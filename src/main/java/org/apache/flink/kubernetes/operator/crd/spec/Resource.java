@@ -5,8 +5,8 @@ import lombok.*;
 
 @Data
 @NoArgsConstructor
-public class Resource implements KubernetesResource {
+public class Resource {
     private double cpu;
     // 1024m, 1g
-    private String mem;
+    private String memory;
 }

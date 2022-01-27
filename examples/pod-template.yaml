@@ -1,0 +1,49 @@
+apiVersion: flink.io/v1alpha1
+kind: FlinkDeployment
+metadata:
+  namespace: default
+  name: pod-template-example
+spec:
+  image: flink:1.14.3
+  flinkVersion: 1.14.3
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+    kubernetes.jobmanager.service-account: flink-operator
+    kubernetes.container-start-command-template: "%java% %classpath% %jvmmem% %jvmopts% %logging% %class% %args%"
+  podTemplate:
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: pod-template
+    spec:
+      containers:
+        # Do not change the main container name
+        - name: flink-main-container
+          volumeMounts:
+            - mountPath: /opt/flink/log
+              name: flink-logs
+        # Sample sidecar container
+        - name: fluentbit
+          image: fluent/fluent-bit:1.8.12-debug
+          command: [ 'sh','-c','/fluent-bit/bin/fluent-bit -i tail -p path=/flink-logs/*.log -p multiline.parser=java -o stdout' ]
+          volumeMounts:
+            - mountPath: /flink-logs
+              name: flink-logs
+      volumes:
+        - name: flink-logs
+          emptyDir: { }
+  jobManager:
+    replicas: 1
+    resource:
+      memory: "2048m"
+      cpu: 1
+  taskManager:
+    taskSlots: 2
+    resource:
+      memory: "2048m"
+      cpu: 1
+  job:
+    jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
+    parallelism: 2
+    cancelMode: none
+    restoreMode: none

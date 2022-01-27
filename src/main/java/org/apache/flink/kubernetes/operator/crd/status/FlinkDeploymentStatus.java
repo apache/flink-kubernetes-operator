@@ -5,6 +5,6 @@ import lombok.NoArgsConstructor;
 
 @Data
 @NoArgsConstructor
-public class FlinkApplicationStatus  {
+public class FlinkDeploymentStatus {
     private JobStatus[] jobStatuses;
 }

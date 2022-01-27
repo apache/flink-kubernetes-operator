@@ -15,7 +15,7 @@ spec:
       serviceAccountName: flink-operator
       containers:
       - name: flink-operator
-        image: docker.apple.com/gyula_fora/flink-java-operator:latest
+        image: docker.apple.com/matyas_orhidi/flink-java-operator:latest
         imagePullPolicy: Always
         env:
           - name: FLINK_CONF_DIR
@@ -26,7 +26,7 @@ spec:
       volumes:
       - name: flink-config-volume
         configMap:
-          name: flink-config
+          name: flink-operator-config
           items:
           - key: flink-conf.yaml
             path: flink-conf.yaml
@@ -38,7 +38,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: flink-config
+  name: flink-operator-config
   labels:
     app: flink
 data:
@@ -97,79 +97,3 @@ data:
     # Suppress the irrelevant (wrong) warnings from the Netty channel handler
     logger.netty.name = org.apache.flink.shaded.akka.org.jboss.netty.channel.DefaultChannelPipeline
     logger.netty.level = OFF
-
----
-
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: flink-operator
-
----
-
-apiVersion: v1
-kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: flink-operator
-rules:
-- apiGroups:
-  - flink-operator
-  resources:
-  - "*"
-  verbs:
-  - "*"
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  - services
-  - endpoints
-  - persistentvolumeclaims
-  - events
-  - configmaps
-  - secrets
-  verbs:
-  - "*"
-- apiGroups:
-  - apps
-  resources:
-  - deployments
-  - replicasets
-  verbs:
-  - "*"
-- apiGroups:
-  - extensions
-  resources:
-  - deployments
-  - ingresses
-  verbs:
-  - "*"
-- apiGroups:
-  - flink.io
-  resources:
-  - flinkapplications
-  verbs:
-  - "*"
-- apiGroups:
-  - networking.k8s.io
-  resources:
-  - ingresses
-  verbs:
-  - "*"
-
----
-
-apiVersion: v1
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: flink-operator-cluster-role-binding
-subjects:
-- kind: ServiceAccount
-  name: flink-operator
-  namespace: default
-roleRef:
-  kind: ClusterRole
-  name: flink-operator
-  apiGroup: rbac.authorization.k8s.io
