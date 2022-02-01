@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.Map;
 
+/** Spec that describes a Flink application deployment. */
 @Data
 @NoArgsConstructor
 public class FlinkDeploymentSpec {
@@ -19,4 +20,3 @@ public class FlinkDeploymentSpec {
     private JobSpec job;
     private Map<String, String> logging;
 }
-

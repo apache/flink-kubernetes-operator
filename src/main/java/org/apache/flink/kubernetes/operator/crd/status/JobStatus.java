@@ -1,12 +1,12 @@
 package org.apache.flink.kubernetes.operator.crd.status;
 
-import io.fabric8.kubernetes.api.model.KubernetesResource;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/** Status of an individual job within the Flink deployment. */
 @Data
 @NoArgsConstructor
-public class JobStatus implements KubernetesResource {
+public class JobStatus {
     private String jobName;
     private String jobId;
     private String state;

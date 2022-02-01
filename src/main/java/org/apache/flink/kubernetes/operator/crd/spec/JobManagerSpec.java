@@ -4,6 +4,7 @@ import io.fabric8.kubernetes.api.model.Pod;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/** JobManager spec. */
 @Data
 @NoArgsConstructor
 public class JobManagerSpec {
@@ -11,4 +12,3 @@ public class JobManagerSpec {
     private int replicas;
     private Pod podTemplate;
 }
-

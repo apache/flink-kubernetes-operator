@@ -4,6 +4,7 @@ import io.fabric8.kubernetes.api.model.Pod;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/** TaskManager spec. */
 @Data
 @NoArgsConstructor
 public class TaskManagerSpec {
@@ -11,4 +12,3 @@ public class TaskManagerSpec {
     private Resource resource;
     private Pod podTemplate;
 }
-

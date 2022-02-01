@@ -1,11 +1,12 @@
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
+
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.api.config.ConfigurationServiceOverrider;
 import io.javaoperatorsdk.operator.config.runtime.DefaultConfigurationService;
-import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.takes.facets.fork.FkRegex;
@@ -15,13 +16,11 @@ import org.takes.http.FtBasic;
 
 import java.io.IOException;
 
-/**
- * Main Class for Flink native k8s operator.
- */
+/** Main Class for Flink native k8s operator. */
 public class FlinkOperator {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkOperator.class);
 
-    public static void main(String args[]) throws IOException {
+    public static void main(String... args) throws IOException {
 
         LOG.info("Starting Flink Kubernetes Operator");
 
@@ -30,9 +29,11 @@ public class FlinkOperator {
         if (namespace == null) {
             namespace = "default";
         }
-        Operator operator = new Operator(client,
-                new ConfigurationServiceOverrider(DefaultConfigurationService.instance())
-                        .build());
+        Operator operator =
+                new Operator(
+                        client,
+                        new ConfigurationServiceOverrider(DefaultConfigurationService.instance())
+                                .build());
         operator.register(new FlinkDeploymentController(client, namespace));
         operator.installShutdownHook();
         operator.start();

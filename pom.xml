@@ -23,6 +23,8 @@
 
         <slf4j.version>1.7.15</slf4j.version>
         <log4j.version>2.17.0</log4j.version>
+
+        <spotless.version>2.4.2</spotless.version>
     </properties>
 
     <dependencies>
@@ -137,11 +139,72 @@
                     </execution>
                 </executions>
             </plugin>
+            
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
             </plugin>
+
+            <plugin>
+    					<groupId>org.apache.maven.plugins</groupId>
+    					<artifactId>maven-checkstyle-plugin</artifactId>
+    					<version>2.17</version>
+    					<dependencies>
+    						<dependency>
+    							<groupId>com.puppycrawl.tools</groupId>
+    							<artifactId>checkstyle</artifactId>
+    							<!-- Note: match version with docs/flinkDev/ide_setup.md -->
+    							<version>8.14</version>
+    						</dependency>
+    					</dependencies>
+    					<executions>
+    						<execution>
+    							<id>validate</id>
+    							<phase>validate</phase>
+    							<goals>
+    								<goal>check</goal>
+    							</goals>
+    						</execution>
+    					</executions>
+    					<configuration>
+    						<suppressionsLocation>/tools/maven/suppressions.xml</suppressionsLocation>
+    						<includeTestSourceDirectory>true</includeTestSourceDirectory>
+    						<configLocation>/tools/maven/checkstyle.xml</configLocation>
+    						<logViolationsToConsole>true</logViolationsToConsole>
+    						<failOnViolation>true</failOnViolation>
+    					</configuration>
+    				</plugin>
+
+    				<plugin>
+    					<groupId>com.diffplug.spotless</groupId>
+    					<artifactId>spotless-maven-plugin</artifactId>
+    					<version>${spotless.version}</version>
+    					<configuration>
+    						<java>
+    							<googleJavaFormat>
+    								<version>1.7</version>
+    								<style>AOSP</style>
+    							</googleJavaFormat>
+
+    							<!-- \# refers to the static imports -->
+    							<importOrder>
+    								<order>org.apache.flink,org.apache.flink.shaded,,javax,java,scala,\#</order>
+    							</importOrder>
+
+    							<removeUnusedImports />
+    						</java>
+    					</configuration>
+    					<executions>
+    						<execution>
+    							<id>spotless-check</id>
+    							<phase>validate</phase>
+    							<goals>
+    								<goal>check</goal>
+    							</goals>
+    						</execution>
+    					</executions>
+    				</plugin>
         </plugins>
     </build>
 

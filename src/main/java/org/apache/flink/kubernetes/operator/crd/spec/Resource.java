@@ -1,8 +1,9 @@
 package org.apache.flink.kubernetes.operator.crd.spec;
 
-import io.fabric8.kubernetes.api.model.KubernetesResource;
-import lombok.*;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
+/** Resource spec. */
 @Data
 @NoArgsConstructor
 public class Resource {
