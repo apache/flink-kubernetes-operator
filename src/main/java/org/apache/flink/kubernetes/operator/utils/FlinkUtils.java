@@ -12,6 +12,7 @@ import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -20,6 +21,8 @@ import org.apache.flink.util.StringUtils;
 
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.internal.SerializationUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,6 +32,8 @@ import java.util.Collections;
 
 /** Flink Utility methods used by the operator. */
 public class FlinkUtils {
+
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
 
     public static Configuration getEffectiveConfig(
             String namespace, String clusterId, FlinkDeploymentSpec spec) {
@@ -44,7 +49,14 @@ public class FlinkUtils {
 
             effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
             effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
-            effectiveConfig.set(DeploymentOptions.TARGET, Constants.KUBERNETES_APP_TARGET);
+
+            if (spec.getJob() != null) {
+                effectiveConfig.set(
+                        DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());
+            } else {
+                effectiveConfig.set(
+                        DeploymentOptions.TARGET, KubernetesDeploymentTarget.SESSION.getName());
+            }
 
             if (!StringUtils.isNullOrWhitespaceOnly(spec.getImage())) {
                 effectiveConfig.set(KubernetesConfigOptions.CONTAINER_IMAGE, spec.getImage());
@@ -136,8 +148,11 @@ public class FlinkUtils {
         final String clusterId = config.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = config.get(KubernetesConfigOptions.NAMESPACE);
         final int port = config.getInteger(RestOptions.PORT);
-        final String restServerAddress =
-                String.format("http://%s-rest.%s:%s", clusterId, namespace, port);
+        final String host =
+                config.getString(
+                        RestOptions.ADDRESS, String.format("%s-rest.%s", clusterId, namespace));
+        final String restServerAddress = String.format("http://%s:%s", host, port);
+        LOG.info("Creating RestClusterClient({})", restServerAddress);
         return new RestClusterClient<>(
                 config, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }

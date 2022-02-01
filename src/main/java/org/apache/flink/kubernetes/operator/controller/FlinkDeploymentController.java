@@ -2,7 +2,9 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.client.cli.ApplicationDeployer;
+import org.apache.flink.client.deployment.ClusterClientFactory;
 import org.apache.flink.client.deployment.ClusterClientServiceLoader;
+import org.apache.flink.client.deployment.ClusterDescriptor;
 import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
@@ -83,11 +85,15 @@ public class FlinkDeploymentController
 
         final Configuration effectiveConfig =
                 FlinkUtils.getEffectiveConfig(namespace, clusterId, flinkApp.getSpec());
-        if (flinkApp.getStatus() == null
-                && flinkApp.getSpec().getJob().getState().equals(JobState.RUNNING)) {
+        if (flinkApp.getStatus() == null) {
             try {
                 flinkApp.setStatus(new FlinkDeploymentStatus());
-                deployFlinkJob(flinkApp, effectiveConfig, Optional.empty());
+                if (flinkApp.getSpec().getJob() != null
+                        && flinkApp.getSpec().getJob().getState().equals(JobState.RUNNING)) {
+                    deployFlinkJob(flinkApp, effectiveConfig, Optional.empty());
+                } else {
+                    deployFlinkSession(flinkApp, effectiveConfig);
+                }
             } catch (Exception e) {
                 LOG.error("Error while deploying " + flinkApp.getMetadata().getName());
                 return UpdateControl.<FlinkDeployment>noUpdate()
@@ -133,12 +139,28 @@ public class FlinkDeploymentController
                         flinkApp.getSpec().getJob().getEntryClass());
 
         deployer.run(effectiveConfig, applicationConfiguration);
-        flinkApp.getStatus().setJobStatuses(null);
         LOG.info("{} deployed", flinkApp.getMetadata().getName());
     }
 
+    private void deployFlinkSession(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+        LOG.info("Deploying session cluster {}", flinkApp.getMetadata().getName());
+        final ClusterClientServiceLoader clusterClientServiceLoader =
+                new DefaultClusterClientServiceLoader();
+        final ClusterClientFactory<String> kubernetesClusterClientFactory =
+                clusterClientServiceLoader.getClusterClientFactory(effectiveConfig);
+        try (final ClusterDescriptor<String> kubernetesClusterDescriptor =
+                kubernetesClusterClientFactory.createClusterDescriptor(effectiveConfig)) {
+            kubernetesClusterDescriptor.deploySessionCluster(
+                    kubernetesClusterClientFactory.getClusterSpecification(effectiveConfig));
+        } catch (Exception e) {
+            LOG.error("Failed to deploy {}", flinkApp.getMetadata().getName(), e);
+        }
+        LOG.info("Session cluster {} deployed", flinkApp.getMetadata().getName());
+    }
+
     private boolean updateFlinkJobStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
-        if (!flinkApp.getStatus().getSpec().getJob().getState().equals(JobState.RUNNING)) {
+        if (flinkApp.getStatus().getSpec().getJob() == null
+                || !flinkApp.getStatus().getSpec().getJob().getState().equals(JobState.RUNNING)) {
             return true;
         }
         LOG.info("Getting job statuses for {}", flinkApp.getMetadata().getName());
@@ -202,32 +224,43 @@ public class FlinkDeploymentController
         boolean specChanged = !flinkApp.getSpec().equals(flinkApp.getStatus().getSpec());
 
         if (specChanged) {
-            JobState currentJobState = flinkApp.getStatus().getSpec().getJob().getState();
-            JobState desiredJobState = flinkApp.getSpec().getJob().getState();
-            UpgradeMode upgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
-            if (currentJobState == JobState.RUNNING) {
-                if (desiredJobState == JobState.RUNNING) {
-                    upgradeFlinkJob(flinkApp, effectiveConfig);
+            if (flinkApp.getStatus().getSpec().getJob() != null) {
+                if (flinkApp.getSpec().getJob() == null) {
+                    throw new RuntimeException("Cannot switch from job to session cluster");
                 }
-                if (desiredJobState.equals(JobState.SUSPENDED)) {
-                    if (upgradeMode == UpgradeMode.STATELESS) {
-                        cancelJob(flinkApp, effectiveConfig);
-                    } else {
-                        suspendJob(flinkApp, effectiveConfig);
+                JobState currentJobState = flinkApp.getStatus().getSpec().getJob().getState();
+                JobState desiredJobState = flinkApp.getSpec().getJob().getState();
+
+                UpgradeMode upgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
+                if (currentJobState == JobState.RUNNING) {
+                    if (desiredJobState == JobState.RUNNING) {
+                        upgradeFlinkJob(flinkApp, effectiveConfig);
+                    }
+                    if (desiredJobState.equals(JobState.SUSPENDED)) {
+                        if (upgradeMode == UpgradeMode.STATELESS) {
+                            cancelJob(flinkApp, effectiveConfig);
+                        } else {
+                            suspendJob(flinkApp, effectiveConfig);
+                        }
                     }
                 }
-            }
-            if (currentJobState == JobState.SUSPENDED) {
-                if (desiredJobState == JobState.RUNNING) {
-                    if (upgradeMode == UpgradeMode.STATELESS) {
-                        deployFlinkJob(flinkApp, effectiveConfig, Optional.empty());
-                    } else if (upgradeMode == UpgradeMode.SAVEPOINT) {
-                        restoreFromLastSavepoint(flinkApp, effectiveConfig);
-                    } else {
-                        throw new UnsupportedOperationException(
-                                "Only savepoint and stateless strategies are supported at the moment.");
+                if (currentJobState == JobState.SUSPENDED) {
+                    if (desiredJobState == JobState.RUNNING) {
+                        if (upgradeMode == UpgradeMode.STATELESS) {
+                            deployFlinkJob(flinkApp, effectiveConfig, Optional.empty());
+                        } else if (upgradeMode == UpgradeMode.SAVEPOINT) {
+                            restoreFromLastSavepoint(flinkApp, effectiveConfig);
+                        } else {
+                            throw new UnsupportedOperationException(
+                                    "Only savepoint and stateless strategies are supported at the moment.");
+                        }
                     }
                 }
+            } else {
+                if (flinkApp.getSpec().getJob() != null) {
+                    throw new RuntimeException("Cannot switch from session to job cluster");
+                }
+                upgradeSessionCluster(flinkApp, effectiveConfig);
             }
         }
     }
@@ -316,6 +349,10 @@ public class FlinkDeploymentController
             LOG.info("Waiting for cluster shutdown... ({})", i);
             Thread.sleep(1000);
         }
+    }
+
+    private void upgradeSessionCluster(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     @Override

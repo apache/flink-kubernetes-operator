@@ -9,7 +9,6 @@ spec:
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
     kubernetes.jobmanager.service-account: flink-operator
-    kubernetes.container-start-command-template: "%java% %classpath% %jvmmem% %jvmopts% %logging% %class% %args%"
   podTemplate:
     apiVersion: v1
     kind: Pod
@@ -42,6 +41,17 @@ spec:
     resource:
       memory: "2048m"
       cpu: 1
+    podTemplate:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: task-manager-pod-template
+      spec:
+        initContainers:
+          # Sample sidecar container
+          - name: busybox
+            image: busybox:latest
+            command: [ 'sh','-c','echo hello from task manager' ]
   job:
     jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
     parallelism: 2
