@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.crd.spec;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 /** Flink job spec. */
@@ -28,6 +29,9 @@ public class JobSpec {
     private int parallelism;
     private String entryClass;
     private String[] args = new String[0];
-    private UpgradeMode upgradeMode = UpgradeMode.STATELESS;
     private JobState state = JobState.RUNNING;
+
+    // The below fields are excluded from equals to avoid triggering job upgrades on changing these
+    @EqualsAndHashCode.Exclude private String initialSavepointPath;
+    @EqualsAndHashCode.Exclude private UpgradeMode upgradeMode = UpgradeMode.STATELESS;
 }

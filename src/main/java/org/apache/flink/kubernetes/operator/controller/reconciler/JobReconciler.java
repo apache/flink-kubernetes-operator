@@ -26,6 +26,7 @@ import org.apache.flink.client.deployment.application.cli.ApplicationClusterDepl
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
@@ -58,13 +59,17 @@ public class JobReconciler {
     public boolean reconcile(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
 
+        JobSpec jobSpec = flinkApp.getSpec().getJob();
         if (flinkApp.getStatus() == null) {
             flinkApp.setStatus(new FlinkDeploymentStatus());
-            if (!flinkApp.getSpec().getJob().getState().equals(JobState.RUNNING)) {
+            if (!jobSpec.getState().equals(JobState.RUNNING)) {
                 throw new RuntimeException("Job must start in running state");
             }
             try {
-                deployFlinkJob(flinkApp, effectiveConfig, Optional.empty());
+                deployFlinkJob(
+                        flinkApp,
+                        effectiveConfig,
+                        Optional.ofNullable(jobSpec.getInitialSavepointPath()));
                 KubernetesUtils.deployIngress(flinkApp, effectiveConfig, kubernetesClient);
                 return true;
             } catch (Exception e) {
@@ -79,9 +84,9 @@ public class JobReconciler {
                 throw new RuntimeException("Cannot switch from session to job cluster");
             }
             JobState currentJobState = flinkApp.getStatus().getSpec().getJob().getState();
-            JobState desiredJobState = flinkApp.getSpec().getJob().getState();
+            JobState desiredJobState = jobSpec.getState();
 
-            UpgradeMode upgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
+            UpgradeMode upgradeMode = jobSpec.getUpgradeMode();
             if (currentJobState == JobState.RUNNING) {
                 if (desiredJobState == JobState.RUNNING) {
                     upgradeFlinkJob(flinkApp, effectiveConfig);
@@ -142,7 +147,7 @@ public class JobReconciler {
 
     private void restoreFromLastSavepoint(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
-        JobStatus jobStatus = flinkApp.getStatus().getJobStatuses().get(0);
+        JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
 
         String savepointLocation = jobStatus.getSavepointLocation();
         if (savepointLocation == null) {
@@ -154,7 +159,7 @@ public class JobReconciler {
     private Optional<String> suspendJob(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         LOG.info("Suspending {}", flinkApp.getMetadata().getName());
-        JobID jobID = JobID.fromHexString(flinkApp.getStatus().getJobStatuses().get(0).getJobId());
+        JobID jobID = JobID.fromHexString(flinkApp.getStatus().getJobStatus().getJobId());
         return cancelJob(flinkApp, jobID, UpgradeMode.SAVEPOINT, effectiveConfig);
     }
 
@@ -162,7 +167,7 @@ public class JobReconciler {
             throws Exception {
         LOG.info("Cancelling {}", flinkApp.getMetadata().getName());
         UpgradeMode upgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
-        JobID jobID = JobID.fromHexString(flinkApp.getStatus().getJobStatuses().get(0).getJobId());
+        JobID jobID = JobID.fromHexString(flinkApp.getStatus().getJobStatus().getJobId());
         return cancelJob(flinkApp, jobID, upgradeMode, effectiveConfig);
     }
 
@@ -172,7 +177,7 @@ public class JobReconciler {
             UpgradeMode upgradeMode,
             Configuration effectiveConfig)
             throws Exception {
-        Optional<String> ret = Optional.empty();
+        Optional<String> savepointOpt = Optional.empty();
         try (ClusterClient<String> clusterClient =
                 FlinkUtils.getRestClusterClient(effectiveConfig)) {
             switch (upgradeMode) {
@@ -184,20 +189,16 @@ public class JobReconciler {
                             clusterClient
                                     .stopWithSavepoint(jobID, false, null)
                                     .get(1, TimeUnit.MINUTES);
-                    ret = Optional.of(savepoint);
+                    savepointOpt = Optional.of(savepoint);
                     break;
                 default:
                     throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
             }
         }
         FlinkUtils.waitForClusterShutdown(kubernetesClient, effectiveConfig);
-        JobStatus jobStatus =
-                flinkApp.getStatus().getJobStatuses().stream()
-                        .filter(j -> j.getJobId().equals(jobID.toHexString()))
-                        .findFirst()
-                        .get();
+        JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
         jobStatus.setState("suspended");
-        jobStatus.setSavepointLocation(ret.orElse(null));
-        return ret;
+        savepointOpt.ifPresent(jobStatus::setSavepointLocation);
+        return savepointOpt;
     }
 }

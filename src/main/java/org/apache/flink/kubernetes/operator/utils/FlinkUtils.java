@@ -33,8 +33,6 @@ import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
-import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.util.StringUtils;
 
@@ -183,14 +181,6 @@ public class FlinkUtils {
         LOG.info("Creating RestClusterClient({})", restServerAddress);
         return new RestClusterClient<>(
                 config, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
-    }
-
-    public static JobStatus convert(JobStatusMessage message) {
-        JobStatus jobStatus = new JobStatus();
-        jobStatus.setJobId(message.getJobId().toHexString());
-        jobStatus.setJobName(message.getJobName());
-        jobStatus.setState(message.getJobState().name());
-        return jobStatus;
     }
 
     public static void deleteCluster(FlinkDeployment flinkApp, KubernetesClient kubernetesClient) {

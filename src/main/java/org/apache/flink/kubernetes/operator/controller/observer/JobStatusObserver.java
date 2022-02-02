@@ -32,10 +32,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /** Observes the actual state of the running jobs on the Flink cluster. */
 public class JobStatusObserver {
@@ -65,12 +64,14 @@ public class JobStatusObserver {
                 FlinkUtils.getRestClusterClient(effectiveConfig)) {
             Collection<JobStatusMessage> clusterJobStatuses =
                     clusterClient.listJobs().get(10, TimeUnit.SECONDS);
-            flinkAppStatus.setJobStatuses(
-                    mergeJobStatuses(flinkAppStatus.getJobStatuses(), clusterJobStatuses));
             if (clusterJobStatuses.isEmpty()) {
                 LOG.info("No jobs found on {} yet, retrying...", flinkApp.getMetadata().getName());
                 return false;
             } else {
+                flinkAppStatus.setJobStatus(
+                        mergeJobStatus(
+                                flinkAppStatus.getJobStatus(),
+                                new ArrayList<>(clusterJobStatuses)));
                 LOG.info("Job statuses updated for {}", flinkApp.getMetadata().getName());
                 return true;
             }
@@ -88,28 +89,30 @@ public class JobStatusObserver {
         }
     }
 
-    /**
-     * Merge previous job statuses with the new ones from the flink job cluster. We match jobs by
-     * their name to preserve savepoint information.
-     */
-    private List<JobStatus> mergeJobStatuses(
-            List<JobStatus> oldJobStatuses, Collection<JobStatusMessage> clusterJobStatuses) {
-        List<JobStatus> newStatuses =
-                oldJobStatuses != null ? new ArrayList<>(oldJobStatuses) : new ArrayList<>();
-        Map<String, JobStatus> statusMap =
-                newStatuses.stream().collect(Collectors.toMap(JobStatus::getJobName, j -> j));
+    /** Merge previous job status with the new one from the flink job cluster. */
+    private JobStatus mergeJobStatus(
+            JobStatus oldStatus, List<JobStatusMessage> clusterJobStatuses) {
+        JobStatus newStatus = oldStatus;
+        Collections.sort(
+                clusterJobStatuses,
+                (j1, j2) -> -1 * Long.compare(j1.getStartTime(), j1.getStartTime()));
+        JobStatusMessage newJob = clusterJobStatuses.get(0);
 
-        clusterJobStatuses.forEach(
-                js -> {
-                    if (statusMap.containsKey(js.getJobName())) {
-                        JobStatus oldStatus = statusMap.get(js.getJobName());
-                        oldStatus.setState(js.getJobState().name());
-                        oldStatus.setJobId(js.getJobId().toHexString());
-                    } else {
-                        newStatuses.add(FlinkUtils.convert(js));
-                    }
-                });
+        if (newStatus == null) {
+            newStatus = createJobStatus(newJob);
+        } else {
+            newStatus.setState(newJob.getJobState().name());
+            newStatus.setJobName(newJob.getJobName());
+            newStatus.setJobId(newJob.getJobId().toHexString());
+        }
+        return newStatus;
+    }
 
-        return newStatuses;
+    public static JobStatus createJobStatus(JobStatusMessage message) {
+        JobStatus jobStatus = new JobStatus();
+        jobStatus.setJobId(message.getJobId().toHexString());
+        jobStatus.setJobName(message.getJobName());
+        jobStatus.setState(message.getJobState().name());
+        return jobStatus;
     }
 }
