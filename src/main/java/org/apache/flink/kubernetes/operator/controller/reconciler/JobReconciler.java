@@ -14,6 +14,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -47,6 +48,7 @@ public class JobReconciler {
             }
             try {
                 deployFlinkJob(flinkApp, effectiveConfig, Optional.empty());
+                KubernetesUtils.deployIngress(flinkApp, effectiveConfig, kubernetesClient);
                 return true;
             } catch (Exception e) {
                 LOG.error("Error while deploying " + flinkApp.getMetadata().getName());

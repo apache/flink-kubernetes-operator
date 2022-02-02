@@ -55,6 +55,12 @@ public class FlinkUtils {
             effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
             effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
 
+            if (spec.getIngressDomain() != null) {
+                effectiveConfig.set(
+                        KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE,
+                        KubernetesConfigOptions.ServiceExposedType.ClusterIP);
+            }
+
             if (spec.getJob() != null) {
                 effectiveConfig.set(
                         DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());
