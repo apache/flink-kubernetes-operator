@@ -8,13 +8,13 @@ spec:
   flinkVersion: 1.14.3
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
-    kubernetes.jobmanager.service-account: flink-operator
   podTemplate:
     apiVersion: v1
     kind: Pod
     metadata:
       name: pod-template
     spec:
+      serviceAccount: flink-operator
       containers:
         # Do not change the main container name
         - name: flink-main-container
@@ -55,5 +55,3 @@ spec:
   job:
     jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
     parallelism: 2
-    cancelMode: none
-    restoreMode: none

@@ -13,6 +13,8 @@ import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
+import org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -20,6 +22,8 @@ import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClie
 import org.apache.flink.util.StringUtils;
 
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import io.fabric8.kubernetes.client.internal.SerializationUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,23 +33,24 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.Collections;
+import java.util.concurrent.Executors;
 
 /** Flink Utility methods used by the operator. */
 public class FlinkUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
 
-    public static Configuration getEffectiveConfig(
-            String namespace, String clusterId, FlinkDeploymentSpec spec) {
-        try {
-            final String flinkConfDir = System.getenv().get(ConfigConstants.ENV_FLINK_CONF_DIR);
-            final Configuration effectiveConfig;
+    public static Configuration getEffectiveConfig(FlinkDeployment flinkApp) {
+        String namespace = flinkApp.getMetadata().getNamespace();
+        String clusterId = flinkApp.getMetadata().getName();
+        FlinkDeploymentSpec spec = flinkApp.getSpec();
 
-            if (flinkConfDir != null) {
-                effectiveConfig = GlobalConfiguration.loadConfiguration(flinkConfDir);
-            } else {
-                effectiveConfig = new Configuration();
-            }
+        try {
+            String flinkConfDir = System.getenv().get(ConfigConstants.ENV_FLINK_CONF_DIR);
+            Configuration effectiveConfig =
+                    flinkConfDir != null
+                            ? GlobalConfiguration.loadConfiguration(flinkConfDir)
+                            : new Configuration();
 
             effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
             effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
@@ -163,5 +168,35 @@ public class FlinkUtils {
         jobStatus.setJobName(message.getJobName());
         jobStatus.setState(message.getJobState().name());
         return jobStatus;
+    }
+
+    public static void deleteCluster(FlinkDeployment flinkApp, KubernetesClient kubernetesClient) {
+        kubernetesClient
+                .apps()
+                .deployments()
+                .inNamespace(flinkApp.getMetadata().getNamespace())
+                .withName(flinkApp.getMetadata().getName())
+                .cascading(true)
+                .delete();
+    }
+
+    /** We need this due to the buggy flink kube cluster client behaviour for now. */
+    public static void waitForClusterShutdown(
+            KubernetesClient kubernetesClient, Configuration effectiveConfig)
+            throws InterruptedException {
+        Fabric8FlinkKubeClient flinkKubeClient =
+                new Fabric8FlinkKubeClient(
+                        effectiveConfig,
+                        (NamespacedKubernetesClient) kubernetesClient,
+                        Executors.newSingleThreadExecutor());
+        for (int i = 0; i < 60; i++) {
+            if (!flinkKubeClient
+                    .getRestEndpoint(effectiveConfig.get(KubernetesConfigOptions.CLUSTER_ID))
+                    .isPresent()) {
+                break;
+            }
+            LOG.info("Waiting for cluster shutdown... ({})", i);
+            Thread.sleep(1000);
+        }
     }
 }

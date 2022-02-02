@@ -9,7 +9,6 @@ spec:
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
     kubernetes.jobmanager.service-account: flink-operator
-    kubernetes.container-start-command-template: "%java% %classpath% %jvmmem% %jvmopts% %logging% %class% %args%"
   jobManager:
     replicas: 1
     resource:
@@ -23,5 +22,4 @@ spec:
   job:
     jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
     parallelism: 2
-    cancelMode: none
-    restoreMode: none
+    upgradeMode: stateless
