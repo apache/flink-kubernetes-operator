@@ -15,9 +15,19 @@
 #  See the License for the specific language governing permissions and
 # limitations under the License.
 ################################################################################
+# Build
+FROM maven:3.8.4-openjdk-11 AS build
+WORKDIR /app
 
+COPY src ./src
+COPY tools ./tools
+COPY pom.xml .
+
+RUN mvn -f ./pom.xml clean install
+
+# stage
 FROM openjdk:11-jre
 
-COPY target/flink-operator-1.0-SNAPSHOT.jar /
+COPY --from=build /app/target/flink-operator-1.0-SNAPSHOT.jar /
 
 CMD ["java", "-jar", "/flink-operator-1.0-SNAPSHOT.jar"]

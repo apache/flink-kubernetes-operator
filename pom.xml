@@ -282,7 +282,7 @@ under the License.
       						<exclude>**/target/**</exclude>
       						<exclude>apache-maven-3.2.5/**</exclude>
       						<!-- PyCharm -->
-      						<exclude>**/.idea/**</exclude>
+      						<exclude>**/.idea/**</exclude>      
       					</excludes>
       				</configuration>
       			</plugin>
