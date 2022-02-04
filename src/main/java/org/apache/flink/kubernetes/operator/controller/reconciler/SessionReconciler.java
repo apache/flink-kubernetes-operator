@@ -54,7 +54,7 @@ public class SessionReconciler {
                 KubernetesUtils.deployIngress(flinkApp, effectiveConfig, kubernetesClient);
                 return true;
             } catch (Exception e) {
-                LOG.error("Error while deploying " + flinkApp.getMetadata().getName());
+                LOG.error("Error while deploying " + flinkApp.getMetadata().getName(), e);
                 return false;
             }
         }

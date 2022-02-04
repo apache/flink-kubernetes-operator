@@ -29,6 +29,7 @@ under the License.
         <maven.compiler.target>1.8</maven.compiler.target>
         <maven-assembly-plugin.version>3.3.0</maven-assembly-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
+        <maven-failsafe-plugin.version>3.0.0-M4</maven-failsafe-plugin.version>
 
         <operator.sdk.version>2.0.1</operator.sdk.version>
         <fabric8.version>5.11.2</fabric8.version>
@@ -41,6 +42,8 @@ under the License.
         <log4j.version>2.17.0</log4j.version>
 
         <spotless.version>2.4.2</spotless.version>
+        <awaitility.version>4.1.0</awaitility.version>
+        <it.skip>true</it.skip>
     </properties>
 
     <dependencies>
@@ -67,6 +70,13 @@ under the License.
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-server-mock</artifactId>
             <version>${fabric8.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>${awaitility.version}</version>
             <scope>test</scope>
         </dependency>
 
@@ -160,6 +170,25 @@ under the License.
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${maven-failsafe-plugin.version}</version>
+                <configuration>
+                    <skipITs>${it.skip}</skipITs>
+                    <includes>
+                        <include>**/*ITCase.*</include>
+                    </includes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>
