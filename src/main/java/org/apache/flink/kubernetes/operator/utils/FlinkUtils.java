@@ -36,6 +36,10 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.util.StringUtils;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
@@ -48,12 +52,14 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.concurrent.Executors;
 
 /** Flink Utility methods used by the operator. */
 public class FlinkUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static Configuration getEffectiveConfig(FlinkDeployment flinkApp) {
         String namespace = flinkApp.getMetadata().getNamespace();
@@ -118,7 +124,10 @@ public class FlinkUtils {
                 if (spec.getJobManager().getPodTemplate() != null) {
                     effectiveConfig.set(
                             KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE,
-                            createTempFile(spec.getJobManager().getPodTemplate()));
+                            createTempFile(
+                                    mergePodTemplates(
+                                            spec.getPodTemplate(),
+                                            spec.getJobManager().getPodTemplate())));
                 }
             }
 
@@ -141,7 +150,10 @@ public class FlinkUtils {
                 if (spec.getTaskManager().getPodTemplate() != null) {
                     effectiveConfig.set(
                             KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE,
-                            createTempFile(spec.getTaskManager().getPodTemplate()));
+                            createTempFile(
+                                    mergePodTemplates(
+                                            spec.getPodTemplate(),
+                                            spec.getTaskManager().getPodTemplate())));
                 }
             }
 
@@ -167,6 +179,49 @@ public class FlinkUtils {
         Files.write(tmp.toPath(), SerializationUtils.dumpAsYaml(podTemplate).getBytes());
         tmp.deleteOnExit();
         return tmp.getAbsolutePath();
+    }
+
+    public static Pod mergePodTemplates(Pod toPod, Pod fromPod) {
+        if (fromPod == null) {
+            return toPod;
+        } else if (toPod == null) {
+            return fromPod;
+        }
+        JsonNode node1 = MAPPER.valueToTree(toPod);
+        JsonNode node2 = MAPPER.valueToTree(fromPod);
+        mergeInto(node1, node2);
+        try {
+            return MAPPER.treeToValue(node1, Pod.class);
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    private static void mergeInto(JsonNode toNode, JsonNode fromNode) {
+        Iterator<String> fieldNames = fromNode.fieldNames();
+        while (fieldNames.hasNext()) {
+            String fieldName = fieldNames.next();
+            JsonNode toChildNode = toNode.get(fieldName);
+            JsonNode fromChildNode = fromNode.get(fieldName);
+
+            if (toChildNode != null && toChildNode.isArray() && fromChildNode.isArray()) {
+                // TODO: does merging arrays even make sense or should it just override?
+                for (int i = 0; i < fromChildNode.size(); i++) {
+                    JsonNode updatedChildNode = fromChildNode.get(i);
+                    if (toChildNode.size() <= i) {
+                        // append new node
+                        ((ArrayNode) toChildNode).add(updatedChildNode);
+                    }
+                    mergeInto(toChildNode.get(i), updatedChildNode);
+                }
+            } else if (toChildNode != null && toChildNode.isObject()) {
+                mergeInto(toChildNode, fromChildNode);
+            } else {
+                if (toNode instanceof ObjectNode) {
+                    ((ObjectNode) toNode).replace(fieldName, fromChildNode);
+                }
+            }
+        }
     }
 
     public static ClusterClient<String> getRestClusterClient(Configuration config)
