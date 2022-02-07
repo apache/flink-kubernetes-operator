@@ -33,7 +33,7 @@ spec:
       serviceAccountName: flink-operator
       containers:
       - name: flink-operator
-        image: docker.apple.com/matyas_orhidi/flink-java-operator:latest
+        image: docker.apple.com/aiml/dpi-flink/flink-operator:1.0.7
         imagePullPolicy: Always
         env:
           - name: FLINK_CONF_DIR

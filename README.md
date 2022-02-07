@@ -9,7 +9,7 @@ mvn clean install
 ## How to Run
 * Make Sure that `FlinkDeployment` Custom Resource Definition is already applied onto the cluster. If not, issue the following commands to apply:
 ```
-k apply -f target/classes/META-INF/fabric8/flindeployments.flink.io-v1.yml
+kubectl create -f target/classes/META-INF/fabric8/flinkdeployments.flink.io-v1.yml
 ```
 * (Optional) Build Docker Image
 ```
@@ -17,18 +17,18 @@ docker build . -t docker.apple.com/gyula_fora/flink-java-operator:latest
 ```
 * Start flink-operator deployment. A new `ServiceAccount` "flink-operator" will be created with enough permission to create/list pods and services.
 ```
-kubectl apply -f deploy/rbac.yaml
-kubectl apply -f deploy/flink-operator.yaml
+kubectl create -f deploy/rbac.yaml
+kubectl create -f deploy/flink-operator.yaml
 ```
 * Create a new Flink deployment
 The flink-operator will watch the CRD resources and submit a new Flink deployment once the CR it applied.
 ```
-kubectl apply -f deploy/basic.yaml
+kubectl create -f examples/basic.yaml
 ```
 
 * Delete a Flink deployment
 ```
-kubectl delete -f deploy/basic.yaml
+kubectl delete -f create/basic.yaml
 
 OR
 
