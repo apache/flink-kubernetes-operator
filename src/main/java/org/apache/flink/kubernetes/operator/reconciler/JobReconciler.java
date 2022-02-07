@@ -15,15 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.controller.reconciler;
+package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.client.cli.ApplicationDeployer;
-import org.apache.flink.client.deployment.ClusterClientServiceLoader;
-import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
-import org.apache.flink.client.deployment.application.ApplicationConfiguration;
-import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
-import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
@@ -31,7 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
@@ -40,7 +34,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Reconciler responsible for handling the job lifecycle according to the desired and current
@@ -51,9 +44,11 @@ public class JobReconciler {
     private static final Logger LOG = LoggerFactory.getLogger(JobReconciler.class);
 
     private final KubernetesClient kubernetesClient;
+    private final FlinkService flinkService;
 
-    public JobReconciler(KubernetesClient kubernetesClient) {
+    public JobReconciler(KubernetesClient kubernetesClient, FlinkService flinkService) {
         this.kubernetesClient = kubernetesClient;
+        this.flinkService = flinkService;
     }
 
     public boolean reconcile(FlinkDeployment flinkApp, Configuration effectiveConfig)
@@ -118,24 +113,12 @@ public class JobReconciler {
     private void deployFlinkJob(
             FlinkDeployment flinkApp, Configuration effectiveConfig, Optional<String> savepoint)
             throws Exception {
-        LOG.info("Deploying {}", flinkApp.getMetadata().getName());
         if (savepoint.isPresent()) {
             effectiveConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, savepoint.get());
         } else {
             effectiveConfig.removeConfig(SavepointConfigOptions.SAVEPOINT_PATH);
         }
-        final ClusterClientServiceLoader clusterClientServiceLoader =
-                new DefaultClusterClientServiceLoader();
-        final ApplicationDeployer deployer =
-                new ApplicationClusterDeployer(clusterClientServiceLoader);
-
-        final ApplicationConfiguration applicationConfiguration =
-                new ApplicationConfiguration(
-                        flinkApp.getSpec().getJob().getArgs(),
-                        flinkApp.getSpec().getJob().getEntryClass());
-
-        deployer.run(effectiveConfig, applicationConfiguration);
-        LOG.info("{} deployed", flinkApp.getMetadata().getName());
+        flinkService.submitApplicationCluster(flinkApp, effectiveConfig);
     }
 
     private void upgradeFlinkJob(FlinkDeployment flinkApp, Configuration effectiveConfig)
@@ -159,43 +142,24 @@ public class JobReconciler {
     private Optional<String> suspendJob(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         LOG.info("Suspending {}", flinkApp.getMetadata().getName());
-        JobID jobID = JobID.fromHexString(flinkApp.getStatus().getJobStatus().getJobId());
-        return cancelJob(flinkApp, jobID, UpgradeMode.SAVEPOINT, effectiveConfig);
+        return cancelJob(flinkApp, UpgradeMode.SAVEPOINT, effectiveConfig);
     }
 
     private Optional<String> cancelJob(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         LOG.info("Cancelling {}", flinkApp.getMetadata().getName());
         UpgradeMode upgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
-        JobID jobID = JobID.fromHexString(flinkApp.getStatus().getJobStatus().getJobId());
-        return cancelJob(flinkApp, jobID, upgradeMode, effectiveConfig);
+        return cancelJob(flinkApp, upgradeMode, effectiveConfig);
     }
 
     private Optional<String> cancelJob(
-            FlinkDeployment flinkApp,
-            JobID jobID,
-            UpgradeMode upgradeMode,
-            Configuration effectiveConfig)
+            FlinkDeployment flinkApp, UpgradeMode upgradeMode, Configuration effectiveConfig)
             throws Exception {
-        Optional<String> savepointOpt = Optional.empty();
-        try (ClusterClient<String> clusterClient =
-                FlinkUtils.getRestClusterClient(effectiveConfig)) {
-            switch (upgradeMode) {
-                case STATELESS:
-                    clusterClient.cancel(jobID).get(1, TimeUnit.MINUTES);
-                    break;
-                case SAVEPOINT:
-                    String savepoint =
-                            clusterClient
-                                    .stopWithSavepoint(jobID, false, null)
-                                    .get(1, TimeUnit.MINUTES);
-                    savepointOpt = Optional.of(savepoint);
-                    break;
-                default:
-                    throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
-            }
-        }
-        FlinkUtils.waitForClusterShutdown(kubernetesClient, effectiveConfig);
+        Optional<String> savepointOpt =
+                flinkService.cancelJob(
+                        JobID.fromHexString(flinkApp.getStatus().getJobStatus().getJobId()),
+                        upgradeMode,
+                        effectiveConfig);
         JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
         jobStatus.setState("suspended");
         savepointOpt.ifPresent(jobStatus::setSavepointLocation);

@@ -18,9 +18,12 @@
 package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
+import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
+import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
+import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.api.config.ConfigurationServiceOverrider;
 import io.javaoperatorsdk.operator.config.runtime.DefaultConfigurationService;
@@ -41,7 +44,7 @@ public class FlinkOperator {
 
         LOG.info("Starting Flink Kubernetes Operator");
 
-        KubernetesClient client = new DefaultKubernetesClient();
+        DefaultKubernetesClient client = new DefaultKubernetesClient();
         String namespace = client.getNamespace();
         if (namespace == null) {
             namespace = "default";
@@ -51,7 +54,18 @@ public class FlinkOperator {
                         client,
                         new ConfigurationServiceOverrider(DefaultConfigurationService.instance())
                                 .build());
-        operator.register(new FlinkDeploymentController(client, namespace));
+
+        FlinkService flinkService = new FlinkService(client);
+
+        JobStatusObserver observer = new JobStatusObserver(flinkService);
+        JobReconciler jobReconciler = new JobReconciler(client, flinkService);
+        SessionReconciler sessionReconciler = new SessionReconciler(client, flinkService);
+
+        FlinkDeploymentController controller =
+                new FlinkDeploymentController(
+                        client, namespace, observer, jobReconciler, sessionReconciler);
+
+        operator.register(controller);
         operator.installShutdownHook();
         operator.start();
 

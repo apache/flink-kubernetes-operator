@@ -17,8 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.client.program.ClusterClient;
-import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
@@ -26,14 +24,11 @@ import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.PipelineOptions;
-import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
-import org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.util.StringUtils;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -42,7 +37,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import io.fabric8.kubernetes.client.internal.SerializationUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +47,6 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.concurrent.Executors;
 
 /** Flink Utility methods used by the operator. */
 public class FlinkUtils {
@@ -224,20 +217,6 @@ public class FlinkUtils {
         }
     }
 
-    public static ClusterClient<String> getRestClusterClient(Configuration config)
-            throws Exception {
-        final String clusterId = config.get(KubernetesConfigOptions.CLUSTER_ID);
-        final String namespace = config.get(KubernetesConfigOptions.NAMESPACE);
-        final int port = config.getInteger(RestOptions.PORT);
-        final String host =
-                config.getString(
-                        RestOptions.ADDRESS, String.format("%s-rest.%s", clusterId, namespace));
-        final String restServerAddress = String.format("http://%s:%s", host, port);
-        LOG.info("Creating RestClusterClient({})", restServerAddress);
-        return new RestClusterClient<>(
-                config, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
-    }
-
     public static void deleteCluster(FlinkDeployment flinkApp, KubernetesClient kubernetesClient) {
         kubernetesClient
                 .apps()
@@ -246,25 +225,5 @@ public class FlinkUtils {
                 .withName(flinkApp.getMetadata().getName())
                 .cascading(true)
                 .delete();
-    }
-
-    /** We need this due to the buggy flink kube cluster client behaviour for now. */
-    public static void waitForClusterShutdown(
-            KubernetesClient kubernetesClient, Configuration effectiveConfig)
-            throws InterruptedException {
-        Fabric8FlinkKubeClient flinkKubeClient =
-                new Fabric8FlinkKubeClient(
-                        effectiveConfig,
-                        (NamespacedKubernetesClient) kubernetesClient,
-                        Executors.newSingleThreadExecutor());
-        for (int i = 0; i < 60; i++) {
-            if (!flinkKubeClient
-                    .getRestEndpoint(effectiveConfig.get(KubernetesConfigOptions.CLUSTER_ID))
-                    .isPresent()) {
-                break;
-            }
-            LOG.info("Waiting for cluster shutdown... ({})", i);
-            Thread.sleep(1000);
-        }
     }
 }

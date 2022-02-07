@@ -15,16 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.controller.observer;
+package org.apache.flink.kubernetes.operator.observer;
 
-import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import org.slf4j.Logger;
@@ -34,12 +33,17 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /** Observes the actual state of the running jobs on the Flink cluster. */
 public class JobStatusObserver {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
+
+    private final FlinkService flinkService;
+
+    public JobStatusObserver(FlinkService flinkService) {
+        this.flinkService = flinkService;
+    }
 
     public boolean observeFlinkJobStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
         if (flinkApp.getStatus() == null) {
@@ -60,10 +64,9 @@ public class JobStatusObserver {
         }
         LOG.info("Getting job statuses for {}", flinkApp.getMetadata().getName());
         FlinkDeploymentStatus flinkAppStatus = flinkApp.getStatus();
-        try (ClusterClient<String> clusterClient =
-                FlinkUtils.getRestClusterClient(effectiveConfig)) {
+        try {
             Collection<JobStatusMessage> clusterJobStatuses =
-                    clusterClient.listJobs().get(10, TimeUnit.SECONDS);
+                    flinkService.listJobs(effectiveConfig);
             if (clusterJobStatuses.isEmpty()) {
                 LOG.info("No jobs found on {} yet, retrying...", flinkApp.getMetadata().getName());
                 return false;

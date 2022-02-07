@@ -32,14 +32,14 @@ under the License.
         <maven-failsafe-plugin.version>3.0.0-M4</maven-failsafe-plugin.version>
 
         <operator.sdk.version>2.0.1</operator.sdk.version>
-        <fabric8.version>5.11.2</fabric8.version>
-        <lombok.version>1.18.10</lombok.version>
+        <fabric8.version>5.12.1</fabric8.version>
+        <lombok.version>1.18.22</lombok.version>
 
         <scala.version>2.12</scala.version>
         <flink.version>1.14.3</flink.version>
 
         <slf4j.version>1.7.15</slf4j.version>
-        <log4j.version>2.17.0</log4j.version>
+        <log4j.version>2.17.1</log4j.version>
 
         <spotless.version>2.4.2</spotless.version>
         <awaitility.version>4.1.0</awaitility.version>
@@ -311,7 +311,7 @@ under the License.
       						<exclude>**/target/**</exclude>
       						<exclude>apache-maven-3.2.5/**</exclude>
       						<!-- PyCharm -->
-      						<exclude>**/.idea/**</exclude>      
+      						<exclude>**/.idea/**</exclude>
       					</excludes>
       				</configuration>
       			</plugin>

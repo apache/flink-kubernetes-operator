@@ -18,10 +18,10 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.controller.observer.JobStatusObserver;
-import org.apache.flink.kubernetes.operator.controller.reconciler.JobReconciler;
-import org.apache.flink.kubernetes.operator.controller.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
+import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
+import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -56,15 +56,21 @@ public class FlinkDeploymentController
 
     private final String operatorNamespace;
 
-    private final JobStatusObserver observer = new JobStatusObserver();
+    private final JobStatusObserver observer;
     private final JobReconciler jobReconciler;
     private final SessionReconciler sessionReconciler;
 
-    public FlinkDeploymentController(KubernetesClient kubernetesClient, String namespace) {
+    public FlinkDeploymentController(
+            KubernetesClient kubernetesClient,
+            String operatorNamespace,
+            JobStatusObserver observer,
+            JobReconciler jobReconciler,
+            SessionReconciler sessionReconciler) {
         this.kubernetesClient = kubernetesClient;
-        this.operatorNamespace = namespace;
-        this.jobReconciler = new JobReconciler(kubernetesClient);
-        this.sessionReconciler = new SessionReconciler(kubernetesClient);
+        this.operatorNamespace = operatorNamespace;
+        this.observer = observer;
+        this.jobReconciler = jobReconciler;
+        this.sessionReconciler = sessionReconciler;
     }
 
     @Override
