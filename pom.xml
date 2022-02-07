@@ -44,6 +44,7 @@ under the License.
         <spotless.version>2.4.2</spotless.version>
         <awaitility.version>4.1.0</awaitility.version>
         <it.skip>true</it.skip>
+        <mockito.version>2.21.0</mockito.version>
     </properties>
 
     <dependencies>
@@ -77,6 +78,14 @@ under the License.
             <groupId>org.awaitility</groupId>
             <artifactId>awaitility</artifactId>
             <version>${awaitility.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <type>jar</type>
             <scope>test</scope>
         </dependency>
 

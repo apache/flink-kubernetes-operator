@@ -17,12 +17,16 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** Status of an individual job within the Flink deployment. */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class JobStatus {
     private String jobName;
     private String jobId;

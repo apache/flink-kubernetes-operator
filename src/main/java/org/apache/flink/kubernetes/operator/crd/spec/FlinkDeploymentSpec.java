@@ -18,6 +18,8 @@
 package org.apache.flink.kubernetes.operator.crd.spec;
 
 import io.fabric8.kubernetes.api.model.Pod;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -26,6 +28,8 @@ import java.util.Map;
 /** Spec that describes a Flink application deployment. */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class FlinkDeploymentSpec {
     private String image;
     private String imagePullPolicy;

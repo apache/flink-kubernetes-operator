@@ -18,14 +18,16 @@
 package org.apache.flink.kubernetes.operator.crd.spec;
 
 import io.fabric8.kubernetes.api.model.Pod;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** TaskManager spec. */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
 public class TaskManagerSpec {
-    private int taskSlots;
     private Resource resource;
+    private int taskSlots;
     private Pod podTemplate;
 }

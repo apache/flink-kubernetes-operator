@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.crd.spec;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -24,6 +26,8 @@ import lombok.NoArgsConstructor;
 /** Flink job spec. */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class JobSpec {
     private String jarURI;
     private int parallelism;

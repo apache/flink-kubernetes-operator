@@ -17,12 +17,14 @@
 
 package org.apache.flink.kubernetes.operator.crd.spec;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** Resource spec. */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
 public class Resource {
     private double cpu;
     // 1024m, 1g

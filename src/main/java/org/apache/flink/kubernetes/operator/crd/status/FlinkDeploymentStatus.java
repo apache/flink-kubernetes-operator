@@ -19,12 +19,14 @@ package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** Current status of the Flink deployment. */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
 public class FlinkDeploymentStatus {
     private JobStatus jobStatus;
     private FlinkDeploymentSpec spec;

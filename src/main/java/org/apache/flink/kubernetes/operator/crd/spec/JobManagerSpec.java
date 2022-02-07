@@ -18,12 +18,14 @@
 package org.apache.flink.kubernetes.operator.crd.spec;
 
 import io.fabric8.kubernetes.api.model.Pod;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** JobManager spec. */
 @Data
 @NoArgsConstructor
+@AllArgsConstructor
 public class JobManagerSpec {
     private Resource resource;
     private int replicas;
