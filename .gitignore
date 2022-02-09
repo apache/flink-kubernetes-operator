@@ -36,3 +36,5 @@ buildNumber.properties
 .idea
 *.iml
 
+helm/flink-operator/templates/flinkdeployments.flink.io-v1.yml
+

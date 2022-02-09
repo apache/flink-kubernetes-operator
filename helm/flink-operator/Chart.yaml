@@ -15,20 +15,11 @@
 #  See the License for the specific language governing permissions and
 # limitations under the License.
 ################################################################################
-# Build
-FROM maven:3.8.4-openjdk-11 AS build
-WORKDIR /app
 
-COPY pom.xml .
-RUN --mount=type=cache,target=/root/.m2 mvn dependency:resolve
-
-COPY src ./src
-COPY tools ./tools
-RUN --mount=type=cache,target=/root/.m2 mvn -f ./pom.xml clean install
-
-# stage
-FROM openjdk:11-jre
-
-COPY --from=build /app/target/flink-operator-1.0-SNAPSHOT.jar /
-
-CMD ["java", "-jar", "/flink-operator-1.0-SNAPSHOT.jar"]
+---
+apiVersion: v2
+name: flink-operator
+description: A Helm chart for flink-operator
+type: application
+version: 0.1.0
+appVersion: "1.0.13"

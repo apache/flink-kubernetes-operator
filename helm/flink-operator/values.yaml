@@ -15,20 +15,26 @@
 #  See the License for the specific language governing permissions and
 # limitations under the License.
 ################################################################################
-# Build
-FROM maven:3.8.4-openjdk-11 AS build
-WORKDIR /app
 
-COPY pom.xml .
-RUN --mount=type=cache,target=/root/.m2 mvn dependency:resolve
+---
 
-COPY src ./src
-COPY tools ./tools
-RUN --mount=type=cache,target=/root/.m2 mvn -f ./pom.xml clean install
+operatorNamespace:
+  name: default
 
-# stage
-FROM openjdk:11-jre
+image:
+  repository: flink-operator
+  pullPolicy: IfNotPresent
+  tag: latest
 
-COPY --from=build /app/target/flink-operator-1.0-SNAPSHOT.jar /
+rbac:
+  create: true
 
-CMD ["java", "-jar", "/flink-operator-1.0-SNAPSHOT.jar"]
+serviceAccount:
+  create: true
+  annotations: {}
+  name: "flink-operator"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+

@@ -30,6 +30,7 @@ under the License.
         <maven-assembly-plugin.version>3.3.0</maven-assembly-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.0.0-M4</maven-failsafe-plugin.version>
+        <maven-resources-plugin.version>3.2.0</maven-resources-plugin.version>
 
         <operator.sdk.version>2.0.1</operator.sdk.version>
         <fabric8.version>5.12.1</fabric8.version>
@@ -142,6 +143,33 @@ under the License.
 
     <build>
         <plugins>
+
+            <plugin>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>${maven-resources-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>copy-resources</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${basedir}/helm/flink-operator/templates</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.outputDirectory}/META-INF/fabric8</directory>
+                                    <includes>
+                                        <include>flinkdeployments.flink.io-v1.yml</include>
+                                    </includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -321,6 +349,8 @@ under the License.
       						<exclude>apache-maven-3.2.5/**</exclude>
       						<!-- PyCharm -->
       						<exclude>**/.idea/**</exclude>
+                  <!-- Generated CRD -->
+                  <exclude>helm/flink-operator/templates/flinkdeployments.flink.io-v1.yml</exclude>
       					</excludes>
       				</configuration>
       			</plugin>

@@ -16,49 +16,57 @@
 # limitations under the License.
 ################################################################################
 
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flink-operator
+  name: {{ include "flink-operator.name" . }}
+  namespace: {{ .Values.operatorNamespace.name }}
+  labels:
+    {{- include "flink-operator.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: flink-operator
+      {{- include "flink-operator.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: flink-operator
+        {{- include "flink-operator.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: flink-operator
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "flink-operator.serviceAccountName" . }}
       containers:
-      - name: flink-operator
-        image: docker.apple.com/aiml/dpi-flink/flink-operator:1.0.7
-        imagePullPolicy: Always
-        env:
-          - name: FLINK_CONF_DIR
-            value: /opt/flink/conf
-        volumeMounts:
-        - name: flink-config-volume
-          mountPath: /opt/flink/conf
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: FLINK_CONF_DIR
+              value: /opt/flink/conf
+          volumeMounts:
+            - name: flink-config-volume
+              mountPath: /opt/flink/conf
       volumes:
-      - name: flink-config-volume
-        configMap:
-          name: flink-operator-config
-          items:
-          - key: flink-conf.yaml
-            path: flink-conf.yaml
-          - key: log4j-console.properties
-            path: log4j-console.properties
-
+        - name: flink-config-volume
+          configMap:
+            name: flink-operator-config
+            items:
+              - key: flink-conf.yaml
+                path: flink-conf.yaml
+              - key: log4j-console.properties
+                path: log4j-console.properties
 ---
 
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: flink-operator-config
+  namespace: {{ .Values.operatorNamespace.name }}
   labels:
-    app: flink
+    {{- include "flink-operator.labels" . | nindent 4 }}
 data:
   flink-conf.yaml: |+
     taskmanager.numberOfTaskSlots: 2

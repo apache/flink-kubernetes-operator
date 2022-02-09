@@ -17,78 +17,75 @@
 ################################################################################
 
 ---
-
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: flink-operator
-  namespace: default
-
+{{- if .Values.rbac.create }}
 ---
-
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: flink-operator
+  namespace: {{ .Values.operatorNamespace.name }}
+  labels:
+    {{- include "flink-operator.labels" . | nindent 4 }}
 rules:
-- apiGroups:
-  - flink-operator
-  resources:
-  - "*"
-  verbs:
-  - "*"
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  - services
-  - endpoints
-  - persistentvolumeclaims
-  - events
-  - configmaps
-  - secrets
-  - nodes
-  verbs:
-  - "*"
-- apiGroups:
-  - apps
-  resources:
-  - deployments
-  - replicasets
-  verbs:
-  - "*"
-- apiGroups:
-  - extensions
-  resources:
-  - deployments
-  - ingresses
-  verbs:
-  - "*"
-- apiGroups:
-  - flink.io
-  resources:
-  - flinkdeployments
-  - flinkdeployments/status
-  verbs:
-  - "*"
-- apiGroups:
-  - networking.k8s.io
-  resources:
-  - ingresses
-  verbs:
-  - "*"
-
+  - apiGroups:
+      - flink-operator
+    resources:
+      - "*"
+    verbs:
+      - "*"
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - services
+      - endpoints
+      - persistentvolumeclaims
+      - events
+      - configmaps
+      - secrets
+    verbs:
+      - "*"
+  - apiGroups:
+      - apps
+    resources:
+      - deployments
+      - replicasets
+    verbs:
+      - "*"
+  - apiGroups:
+      - extensions
+    resources:
+      - deployments
+      - ingresses
+    verbs:
+      - "*"
+  - apiGroups:
+      - flink.io
+    resources:
+      - flinkdeployments
+      - flinkdeployments/status
+    verbs:
+      - "*"
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - "*"
 ---
-
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: flink-operator-cluster-role-binding
-subjects:
-- kind: ServiceAccount
-  name: flink-operator
-  namespace: default
+  namespace: {{ .Values.operatorNamespace.name }}
+  labels:
+    {{- include "flink-operator.labels" . | nindent 4 }}
 roleRef:
   kind: ClusterRole
   name: flink-operator
   apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: {{ template "flink-operator.serviceAccountName" . }}
+    namespace: {{ .Values.operatorNamespace.name }}
+{{- end }}
