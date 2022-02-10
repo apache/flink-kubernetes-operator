@@ -26,7 +26,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.KubernetesUtils;
+import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -51,7 +51,8 @@ public class JobReconciler {
         this.flinkService = flinkService;
     }
 
-    public boolean reconcile(FlinkDeployment flinkApp, Configuration effectiveConfig)
+    public boolean reconcile(
+            String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
 
         JobSpec jobSpec = flinkApp.getSpec().getJob();
@@ -65,7 +66,8 @@ public class JobReconciler {
                         flinkApp,
                         effectiveConfig,
                         Optional.ofNullable(jobSpec.getInitialSavepointPath()));
-                KubernetesUtils.deployIngress(flinkApp, effectiveConfig, kubernetesClient);
+                IngressUtils.updateIngressRules(
+                        flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
                 return true;
             } catch (Exception e) {
                 LOG.error("Error while deploying " + flinkApp.getMetadata().getName(), e);

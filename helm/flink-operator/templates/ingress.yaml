@@ -15,31 +15,19 @@
 #  See the License for the specific language governing permissions and
 # limitations under the License.
 ################################################################################
-
-apiVersion: flink.apache.org/v1alpha1
-kind: FlinkDeployment
+---
+{{- if .Values.ingress.create }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
 metadata:
-  namespace: default
-  name: basic-ingress
+  name: {{ include "flink-operator.name" . }}
+  namespace: {{ .Values.operatorNamespace.name }}
+  labels:
+    {{- include "flink-operator.labels" . | nindent 4 }}
 spec:
-  image: flink:1.14.3
-  flinkVersion: 1.14.3
-  ingressDomain: flink.k8s.io
-  flinkConfiguration:
-#    rest.address: basic-example.flink.k8s.io
-#    rest.port: "80"
-    taskmanager.numberOfTaskSlots: "2"
-    kubernetes.jobmanager.service-account: flink-operator
-  jobManager:
-    replicas: 1
-    resource:
-      memory: "2048m"
-      cpu: 1
-  taskManager:
-    taskSlots: 2
-    resource:
-      memory: "2048m"
-      cpu: 1
-  job:
-    jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
-    parallelism: 2
+  defaultBackend:
+    service:
+      name: dummy-http-backend
+      port:
+        number: 80
+{{- end }}

@@ -21,7 +21,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.KubernetesUtils;
+import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
@@ -43,13 +43,15 @@ public class SessionReconciler {
         this.flinkService = flinkService;
     }
 
-    public boolean reconcile(FlinkDeployment flinkApp, Configuration effectiveConfig)
+    public boolean reconcile(
+            String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         if (flinkApp.getStatus() == null) {
             flinkApp.setStatus(new FlinkDeploymentStatus());
             try {
                 flinkService.submitSessionCluster(flinkApp, effectiveConfig);
-                KubernetesUtils.deployIngress(flinkApp, effectiveConfig, kubernetesClient);
+                IngressUtils.updateIngressRules(
+                        flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
                 return true;
             } catch (Exception e) {
                 LOG.error("Error while deploying " + flinkApp.getMetadata().getName(), e);

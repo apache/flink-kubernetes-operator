@@ -29,6 +29,9 @@ image:
 rbac:
   create: true
 
+ingress:
+  create: false
+
 serviceAccount:
   create: true
   annotations: {}

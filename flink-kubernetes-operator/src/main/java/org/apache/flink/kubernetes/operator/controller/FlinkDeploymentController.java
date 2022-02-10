@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -77,6 +78,12 @@ public class FlinkDeploymentController
     public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
         LOG.info("Cleaning up application cluster {}", flinkApp.getMetadata().getName());
         FlinkUtils.deleteCluster(flinkApp, kubernetesClient);
+        IngressUtils.updateIngressRules(
+                flinkApp,
+                FlinkUtils.getEffectiveConfig(flinkApp),
+                operatorNamespace,
+                kubernetesClient,
+                true);
         return DeleteControl.defaultDelete();
     }
 
@@ -89,7 +96,7 @@ public class FlinkDeploymentController
         boolean success = observer.observeFlinkJobStatus(flinkApp, effectiveConfig);
         if (success) {
             try {
-                success = reconcileFlinkDeployment(flinkApp, effectiveConfig);
+                success = reconcileFlinkDeployment(operatorNamespace, flinkApp, effectiveConfig);
             } catch (Exception e) {
                 throw new RuntimeException(
                         "Error while reconciling deployment change for "
@@ -109,10 +116,11 @@ public class FlinkDeploymentController
     }
 
     private boolean reconcileFlinkDeployment(
-            FlinkDeployment flinkApp, Configuration effectiveConfig) throws Exception {
+            String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig)
+            throws Exception {
         return flinkApp.getSpec().getJob() == null
-                ? sessionReconciler.reconcile(flinkApp, effectiveConfig)
-                : jobReconciler.reconcile(flinkApp, effectiveConfig);
+                ? sessionReconciler.reconcile(operatorNamespace, flinkApp, effectiveConfig)
+                : jobReconciler.reconcile(operatorNamespace, flinkApp, effectiveConfig);
     }
 
     @Override
