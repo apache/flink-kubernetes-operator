@@ -16,7 +16,7 @@
 # limitations under the License.
 ################################################################################
 
-apiVersion: flink.io/v1alpha1
+apiVersion: flink.apache.org/v1alpha1
 kind: FlinkDeployment
 metadata:
   namespace: default

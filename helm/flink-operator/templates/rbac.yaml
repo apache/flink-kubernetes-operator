@@ -60,7 +60,7 @@ rules:
     verbs:
       - "*"
   - apiGroups:
-      - flink.io
+      - flink.apache.org
     resources:
       - flinkdeployments
       - flinkdeployments/status

@@ -83,7 +83,7 @@ metadata:
     cert-manager.io/inject-ca-from: default/flink-operator-serving-cert
   name: flink-operator-validating-webhook-configuration
 webhooks:
-- name: vflinkdeployments.flink.io
+- name: vflinkdeployments.flink.apache.org
   admissionReviewVersions: ["v1"]
   clientConfig:
     service:

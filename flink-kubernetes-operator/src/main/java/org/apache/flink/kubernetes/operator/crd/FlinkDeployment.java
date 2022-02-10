@@ -31,7 +31,7 @@ import io.fabric8.kubernetes.model.annotation.Version;
 /** Flink deployment object (spec + status). */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonDeserialize()
-@Group("flink.io")
+@Group("flink.apache.org")
 @Version("v1alpha1")
 @ShortNames({"flinkdep"})
 public class FlinkDeployment extends CustomResource<FlinkDeploymentSpec, FlinkDeploymentStatus>
