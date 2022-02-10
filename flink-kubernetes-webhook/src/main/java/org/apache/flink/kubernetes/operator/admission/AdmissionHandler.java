@@ -1,0 +1,124 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.flink.kubernetes.operator.admission;
+
+import org.apache.flink.kubernetes.operator.admission.admissioncontroller.AdmissionController;
+import org.apache.flink.kubernetes.operator.admission.admissioncontroller.validation.Validator;
+
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
+import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufInputStream;
+import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
+import org.apache.flink.shaded.netty4.io.netty.channel.ChannelFuture;
+import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandler;
+import org.apache.flink.shaded.netty4.io.netty.channel.ChannelHandlerContext;
+import org.apache.flink.shaded.netty4.io.netty.channel.SimpleChannelInboundHandler;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultFullHttpResponse;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultHttpResponse;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.FullHttpRequest;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaderValues;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaders;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpRequest;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponse;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.LastHttpContent;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
+import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+
+import javax.annotation.Nonnull;
+
+import java.io.InputStream;
+import java.nio.charset.Charset;
+import java.util.concurrent.CompletableFuture;
+
+import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaderValues.APPLICATION_JSON;
+import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
+import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+
+/** Rest endpoint for validation requests. */
+@ChannelHandler.Sharable
+public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    private final AdmissionController<GenericKubernetesResource> validatingController;
+
+    public AdmissionHandler(Validator<GenericKubernetesResource> validator) {
+        this.validatingController = new AdmissionController<>(validator);
+    }
+
+    @Override
+    protected void channelRead0(ChannelHandlerContext ctx, HttpRequest httpRequest) {
+        final ByteBuf msgContent = ((FullHttpRequest) httpRequest).content();
+        AdmissionReview review;
+        try {
+            InputStream in = new ByteBufInputStream(msgContent);
+            review = objectMapper.readValue(in, AdmissionReview.class);
+            AdmissionReview response = validatingController.handle(review);
+            sendResponse(ctx, objectMapper.writeValueAsString(response));
+        } catch (Exception e) {
+            sendError(ctx, ExceptionUtils.getStackTrace(e));
+        }
+    }
+
+    private void sendError(ChannelHandlerContext ctx, String error) {
+        if (ctx.channel().isActive()) {
+            DefaultFullHttpResponse response =
+                    new DefaultFullHttpResponse(
+                            HttpVersion.HTTP_1_1,
+                            HttpResponseStatus.INTERNAL_SERVER_ERROR,
+                            Unpooled.wrappedBuffer(error.getBytes(Charset.defaultCharset())));
+
+            response.headers().set(HttpHeaders.Names.CONTENT_TYPE, HttpHeaderValues.TEXT_PLAIN);
+            response.headers()
+                    .set(HttpHeaders.Names.CONTENT_LENGTH, response.content().readableBytes());
+
+            ctx.writeAndFlush(response);
+        }
+    }
+
+    public static CompletableFuture<Void> sendResponse(
+            @Nonnull ChannelHandlerContext channelHandlerContext, @Nonnull String json) {
+        HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK);
+
+        response.headers().set(CONTENT_TYPE, APPLICATION_JSON);
+
+        byte[] buf = json.getBytes(Charset.defaultCharset());
+        ByteBuf b = Unpooled.copiedBuffer(buf);
+        HttpHeaders.setContentLength(response, buf.length);
+
+        // write the initial line and the header.
+        channelHandlerContext.write(response);
+        channelHandlerContext.write(b);
+        ChannelFuture channelFuture =
+                channelHandlerContext.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+
+        final CompletableFuture<Void> completableFuture = new CompletableFuture<>();
+        channelFuture.addListener(
+                future -> {
+                    if (future.isSuccess()) {
+                        completableFuture.complete(null);
+                    } else {
+                        completableFuture.completeExceptionally(future.cause());
+                    }
+                });
+        return completableFuture;
+    }
+}

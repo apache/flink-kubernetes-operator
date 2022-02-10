@@ -43,12 +43,41 @@ spec:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/docker-entrypoint.sh", "operator"]
           env:
             - name: FLINK_CONF_DIR
               value: /opt/flink/conf
           volumeMounts:
             - name: flink-config-volume
               mountPath: /opt/flink/conf
+        {{- if .Values.webhook.create }}
+        - name: flink-webhook
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/docker-entrypoint.sh", "webhook"]
+          env:
+            - name: WEBHOOK_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                {{- if .Values.webhook.keystore.useDefaultPassword }}
+                  name: flink-operator-webhook-secret
+                  key: password
+                {{- else }}
+                  {{- with .Values.webhook.keystore.passwordSecretRef }}
+                    {{- toYaml . | nindent 18 }}
+                  {{- end }}
+                {{- end }}
+            - name: WEBHOOK_KEYSTORE_FILE
+              value: "/certs/keystore.p12"
+            - name: WEBHOOK_KEYSTORE_TYPE
+              value: "pkcs12"
+            - name: WEBHOOK_SERVER_PORT
+              value: "9443"
+          volumeMounts:
+          - name: keystore
+            mountPath: "/certs"
+            readOnly: true
+        {{- end }}
       volumes:
         - name: flink-config-volume
           configMap:
@@ -58,6 +87,14 @@ spec:
                 path: flink-conf.yaml
               - key: log4j-console.properties
                 path: log4j-console.properties
+        {{- if .Values.webhook.create }}
+        - name: keystore
+          secret:
+            secretName: webhook-server-cert
+            items:
+            - key: keystore.p12
+              path: keystore.p12
+        {{- end }}
 ---
 
 apiVersion: v1

@@ -18,12 +18,37 @@ under the License.
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <parent>
+      <groupId>org.apache</groupId>
+      <artifactId>apache</artifactId>
+      <version>20</version>
+    </parent>
+
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.apache.flink</groupId>
-    <artifactId>flink-operator</artifactId>
+    <artifactId>flink-kubernetes-operator-parent</artifactId>
     <version>1.0-SNAPSHOT</version>
-    <packaging>jar</packaging>
+
+    <name>Flink Kubernetes: </name>
+  	<packaging>pom</packaging>
+  	<url>https://flink.apache.org</url>
+  	<inceptionYear>2014</inceptionYear>
+
+    <licenses>
+      <license>
+        <name>The Apache Software License, Version 2.0</name>
+        <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        <distribution>repo</distribution>
+      </license>
+    </licenses>
+
+    <modules>
+      <module>flink-kubernetes-operator</module>
+      <module>flink-kubernetes-webhook</module>
+    </modules>
+
     <properties>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
@@ -38,6 +63,7 @@ under the License.
 
         <scala.version>2.12</scala.version>
         <flink.version>1.14.3</flink.version>
+        <flink.shaded.version>15.0</flink.shaded.version>
 
         <slf4j.version>1.7.15</slf4j.version>
         <log4j.version>2.17.1</log4j.version>
@@ -50,63 +76,22 @@ under the License.
 
     <dependencies>
         <dependency>
-            <groupId>io.javaoperatorsdk</groupId>
-            <artifactId>operator-framework</artifactId>
-            <version>${operator.sdk.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.fabric8</groupId>
-            <artifactId>crd-generator-apt</artifactId>
-            <version>${fabric8.version}</version>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
             <scope>provided</scope>
         </dependency>
 
-        <dependency>
-            <groupId>org.takes</groupId>
-            <artifactId>takes</artifactId>
-            <version>1.19</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.fabric8</groupId>
-            <artifactId>kubernetes-server-mock</artifactId>
-            <version>${fabric8.version}</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.awaitility</groupId>
-            <artifactId>awaitility</artifactId>
-            <version>${awaitility.version}</version>
-            <scope>test</scope>
-        </dependency>
+        <!-- Testing -->
 
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
             <version>${mockito.version}</version>
-            <type>jar</type>
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>${lombok.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-clients_${scala.version}</artifactId>
-            <version>${flink.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.flink</groupId>
-            <artifactId>flink-kubernetes_${scala.version}</artifactId>
-            <version>${flink.version}</version>
-        </dependency>
+        <!-- Logging -->
 
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -133,12 +118,10 @@ under the License.
         </dependency>
 
         <dependency>
-            <!-- API bridge between log4j 1 and 2 -->
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-1.2-api</artifactId>
             <version>${log4j.version}</version>
         </dependency>
-
     </dependencies>
 
     <build>
@@ -165,39 +148,6 @@ under the License.
                                     <filtering>false</filtering>
                                 </resource>
                             </resources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>shade-flink-operator</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration combine.children="append">
-                            <artifactSet>
-                                <includes combine.children="append">
-                                    <include>*:*</include>
-                                </includes>
-                            </artifactSet>
-                            <transformers combine.children="append">
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>org.apache.flink.kubernetes.operator.FlinkOperator</mainClass>
-                                </transformer>
-                                <!-- The service transformer is needed to merge META-INF/services files -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                                <!-- The ApacheNoticeResourceTransformer collects and aggregates NOTICE files -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
-                                    <projectName>Apache Flink</projectName>
-                                    <encoding>UTF-8</encoding>
-                                </transformer>
-                            </transformers>
                         </configuration>
                     </execution>
                 </executions>
@@ -339,6 +289,7 @@ under the License.
       						<exclude>**/.*/**</exclude>
       						<exclude>**/*.prefs</exclude>
       						<exclude>**/*.log</exclude>
+                  <exclude>**/dependency-reduced-pom.xml</exclude>
       						<!-- Administrative files in the main trunk. -->
       						<exclude>**/README.md</exclude>
       						<exclude>.github/**</exclude>

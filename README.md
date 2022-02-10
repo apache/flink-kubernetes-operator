@@ -9,6 +9,13 @@ The operator is managed helm chart. To install run:
  helm install flink-operator .
 ```
 
+In order to use the webhook for FlinkDeployment validation, you must install the cert-manager on the Kubernetes cluster:
+```
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.7.1/cert-manager.yaml
+```
+
+The webhook can be disabled during helm install by passing the `--set webhook.create=false` parameter or editing the `values.yaml` directly.
+
 ## User Guide
 ### Create a new Flink deployment
 The flink-operator will watch the CRD resources and submit a new Flink deployment once the CR it applied.
@@ -43,7 +50,7 @@ docker push <repo>flink-java-operator:latest
 helm install flink-operator . --set image.repository=<repo> --set image.tag=latest
 ```
 ### Running the operator locally
-You can run or debug the `FlinkOperator` from your preferred IDE. The operator itself is accessing the deployed Flink clusters through the REST interface. When running locally the `rest.port` and `rest.address` Flink configuration parameters must be modified to a locally accessible value. 
+You can run or debug the `FlinkOperator` from your preferred IDE. The operator itself is accessing the deployed Flink clusters through the REST interface. When running locally the `rest.port` and `rest.address` Flink configuration parameters must be modified to a locally accessible value.
 
 When using `minikube tunnel` the rest service is exposed on `localhost:8081`
 ```
@@ -60,4 +67,3 @@ cat /opt/flink/conf/flink-conf.yaml
 rest.port: 8081
 rest.address: localhost
 ```
-

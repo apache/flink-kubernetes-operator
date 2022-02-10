@@ -1,4 +1,6 @@
-################################################################################
+#!/usr/bin/env bash
+
+###############################################################################
 #  Licensed to the Apache Software Foundation (ASF) under one
 #  or more contributor license agreements.  See the NOTICE file
 #  distributed with this work for additional information
@@ -14,34 +16,24 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 # limitations under the License.
-################################################################################
+###############################################################################
 
----
+args=("$@")
+if [ "$1" = "help" ]; then
+    printf "Usage: $(basename "$0") (operator|webhook)\n"
+    printf "    Or $(basename "$0") help\n\n"
+    exit 0
+elif [ "$1" = "operator" ]; then
+    echo "Starting Operator"
 
-operatorNamespace:
-  name: default
+    exec java -jar /$OPERATOR_JAR
+elif [ "$1" = "webhook" ]; then
+    echo "Starting Webhook"
 
-image:
-  repository: flink-operator
-  pullPolicy: IfNotPresent
-  tag: latest
+    exec java -jar /$WEBHOOK_JAR
+fi
 
-rbac:
-  create: true
+args=("${args[@]}")
 
-serviceAccount:
-  create: true
-  annotations: {}
-  name: "flink-operator"
-
-webhook:
-  create: true
-  keystore:
-    useDefaultPassword: true
-  # passwordSecretRef:
-  #   name: jks-password-secret
-  #   key: password-key
-
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+# Running command in pass-through mode
+exec "${args[@]}"
