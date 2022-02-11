@@ -19,6 +19,7 @@
 ###############################################################################
 
 args=("$@")
+
 if [ "$1" = "help" ]; then
     printf "Usage: $(basename "$0") (operator|webhook)\n"
     printf "    Or $(basename "$0") help\n\n"
@@ -26,11 +27,11 @@ if [ "$1" = "help" ]; then
 elif [ "$1" = "operator" ]; then
     echo "Starting Operator"
 
-    exec java -jar /$OPERATOR_JAR
+    exec java -jar $LOG_CONFIG /$OPERATOR_JAR
 elif [ "$1" = "webhook" ]; then
     echo "Starting Webhook"
 
-    exec java -jar /$WEBHOOK_JAR
+    exec java -jar $LOG_CONFIG /$WEBHOOK_JAR
 fi
 
 args=("${args[@]}")

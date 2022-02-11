@@ -15,7 +15,6 @@
 #  See the License for the specific language governing permissions and
 # limitations under the License.
 ################################################################################
-
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -47,8 +46,12 @@ spec:
           env:
             - name: FLINK_CONF_DIR
               value: /opt/flink/conf
+            - name: LOG_CONFIG
+              value: -Dlog4j.configurationFile=/opt/flink-operator/conf/log4j2.properties
           volumeMounts:
-            - name: flink-config-volume
+            - name: flink-operator-config-volume
+              mountPath: /opt/flink-operator/conf
+            - name: flink-default-config-volume
               mountPath: /opt/flink/conf
         {{- if .Values.webhook.create }}
         - name: flink-webhook
@@ -73,15 +76,25 @@ spec:
               value: "pkcs12"
             - name: WEBHOOK_SERVER_PORT
               value: "9443"
+            - name: LOG_CONFIG
+              value: -Dlog4j.configurationFile=/opt/flink-operator/conf/log4j2.properties
           volumeMounts:
           - name: keystore
             mountPath: "/certs"
             readOnly: true
+          - name: flink-operator-config-volume
+            mountPath: /opt/flink-operator/conf
         {{- end }}
       volumes:
-        - name: flink-config-volume
+        - name: flink-operator-config-volume
           configMap:
             name: flink-operator-config
+            items:
+              - key: log4j2.properties
+                path: log4j2.properties
+        - name: flink-default-config-volume
+          configMap:
+            name: flink-default-config
             items:
               - key: flink-conf.yaml
                 path: flink-conf.yaml
@@ -101,6 +114,28 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: flink-operator-config
+  namespace: {{ .Values.operatorNamespace.name }}
+  labels:
+    {{- include "flink-operator.labels" . | nindent 4 }}
+data:
+  log4j2.properties: |+
+    rootLogger.level = DEBUG
+    rootLogger.appenderRef.console.ref = ConsoleAppender
+
+    logger.spring-web.name= org.springframework.web.filter
+    logger.spring-web.level = DEBUG
+
+    # Log all infos to the console
+    appender.console.name = ConsoleAppender
+    appender.console.type = CONSOLE
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = %style{%d}{yellow} %style{%-30c{1.}}{cyan} %highlight{[%-5level] %msg%n%throwable}
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-default-config
   namespace: {{ .Values.operatorNamespace.name }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
