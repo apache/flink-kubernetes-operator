@@ -44,8 +44,16 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/docker-entrypoint.sh", "operator"]
           env:
+            - name: OPERATOR_NAMESPACE
+              value: {{ .Values.operatorNamespace.name }}
+            - name: OPERATOR_NAME
+              value: {{ include "flink-operator.name" . }}
             - name: FLINK_CONF_DIR
               value: /opt/flink/conf
+            - name: FLINK_PLUGINS_DIR
+              value: /opt/flink/plugins
+            - name: FLINK_OPERATOR_CONF_DIR
+              value: /opt/flink-operator/conf
             - name: LOG_CONFIG
               value: -Dlog4j.configurationFile=/opt/flink-operator/conf/log4j2.properties
           volumeMounts:
@@ -90,6 +98,8 @@ spec:
           configMap:
             name: flink-operator-config
             items:
+              - key: flink-conf.yaml
+                path: flink-conf.yaml
               - key: log4j2.properties
                 path: log4j2.properties
         - name: flink-default-config-volume
@@ -118,6 +128,10 @@ metadata:
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
 data:
+  flink-conf.yaml: |+
+    metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
+    metrics.reporter.slf4j.interval: 1 MINUTE
+    # metrics.scope.kubernetes-operator: <host>.kubernetes-operator.<namespace>.<name>
   log4j2.properties: |+
     rootLogger.level = DEBUG
     rootLogger.appenderRef.console.ref = ConsoleAppender

@@ -33,6 +33,7 @@ under the License.
 
     <properties>
         <awaitility.version>4.1.0</awaitility.version>
+        <plugins.tmp.dir>${project.build.directory}/plugins</plugins.tmp.dir>
     </properties>
 
     <dependencies>
@@ -143,6 +144,59 @@ under the License.
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <artifactItems>
+                        <artifactItem>
+                            <groupId>org.apache.flink</groupId>
+                            <artifactId>flink-metrics-datadog</artifactId>
+                            <version>${flink.version}</version>
+                            <outputDirectory>${plugins.tmp.dir}/flink-metrics-datadog</outputDirectory>
+                        </artifactItem>
+                        <artifactItem>
+                            <groupId>org.apache.flink</groupId>
+                            <artifactId>flink-metrics-graphite</artifactId>
+                            <version>${flink.version}</version>
+                            <outputDirectory>${plugins.tmp.dir}/flink-metrics-graphite</outputDirectory>
+                        </artifactItem>
+                        <artifactItem>
+                            <groupId>org.apache.flink</groupId>
+                            <artifactId>flink-metrics-influxdb</artifactId>
+                            <version>${flink.version}</version>
+                            <outputDirectory>${plugins.tmp.dir}/flink-metrics-influxdb</outputDirectory>
+                        </artifactItem>
+                        <artifactItem>
+                            <groupId>org.apache.flink</groupId>
+                            <artifactId>flink-metrics-prometheus</artifactId>
+                            <version>${flink.version}</version>
+                            <outputDirectory>${plugins.tmp.dir}/flink-metrics-prometheus</outputDirectory>
+                        </artifactItem>
+                        <artifactItem>
+                            <groupId>org.apache.flink</groupId>
+                            <artifactId>flink-metrics-slf4j</artifactId>
+                            <version>${flink.version}</version>
+                            <outputDirectory>${plugins.tmp.dir}/flink-metrics-slf4j</outputDirectory>
+                        </artifactItem>
+                        <artifactItem>
+                            <groupId>org.apache.flink</groupId>
+                            <artifactId>flink-metrics-statsd</artifactId>
+                            <version>${flink.version}</version>
+                            <outputDirectory>${plugins.tmp.dir}/flink-metrics-statsd</outputDirectory>
+                        </artifactItem>
+                    </artifactItems>
+                </configuration>
             </plugin>
         </plugins>
     </build>

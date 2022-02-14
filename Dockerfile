@@ -17,8 +17,8 @@
 ################################################################################
 # Build
 FROM maven:3.8.4-openjdk-11 AS build
-WORKDIR /app
 
+WORKDIR /app
 ENV OPERATOR_DIR=flink-kubernetes-operator
 ENV WEBHOOK_DIR=flink-kubernetes-webhook
 
@@ -44,6 +44,7 @@ ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION-shaded.jar
 
 COPY --from=build /app/flink-kubernetes-operator/target/$OPERATOR_JAR /
 COPY --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR /
+COPY --from=build /app/flink-kubernetes-operator/target/plugins /opt/flink/plugins
 
 COPY docker-entrypoint.sh /
 ENTRYPOINT ["/docker-entrypoint.sh"]
