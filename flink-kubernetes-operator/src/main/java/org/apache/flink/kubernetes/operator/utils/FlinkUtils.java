@@ -61,10 +61,7 @@ public class FlinkUtils {
 
         try {
             String flinkConfDir = System.getenv().get(ConfigConstants.ENV_FLINK_CONF_DIR);
-            Configuration effectiveConfig =
-                    flinkConfDir != null
-                            ? GlobalConfiguration.loadConfiguration(flinkConfDir)
-                            : new Configuration();
+            Configuration effectiveConfig = loadConfiguration(flinkConfDir);
 
             effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
             effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
@@ -165,6 +162,14 @@ public class FlinkUtils {
         } catch (Exception e) {
             throw new RuntimeException("Failed to load configuration", e);
         }
+    }
+
+    public static Configuration loadConfiguration(String confDir) {
+        Configuration configuration =
+                confDir != null
+                        ? GlobalConfiguration.loadConfiguration(confDir)
+                        : new Configuration();
+        return configuration;
     }
 
     private static String createTempFile(Pod podTemplate) throws IOException {
