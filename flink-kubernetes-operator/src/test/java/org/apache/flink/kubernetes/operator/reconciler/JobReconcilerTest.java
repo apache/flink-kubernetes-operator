@@ -17,51 +17,43 @@
 
 package org.apache.flink.kubernetes.operator.reconciler;
 
-import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
+import org.apache.flink.runtime.client.JobStatusMessage;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
 
-import java.util.Optional;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.times;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** @link JobStatusObserver unit tests */
 public class JobReconcilerTest {
 
-    public static final String JOB_NAME = "test1";
-    public static final String JOB_ID = "fd72014d4c864993a2e5a9287b4a9c5d";
-
-    private FlinkService flinkService = Mockito.mock(FlinkService.class);
-
     @Test
     public void testUpgrade() throws Exception {
-        KubernetesClient kubernetesClient = Mockito.mock(KubernetesClient.class);
-        JobReconciler reconciler = new JobReconciler(kubernetesClient, flinkService);
+        TestingFlinkService flinkService = new TestingFlinkService();
+
+        JobReconciler reconciler = new JobReconciler(null, flinkService);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration config = FlinkUtils.getEffectiveConfig(deployment);
 
         reconciler.reconcile("test", deployment, config);
-        Mockito.verify(flinkService, times(1)).submitApplicationCluster(eq(deployment), eq(config));
-        Mockito.clearInvocations(flinkService);
+        List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        assertEquals(1, runningJobs.size());
+        assertNull(runningJobs.get(0).f0);
         deployment.getStatus().setSpec(deployment.getSpec());
 
         JobStatus jobStatus = new JobStatus();
-        jobStatus.setJobName(JOB_NAME);
-        jobStatus.setJobId(JOB_ID);
+        jobStatus.setJobName(runningJobs.get(0).f1.getJobName());
+        jobStatus.setJobId(runningJobs.get(0).f1.getJobId().toHexString());
         jobStatus.setState("RUNNING");
 
         deployment.getStatus().setJobStatus(jobStatus);
@@ -71,30 +63,25 @@ public class JobReconcilerTest {
         statelessUpgrade.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         statelessUpgrade.getSpec().getFlinkConfiguration().put("new", "conf");
         reconciler.reconcile("test", statelessUpgrade, config);
-        Mockito.verify(flinkService, times(1))
-                .cancelJob(eq(JobID.fromHexString(JOB_ID)), eq(UpgradeMode.STATELESS), eq(config));
 
-        Mockito.verify(flinkService, times(1))
-                .submitApplicationCluster(eq(statelessUpgrade), eq(config));
+        runningJobs = flinkService.listJobs();
+        assertEquals(1, runningJobs.size());
+        assertNull(runningJobs.get(0).f0);
 
-        Mockito.clearInvocations(flinkService);
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setJobId(runningJobs.get(0).f1.getJobId().toHexString());
 
         // Test stateful upgrade
         FlinkDeployment statefulUpgrade = TestUtils.clone(deployment);
         statefulUpgrade.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
-        statefulUpgrade.getSpec().getFlinkConfiguration().put("new", "conf");
-
-        Mockito.doReturn(Optional.of("sp")).when(flinkService).cancelJob(any(), any(), any());
+        statefulUpgrade.getSpec().getFlinkConfiguration().put("new", "conf2");
 
         reconciler.reconcile("test", statefulUpgrade, new Configuration(config));
-        Mockito.verify(flinkService, times(1))
-                .cancelJob(eq(JobID.fromHexString(JOB_ID)), eq(UpgradeMode.SAVEPOINT), eq(config));
 
-        ArgumentCaptor<Configuration> argument = ArgumentCaptor.forClass(Configuration.class);
-        Mockito.verify(flinkService, times(1))
-                .submitApplicationCluster(eq(statefulUpgrade), argument.capture());
-        assertEquals("sp", argument.getValue().get(SavepointConfigOptions.SAVEPOINT_PATH));
-
-        Mockito.verifyNoMoreInteractions(flinkService);
+        runningJobs = flinkService.listJobs();
+        assertEquals(1, runningJobs.size());
+        assertEquals(TestingFlinkService.SAVEPOINT, runningJobs.get(0).f0);
     }
 }

@@ -17,40 +17,27 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
-import org.apache.flink.api.common.JobID;
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.runtime.client.JobStatusMessage;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-
-import java.util.Arrays;
-import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /** @link JobStatusObserver unit tests */
 public class JobStatusObserverTest {
 
-    public static final String JOB_NAME = "test1";
-
-    private FlinkService flinkService = Mockito.mock(FlinkService.class);
-
     @Test
     public void observeSessionCluster() {
+        FlinkService flinkService = new TestingFlinkService();
         JobStatusObserver observer = new JobStatusObserver(flinkService);
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         deployment.setStatus(new FlinkDeploymentStatus());
@@ -61,36 +48,27 @@ public class JobStatusObserverTest {
     }
 
     @Test
-    public void observeApplicationCluster() throws Exception {
+    public void observeApplicationCluster() {
+        TestingFlinkService flinkService = new TestingFlinkService();
         JobStatusObserver observer = new JobStatusObserver(flinkService);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        assertTrue(
-                observer.observeFlinkJobStatus(
-                        deployment, FlinkUtils.getEffectiveConfig(deployment)));
+        Configuration conf = FlinkUtils.getEffectiveConfig(deployment);
+
+        assertTrue(observer.observeFlinkJobStatus(deployment, conf));
         deployment.setStatus(new FlinkDeploymentStatus());
         deployment.getStatus().setSpec(deployment.getSpec());
-        verify(flinkService, times(0)).listJobs(any(Configuration.class));
 
-        when(flinkService.listJobs(any(Configuration.class))).thenReturn(Collections.emptyList());
-        assertFalse(
-                observer.observeFlinkJobStatus(
-                        deployment, FlinkUtils.getEffectiveConfig(deployment)));
-        verify(flinkService, times(1)).listJobs(any(Configuration.class));
+        assertFalse(observer.observeFlinkJobStatus(deployment, conf));
 
-        when(flinkService.listJobs(any(Configuration.class)))
-                .thenReturn(
-                        Arrays.asList(
-                                new JobStatusMessage(
-                                        new JobID(), JOB_NAME, JobStatus.RUNNING, 1L)));
-        assertTrue(
-                observer.observeFlinkJobStatus(
-                        deployment, FlinkUtils.getEffectiveConfig(deployment)));
-        verify(flinkService, times(2)).listJobs(any(Configuration.class));
-        assertEquals(JOB_NAME, deployment.getStatus().getJobStatus().getJobName());
+        flinkService.submitApplicationCluster(deployment, conf);
+        assertTrue(observer.observeFlinkJobStatus(deployment, conf));
+
+        assertEquals(
+                deployment.getMetadata().getName(),
+                deployment.getStatus().getJobStatus().getJobName());
+
         deployment.getSpec().getJob().setState(JobState.SUSPENDED);
-        assertTrue(
-                observer.observeFlinkJobStatus(
-                        deployment, FlinkUtils.getEffectiveConfig(deployment)));
-        verify(flinkService, times(2)).listJobs(any(Configuration.class));
+        flinkService.clear();
+        assertTrue(observer.observeFlinkJobStatus(deployment, conf));
     }
 }

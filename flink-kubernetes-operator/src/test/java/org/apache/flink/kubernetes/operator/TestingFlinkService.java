@@ -1,0 +1,100 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.flink.kubernetes.operator;
+
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/** Flink service mock for tests. */
+public class TestingFlinkService extends FlinkService {
+
+    public static final String SAVEPOINT = "savepoint";
+
+    private List<Tuple2<String, JobStatusMessage>> jobs = new ArrayList<>();
+    private Set<String> sessions = new HashSet<>();
+
+    public TestingFlinkService() {
+        super(null);
+    }
+
+    public void clear() {
+        jobs.clear();
+        sessions.clear();
+    }
+
+    @Override
+    public void submitApplicationCluster(FlinkDeployment deployment, Configuration conf) {
+        JobID jobID = new JobID();
+        JobStatusMessage jobStatusMessage =
+                new JobStatusMessage(
+                        jobID,
+                        deployment.getMetadata().getName(),
+                        JobStatus.RUNNING,
+                        System.currentTimeMillis());
+
+        jobs.add(Tuple2.of(conf.get(SavepointConfigOptions.SAVEPOINT_PATH), jobStatusMessage));
+    }
+
+    @Override
+    public void submitSessionCluster(FlinkDeployment deployment, Configuration conf) {
+        sessions.add(deployment.getMetadata().getName());
+    }
+
+    @Override
+    public List<JobStatusMessage> listJobs(Configuration conf) {
+        return jobs.stream().map(t -> t.f1).collect(Collectors.toList());
+    }
+
+    public List<Tuple2<String, JobStatusMessage>> listJobs() {
+        return new ArrayList<>(jobs);
+    }
+
+    @Override
+    public Optional<String> cancelJob(JobID jobID, UpgradeMode upgradeMode, Configuration conf)
+            throws Exception {
+
+        if (!jobs.removeIf(js -> js.f1.getJobId().equals(jobID))) {
+            throw new Exception("Job not found");
+        }
+
+        if (upgradeMode != UpgradeMode.STATELESS) {
+            return Optional.of(SAVEPOINT);
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public void stopSessionCluster(FlinkDeployment deployment, Configuration conf) {
+        sessions.remove(deployment.getMetadata().getName());
+    }
+}
