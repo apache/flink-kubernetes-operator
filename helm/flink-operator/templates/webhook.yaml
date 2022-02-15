@@ -48,8 +48,8 @@ metadata:
   namespace: {{ .Values.operatorNamespace.name }}
 spec:
   dnsNames:
-  - flink-operator-webhook-service.default.svc
-  - flink-operator-webhook-service.default.svc.cluster.local
+  - flink-operator-webhook-service.{{ .Values.operatorNamespace.name }}.svc
+  - flink-operator-webhook-service.{{ .Values.operatorNamespace.name }}.svc.cluster.local
   keystores:
     pkcs12:
       create: true
@@ -80,7 +80,7 @@ apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   annotations:
-    cert-manager.io/inject-ca-from: default/flink-operator-serving-cert
+    cert-manager.io/inject-ca-from: {{ .Values.operatorNamespace.name }}/flink-operator-serving-cert
   name: flink-operator-validating-webhook-configuration
 webhooks:
 - name: vflinkdeployments.flink.apache.org
