@@ -37,15 +37,25 @@ RUN --mount=type=cache,target=/root/.m2 mvn clean install
 
 # stage
 FROM openjdk:11-jre
-
+ENV FLINK_HOME=/opt/flink
 ENV OPERATOR_VERSION=1.0-SNAPSHOT
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
 ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION-shaded.jar
 
-COPY --from=build /app/flink-kubernetes-operator/target/$OPERATOR_JAR /
-COPY --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR /
-COPY --from=build /app/flink-kubernetes-operator/target/plugins /opt/flink/plugins
+WORKDIR /
+RUN groupadd --system --gid=9999 flink && \
+    useradd --system --home-dir $FLINK_HOME --uid=9999 --gid=flink flink
 
+COPY --from=build /app/flink-kubernetes-operator/target/$OPERATOR_JAR .
+COPY --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR .
+COPY --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
 COPY docker-entrypoint.sh /
+
+RUN chown -R flink:flink $FLINK_HOME && \
+    chown flink:flink $OPERATOR_JAR && \
+    chown flink:flink $WEBHOOK_JAR && \
+    chown flink:flink docker-entrypoint.sh
+
+USER flink
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["help"]

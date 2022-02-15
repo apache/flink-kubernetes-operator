@@ -33,6 +33,9 @@ spec:
       labels:
         {{- include "flink-operator.selectorLabels" . | nindent 8 }}
     spec:
+      securityContext:
+        runAsUser: 9999
+        runAsGroup: 9999
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

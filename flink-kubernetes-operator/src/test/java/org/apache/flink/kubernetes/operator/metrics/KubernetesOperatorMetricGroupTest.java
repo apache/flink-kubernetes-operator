@@ -23,7 +23,7 @@ import org.apache.flink.runtime.metrics.MetricRegistryImpl;
 
 import org.apache.flink.shaded.guava30.com.google.common.collect.ImmutableMap;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR;
 import static org.junit.Assert.assertArrayEquals;
