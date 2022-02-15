@@ -50,14 +50,14 @@ under the License.
     </modules>
 
     <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
         <maven-assembly-plugin.version>3.3.0</maven-assembly-plugin.version>
         <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.0.0-M4</maven-failsafe-plugin.version>
         <maven-resources-plugin.version>3.2.0</maven-resources-plugin.version>
 
-        <operator.sdk.version>2.0.1</operator.sdk.version>
+        <operator.sdk.version>2.1.1</operator.sdk.version>
         <fabric8.version>5.12.1</fabric8.version>
         <lombok.version>1.18.22</lombok.version>
 
@@ -65,13 +65,12 @@ under the License.
         <flink.version>1.14.3</flink.version>
         <flink.shaded.version>15.0</flink.shaded.version>
 
-        <slf4j.version>1.7.15</slf4j.version>
+        <slf4j.version>1.7.36</slf4j.version>
         <log4j.version>2.17.1</log4j.version>
 
         <spotless.version>2.4.2</spotless.version>
-        <awaitility.version>4.1.0</awaitility.version>
         <it.skip>true</it.skip>
-        <mockito.version>2.21.0</mockito.version>
+        <mockito.version>3.12.4</mockito.version>
     </properties>
 
     <dependencies>

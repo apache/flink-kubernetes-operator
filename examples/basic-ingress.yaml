@@ -28,7 +28,6 @@ spec:
   flinkConfiguration:
 #    rest.address: basic-example.flink.k8s.io
 #    rest.port: "80"
-    taskmanager.numberOfTaskSlots: "2"
     kubernetes.jobmanager.service-account: flink-operator
   jobManager:
     replicas: 1

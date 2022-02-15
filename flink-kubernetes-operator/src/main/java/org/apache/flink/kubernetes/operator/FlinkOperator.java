@@ -29,18 +29,12 @@ import io.javaoperatorsdk.operator.api.config.ConfigurationServiceOverrider;
 import io.javaoperatorsdk.operator.config.runtime.DefaultConfigurationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.takes.facets.fork.FkRegex;
-import org.takes.facets.fork.TkFork;
-import org.takes.http.Exit;
-import org.takes.http.FtBasic;
-
-import java.io.IOException;
 
 /** Main Class for Flink native k8s operator. */
 public class FlinkOperator {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkOperator.class);
 
-    public static void main(String... args) throws IOException {
+    public static void main(String... args) {
 
         LOG.info("Starting Flink Kubernetes Operator");
 
@@ -68,7 +62,5 @@ public class FlinkOperator {
         operator.register(controller);
         operator.installShutdownHook();
         operator.start();
-
-        new FtBasic(new TkFork(new FkRegex("/health", "ALL GOOD!")), 8080).start(Exit.NEVER);
     }
 }

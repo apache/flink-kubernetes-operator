@@ -33,7 +33,6 @@ under the License.
 
     <properties>
         <awaitility.version>4.1.0</awaitility.version>
-        <takes.version>1.19</takes.version>
     </properties>
 
     <dependencies>
@@ -54,12 +53,6 @@ under the License.
             <artifactId>crd-generator-apt</artifactId>
             <version>${fabric8.version}</version>
             <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.takes</groupId>
-            <artifactId>takes</artifactId>
-            <version>${takes.version}</version>
         </dependency>
 
         <!-- Flink -->

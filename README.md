@@ -18,7 +18,7 @@ The webhook can be disabled during helm install by passing the `--set webhook.cr
 
 ## User Guide
 ### Create a new Flink deployment
-The flink-operator will watch the CRD resources and submit a new Flink deployment once the CR it applied.
+The flink-operator will watch the CRD resources and submit a new Flink deployment once the CR is applied.
 ```
 kubectl create -f examples/basic.yaml
 ```
@@ -37,7 +37,7 @@ Get all the Flink deployments running in the K8s cluster
 ```
 kubectl get flinkdep
 ```
-Describe a specific Flink deployment to show the status(including job status, savepoint, ect.)
+Describe a specific Flink deployment to show the status(including job status, savepoint, etc.)
 ```
 kubectl describe flinkdep {dep_name}
 ```
@@ -61,7 +61,7 @@ NAME                         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)
 basic-session-example        ClusterIP      None           <none>        6123/TCP,6124/TCP   14h
 basic-session-example-rest   LoadBalancer   10.96.36.250   127.0.0.1     8081:30572/TCP      14h
 ```
-The operator pics up the default log and flink configurations from `/opt/flink/conf`. You can put the rest configuration parameters here:
+The operator picks up the default log and flink configurations from `/opt/flink/conf`. You can put the rest configuration parameters here:
 ```
 cat /opt/flink/conf/flink-conf.yaml
 rest.port: 8081

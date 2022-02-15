@@ -24,8 +24,6 @@ metadata:
 spec:
   image: flink:1.14.3
   flinkVersion: 1.14.3
-  flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
   podTemplate:
     apiVersion: v1
     kind: Pod

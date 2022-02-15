@@ -25,7 +25,6 @@ spec:
   image: flink:1.14.3
   flinkVersion: 1.14.3
   flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
     state.savepoints.dir: file:///flink-data/savepoints
     high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
     high-availability.storageDir: file:///flink-data/ha
