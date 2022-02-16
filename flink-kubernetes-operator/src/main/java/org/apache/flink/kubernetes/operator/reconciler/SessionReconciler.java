@@ -19,7 +19,8 @@ package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
@@ -43,31 +44,28 @@ public class SessionReconciler {
         this.flinkService = flinkService;
     }
 
-    public boolean reconcile(
+    public void reconcile(
             String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
-        if (flinkApp.getStatus() == null) {
-            flinkApp.setStatus(new FlinkDeploymentStatus());
-            try {
-                flinkService.submitSessionCluster(flinkApp, effectiveConfig);
-                IngressUtils.updateIngressRules(
-                        flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
-                return true;
-            } catch (Exception e) {
-                LOG.error("Error while deploying " + flinkApp.getMetadata().getName(), e);
-                return false;
-            }
+
+        FlinkDeploymentSpec lastReconciledSpec =
+                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
+
+        if (lastReconciledSpec == null) {
+            flinkService.submitSessionCluster(flinkApp, effectiveConfig);
+            IngressUtils.updateIngressRules(
+                    flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
+            return;
         }
 
-        boolean specChanged = !flinkApp.getSpec().equals(flinkApp.getStatus().getSpec());
+        boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
 
         if (specChanged) {
-            if (flinkApp.getStatus().getSpec().getJob() != null) {
-                throw new RuntimeException("Cannot switch from job to session cluster");
+            if (lastReconciledSpec.getJob() != null) {
+                throw new InvalidDeploymentException("Cannot switch from job to session cluster");
             }
             upgradeSessionCluster(flinkApp, effectiveConfig);
         }
-        return true;
     }
 
     private void upgradeSessionCluster(FlinkDeployment flinkApp, Configuration effectiveConfig)

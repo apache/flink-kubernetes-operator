@@ -17,15 +17,20 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Current status of the Flink deployment. */
+/** Status of the Flink deployment reconciliation flow. */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class FlinkDeploymentStatus {
-    private JobStatus jobStatus;
-    private ReconciliationStatus reconciliationStatus = new ReconciliationStatus();
+@Builder
+public class ReconciliationStatus {
+    private boolean success;
+    private String error;
+    private FlinkDeploymentSpec lastReconciledSpec;
 }

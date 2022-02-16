@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
@@ -46,12 +47,15 @@ public class JobStatusObserver {
     }
 
     public boolean observeFlinkJobStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
-        if (flinkApp.getStatus() == null) {
+        FlinkDeploymentSpec lastReconciledSpec =
+                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
+
+        if (lastReconciledSpec == null) {
             // This is the first run, nothing to observe
             return true;
         }
 
-        JobSpec jobSpec = flinkApp.getStatus().getSpec().getJob();
+        JobSpec jobSpec = lastReconciledSpec.getJob();
 
         if (jobSpec == null) {
             // This is a session cluster, nothing to observe

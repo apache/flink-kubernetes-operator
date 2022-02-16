@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +45,7 @@ public class TestUtils {
 
     public static FlinkDeployment buildSessionCluster() {
         FlinkDeployment deployment = new FlinkDeployment();
+        deployment.setStatus(new FlinkDeploymentStatus());
         deployment.setMetadata(
                 new ObjectMetaBuilder()
                         .withName("test-cluster")

@@ -19,6 +19,8 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
@@ -51,7 +53,9 @@ public class FlinkDeploymentController
                 ErrorStatusHandler<FlinkDeployment>,
                 EventSourceInitializer<FlinkDeployment> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
-    private static final int JOB_REFRESH_SECONDS = 5;
+
+    public static final int OBSERVE_REFRESH_SECONDS = 10;
+    public static final int RECONCILE_ERROR_REFRESH_SECONDS = 5;
 
     private final KubernetesClient kubernetesClient;
 
@@ -90,37 +94,75 @@ public class FlinkDeploymentController
     @Override
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context) {
         LOG.info("Reconciling {}", flinkApp.getMetadata().getName());
+        if (flinkApp.getStatus() == null) {
+            flinkApp.setStatus(new FlinkDeploymentStatus());
+        }
 
         Configuration effectiveConfig = FlinkUtils.getEffectiveConfig(flinkApp);
 
-        boolean success = observer.observeFlinkJobStatus(flinkApp, effectiveConfig);
-        if (success) {
-            try {
-                success = reconcileFlinkDeployment(operatorNamespace, flinkApp, effectiveConfig);
-            } catch (Exception e) {
-                throw new RuntimeException(
-                        "Error while reconciling deployment change for "
-                                + flinkApp.getMetadata().getName(),
-                        e);
+        boolean successfulObserve = observer.observeFlinkJobStatus(flinkApp, effectiveConfig);
+
+        if (!successfulObserve) {
+            // Cluster not accessible let's retry
+            return UpdateControl.<FlinkDeployment>noUpdate()
+                    .rescheduleAfter(OBSERVE_REFRESH_SECONDS, TimeUnit.SECONDS);
+        }
+
+        if (!specChanged(flinkApp)) {
+            // Successfully observed the cluster after reconciliation, no need to reschedule
+            return UpdateControl.updateStatus(flinkApp);
+        }
+
+        try {
+            reconcileFlinkDeployment(operatorNamespace, flinkApp, effectiveConfig);
+        } catch (Exception e) {
+            String err = "Error while reconciling deployment change: " + e.getMessage();
+            String lastErr = flinkApp.getStatus().getReconciliationStatus().getError();
+            if (!err.equals(lastErr)) {
+                // Log new errors on the first instance
+                LOG.error("Error while reconciling deployment change", e);
+                updateForReconciliationError(flinkApp, err);
+                return UpdateControl.updateStatus(flinkApp)
+                        .rescheduleAfter(RECONCILE_ERROR_REFRESH_SECONDS, TimeUnit.SECONDS);
+            } else {
+                return UpdateControl.<FlinkDeployment>noUpdate()
+                        .rescheduleAfter(RECONCILE_ERROR_REFRESH_SECONDS, TimeUnit.SECONDS);
             }
         }
 
-        if (!success) {
-            return UpdateControl.<FlinkDeployment>noUpdate()
-                    .rescheduleAfter(JOB_REFRESH_SECONDS, TimeUnit.SECONDS);
-        }
-
-        flinkApp.getStatus().setSpec(flinkApp.getSpec());
+        // Everything went well, update status and reschedule for observation
+        updateForReconciliationSuccess(flinkApp);
         return UpdateControl.updateStatus(flinkApp)
-                .rescheduleAfter(JOB_REFRESH_SECONDS, TimeUnit.SECONDS);
+                .rescheduleAfter(OBSERVE_REFRESH_SECONDS, TimeUnit.SECONDS);
     }
 
-    private boolean reconcileFlinkDeployment(
+    private boolean specChanged(FlinkDeployment flinkApp) {
+        return !flinkApp.getSpec()
+                .equals(flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec());
+    }
+
+    private void reconcileFlinkDeployment(
             String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
-        return flinkApp.getSpec().getJob() == null
-                ? sessionReconciler.reconcile(operatorNamespace, flinkApp, effectiveConfig)
-                : jobReconciler.reconcile(operatorNamespace, flinkApp, effectiveConfig);
+
+        if (flinkApp.getSpec().getJob() == null) {
+            sessionReconciler.reconcile(operatorNamespace, flinkApp, effectiveConfig);
+        } else {
+            jobReconciler.reconcile(operatorNamespace, flinkApp, effectiveConfig);
+        }
+    }
+
+    private void updateForReconciliationSuccess(FlinkDeployment flinkApp) {
+        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
+        reconciliationStatus.setSuccess(true);
+        reconciliationStatus.setError(null);
+        reconciliationStatus.setLastReconciledSpec(flinkApp.getSpec());
+    }
+
+    private void updateForReconciliationError(FlinkDeployment flinkApp, String err) {
+        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
+        reconciliationStatus.setSuccess(false);
+        reconciliationStatus.setError(err);
     }
 
     @Override
