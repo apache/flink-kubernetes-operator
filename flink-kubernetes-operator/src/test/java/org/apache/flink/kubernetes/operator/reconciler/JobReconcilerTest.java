@@ -49,7 +49,10 @@ public class JobReconcilerTest {
         List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
         assertEquals(1, runningJobs.size());
         assertNull(runningJobs.get(0).f0);
-        deployment.getStatus().setSpec(deployment.getSpec());
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .setLastReconciledSpec(deployment.getSpec());
 
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobName(runningJobs.get(0).f1.getJobName());

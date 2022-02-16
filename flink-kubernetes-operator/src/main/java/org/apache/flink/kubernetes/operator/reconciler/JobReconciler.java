@@ -20,11 +20,12 @@ package org.apache.flink.kubernetes.operator.reconciler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -51,36 +52,32 @@ public class JobReconciler {
         this.flinkService = flinkService;
     }
 
-    public boolean reconcile(
+    public void reconcile(
             String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
 
+        FlinkDeploymentSpec lastReconciledSpec =
+                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
         JobSpec jobSpec = flinkApp.getSpec().getJob();
-        if (flinkApp.getStatus() == null) {
-            flinkApp.setStatus(new FlinkDeploymentStatus());
+        if (lastReconciledSpec == null) {
             if (!jobSpec.getState().equals(JobState.RUNNING)) {
-                throw new RuntimeException("Job must start in running state");
+                throw new InvalidDeploymentException("Job must start in running state");
             }
-            try {
-                deployFlinkJob(
-                        flinkApp,
-                        effectiveConfig,
-                        Optional.ofNullable(jobSpec.getInitialSavepointPath()));
-                IngressUtils.updateIngressRules(
-                        flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
-                return true;
-            } catch (Exception e) {
-                LOG.error("Error while deploying " + flinkApp.getMetadata().getName(), e);
-                return false;
-            }
+            deployFlinkJob(
+                    flinkApp,
+                    effectiveConfig,
+                    Optional.ofNullable(jobSpec.getInitialSavepointPath()));
+            IngressUtils.updateIngressRules(
+                    flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
+            return;
         }
 
-        boolean specChanged = !flinkApp.getSpec().equals(flinkApp.getStatus().getSpec());
+        boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
         if (specChanged) {
-            if (flinkApp.getStatus().getSpec().getJob() == null) {
-                throw new RuntimeException("Cannot switch from session to job cluster");
+            if (lastReconciledSpec.getJob() == null) {
+                throw new InvalidDeploymentException("Cannot switch from session to job cluster");
             }
-            JobState currentJobState = flinkApp.getStatus().getSpec().getJob().getState();
+            JobState currentJobState = lastReconciledSpec.getJob().getState();
             JobState desiredJobState = jobSpec.getState();
 
             UpgradeMode upgradeMode = jobSpec.getUpgradeMode();
@@ -103,13 +100,12 @@ public class JobReconciler {
                     } else if (upgradeMode == UpgradeMode.SAVEPOINT) {
                         restoreFromLastSavepoint(flinkApp, effectiveConfig);
                     } else {
-                        throw new UnsupportedOperationException(
+                        throw new InvalidDeploymentException(
                                 "Only savepoint and stateless strategies are supported at the moment.");
                     }
                 }
             }
         }
-        return true;
     }
 
     private void deployFlinkJob(
@@ -136,7 +132,8 @@ public class JobReconciler {
 
         String savepointLocation = jobStatus.getSavepointLocation();
         if (savepointLocation == null) {
-            throw new RuntimeException("Cannot perform stateful restore without a valid savepoint");
+            throw new InvalidDeploymentException(
+                    "Cannot perform stateful restore without a valid savepoint");
         }
         deployFlinkJob(flinkApp, effectiveConfig, Optional.of(savepointLocation));
     }

@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.status;
+package org.apache.flink.kubernetes.operator.exception;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+/** Exception for encountering invalid FlinkDeployment resources. */
+public class InvalidDeploymentException extends Exception {
 
-/** Current status of the Flink deployment. */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class FlinkDeploymentStatus {
-    private JobStatus jobStatus;
-    private ReconciliationStatus reconciliationStatus = new ReconciliationStatus();
+    public InvalidDeploymentException(String msg) {
+        super(msg);
+    }
+
+    public InvalidDeploymentException(String msg, Throwable cause) {
+        super(msg, cause);
+    }
 }

@@ -40,8 +40,10 @@ public class JobStatusObserverTest {
         FlinkService flinkService = new TestingFlinkService();
         JobStatusObserver observer = new JobStatusObserver(flinkService);
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
-        deployment.setStatus(new FlinkDeploymentStatus());
-        deployment.getStatus().setSpec(deployment.getSpec());
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .setLastReconciledSpec(deployment.getSpec());
         assertTrue(
                 observer.observeFlinkJobStatus(
                         deployment, FlinkUtils.getEffectiveConfig(deployment)));
@@ -56,7 +58,10 @@ public class JobStatusObserverTest {
 
         assertTrue(observer.observeFlinkJobStatus(deployment, conf));
         deployment.setStatus(new FlinkDeploymentStatus());
-        deployment.getStatus().setSpec(deployment.getSpec());
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .setLastReconciledSpec(deployment.getSpec());
 
         assertFalse(observer.observeFlinkJobStatus(deployment, conf));
 
