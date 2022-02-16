@@ -1,5 +1,6 @@
-# flink-kubernetes-operator
-Temporary repository for Flink Kubernetes Operator. The content will be moved to OSS repo once created an IPR. Check [FLIP-212](https://cwiki.apache.org/confluence/display/FLINK/FLIP-212%3A+Introduce+Flink+Kubernetes+Operator) further info.
+# Apache Flink Kubernetes Operator
+
+A Kubernetes operator for Apache Flink, implemented in Java. See [FLIP-212](https://cwiki.apache.org/confluence/display/FLINK/FLIP-212%3A+Introduce+Flink+Kubernetes+Operator).
 
 ## Installation
 
