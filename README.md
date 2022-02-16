@@ -25,7 +25,7 @@ kubectl create -f examples/basic.yaml
 
 ### Delete a Flink deployment
 ```
-kubectl delete -f create/basic.yaml
+kubectl delete -f examples/basic.yaml
 
 OR
 
