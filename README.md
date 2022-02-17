@@ -68,3 +68,12 @@ cat /opt/flink/conf/flink-conf.yaml
 rest.port: 8081
 rest.address: localhost
 ```
+### CI/CD
+[GitHub Actions](https://help.github.com/en/actions/getting-started-with-github-actions/about-github-actions) help you automate your software development workflows in the same place you store code and collaborate on pull requests and issues.
+You can write individual tasks, called actions, and combine them to create a custom workflow.
+Workflows are custom automated processes that you can set up in your repository to build, test, package, release, or deploy any code project on GitHub.
+
+Considering the cost of running the builds, the stability, and the maintainability, flink-kubernetes-operator chose GitHub Actions and build the whole CI/CD solution on it.
+All the unit tests, integration tests, and the end-to-end tests will be triggered for each PR.
+
+Note: Please make sure the CI passed before merging.
