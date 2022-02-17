@@ -221,6 +221,13 @@ under the License.
                             <!-- Generated content -->
                             <exclude>**/target/**</exclude>
                             <exclude>apache-maven-3.2.5/**</exclude>
+                            <!-- Documentation -->
+                            <exclude>docs/static/font-awesome/**</exclude>
+                            <exclude>docs/resources/**</exclude>
+                            <exclude>docs/public/**</exclude>
+                            <exclude>docs/themes/book/**</exclude>
+                            <exclude>docs/assets/github.css</exclude>
+                            <exclude>docs/static/js/anchor.min.js</exclude>
                             <!-- PyCharm -->
                             <exclude>**/.idea/**</exclude>
                             <!-- Generated CRD -->
