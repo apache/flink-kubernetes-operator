@@ -18,11 +18,10 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.flink.kubernetes.operator.TestUtils;
+
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodSpec;
 import org.junit.Assert;
 import org.junit.jupiter.api.Test;
 
@@ -39,23 +38,13 @@ public class FlinkUtilsTest {
         Container container2 = new Container();
         container2.setName("container2");
 
-        PodSpec podSpec1 = new PodSpec();
-        podSpec1.setHostname("pod1 hostname");
-        podSpec1.setContainers(Arrays.asList(container2));
-        Pod pod1 = new Pod();
-        pod1.setApiVersion("pod1 api version");
-        pod1.setSpec(podSpec1);
+        Pod pod1 =
+                TestUtils.getTestPod(
+                        "pod1 hostname", "pod1 api version", Arrays.asList(container2));
 
-        PodSpec podSpec2 = new PodSpec();
-        podSpec2.setHostname("pod2 hostname");
-        podSpec2.setContainers(Arrays.asList(container1, container2));
-        Pod pod2 = new Pod();
-        pod2.setApiVersion("pod2 api version");
-        pod2.setSpec(podSpec2);
-
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode node1 = mapper.valueToTree(pod1);
-        JsonNode node2 = mapper.valueToTree(pod2);
+        Pod pod2 =
+                TestUtils.getTestPod(
+                        "pod2 hostname", "pod2 api version", Arrays.asList(container1, container2));
 
         Pod mergedPod = FlinkUtils.mergePodTemplates(pod1, pod2);
 
