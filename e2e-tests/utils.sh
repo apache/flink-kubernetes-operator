@@ -73,6 +73,38 @@ function debug_and_show_logs {
     done
 }
 
+function start_minikube {
+    if ! retry_times 5 30 start_minikube_if_not_running; then
+        echo "Could not start minikube. Aborting..."
+        exit 1
+   fi
+}
+
+function start_minikube_if_not_running {
+    if ! minikube status; then
+        echo "Starting minikube ..."
+        minikube start \
+        --extra-config=kubelet.image-gc-high-threshold=99 \
+        --extra-config=kubelet.image-gc-low-threshold=98 \
+        --extra-config=kubelet.minimum-container-ttl-duration=120m \
+        --extra-config=kubelet.eviction-hard="memory.available<5Mi,nodefs.available<1Mi,imagefs.available<1Mi" \
+        --extra-config=kubelet.eviction-soft="memory.available<5Mi,nodefs.available<2Mi,imagefs.available<2Mi" \
+        --extra-config=kubelet.eviction-soft-grace-period="memory.available=2h,nodefs.available=2h,imagefs.available=2h"
+        minikube update-context
+    fi
+
+    minikube status
+    return $?
+}
+
+function stop_minikube {
+    echo "Stopping minikube ..."
+    if ! retry_times 5 30 "minikube stop"; then
+        echo "Could not stop minikube. Aborting..."
+        exit 1
+    fi
+}
+
 function _on_exit_callback {
   # Export the exit code so that it could be used by the callback commands
   export TRAPPED_EXIT_CODE=$?
