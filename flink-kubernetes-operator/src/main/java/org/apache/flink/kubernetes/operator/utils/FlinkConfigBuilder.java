@@ -102,6 +102,14 @@ public class FlinkConfigBuilder {
         return this;
     }
 
+    public FlinkConfigBuilder applyServiceAccount() {
+        if (spec.getServiceAccount() != null) {
+            effectiveConfig.set(
+                    KubernetesConfigOptions.KUBERNETES_SERVICE_ACCOUNT, spec.getServiceAccount());
+        }
+        return this;
+    }
+
     public FlinkConfigBuilder applyJobManagerSpec() throws IOException {
         if (spec.getJobManager() != null) {
             if (spec.getJobManager() != null) {
@@ -124,10 +132,6 @@ public class FlinkConfigBuilder {
                     spec.getTaskManager().getPodTemplate(),
                     effectiveConfig,
                     false);
-            if (spec.getTaskManager().getTaskSlots() > 0) {
-                effectiveConfig.set(
-                        TaskManagerOptions.NUM_TASK_SLOTS, spec.getTaskManager().getTaskSlots());
-            }
         }
         return this;
     }
@@ -166,6 +170,7 @@ public class FlinkConfigBuilder {
                 .applyFlinkConfiguration()
                 .applyImage()
                 .applyImagePullPolicy()
+                .applyServiceAccount()
                 .applyCommonPodTemplate()
                 .applyIngressDomain()
                 .applyJobManagerSpec()

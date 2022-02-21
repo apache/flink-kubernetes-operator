@@ -38,9 +38,6 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.CoreMatchers.is;
@@ -110,9 +107,7 @@ public class FlinkOperatorITCase {
         FlinkDeploymentSpec spec = new FlinkDeploymentSpec();
         spec.setImage(IMAGE);
         spec.setFlinkVersion(FLINK_VERSION);
-        Map config = new HashMap<String, String>();
-        config.put("kubernetes.jobmanager.service-account", SERVICE_ACCOUNT);
-        spec.setFlinkConfiguration(config);
+        spec.setServiceAccount(SERVICE_ACCOUNT);
         Resource resource = new Resource();
         resource.setMemory("2048m");
         resource.setCpu(1);

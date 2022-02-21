@@ -25,11 +25,12 @@ spec:
   image: flink:1.14.3
   flinkVersion: 1.14.3
   flinkConfiguration:
-    kubernetes.service-account: flink-operator
+    taskmanager.numberOfTaskSlots: "2"
     high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
     high-availability.storageDir: file:///opt/flink/volume/flink-ha
     state.checkpoints.dir: file:///opt/flink/volume/flink-cp
     state.savepoints.dir: file:///opt/flink/volume/flink-sp
+  serviceAccount: flink-operator
   podTemplate:
     apiVersion: v1
     kind: Pod
@@ -70,7 +71,6 @@ spec:
       memory: "1024m"
       cpu: 0.5
   taskManager:
-    taskSlots: 2
     resource:
       memory: "1024m"
       cpu: 0.5

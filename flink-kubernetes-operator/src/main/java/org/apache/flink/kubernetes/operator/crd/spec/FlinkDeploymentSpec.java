@@ -33,6 +33,7 @@ import java.util.Map;
 public class FlinkDeploymentSpec {
     private String image;
     private String imagePullPolicy;
+    private String serviceAccount;
     private String flinkVersion;
     private String ingressDomain;
     private Map<String, String> flinkConfiguration;

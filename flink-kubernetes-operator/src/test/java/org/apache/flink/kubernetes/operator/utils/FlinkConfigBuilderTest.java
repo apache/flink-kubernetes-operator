@@ -91,9 +91,7 @@ public class FlinkConfigBuilderTest {
     public void testApplyFlinkConfiguration() {
         final Configuration configuration =
                 new FlinkConfigBuilder(flinkDeployment).applyFlinkConfiguration().build();
-        Assert.assertEquals(
-                SERVICE_ACCOUNT,
-                configuration.get(KubernetesConfigOptions.JOB_MANAGER_SERVICE_ACCOUNT));
+        Assert.assertEquals(2, (int) configuration.get(TaskManagerOptions.NUM_TASK_SLOTS));
     }
 
     @Test
@@ -123,6 +121,15 @@ public class FlinkConfigBuilderTest {
         Assert.assertEquals(
                 KubernetesConfigOptions.ServiceExposedType.ClusterIP,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
+    }
+
+    @Test
+    public void testApplyServiceAccount() {
+        final Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment).applyServiceAccount().build();
+        Assert.assertEquals(
+                SERVICE_ACCOUNT,
+                configuration.get(KubernetesConfigOptions.KUBERNETES_SERVICE_ACCOUNT));
     }
 
     @Test
@@ -158,8 +165,6 @@ public class FlinkConfigBuilderTest {
                 configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
         Assert.assertEquals(
                 Double.valueOf(1), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
-        Assert.assertEquals(
-                Integer.valueOf(2), configuration.get(TaskManagerOptions.NUM_TASK_SLOTS));
         Assert.assertEquals("pod2 api version", tmPod.getApiVersion());
     }
 
