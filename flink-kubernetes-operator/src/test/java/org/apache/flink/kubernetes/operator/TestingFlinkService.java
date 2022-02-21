@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
 /** Flink service mock for tests. */
 public class TestingFlinkService extends FlinkService {
 
-    public static final String SAVEPOINT = "savepoint";
+    private int savepointCounter = 0;
 
     private List<Tuple2<String, JobStatusMessage>> jobs = new ArrayList<>();
     private Set<String> sessions = new HashSet<>();
@@ -70,7 +70,10 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public List<JobStatusMessage> listJobs(Configuration conf) {
+    public List<JobStatusMessage> listJobs(Configuration conf) throws Exception {
+        if (jobs.isEmpty()) {
+            throw new Exception("Trying to list a job without submitting it");
+        }
         return jobs.stream().map(t -> t.f1).collect(Collectors.toList());
     }
 
@@ -87,7 +90,7 @@ public class TestingFlinkService extends FlinkService {
         }
 
         if (upgradeMode != UpgradeMode.STATELESS) {
-            return Optional.of(SAVEPOINT);
+            return Optional.of("savepoint_" + savepointCounter++);
         } else {
             return Optional.empty();
         }
