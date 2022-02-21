@@ -29,7 +29,6 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link JobStatusObserver unit tests */
@@ -63,8 +62,6 @@ public class JobStatusObserverTest {
                 .getStatus()
                 .getReconciliationStatus()
                 .setLastReconciledSpec(deployment.getSpec());
-
-        assertFalse(observer.observeFlinkJobStatus(deployment, conf));
 
         flinkService.submitApplicationCluster(deployment, conf);
         assertTrue(observer.observeFlinkJobStatus(deployment, conf));

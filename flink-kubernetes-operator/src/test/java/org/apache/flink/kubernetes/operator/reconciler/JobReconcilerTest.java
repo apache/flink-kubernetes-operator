@@ -85,6 +85,6 @@ public class JobReconcilerTest {
 
         runningJobs = flinkService.listJobs();
         assertEquals(1, runningJobs.size());
-        assertEquals(TestingFlinkService.SAVEPOINT, runningJobs.get(0).f0);
+        assertEquals("savepoint_0", runningJobs.get(0).f0);
     }
 }
