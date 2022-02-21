@@ -59,6 +59,8 @@ spec:
               value: /opt/flink-operator/conf
             - name: LOG_CONFIG
               value: -Dlog4j.configurationFile=/opt/flink-operator/conf/log4j2.properties
+            - name: FLINK_OPERATOR_WATCH_NAMESPACES
+              value: {{ join "," .Values.watchNamespaces  }}
           volumeMounts:
             - name: flink-operator-config-volume
               mountPath: /opt/flink-operator/conf

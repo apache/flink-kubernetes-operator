@@ -10,12 +10,18 @@ The operator is managed helm chart. To install run:
  helm install flink-operator .
 ```
 
+### Validating webhook
+
 In order to use the webhook for FlinkDeployment validation, you must install the cert-manager on the Kubernetes cluster:
 ```
 kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.7.1/cert-manager.yaml
 ```
 
 The webhook can be disabled during helm install by passing the `--set webhook.create=false` parameter or editing the `values.yaml` directly.
+
+### Watching only specific namespaces
+
+The operator supports watching a specific list of namespaces for FlinkDeployment resources. You can enable it by setting the `--set watchNamespaces={flink-test}` parameter.
 
 ## User Guide
 ### Create a new Flink deployment
