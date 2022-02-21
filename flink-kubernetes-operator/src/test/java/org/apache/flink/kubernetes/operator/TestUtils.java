@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator;
 
-import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
@@ -54,13 +54,13 @@ public class TestUtils {
         deployment.setSpec(
                 FlinkDeploymentSpec.builder()
                         .image(IMAGE)
+                        .serviceAccount(SERVICE_ACCOUNT)
                         .flinkVersion(FLINK_VERSION)
                         .flinkConfiguration(
                                 Collections.singletonMap(
-                                        KubernetesConfigOptions.JOB_MANAGER_SERVICE_ACCOUNT.key(),
-                                        SERVICE_ACCOUNT))
+                                        TaskManagerOptions.NUM_TASK_SLOTS.key(), "2"))
                         .jobManager(new JobManagerSpec(new Resource(1, "2048m"), 1, null))
-                        .taskManager(new TaskManagerSpec(new Resource(1, "2048m"), 2, null))
+                        .taskManager(new TaskManagerSpec(new Resource(1, "2048m"), null))
                         .build());
         return deployment;
     }

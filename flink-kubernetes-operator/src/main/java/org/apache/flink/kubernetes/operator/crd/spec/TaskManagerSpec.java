@@ -28,6 +28,5 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class TaskManagerSpec {
     private Resource resource;
-    private int taskSlots;
     private Pod podTemplate;
 }

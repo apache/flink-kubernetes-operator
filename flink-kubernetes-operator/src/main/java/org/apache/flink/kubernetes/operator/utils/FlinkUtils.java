@@ -72,6 +72,12 @@ public class FlinkUtils {
                         KubernetesConfigOptions.ServiceExposedType.ClusterIP);
             }
 
+            if (spec.getServiceAccount() != null) {
+                effectiveConfig.set(
+                        KubernetesConfigOptions.KUBERNETES_SERVICE_ACCOUNT,
+                        spec.getServiceAccount());
+            }
+
             if (spec.getJob() != null) {
                 effectiveConfig.set(
                         DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());
@@ -122,12 +128,6 @@ public class FlinkUtils {
             }
 
             if (spec.getTaskManager() != null) {
-                if (spec.getTaskManager().getTaskSlots() > 0) {
-                    effectiveConfig.set(
-                            TaskManagerOptions.NUM_TASK_SLOTS,
-                            spec.getTaskManager().getTaskSlots());
-                }
-
                 if (spec.getTaskManager().getResource() != null) {
                     effectiveConfig.setString(
                             TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
