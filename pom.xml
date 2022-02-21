@@ -264,7 +264,7 @@ under the License.
                             <!-- PyCharm -->
                             <exclude>**/.idea/**</exclude>
                             <!-- Generated CRD -->
-                            <exclude>helm/flink-operator/templates/flinkdeployments.flink.apache.org-v1.yml</exclude>
+                            <exclude>helm/flink-operator/crds/flinkdeployments.flink.apache.org-v1.yml</exclude>
                             <exclude>rio.yml</exclude>
                         </excludes>
                     </configuration>

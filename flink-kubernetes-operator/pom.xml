@@ -98,7 +98,7 @@ under the License.
                             <goal>copy-resources</goal>
                         </goals>
                         <configuration>
-                            <outputDirectory>${project.basedir}/../helm/flink-operator/templates</outputDirectory>
+                            <outputDirectory>${project.basedir}/../helm/flink-operator/crds</outputDirectory>
                             <resources>
                                 <resource>
                                     <directory>${project.build.outputDirectory}/META-INF/fabric8</directory>
