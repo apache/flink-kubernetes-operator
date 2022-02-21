@@ -35,4 +35,10 @@ import io.fabric8.kubernetes.model.annotation.Version;
 @Version("v1alpha1")
 @ShortNames({"flinkdep"})
 public class FlinkDeployment extends CustomResource<FlinkDeploymentSpec, FlinkDeploymentStatus>
-        implements Namespaced {}
+        implements Namespaced {
+
+    @Override
+    protected FlinkDeploymentStatus initStatus() {
+        return new FlinkDeploymentStatus();
+    }
+}

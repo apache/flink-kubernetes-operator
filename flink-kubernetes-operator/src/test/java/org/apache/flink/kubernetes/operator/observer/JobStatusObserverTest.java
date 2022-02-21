@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class JobStatusObserverTest {
 
     @Test
-    public void observeSessionCluster() {
+    public void observeSessionCluster() throws Exception {
         FlinkService flinkService = new TestingFlinkService();
         JobStatusObserver observer = new JobStatusObserver(flinkService);
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
@@ -50,7 +50,7 @@ public class JobStatusObserverTest {
     }
 
     @Test
-    public void observeApplicationCluster() {
+    public void observeApplicationCluster() throws Exception {
         TestingFlinkService flinkService = new TestingFlinkService();
         JobStatusObserver observer = new JobStatusObserver(flinkService);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();

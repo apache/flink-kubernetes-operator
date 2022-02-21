@@ -19,8 +19,9 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
+import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
@@ -47,15 +48,14 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /** Controller that runs the main reconcile loop for Flink deployments. */
-@ControllerConfiguration
+@ControllerConfiguration(generationAwareEventProcessing = false)
 public class FlinkDeploymentController
         implements Reconciler<FlinkDeployment>,
                 ErrorStatusHandler<FlinkDeployment>,
                 EventSourceInitializer<FlinkDeployment> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
 
-    public static final int OBSERVE_REFRESH_SECONDS = 10;
-    public static final int RECONCILE_ERROR_REFRESH_SECONDS = 5;
+    public static final int REFRESH_SECONDS = 60;
 
     private final KubernetesClient kubernetesClient;
 
@@ -94,51 +94,23 @@ public class FlinkDeploymentController
     @Override
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context) {
         LOG.info("Reconciling {}", flinkApp.getMetadata().getName());
-        if (flinkApp.getStatus() == null) {
-            flinkApp.setStatus(new FlinkDeploymentStatus());
-        }
 
         Configuration effectiveConfig = FlinkUtils.getEffectiveConfig(flinkApp);
-
-        boolean successfulObserve = observer.observeFlinkJobStatus(flinkApp, effectiveConfig);
-
-        if (!successfulObserve) {
-            // Cluster not accessible let's retry
-            return UpdateControl.<FlinkDeployment>noUpdate()
-                    .rescheduleAfter(OBSERVE_REFRESH_SECONDS, TimeUnit.SECONDS);
-        }
-
-        if (!specChanged(flinkApp)) {
-            // Successfully observed the cluster after reconciliation, no need to reschedule
-            return UpdateControl.updateStatus(flinkApp);
-        }
-
         try {
-            reconcileFlinkDeployment(operatorNamespace, flinkApp, effectiveConfig);
-        } catch (Exception e) {
-            String err = "Error while reconciling deployment change: " + e.getMessage();
-            String lastErr = flinkApp.getStatus().getReconciliationStatus().getError();
-            if (!err.equals(lastErr)) {
-                // Log new errors on the first instance
-                LOG.error("Error while reconciling deployment change", e);
-                updateForReconciliationError(flinkApp, err);
-                return UpdateControl.updateStatus(flinkApp)
-                        .rescheduleAfter(RECONCILE_ERROR_REFRESH_SECONDS, TimeUnit.SECONDS);
-            } else {
-                return UpdateControl.<FlinkDeployment>noUpdate()
-                        .rescheduleAfter(RECONCILE_ERROR_REFRESH_SECONDS, TimeUnit.SECONDS);
+            boolean successfulObserve = observer.observeFlinkJobStatus(flinkApp, effectiveConfig);
+            if (successfulObserve) {
+                reconcileFlinkDeployment(operatorNamespace, flinkApp, effectiveConfig);
+                updateForReconciliationSuccess(flinkApp);
             }
+        } catch (InvalidDeploymentException ide) {
+            LOG.error("Reconciliation failed", ide);
+            updateForReconciliationError(flinkApp, ide.getMessage());
+            return UpdateControl.updateStatus(flinkApp);
+        } catch (Exception e) {
+            throw new ReconciliationException(e);
         }
-
-        // Everything went well, update status and reschedule for observation
-        updateForReconciliationSuccess(flinkApp);
         return UpdateControl.updateStatus(flinkApp)
-                .rescheduleAfter(OBSERVE_REFRESH_SECONDS, TimeUnit.SECONDS);
-    }
-
-    private boolean specChanged(FlinkDeployment flinkApp) {
-        return !flinkApp.getSpec()
-                .equals(flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec());
+                .rescheduleAfter(REFRESH_SECONDS, TimeUnit.SECONDS);
     }
 
     private void reconcileFlinkDeployment(
@@ -178,7 +150,14 @@ public class FlinkDeploymentController
     @Override
     public Optional<FlinkDeployment> updateErrorStatus(
             FlinkDeployment flinkApp, RetryInfo retryInfo, RuntimeException e) {
-        LOG.warn("TODO: handle error status");
-        return Optional.empty();
+        LOG.warn(
+                "attempt count: {}, last attempt: {}",
+                retryInfo.getAttemptCount(),
+                retryInfo.isLastAttempt());
+
+        updateForReconciliationError(
+                flinkApp,
+                (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
+        return Optional.of(flinkApp);
     }
 }
