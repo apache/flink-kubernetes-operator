@@ -21,6 +21,9 @@
 operatorNamespace:
   name: default
 
+# List of kubernetes namespaces to watch for FlinkDeployment changes, empty means all namespaces
+# watchNamespaces: ["flink"]
+
 image:
   repository: flink-operator
   pullPolicy: IfNotPresent

@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
@@ -27,7 +28,6 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
-import io.javaoperatorsdk.operator.api.config.ConfigurationServiceOverrider;
 import io.javaoperatorsdk.operator.config.runtime.DefaultConfigurationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,7 +35,8 @@ import org.slf4j.LoggerFactory;
 /** Main Class for Flink native k8s operator. */
 public class FlinkOperator {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkOperator.class);
-    private static final String ENV_FLINK_OPERATOR_CONF_DIR = "FLINK_OPERATOR_CONF_DIR";
+
+    public static final String ENV_FLINK_OPERATOR_CONF_DIR = "FLINK_OPERATOR_CONF_DIR";
 
     public static void main(String... args) {
 
@@ -48,11 +49,9 @@ public class FlinkOperator {
         if (namespace == null) {
             namespace = "default";
         }
-        Operator operator =
-                new Operator(
-                        client,
-                        new ConfigurationServiceOverrider(DefaultConfigurationService.instance())
-                                .build());
+
+        DefaultConfigurationService configurationService = DefaultConfigurationService.instance();
+        Operator operator = new Operator(client, configurationService);
 
         FlinkService flinkService = new FlinkService(client);
 
@@ -64,7 +63,10 @@ public class FlinkOperator {
                 new FlinkDeploymentController(
                         client, namespace, observer, jobReconciler, sessionReconciler);
 
-        operator.register(controller);
+        FlinkControllerConfig controllerConfig = new FlinkControllerConfig(controller);
+        controllerConfig.setConfigurationService(configurationService);
+
+        operator.register(controller, controllerConfig);
         operator.installShutdownHook();
         operator.start();
     }

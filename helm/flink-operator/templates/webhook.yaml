@@ -81,7 +81,7 @@ kind: ValidatingWebhookConfiguration
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: {{ .Values.operatorNamespace.name }}/flink-operator-serving-cert
-  name: flink-operator-validating-webhook-configuration
+  name: flink-operator-{{ .Values.operatorNamespace.name }}-webhook-configuration
 webhooks:
 - name: vflinkdeployments.flink.apache.org
   admissionReviewVersions: ["v1"]
@@ -94,10 +94,18 @@ webhooks:
   rules:
   - apiGroups: ["*"]
     apiVersions: ["*"]
+    scope: "Namespaced"
     operations:
     - CREATE
     - UPDATE
     resources:
     - flinkdeployments
   sideEffects: None
+  {{- if .Values.watchNamespaces }}
+  namespaceSelector:
+    matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: In
+        values: {{ .Values.watchNamespaces }}
+  {{- end }}
   {{- end }}
