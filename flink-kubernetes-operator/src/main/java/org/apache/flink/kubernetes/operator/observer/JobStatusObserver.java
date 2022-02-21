@@ -46,7 +46,8 @@ public class JobStatusObserver {
         this.flinkService = flinkService;
     }
 
-    public boolean observeFlinkJobStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+    public boolean observeFlinkJobStatus(FlinkDeployment flinkApp, Configuration effectiveConfig)
+            throws Exception {
         FlinkDeploymentSpec lastReconciledSpec =
                 flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
 
@@ -68,31 +69,17 @@ public class JobStatusObserver {
         }
         LOG.info("Getting job statuses for {}", flinkApp.getMetadata().getName());
         FlinkDeploymentStatus flinkAppStatus = flinkApp.getStatus();
-        try {
-            Collection<JobStatusMessage> clusterJobStatuses =
-                    flinkService.listJobs(effectiveConfig);
-            if (clusterJobStatuses.isEmpty()) {
-                LOG.info("No jobs found on {} yet, retrying...", flinkApp.getMetadata().getName());
-                return false;
-            } else {
-                flinkAppStatus.setJobStatus(
-                        mergeJobStatus(
-                                flinkAppStatus.getJobStatus(),
-                                new ArrayList<>(clusterJobStatuses)));
-                LOG.info("Job statuses updated for {}", flinkApp.getMetadata().getName());
-                return true;
-            }
 
-        } catch (Exception e) {
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Failed to list jobs for {}", flinkApp, e);
-            } else {
-                LOG.warn(
-                        "Failed to list jobs for {}, retrying...",
-                        flinkApp.getMetadata().getName());
-            }
-
+        Collection<JobStatusMessage> clusterJobStatuses = flinkService.listJobs(effectiveConfig);
+        if (clusterJobStatuses.isEmpty()) {
+            LOG.info("No jobs found on {} yet", flinkApp.getMetadata().getName());
             return false;
+        } else {
+            flinkAppStatus.setJobStatus(
+                    mergeJobStatus(
+                            flinkAppStatus.getJobStatus(), new ArrayList<>(clusterJobStatuses)));
+            LOG.info("Job statuses updated for {}", flinkApp.getMetadata().getName());
+            return true;
         }
     }
 

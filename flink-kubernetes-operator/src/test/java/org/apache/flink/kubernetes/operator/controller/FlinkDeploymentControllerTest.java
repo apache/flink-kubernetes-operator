@@ -51,7 +51,7 @@ public class FlinkDeploymentControllerTest {
         updateControl = testController.reconcile(appCluster, null);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                FlinkDeploymentController.OBSERVE_REFRESH_SECONDS * 1000,
+                FlinkDeploymentController.REFRESH_SECONDS * 1000,
                 (long) updateControl.getScheduleDelay().get());
 
         // Validate reconciliation status
@@ -63,7 +63,9 @@ public class FlinkDeploymentControllerTest {
 
         updateControl = testController.reconcile(appCluster, null);
         assertTrue(updateControl.isUpdateStatus());
-        assertFalse(updateControl.getScheduleDelay().isPresent());
+        assertEquals(
+                FlinkDeploymentController.REFRESH_SECONDS * 1000,
+                (long) updateControl.getScheduleDelay().get());
 
         // Validate job status
         JobStatus jobStatus = appCluster.getStatus().getJobStatus();
@@ -77,22 +79,12 @@ public class FlinkDeploymentControllerTest {
         appCluster.getSpec().setJob(null);
         updateControl = testController.reconcile(appCluster, null);
         assertTrue(updateControl.isUpdateStatus());
-        assertEquals(
-                FlinkDeploymentController.RECONCILE_ERROR_REFRESH_SECONDS * 1000,
-                (long) updateControl.getScheduleDelay().get());
+        assertFalse(updateControl.getScheduleDelay().isPresent());
 
         reconciliationStatus = appCluster.getStatus().getReconciliationStatus();
         assertFalse(reconciliationStatus.isSuccess());
-        assertEquals(
-                "Error while reconciling deployment change: Cannot switch from job to session cluster",
-                reconciliationStatus.getError());
+        assertEquals("Cannot switch from job to session cluster", reconciliationStatus.getError());
         assertNotNull(reconciliationStatus.getLastReconciledSpec().getJob());
-
-        updateControl = testController.reconcile(appCluster, null);
-        assertTrue(updateControl.isNoUpdate());
-        assertEquals(
-                FlinkDeploymentController.RECONCILE_ERROR_REFRESH_SECONDS * 1000,
-                (long) updateControl.getScheduleDelay().get());
 
         // Validate job status correct even with error
         jobStatus = appCluster.getStatus().getJobStatus();
