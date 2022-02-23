@@ -89,7 +89,7 @@ public class JobStatusObserver {
         JobStatus newStatus = oldStatus;
         Collections.sort(
                 clusterJobStatuses,
-                (j1, j2) -> -1 * Long.compare(j1.getStartTime(), j1.getStartTime()));
+                (j1, j2) -> -1 * Long.compare(j1.getStartTime(), j2.getStartTime()));
         JobStatusMessage newJob = clusterJobStatuses.get(0);
 
         if (newStatus == null) {
