@@ -119,6 +119,11 @@ public class FlinkConfigBuilder {
                         spec.getJobManager().getPodTemplate(),
                         effectiveConfig,
                         true);
+                if (spec.getJobManager().getReplicas() > 0) {
+                    effectiveConfig.set(
+                            KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS,
+                            spec.getJobManager().getReplicas());
+                }
             }
         }
         return this;
