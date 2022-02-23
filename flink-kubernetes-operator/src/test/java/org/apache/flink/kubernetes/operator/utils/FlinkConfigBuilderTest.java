@@ -67,6 +67,7 @@ public class FlinkConfigBuilderTest {
         flinkDeployment.getSpec().setPodTemplate(pod0);
         flinkDeployment.getSpec().setIngressDomain("test.com");
         flinkDeployment.getSpec().getJobManager().setPodTemplate(pod1);
+        flinkDeployment.getSpec().getJobManager().setReplicas(2);
         flinkDeployment.getSpec().getTaskManager().setPodTemplate(pod2);
         flinkDeployment.getSpec().getJob().setParallelism(2);
     }
@@ -148,6 +149,9 @@ public class FlinkConfigBuilderTest {
         Assert.assertEquals(
                 Double.valueOf(1), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
         Assert.assertEquals("pod1 api version", jmPod.getApiVersion());
+        Assert.assertEquals(
+                Integer.valueOf(2),
+                configuration.get(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS));
     }
 
     @Test
