@@ -37,8 +37,6 @@ import org.slf4j.LoggerFactory;
 public class FlinkOperator {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkOperator.class);
 
-    public static final String ENV_FLINK_OPERATOR_CONF_DIR = "FLINK_OPERATOR_CONF_DIR";
-
     public static void main(String... args) {
 
         LOG.info("Starting Flink Kubernetes Operator");

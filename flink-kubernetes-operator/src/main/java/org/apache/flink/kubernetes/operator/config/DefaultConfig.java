@@ -24,18 +24,18 @@ import org.apache.flink.configuration.Configuration;
 public class DefaultConfig {
 
     private final Configuration operatorConfig;
-    private final Configuration defaultFlinkConfig;
+    private final Configuration flinkConfig;
 
-    public DefaultConfig(Configuration operatorConfig, Configuration defaultFlinkConfig) {
+    public DefaultConfig(Configuration operatorConfig, Configuration flinkConfig) {
         this.operatorConfig = operatorConfig;
-        this.defaultFlinkConfig = defaultFlinkConfig;
+        this.flinkConfig = flinkConfig;
     }
 
     public Configuration getOperatorConfig() {
         return operatorConfig;
     }
 
-    public Configuration getDefaultFlinkConfig() {
-        return defaultFlinkConfig;
+    public Configuration getFlinkConfig() {
+        return flinkConfig;
     }
 }

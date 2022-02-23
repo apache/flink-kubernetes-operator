@@ -18,10 +18,12 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
 import io.javaoperatorsdk.operator.config.runtime.AnnotationConfiguration;
 import org.apache.commons.lang3.StringUtils;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -29,7 +31,6 @@ import java.util.Set;
 /** Custom config for {@link FlinkDeploymentController}. */
 public class FlinkControllerConfig extends AnnotationConfiguration<FlinkDeployment> {
 
-    private static final String ENV_WATCHED_NAMESPACES = "FLINK_OPERATOR_WATCH_NAMESPACES";
     private static final String NAMESPACES_SPLITTER_KEY = ",";
 
     public FlinkControllerConfig(FlinkDeploymentController reconciler) {
@@ -38,17 +39,12 @@ public class FlinkControllerConfig extends AnnotationConfiguration<FlinkDeployme
 
     @Override
     public Set<String> getNamespaces() {
-        String watchedNamespaces = System.getenv(ENV_WATCHED_NAMESPACES);
+        String watchedNamespaces = EnvUtils.get(EnvUtils.ENV_WATCHED_NAMESPACES);
 
         if (StringUtils.isEmpty(watchedNamespaces)) {
             return Collections.emptySet();
+        } else {
+            return new HashSet<>(Arrays.asList(watchedNamespaces.split(NAMESPACES_SPLITTER_KEY)));
         }
-
-        Set<String> namespaces = new HashSet<>();
-        for (String ns : watchedNamespaces.split(NAMESPACES_SPLITTER_KEY)) {
-            namespaces.add(ns);
-        }
-
-        return namespaces;
     }
 }

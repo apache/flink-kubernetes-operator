@@ -88,7 +88,7 @@ public class FlinkDeploymentController
         FlinkUtils.deleteCluster(flinkApp, kubernetesClient);
         IngressUtils.updateIngressRules(
                 flinkApp,
-                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getDefaultFlinkConfig()),
+                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig()),
                 operatorNamespace,
                 kubernetesClient,
                 true);
@@ -100,7 +100,7 @@ public class FlinkDeploymentController
         LOG.info("Reconciling {}", flinkApp.getMetadata().getName());
 
         Configuration effectiveConfig =
-                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getDefaultFlinkConfig());
+                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
         try {
             boolean successfulObserve = observer.observeFlinkJobStatus(flinkApp, effectiveConfig);
             if (successfulObserve) {
