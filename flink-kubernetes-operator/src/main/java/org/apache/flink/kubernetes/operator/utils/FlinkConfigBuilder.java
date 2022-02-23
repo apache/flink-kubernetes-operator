@@ -112,18 +112,16 @@ public class FlinkConfigBuilder {
 
     public FlinkConfigBuilder applyJobManagerSpec() throws IOException {
         if (spec.getJobManager() != null) {
-            if (spec.getJobManager() != null) {
-                setResource(spec.getJobManager().getResource(), effectiveConfig, true);
-                setPodTemplate(
-                        spec.getPodTemplate(),
-                        spec.getJobManager().getPodTemplate(),
-                        effectiveConfig,
-                        true);
-                if (spec.getJobManager().getReplicas() > 0) {
-                    effectiveConfig.set(
-                            KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS,
-                            spec.getJobManager().getReplicas());
-                }
+            setResource(spec.getJobManager().getResource(), effectiveConfig, true);
+            setPodTemplate(
+                    spec.getPodTemplate(),
+                    spec.getJobManager().getPodTemplate(),
+                    effectiveConfig,
+                    true);
+            if (spec.getJobManager().getReplicas() > 0) {
+                effectiveConfig.set(
+                        KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS,
+                        spec.getJobManager().getReplicas());
             }
         }
         return this;
