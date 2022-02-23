@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
@@ -51,12 +50,10 @@ public class FlinkConfigBuilder {
     private final FlinkDeploymentSpec spec;
     private final Configuration effectiveConfig;
 
-    public FlinkConfigBuilder(FlinkDeployment deploy) {
+    public FlinkConfigBuilder(FlinkDeployment deploy, Configuration defaultFlinkConfig) {
         this.deploy = deploy;
         this.spec = this.deploy.getSpec();
-        this.effectiveConfig =
-                FlinkUtils.loadConfiguration(
-                        System.getenv().get(ConfigConstants.ENV_FLINK_CONF_DIR));
+        this.effectiveConfig = defaultFlinkConfig;
     }
 
     public FlinkConfigBuilder applyImage() {
@@ -167,9 +164,9 @@ public class FlinkConfigBuilder {
         return effectiveConfig;
     }
 
-    public static Configuration buildFrom(FlinkDeployment dep)
+    public static Configuration buildFrom(FlinkDeployment dep, Configuration defaultFlinkConf)
             throws IOException, URISyntaxException {
-        return new FlinkConfigBuilder(dep)
+        return new FlinkConfigBuilder(dep, defaultFlinkConf)
                 .applyFlinkConfiguration()
                 .applyImage()
                 .applyImagePullPolicy()

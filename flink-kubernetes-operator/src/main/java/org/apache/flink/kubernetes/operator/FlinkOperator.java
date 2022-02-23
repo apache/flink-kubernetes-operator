@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
@@ -41,8 +42,8 @@ public class FlinkOperator {
     public static void main(String... args) {
 
         LOG.info("Starting Flink Kubernetes Operator");
-        OperatorMetricUtils.initOperatorMetrics(
-                FlinkUtils.loadConfiguration(System.getenv().get(ENV_FLINK_OPERATOR_CONF_DIR)));
+        DefaultConfig defaultConfig = FlinkUtils.loadDefaultConfig();
+        OperatorMetricUtils.initOperatorMetrics(defaultConfig.getOperatorConfig());
 
         DefaultKubernetesClient client = new DefaultKubernetesClient();
         String namespace = client.getNamespace();
@@ -61,7 +62,12 @@ public class FlinkOperator {
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(
-                        client, namespace, observer, jobReconciler, sessionReconciler);
+                        defaultConfig,
+                        client,
+                        namespace,
+                        observer,
+                        jobReconciler,
+                        sessionReconciler);
 
         FlinkControllerConfig controllerConfig = new FlinkControllerConfig(controller);
         controllerConfig.setConfigurationService(configurationService);

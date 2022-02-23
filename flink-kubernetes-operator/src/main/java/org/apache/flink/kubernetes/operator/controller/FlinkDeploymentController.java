@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
@@ -64,13 +65,16 @@ public class FlinkDeploymentController
     private final JobStatusObserver observer;
     private final JobReconciler jobReconciler;
     private final SessionReconciler sessionReconciler;
+    private final DefaultConfig defaultConfig;
 
     public FlinkDeploymentController(
+            DefaultConfig defaultConfig,
             KubernetesClient kubernetesClient,
             String operatorNamespace,
             JobStatusObserver observer,
             JobReconciler jobReconciler,
             SessionReconciler sessionReconciler) {
+        this.defaultConfig = defaultConfig;
         this.kubernetesClient = kubernetesClient;
         this.operatorNamespace = operatorNamespace;
         this.observer = observer;
@@ -84,7 +88,7 @@ public class FlinkDeploymentController
         FlinkUtils.deleteCluster(flinkApp, kubernetesClient);
         IngressUtils.updateIngressRules(
                 flinkApp,
-                FlinkUtils.getEffectiveConfig(flinkApp),
+                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getDefaultFlinkConfig()),
                 operatorNamespace,
                 kubernetesClient,
                 true);
@@ -95,7 +99,8 @@ public class FlinkDeploymentController
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context) {
         LOG.info("Reconciling {}", flinkApp.getMetadata().getName());
 
-        Configuration effectiveConfig = FlinkUtils.getEffectiveConfig(flinkApp);
+        Configuration effectiveConfig =
+                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getDefaultFlinkConfig());
         try {
             boolean successfulObserve = observer.observeFlinkJobStatus(flinkApp, effectiveConfig);
             if (successfulObserve) {

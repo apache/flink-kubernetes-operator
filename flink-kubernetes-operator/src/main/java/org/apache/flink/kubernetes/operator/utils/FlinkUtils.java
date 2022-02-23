@@ -17,8 +17,11 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.kubernetes.operator.FlinkOperator;
+import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,9 +41,21 @@ public class FlinkUtils {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    public static Configuration getEffectiveConfig(FlinkDeployment flinkApp) {
+    public static DefaultConfig loadDefaultConfig() {
+        // TODO refactor after FLINK-26332
+        Configuration operatorConfig =
+                FlinkUtils.loadConfiguration(
+                        System.getenv().get(FlinkOperator.ENV_FLINK_OPERATOR_CONF_DIR));
+        Configuration flinkDefaultConfig =
+                FlinkUtils.loadConfiguration(System.getenv(ConfigConstants.ENV_FLINK_CONF_DIR));
+        return new DefaultConfig(operatorConfig, flinkDefaultConfig);
+    }
+
+    public static Configuration getEffectiveConfig(
+            FlinkDeployment flinkApp, Configuration defaultFlinkConfig) {
         try {
-            final Configuration effectiveConfig = FlinkConfigBuilder.buildFrom(flinkApp);
+            final Configuration effectiveConfig =
+                    FlinkConfigBuilder.buildFrom(flinkApp, defaultFlinkConfig);
             LOG.debug("Effective config: {}", effectiveConfig);
             return effectiveConfig;
         } catch (Exception e) {

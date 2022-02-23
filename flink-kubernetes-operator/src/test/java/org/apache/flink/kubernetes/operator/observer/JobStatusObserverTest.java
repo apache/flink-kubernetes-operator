@@ -46,7 +46,8 @@ public class JobStatusObserverTest {
                 .setLastReconciledSpec(deployment.getSpec());
         assertTrue(
                 observer.observeFlinkJobStatus(
-                        deployment, FlinkUtils.getEffectiveConfig(deployment)));
+                        deployment,
+                        FlinkUtils.getEffectiveConfig(deployment, new Configuration())));
     }
 
     @Test
@@ -54,7 +55,7 @@ public class JobStatusObserverTest {
         TestingFlinkService flinkService = new TestingFlinkService();
         JobStatusObserver observer = new JobStatusObserver(flinkService);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        Configuration conf = FlinkUtils.getEffectiveConfig(deployment);
+        Configuration conf = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
         assertTrue(observer.observeFlinkJobStatus(deployment, conf));
         deployment.setStatus(new FlinkDeploymentStatus());
