@@ -156,8 +156,11 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyTaskManagerSpec() throws Exception {
+        FlinkDeployment deploymentClone = TestUtils.clone(flinkDeployment);
+        deploymentClone.getSpec().setPodTemplate(null);
+
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment).applyTaskManagerSpec().build();
+                new FlinkConfigBuilder(deploymentClone).applyTaskManagerSpec().build();
         final Pod tmPod =
                 OBJECT_MAPPER.readValue(
                         new File(

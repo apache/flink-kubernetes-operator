@@ -201,14 +201,17 @@ public class FlinkConfigBuilder {
     private static void setPodTemplate(
             Pod basicPod, Pod appendPod, Configuration effectiveConfig, boolean isJM)
             throws IOException {
-        if (basicPod != null) {
-            final ConfigOption<String> podConfigOption =
-                    isJM
-                            ? KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE
-                            : KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE;
-            effectiveConfig.setString(
-                    podConfigOption, createTempFile(mergePodTemplates(basicPod, appendPod)));
+
+        if (basicPod == null && appendPod == null) {
+            return;
         }
+
+        final ConfigOption<String> podConfigOption =
+                isJM
+                        ? KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE
+                        : KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE;
+        effectiveConfig.setString(
+                podConfigOption, createTempFile(mergePodTemplates(basicPod, appendPod)));
     }
 
     private static String createTempFile(Pod podTemplate) throws IOException {
