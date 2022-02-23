@@ -50,10 +50,10 @@ public class FlinkConfigBuilder {
     private final FlinkDeploymentSpec spec;
     private final Configuration effectiveConfig;
 
-    public FlinkConfigBuilder(FlinkDeployment deploy, Configuration defaultFlinkConfig) {
+    public FlinkConfigBuilder(FlinkDeployment deploy, Configuration flinkConfig) {
         this.deploy = deploy;
         this.spec = this.deploy.getSpec();
-        this.effectiveConfig = defaultFlinkConfig;
+        this.effectiveConfig = flinkConfig;
     }
 
     public FlinkConfigBuilder applyImage() {
@@ -164,9 +164,9 @@ public class FlinkConfigBuilder {
         return effectiveConfig;
     }
 
-    public static Configuration buildFrom(FlinkDeployment dep, Configuration defaultFlinkConf)
+    public static Configuration buildFrom(FlinkDeployment dep, Configuration flinkConfig)
             throws IOException, URISyntaxException {
-        return new FlinkConfigBuilder(dep, defaultFlinkConf)
+        return new FlinkConfigBuilder(dep, flinkConfig)
                 .applyFlinkConfiguration()
                 .applyImage()
                 .applyImagePullPolicy()

@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.MetricRegistryConfiguration;
@@ -30,10 +31,6 @@ import org.apache.flink.runtime.metrics.util.MetricUtils;
 /** Utility class for flink based operator metrics. */
 public class OperatorMetricUtils {
 
-    private static final String ENV_HOSTNAME = "HOSTNAME";
-    private static final String ENV_OPERATOR_NAME = "OPERATOR_NAME";
-    private static final String ENV_OPERATOR_NAMESPACE = "OPERATOR_NAMESPACE";
-
     public static void initOperatorMetrics(Configuration operatorConfig) {
         PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(operatorConfig);
         MetricRegistry metricRegistry = createMetricRegistry(operatorConfig, pluginManager);
@@ -41,9 +38,9 @@ public class OperatorMetricUtils {
                 KubernetesOperatorMetricGroup.create(
                         metricRegistry,
                         operatorConfig,
-                        System.getenv().getOrDefault(ENV_OPERATOR_NAMESPACE, "default"),
-                        System.getenv().getOrDefault(ENV_OPERATOR_NAME, "flink-operator"),
-                        System.getenv().getOrDefault(ENV_HOSTNAME, "localhost"));
+                        EnvUtils.getOrDefault(EnvUtils.ENV_OPERATOR_NAMESPACE, "default"),
+                        EnvUtils.getOrDefault(EnvUtils.ENV_OPERATOR_NAME, "flink-operator"),
+                        EnvUtils.getOrDefault(EnvUtils.ENV_HOSTNAME, "localhost"));
         MetricGroup statusGroup = operatorMetricGroup.addGroup("Status");
         MetricUtils.instantiateStatusMetrics(statusGroup);
     }

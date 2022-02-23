@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
+
 import org.apache.flink.shaded.netty4.io.netty.bootstrap.ServerBootstrap;
 import org.apache.flink.shaded.netty4.io.netty.channel.Channel;
 import org.apache.flink.shaded.netty4.io.netty.channel.ChannelInitializer;
@@ -50,11 +52,6 @@ public class FlinkOperatorWebhook {
 
     private static final int MAX_CONTEXT_LENGTH = 104_857_600;
 
-    public static final String WEBHOOK_KEYSTORE_FILE = "WEBHOOK_KEYSTORE_FILE";
-    public static final String WEBHOOK_KEYSTORE_PASSWORD = "WEBHOOK_KEYSTORE_PASSWORD";
-    public static final String WEBHOOK_KEYSTORE_TYPE = "WEBHOOK_KEYSTORE_TYPE";
-    public static final String WEBHOOK_SERVER_PORT = "WEBHOOK_SERVER_PORT";
-
     public static void main(String[] args) throws Exception {
         LOG.info("Starting Flink Kubernetes Webhook");
         AdmissionHandler endpoint = new AdmissionHandler(new FlinkDeploymentValidator());
@@ -85,10 +82,7 @@ public class FlinkOperatorWebhook {
     }
 
     private static int getPort() {
-        String portString = System.getenv(WEBHOOK_SERVER_PORT);
-        if (StringUtils.isEmpty(portString)) {
-            throw new RuntimeException(WEBHOOK_SERVER_PORT + " cannot be empty");
-        }
+        String portString = EnvUtils.getRequired(EnvUtils.ENV_WEBHOOK_SERVER_PORT);
         return Integer.parseInt(portString);
     }
 
@@ -117,26 +111,18 @@ public class FlinkOperatorWebhook {
     }
 
     private static SslContext createSslContext() throws Exception {
-        String keystorePath = System.getenv(WEBHOOK_KEYSTORE_FILE);
-        String keystorePassword = System.getenv(WEBHOOK_KEYSTORE_PASSWORD);
-        String keystoreType = System.getenv(WEBHOOK_KEYSTORE_TYPE);
+        String keystorePath = EnvUtils.get(EnvUtils.ENV_WEBHOOK_KEYSTORE_FILE);
 
         if (StringUtils.isEmpty(keystorePath)) {
             LOG.info(
                     "No keystore path is defined in "
-                            + WEBHOOK_KEYSTORE_FILE
+                            + EnvUtils.ENV_WEBHOOK_KEYSTORE_FILE
                             + ", running without ssl");
             return null;
         }
 
-        if (StringUtils.isAnyEmpty(keystorePassword, keystoreType)) {
-            throw new RuntimeException(
-                    WEBHOOK_KEYSTORE_PASSWORD
-                            + " and "
-                            + WEBHOOK_KEYSTORE_TYPE
-                            + " must no be empty");
-        }
-
+        String keystorePassword = EnvUtils.getRequired(EnvUtils.ENV_WEBHOOK_KEYSTORE_PASSWORD);
+        String keystoreType = EnvUtils.getRequired(EnvUtils.ENV_WEBHOOK_KEYSTORE_TYPE);
         KeyStore keyStore = KeyStore.getInstance(keystoreType);
         try (InputStream keyStoreFile = Files.newInputStream(new File(keystorePath).toPath())) {
             keyStore.load(keyStoreFile, keystorePassword.toCharArray());

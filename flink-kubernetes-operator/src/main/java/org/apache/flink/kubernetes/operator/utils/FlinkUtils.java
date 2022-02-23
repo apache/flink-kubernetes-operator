@@ -17,10 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
-import org.apache.flink.kubernetes.operator.FlinkOperator;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 
@@ -42,20 +40,18 @@ public class FlinkUtils {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static DefaultConfig loadDefaultConfig() {
-        // TODO refactor after FLINK-26332
         Configuration operatorConfig =
-                FlinkUtils.loadConfiguration(
-                        System.getenv().get(FlinkOperator.ENV_FLINK_OPERATOR_CONF_DIR));
-        Configuration flinkDefaultConfig =
-                FlinkUtils.loadConfiguration(System.getenv(ConfigConstants.ENV_FLINK_CONF_DIR));
-        return new DefaultConfig(operatorConfig, flinkDefaultConfig);
+                FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_OPERATOR_CONF_DIR));
+        Configuration flinkConfig =
+                FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR));
+        return new DefaultConfig(operatorConfig, flinkConfig);
     }
 
     public static Configuration getEffectiveConfig(
-            FlinkDeployment flinkApp, Configuration defaultFlinkConfig) {
+            FlinkDeployment flinkApp, Configuration flinkConfig) {
         try {
             final Configuration effectiveConfig =
-                    FlinkConfigBuilder.buildFrom(flinkApp, defaultFlinkConfig);
+                    FlinkConfigBuilder.buildFrom(flinkApp, flinkConfig);
             LOG.debug("Effective config: {}", effectiveConfig);
             return effectiveConfig;
         } catch (Exception e) {
@@ -64,11 +60,9 @@ public class FlinkUtils {
     }
 
     public static Configuration loadConfiguration(String confDir) {
-        Configuration configuration =
-                confDir != null
-                        ? GlobalConfiguration.loadConfiguration(confDir)
-                        : new Configuration();
-        return configuration;
+        return confDir != null
+                ? GlobalConfiguration.loadConfiguration(confDir)
+                : new Configuration();
     }
 
     public static Pod mergePodTemplates(Pod toPod, Pod fromPod) {
