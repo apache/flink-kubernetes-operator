@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
@@ -100,6 +101,11 @@ public class FlinkDeploymentControllerTest {
         SessionReconciler sessionReconciler = new SessionReconciler(null, flinkService);
 
         return new FlinkDeploymentController(
-                null, "test", observer, jobReconciler, sessionReconciler);
+                FlinkUtils.loadDefaultConfig(),
+                null,
+                "test",
+                observer,
+                jobReconciler,
+                sessionReconciler);
     }
 }

@@ -75,14 +75,16 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyImage() {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment).applyImage().build();
+                new FlinkConfigBuilder(flinkDeployment, new Configuration()).applyImage().build();
         Assert.assertEquals(IMAGE, configuration.get(KubernetesConfigOptions.CONTAINER_IMAGE));
     }
 
     @Test
     public void testApplyImagePolicy() {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment).applyImagePullPolicy().build();
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyImagePullPolicy()
+                        .build();
         Assert.assertEquals(
                 IMAGE_POLICY,
                 configuration.get(KubernetesConfigOptions.CONTAINER_IMAGE_PULL_POLICY).toString());
@@ -91,14 +93,18 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyFlinkConfiguration() {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment).applyFlinkConfiguration().build();
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .build();
         Assert.assertEquals(2, (int) configuration.get(TaskManagerOptions.NUM_TASK_SLOTS));
     }
 
     @Test
     public void testApplyCommonPodTemplate() throws Exception {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment).applyCommonPodTemplate().build();
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyCommonPodTemplate()
+                        .build();
         final Pod jmPod =
                 OBJECT_MAPPER.readValue(
                         new File(
@@ -118,7 +124,9 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyIngressDomain() {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment).applyIngressDomain().build();
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyIngressDomain()
+                        .build();
         Assert.assertEquals(
                 KubernetesConfigOptions.ServiceExposedType.ClusterIP,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
@@ -127,7 +135,9 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyServiceAccount() {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment).applyServiceAccount().build();
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyServiceAccount()
+                        .build();
         Assert.assertEquals(
                 SERVICE_ACCOUNT,
                 configuration.get(KubernetesConfigOptions.KUBERNETES_SERVICE_ACCOUNT));
@@ -136,7 +146,9 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyJobManagerSpec() throws Exception {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment).applyJobManagerSpec().build();
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobManagerSpec()
+                        .build();
         final Pod jmPod =
                 OBJECT_MAPPER.readValue(
                         new File(
@@ -160,7 +172,9 @@ public class FlinkConfigBuilderTest {
         deploymentClone.getSpec().setPodTemplate(null);
 
         final Configuration configuration =
-                new FlinkConfigBuilder(deploymentClone).applyTaskManagerSpec().build();
+                new FlinkConfigBuilder(deploymentClone, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
         final Pod tmPod =
                 OBJECT_MAPPER.readValue(
                         new File(
@@ -178,7 +192,9 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyJobOrSessionSpec() throws Exception {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment).applyJobOrSessionSpec().build();
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobOrSessionSpec()
+                        .build();
         Assert.assertEquals(
                 KubernetesDeploymentTarget.APPLICATION.getName(),
                 configuration.get(DeploymentOptions.TARGET));
@@ -188,7 +204,8 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testBuildFrom() throws Exception {
-        final Configuration configuration = FlinkConfigBuilder.buildFrom(flinkDeployment);
+        final Configuration configuration =
+                FlinkConfigBuilder.buildFrom(flinkDeployment, new Configuration());
         final String namespace = flinkDeployment.getMetadata().getNamespace();
         final String clusterId = flinkDeployment.getMetadata().getName();
         // Most configs have been tested by previous unit tests, thus we only verify the namespace

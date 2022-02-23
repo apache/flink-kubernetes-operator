@@ -34,13 +34,13 @@ public class OperatorMetricUtils {
     private static final String ENV_OPERATOR_NAME = "OPERATOR_NAME";
     private static final String ENV_OPERATOR_NAMESPACE = "OPERATOR_NAMESPACE";
 
-    public static void initOperatorMetrics(Configuration configuration) {
-        PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(configuration);
-        MetricRegistry metricRegistry = createMetricRegistry(configuration, pluginManager);
+    public static void initOperatorMetrics(Configuration operatorConfig) {
+        PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(operatorConfig);
+        MetricRegistry metricRegistry = createMetricRegistry(operatorConfig, pluginManager);
         KubernetesOperatorMetricGroup operatorMetricGroup =
                 KubernetesOperatorMetricGroup.create(
                         metricRegistry,
-                        configuration,
+                        operatorConfig,
                         System.getenv().getOrDefault(ENV_OPERATOR_NAMESPACE, "default"),
                         System.getenv().getOrDefault(ENV_OPERATOR_NAME, "flink-operator"),
                         System.getenv().getOrDefault(ENV_HOSTNAME, "localhost"));

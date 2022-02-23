@@ -43,7 +43,7 @@ public class JobReconcilerTest {
 
         JobReconciler reconciler = new JobReconciler(null, flinkService);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        Configuration config = FlinkUtils.getEffectiveConfig(deployment);
+        Configuration config = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
         reconciler.reconcile("test", deployment, config);
         List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
