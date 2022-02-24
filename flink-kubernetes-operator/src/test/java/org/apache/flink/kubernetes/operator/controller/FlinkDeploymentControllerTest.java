@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
@@ -189,6 +190,7 @@ public class FlinkDeploymentControllerTest {
                 FlinkUtils.loadDefaultConfig(),
                 null,
                 "test",
+                new DefaultDeploymentValidator(),
                 observer,
                 jobReconciler,
                 sessionReconciler);

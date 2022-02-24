@@ -26,6 +26,8 @@ import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
+import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
@@ -58,11 +60,14 @@ public class FlinkOperator {
         JobReconciler jobReconciler = new JobReconciler(client, flinkService);
         SessionReconciler sessionReconciler = new SessionReconciler(client, flinkService);
 
+        FlinkDeploymentValidator validator = new DefaultDeploymentValidator();
+
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(
                         defaultConfig,
                         client,
                         namespace,
+                        validator,
                         observer,
                         jobReconciler,
                         sessionReconciler);

@@ -21,18 +21,25 @@ import org.apache.flink.kubernetes.operator.admission.admissioncontroller.NotAll
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation;
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.validation.Validator;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
+import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
+
 /** Validator for FlinkDeployment creation and updates. */
-public class FlinkDeploymentValidator implements Validator<GenericKubernetesResource> {
-    private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentValidator.class);
+public class FlinkValidator implements Validator<GenericKubernetesResource> {
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkValidator.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    private final FlinkDeploymentValidator deploymentValidator;
+
+    public FlinkValidator(FlinkDeploymentValidator deploymentValidator) {
+        this.deploymentValidator = deploymentValidator;
+    }
 
     @Override
     public void validate(GenericKubernetesResource resource, Operation operation)
@@ -41,13 +48,10 @@ public class FlinkDeploymentValidator implements Validator<GenericKubernetesReso
 
         FlinkDeployment flinkDeployment =
                 objectMapper.convertValue(resource, FlinkDeployment.class);
-        FlinkDeploymentSpec spec = flinkDeployment.getSpec();
-        JobSpec job = spec.getJob();
 
-        if (job != null) {
-            if (job.getParallelism() < 1) {
-                throw new NotAllowedException("Job parallelism must be larger than 0");
-            }
+        Optional<String> validationError = deploymentValidator.validate(flinkDeployment);
+        if (validationError.isPresent()) {
+            throw new NotAllowedException(validationError.get());
         }
     }
 }
