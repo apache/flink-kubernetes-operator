@@ -109,11 +109,19 @@ public class FlinkUtils {
     }
 
     public static void deleteCluster(FlinkDeployment flinkApp, KubernetesClient kubernetesClient) {
+        deleteCluster(
+                flinkApp.getMetadata().getNamespace(),
+                flinkApp.getMetadata().getName(),
+                kubernetesClient);
+    }
+
+    public static void deleteCluster(
+            String namespace, String clusterId, KubernetesClient kubernetesClient) {
         kubernetesClient
                 .apps()
                 .deployments()
-                .inNamespace(flinkApp.getMetadata().getNamespace())
-                .withName(flinkApp.getMetadata().getName())
+                .inNamespace(namespace)
+                .withName(clusterId)
                 .cascading(true)
                 .delete();
     }

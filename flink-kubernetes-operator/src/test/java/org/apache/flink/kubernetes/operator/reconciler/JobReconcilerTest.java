@@ -22,10 +22,12 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import org.junit.jupiter.api.Test;
 
@@ -33,6 +35,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link JobStatusObserver unit tests */
 public class JobReconcilerTest {
@@ -47,19 +50,7 @@ public class JobReconcilerTest {
 
         reconciler.reconcile("test", deployment, config);
         List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
-        assertEquals(1, runningJobs.size());
-        assertNull(runningJobs.get(0).f0);
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .setLastReconciledSpec(deployment.getSpec());
-
-        JobStatus jobStatus = new JobStatus();
-        jobStatus.setJobName(runningJobs.get(0).f1.getJobName());
-        jobStatus.setJobId(runningJobs.get(0).f1.getJobId().toHexString());
-        jobStatus.setState("RUNNING");
-
-        deployment.getStatus().setJobStatus(jobStatus);
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs);
 
         // Test stateless upgrade
         FlinkDeployment statelessUpgrade = TestUtils.clone(deployment);
@@ -86,5 +77,68 @@ public class JobReconcilerTest {
         runningJobs = flinkService.listJobs();
         assertEquals(1, runningJobs.size());
         assertEquals("savepoint_0", runningJobs.get(0).f0);
+    }
+
+    @Test
+    public void testUpgradeModeChangeFromSavepointToLastState() throws Exception {
+        final String expectedSavepointPath = "savepoint_0";
+        final TestingFlinkService flinkService = new TestingFlinkService();
+
+        final JobReconciler reconciler = new JobReconciler(null, flinkService);
+        final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        final Configuration config = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
+
+        reconciler.reconcile("test", deployment, config);
+        List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs);
+
+        // Suspend FlinkDeployment with savepoint upgrade mode
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        deployment.getSpec().getJob().setState(JobState.SUSPENDED);
+        deployment.getSpec().setImage("new-image-1");
+
+        reconciler.reconcile("test", deployment, config);
+        assertEquals(0, flinkService.listJobs().size());
+        assertTrue(
+                JobState.SUSPENDED
+                        .name()
+                        .equalsIgnoreCase(deployment.getStatus().getJobStatus().getState()));
+        assertEquals(
+                expectedSavepointPath,
+                deployment.getStatus().getJobStatus().getSavepointLocation());
+
+        // Resume FlinkDeployment with last-state upgrade mode
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .getLastReconciledSpec()
+                .getJob()
+                .setState(JobState.SUSPENDED);
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        deployment.getSpec().getJob().setState(JobState.RUNNING);
+        deployment.getSpec().setImage("new-image-2");
+
+        reconciler.reconcile("test", deployment, config);
+        runningJobs = flinkService.listJobs();
+        assertEquals(expectedSavepointPath, config.get(SavepointConfigOptions.SAVEPOINT_PATH));
+        assertEquals(1, runningJobs.size());
+        assertEquals(expectedSavepointPath, runningJobs.get(0).f0);
+    }
+
+    private void verifyAndSetRunningJobsToStatus(
+            FlinkDeployment deployment, List<Tuple2<String, JobStatusMessage>> runningJobs) {
+        assertEquals(1, runningJobs.size());
+        assertNull(runningJobs.get(0).f0);
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .setLastReconciledSpec(TestUtils.clone(deployment.getSpec()));
+
+        JobStatus jobStatus = new JobStatus();
+        jobStatus.setJobName(runningJobs.get(0).f1.getJobName());
+        jobStatus.setJobId(runningJobs.get(0).f1.getJobId().toHexString());
+        jobStatus.setState("RUNNING");
+
+        deployment.getStatus().setJobStatus(jobStatus);
     }
 }
