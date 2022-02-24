@@ -95,7 +95,7 @@ public class JobStatusObserver {
         if (newStatus == null) {
             newStatus = createJobStatus(newJob);
         } else {
-            newStatus.setState(newJob.getJobState().name());
+            newStatus.setState(JobState.valueOf(newJob.getJobState().name()));
             newStatus.setJobName(newJob.getJobName());
             newStatus.setJobId(newJob.getJobId().toHexString());
         }
@@ -106,7 +106,7 @@ public class JobStatusObserver {
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobId(message.getJobId().toHexString());
         jobStatus.setJobName(message.getJobName());
-        jobStatus.setState(message.getJobState().name());
+        jobStatus.setState(JobState.valueOf(message.getJobState().name()));
         return jobStatus;
     }
 }

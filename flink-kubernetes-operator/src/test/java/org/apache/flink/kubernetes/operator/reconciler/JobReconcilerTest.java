@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -57,7 +58,7 @@ public class JobReconcilerTest {
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobName(runningJobs.get(0).f1.getJobName());
         jobStatus.setJobId(runningJobs.get(0).f1.getJobId().toHexString());
-        jobStatus.setState("RUNNING");
+        jobStatus.setState(JobState.RUNNING);
 
         deployment.getStatus().setJobStatus(jobStatus);
 

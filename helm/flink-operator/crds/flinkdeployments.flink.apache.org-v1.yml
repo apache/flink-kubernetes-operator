@@ -9067,6 +9067,9 @@ spec:
                   jobId:
                     type: string
                   state:
+                    enum:
+                    - running
+                    - suspended
                     type: string
                   updateTime:
                     type: string

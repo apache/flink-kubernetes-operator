@@ -160,7 +160,7 @@ public class JobReconciler {
                         upgradeMode,
                         effectiveConfig);
         JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
-        jobStatus.setState("suspended");
+        jobStatus.setState(JobState.SUSPENDED);
         savepointOpt.ifPresent(jobStatus::setSavepointLocation);
         return savepointOpt;
     }

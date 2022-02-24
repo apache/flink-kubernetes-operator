@@ -78,7 +78,7 @@ public class FlinkDeploymentControllerTest {
         JobStatusMessage expectedJobStatus = flinkService.listJobs().get(0).f1;
         assertEquals(expectedJobStatus.getJobId().toHexString(), jobStatus.getJobId());
         assertEquals(expectedJobStatus.getJobName(), jobStatus.getJobName());
-        assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
+        assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState().toString());
 
         // Send in invalid update
         appCluster = TestUtils.clone(appCluster);
@@ -97,7 +97,7 @@ public class FlinkDeploymentControllerTest {
         expectedJobStatus = flinkService.listJobs().get(0).f1;
         assertEquals(expectedJobStatus.getJobId().toHexString(), jobStatus.getJobId());
         assertEquals(expectedJobStatus.getJobName(), jobStatus.getJobName());
-        assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
+        assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState().toString());
     }
 
     @Test

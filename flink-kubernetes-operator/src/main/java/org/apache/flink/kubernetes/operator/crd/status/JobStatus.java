@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -30,7 +32,7 @@ import lombok.NoArgsConstructor;
 public class JobStatus {
     private String jobName;
     private String jobId;
-    private String state;
+    private JobState state;
     private String updateTime;
     private String savepointLocation;
 }
