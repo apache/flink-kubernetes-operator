@@ -30,7 +30,11 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
 
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
+import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
@@ -41,10 +45,12 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
+import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -58,6 +64,7 @@ public class FlinkDeploymentController
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
 
     public static final int REFRESH_SECONDS = 60;
+    public static final int PORT_READY_DELAY_SECONDS = 10;
 
     private final KubernetesClient kubernetesClient;
 
@@ -68,6 +75,7 @@ public class FlinkDeploymentController
     private final JobReconciler jobReconciler;
     private final SessionReconciler sessionReconciler;
     private final DefaultConfig defaultConfig;
+    private final HashSet<String> jobManagerDeployments = new HashSet<>();
 
     public FlinkDeploymentController(
             DefaultConfig defaultConfig,
@@ -96,6 +104,7 @@ public class FlinkDeploymentController
                 operatorNamespace,
                 kubernetesClient,
                 true);
+        jobManagerDeployments.remove(flinkApp.getMetadata().getSelfLink());
         return DeleteControl.defaultDelete();
     }
 
@@ -113,8 +122,11 @@ public class FlinkDeploymentController
         Configuration effectiveConfig =
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
         try {
-            boolean successfulObserve = observer.observeFlinkJobStatus(flinkApp, effectiveConfig);
-            if (successfulObserve) {
+            // only check job status when the JM deployment is ready
+            boolean shouldReconcile =
+                    !jobManagerDeployments.contains(flinkApp.getMetadata().getSelfLink())
+                            || observer.observeFlinkJobStatus(flinkApp, effectiveConfig);
+            if (shouldReconcile) {
                 reconcileFlinkDeployment(operatorNamespace, flinkApp, effectiveConfig);
                 updateForReconciliationSuccess(flinkApp);
             }
@@ -124,6 +136,49 @@ public class FlinkDeploymentController
             return UpdateControl.updateStatus(flinkApp);
         } catch (Exception e) {
             throw new ReconciliationException(e);
+        }
+
+        return checkJobManagerDeployment(flinkApp, context, effectiveConfig);
+    }
+
+    private UpdateControl<FlinkDeployment> checkJobManagerDeployment(
+            FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
+        if (!jobManagerDeployments.contains(flinkApp.getMetadata().getSelfLink())) {
+            Optional<Deployment> deployment = context.getSecondaryResource(Deployment.class);
+            if (deployment.isPresent()) {
+                DeploymentStatus status = deployment.get().getStatus();
+                DeploymentSpec spec = deployment.get().getSpec();
+                if (status != null
+                        && status.getAvailableReplicas() != null
+                        && spec.getReplicas().intValue() == status.getReplicas()
+                        && spec.getReplicas().intValue() == status.getAvailableReplicas()) {
+                    // typically it takes a few seconds for the REST server to be ready
+                    if (observer.isJobManagerReady(effectiveConfig)) {
+                        LOG.info(
+                                "JobManager deployment {} in namespace {} is ready",
+                                flinkApp.getMetadata().getName(),
+                                flinkApp.getMetadata().getNamespace());
+                        jobManagerDeployments.add(flinkApp.getMetadata().getSelfLink());
+                        if (flinkApp.getStatus().getJobStatus() != null) {
+                            // short circuit, if the job was already running
+                            // reschedule for immediate job status check
+                            return UpdateControl.updateStatus(flinkApp).rescheduleAfter(0);
+                        }
+                    }
+                    LOG.info(
+                            "JobManager deployment {} in namespace {} port not ready",
+                            flinkApp.getMetadata().getName(),
+                            flinkApp.getMetadata().getNamespace());
+                    return UpdateControl.updateStatus(flinkApp)
+                            .rescheduleAfter(PORT_READY_DELAY_SECONDS, TimeUnit.SECONDS);
+                } else {
+                    LOG.info(
+                            "JobManager deployment {} in namespace {} not yet ready, status {}",
+                            flinkApp.getMetadata().getName(),
+                            flinkApp.getMetadata().getNamespace(),
+                            status);
+                }
+            }
         }
         return UpdateControl.updateStatus(flinkApp)
                 .rescheduleAfter(REFRESH_SECONDS, TimeUnit.SECONDS);
@@ -156,11 +211,16 @@ public class FlinkDeploymentController
     @Override
     public List<EventSource> prepareEventSources(
             EventSourceContext<FlinkDeployment> eventSourceContext) {
-        // TODO: start status updated
-        //        return List.of(new PerResourcePollingEventSource<>(
-        //                new FlinkResourceSupplier, context.getPrimaryCache(), POLL_PERIOD,
-        //                FlinkApplication.class));
-        return Collections.emptyList();
+        // reconcile when job manager deployment is ready
+        SharedIndexInformer<Deployment> deploymentInformer =
+                kubernetesClient
+                        .apps()
+                        .deployments()
+                        .inAnyNamespace()
+                        .withLabel("type", "flink-native-kubernetes")
+                        .withLabel("component", "jobmanager")
+                        .runnableInformer(0);
+        return List.of(new InformerEventSource<>(deploymentInformer, Mappers.fromLabel("app")));
     }
 
     @Override
