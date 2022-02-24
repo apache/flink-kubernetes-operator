@@ -78,6 +78,7 @@ spec:
     jarURI: local:///opt/flink/usrlib/myjob.jar
     entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample
     parallelism: 2
+    upgradeMode: last-state
 
 ---
 apiVersion: v1

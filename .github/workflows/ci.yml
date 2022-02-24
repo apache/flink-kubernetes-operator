@@ -106,7 +106,10 @@ jobs:
           kubectl get pods
       - name: Run Flink e2e tests
         run: |
-          ./e2e-tests/test_kubernetes_application_ha.sh
+          ls e2e-tests/test_*.sh | while read script_test;do \
+            echo "Running $script_test"
+            bash $script_test || exit 1
+          done
       - name: Stop the operator
         run: |
           helm uninstall flink-operator
