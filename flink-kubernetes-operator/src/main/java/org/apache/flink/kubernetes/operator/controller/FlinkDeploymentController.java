@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -62,6 +63,7 @@ public class FlinkDeploymentController
 
     private final String operatorNamespace;
 
+    private final FlinkDeploymentValidator validator;
     private final JobStatusObserver observer;
     private final JobReconciler jobReconciler;
     private final SessionReconciler sessionReconciler;
@@ -71,12 +73,14 @@ public class FlinkDeploymentController
             DefaultConfig defaultConfig,
             KubernetesClient kubernetesClient,
             String operatorNamespace,
+            FlinkDeploymentValidator validator,
             JobStatusObserver observer,
             JobReconciler jobReconciler,
             SessionReconciler sessionReconciler) {
         this.defaultConfig = defaultConfig;
         this.kubernetesClient = kubernetesClient;
         this.operatorNamespace = operatorNamespace;
+        this.validator = validator;
         this.observer = observer;
         this.jobReconciler = jobReconciler;
         this.sessionReconciler = sessionReconciler;
@@ -98,6 +102,13 @@ public class FlinkDeploymentController
     @Override
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context) {
         LOG.info("Reconciling {}", flinkApp.getMetadata().getName());
+
+        Optional<String> validationError = validator.validate(flinkApp);
+        if (validationError.isPresent()) {
+            LOG.error("Reconciliation failed: " + validationError.get());
+            updateForReconciliationError(flinkApp, validationError.get());
+            return UpdateControl.updateStatus(flinkApp);
+        }
 
         Configuration effectiveConfig =
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());

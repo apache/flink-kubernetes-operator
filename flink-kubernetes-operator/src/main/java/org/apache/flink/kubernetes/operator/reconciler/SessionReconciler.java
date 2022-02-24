@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.reconciler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
@@ -61,9 +60,6 @@ public class SessionReconciler {
         boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
 
         if (specChanged) {
-            if (lastReconciledSpec.getJob() != null) {
-                throw new InvalidDeploymentException("Cannot switch from job to session cluster");
-            }
             upgradeSessionCluster(flinkApp, effectiveConfig);
         }
     }

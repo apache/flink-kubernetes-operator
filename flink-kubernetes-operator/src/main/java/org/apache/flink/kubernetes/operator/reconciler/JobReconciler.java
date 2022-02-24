@@ -60,9 +60,6 @@ public class JobReconciler {
                 flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
         JobSpec jobSpec = flinkApp.getSpec().getJob();
         if (lastReconciledSpec == null) {
-            if (!jobSpec.getState().equals(JobState.RUNNING)) {
-                throw new InvalidDeploymentException("Job must start in running state");
-            }
             deployFlinkJob(
                     flinkApp,
                     effectiveConfig,
@@ -74,9 +71,6 @@ public class JobReconciler {
 
         boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
         if (specChanged) {
-            if (lastReconciledSpec.getJob() == null) {
-                throw new InvalidDeploymentException("Cannot switch from session to job cluster");
-            }
             JobState currentJobState = lastReconciledSpec.getJob().getState();
             JobState desiredJobState = jobSpec.getState();
 
@@ -129,13 +123,7 @@ public class JobReconciler {
     private void restoreFromLastSavepoint(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
-
-        String savepointLocation = jobStatus.getSavepointLocation();
-        if (savepointLocation == null) {
-            throw new InvalidDeploymentException(
-                    "Cannot perform stateful restore without a valid savepoint");
-        }
-        deployFlinkJob(flinkApp, effectiveConfig, Optional.of(savepointLocation));
+        deployFlinkJob(flinkApp, effectiveConfig, Optional.of(jobStatus.getSavepointLocation()));
     }
 
     private Optional<String> suspendJob(FlinkDeployment flinkApp, Configuration effectiveConfig)

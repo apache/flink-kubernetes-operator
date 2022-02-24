@@ -65,7 +65,12 @@ public class TestUtils {
         FlinkDeployment deployment = buildSessionCluster();
         deployment
                 .getSpec()
-                .setJob(JobSpec.builder().jarURI(SAMPLE_JAR).state(JobState.RUNNING).build());
+                .setJob(
+                        JobSpec.builder()
+                                .jarURI(SAMPLE_JAR)
+                                .parallelism(1)
+                                .state(JobState.RUNNING)
+                                .build());
         return deployment;
     }
 

@@ -32,6 +32,7 @@ import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -65,10 +66,11 @@ public class FlinkService {
         final ApplicationDeployer deployer =
                 new ApplicationClusterDeployer(clusterClientServiceLoader);
 
+        JobSpec jobSpec = deployment.getSpec().getJob();
         final ApplicationConfiguration applicationConfiguration =
                 new ApplicationConfiguration(
-                        deployment.getSpec().getJob().getArgs(),
-                        deployment.getSpec().getJob().getEntryClass());
+                        jobSpec.getArgs() != null ? jobSpec.getArgs() : new String[0],
+                        jobSpec.getEntryClass());
 
         deployer.run(conf, applicationConfiguration);
         LOG.info("Application cluster {} deployed", deployment.getMetadata().getName());
