@@ -45,6 +45,12 @@ import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketAddress;
+import java.net.SocketTimeoutException;
+import java.net.URI;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.Executors;
@@ -92,6 +98,25 @@ public class FlinkService {
                     kubernetesClusterClientFactory.getClusterSpecification(conf));
         }
         LOG.info("Session cluster {} deployed", deployment.getMetadata().getName());
+    }
+
+    public boolean isJobManagerReady(Configuration config) {
+        final URI uri;
+        try (ClusterClient<String> clusterClient = getClusterClient(config)) {
+            uri = URI.create(clusterClient.getWebInterfaceURL());
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+        SocketAddress socketAddress = new InetSocketAddress(uri.getHost(), uri.getPort());
+        Socket socket = new Socket();
+        try {
+            socket.connect(socketAddress, 1000);
+            socket.close();
+            return true;
+        } catch (SocketTimeoutException ste) {
+        } catch (IOException e) {
+        }
+        return false;
     }
 
     public Collection<JobStatusMessage> listJobs(Configuration conf) throws Exception {

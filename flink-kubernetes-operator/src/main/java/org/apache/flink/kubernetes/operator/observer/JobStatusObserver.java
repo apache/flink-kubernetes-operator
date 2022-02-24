@@ -83,6 +83,10 @@ public class JobStatusObserver {
         }
     }
 
+    public boolean isJobManagerReady(Configuration config) {
+        return flinkService.isJobManagerReady(config);
+    }
+
     /** Merge previous job status with the new one from the flink job cluster. */
     private JobStatus mergeJobStatus(
             JobStatus oldStatus, List<JobStatusMessage> clusterJobStatuses) {
@@ -98,6 +102,8 @@ public class JobStatusObserver {
             newStatus.setState(newJob.getJobState().name());
             newStatus.setJobName(newJob.getJobName());
             newStatus.setJobId(newJob.getJobId().toHexString());
+            // track the start time, changing timestamp would cause busy reconciliation
+            newStatus.setUpdateTime(String.valueOf(newJob.getStartTime()));
         }
         return newStatus;
     }
@@ -107,6 +113,7 @@ public class JobStatusObserver {
         jobStatus.setJobId(message.getJobId().toHexString());
         jobStatus.setJobName(message.getJobName());
         jobStatus.setState(message.getJobState().name());
+        jobStatus.setUpdateTime(String.valueOf(message.getStartTime()));
         return jobStatus;
     }
 }

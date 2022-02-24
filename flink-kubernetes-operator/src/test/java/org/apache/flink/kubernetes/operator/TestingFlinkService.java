@@ -100,4 +100,9 @@ public class TestingFlinkService extends FlinkService {
     public void stopSessionCluster(FlinkDeployment deployment, Configuration conf) {
         sessions.remove(deployment.getMetadata().getName());
     }
+
+    @Override
+    public boolean isJobManagerReady(Configuration config) {
+        return true;
+    }
 }
