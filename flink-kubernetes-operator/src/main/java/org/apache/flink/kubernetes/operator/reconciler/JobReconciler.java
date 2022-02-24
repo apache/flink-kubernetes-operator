@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
-import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -80,23 +79,21 @@ public class JobReconciler {
                     upgradeFlinkJob(flinkApp, effectiveConfig);
                 }
                 if (desiredJobState.equals(JobState.SUSPENDED)) {
-                    if (upgradeMode == UpgradeMode.STATELESS) {
-                        cancelJob(flinkApp, effectiveConfig);
-                    } else {
-                        suspendJob(flinkApp, effectiveConfig);
-                    }
+                    printCancelLogs(upgradeMode, flinkApp.getMetadata().getName());
+                    cancelJob(flinkApp, upgradeMode, effectiveConfig);
                 }
             }
-            if (currentJobState == JobState.SUSPENDED) {
-                if (desiredJobState == JobState.RUNNING) {
-                    if (upgradeMode == UpgradeMode.STATELESS) {
-                        deployFlinkJob(flinkApp, effectiveConfig, Optional.empty());
-                    } else if (upgradeMode == UpgradeMode.SAVEPOINT) {
-                        restoreFromLastSavepoint(flinkApp, effectiveConfig);
-                    } else {
-                        throw new InvalidDeploymentException(
-                                "Only savepoint and stateless strategies are supported at the moment.");
-                    }
+            if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
+                if (upgradeMode == UpgradeMode.STATELESS) {
+                    deployFlinkJob(flinkApp, effectiveConfig, Optional.empty());
+                } else if (upgradeMode == UpgradeMode.SAVEPOINT) {
+                    restoreFromLastSavepoint(flinkApp, effectiveConfig);
+                } else if (upgradeMode == UpgradeMode.LAST_STATE) {
+                    final String savepointLocation =
+                            flinkApp.getStatus().getJobStatus().getSavepointLocation();
+                    // Upgrade mode changes from savepoint -> last-state
+                    deployFlinkJob(
+                            flinkApp, effectiveConfig, Optional.ofNullable(savepointLocation));
                 }
             }
         }
@@ -116,7 +113,8 @@ public class JobReconciler {
     private void upgradeFlinkJob(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         LOG.info("Upgrading running job");
-        Optional<String> savepoint = cancelJob(flinkApp, effectiveConfig);
+        final Optional<String> savepoint =
+                cancelJob(flinkApp, flinkApp.getSpec().getJob().getUpgradeMode(), effectiveConfig);
         deployFlinkJob(flinkApp, effectiveConfig, savepoint);
     }
 
@@ -126,17 +124,20 @@ public class JobReconciler {
         deployFlinkJob(flinkApp, effectiveConfig, Optional.of(jobStatus.getSavepointLocation()));
     }
 
-    private Optional<String> suspendJob(FlinkDeployment flinkApp, Configuration effectiveConfig)
-            throws Exception {
-        LOG.info("Suspending {}", flinkApp.getMetadata().getName());
-        return cancelJob(flinkApp, UpgradeMode.SAVEPOINT, effectiveConfig);
-    }
-
-    private Optional<String> cancelJob(FlinkDeployment flinkApp, Configuration effectiveConfig)
-            throws Exception {
-        LOG.info("Cancelling {}", flinkApp.getMetadata().getName());
-        UpgradeMode upgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
-        return cancelJob(flinkApp, upgradeMode, effectiveConfig);
+    private void printCancelLogs(UpgradeMode upgradeMode, String name) {
+        switch (upgradeMode) {
+            case STATELESS:
+                LOG.info("Cancelling {}", name);
+                break;
+            case SAVEPOINT:
+                LOG.info("Suspending {}", name);
+                break;
+            case LAST_STATE:
+                LOG.info("Cancelling {} with last state retained", name);
+                break;
+            default:
+                throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
+        }
     }
 
     private Optional<String> cancelJob(

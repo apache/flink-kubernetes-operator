@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.service;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.client.cli.ApplicationDeployer;
 import org.apache.flink.client.deployment.ClusterClientFactory;
@@ -34,9 +35,11 @@ import org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import org.slf4j.Logger;
@@ -97,7 +100,8 @@ public class FlinkService {
         }
     }
 
-    private ClusterClient<String> getClusterClient(Configuration config) throws Exception {
+    @VisibleForTesting
+    protected ClusterClient<String> getClusterClient(Configuration config) throws Exception {
         final String clusterId = config.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = config.get(KubernetesConfigOptions.NAMESPACE);
         final int port = config.getInteger(RestOptions.PORT);
@@ -124,6 +128,15 @@ public class FlinkService {
                                     .stopWithSavepoint(jobID, false, null)
                                     .get(1, TimeUnit.MINUTES);
                     savepointOpt = Optional.of(savepoint);
+                    break;
+                case LAST_STATE:
+                    if (!HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
+                        throw new InvalidDeploymentException(
+                                "Job could not be upgraded with last-state while HA disabled");
+                    }
+                    final String namespace = conf.getString(KubernetesConfigOptions.NAMESPACE);
+                    final String clusterId = clusterClient.getClusterId();
+                    FlinkUtils.deleteCluster(namespace, clusterId, kubernetesClient);
                     break;
                 default:
                     throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
