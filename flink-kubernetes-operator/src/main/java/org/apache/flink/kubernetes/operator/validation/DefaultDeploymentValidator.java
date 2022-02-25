@@ -27,10 +27,12 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /** Default validator implementation. */
 public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
@@ -38,11 +40,15 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
     private static final String[] FORBIDDEN_CONF_KEYS =
             new String[] {"kubernetes.namespace", "kubernetes.cluster-id"};
 
+    private static final Set<String> ALLOWED_LOG_CONF_KEYS =
+            Set.of(Constants.CONFIG_FILE_LOG4J_NAME, Constants.CONFIG_FILE_LOGBACK_NAME);
+
     @Override
     public Optional<String> validate(FlinkDeployment deployment) {
         FlinkDeploymentSpec spec = deployment.getSpec();
         return firstPresent(
                 validateFlinkConfig(spec.getFlinkConfiguration()),
+                validateLogConfig(spec.getLogConfiguration()),
                 validateJobSpec(spec.getJob(), spec.getFlinkConfiguration()),
                 validateJmSpec(spec.getJobManager(), spec.getFlinkConfiguration()),
                 validateTmSpec(spec.getTaskManager()),
@@ -66,6 +72,21 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
         for (String key : FORBIDDEN_CONF_KEYS) {
             if (conf.containsKey(key)) {
                 return Optional.of("Forbidden Flink config key: " + key);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateLogConfig(Map<String, String> confMap) {
+        if (confMap == null) {
+            return Optional.empty();
+        }
+        for (String key : confMap.keySet()) {
+            if (!ALLOWED_LOG_CONF_KEYS.contains(key)) {
+                return Optional.of(
+                        String.format(
+                                "Invalid log config key: %s. Allowed keys are %s",
+                                key, ALLOWED_LOG_CONF_KEYS));
             }
         }
         return Optional.empty();

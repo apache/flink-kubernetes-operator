@@ -42,7 +42,10 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.Collections;
 
+import static org.apache.flink.configuration.DeploymentOptionsInternal.CONF_DIR;
 import static org.apache.flink.kubernetes.operator.utils.FlinkUtils.mergePodTemplates;
+import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
+import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOGBACK_NAME;
 
 /** Builder to get effective flink config from {@link FlinkDeployment}. */
 public class FlinkConfigBuilder {
@@ -76,6 +79,17 @@ public class FlinkConfigBuilder {
         // Parse config from spec's flinkConfiguration
         if (spec.getFlinkConfiguration() != null && !spec.getFlinkConfiguration().isEmpty()) {
             spec.getFlinkConfiguration().forEach(effectiveConfig::setString);
+        }
+        return this;
+    }
+
+    public FlinkConfigBuilder applyLogConfiguration() throws IOException {
+        if (spec.getLogConfiguration() != null) {
+            String confDir =
+                    createLogConfigFiles(
+                            spec.getLogConfiguration().get(CONFIG_FILE_LOG4J_NAME),
+                            spec.getLogConfiguration().get(CONFIG_FILE_LOGBACK_NAME));
+            effectiveConfig.setString(CONF_DIR, confDir);
         }
         return this;
     }
@@ -168,6 +182,7 @@ public class FlinkConfigBuilder {
             throws IOException, URISyntaxException {
         return new FlinkConfigBuilder(dep, flinkConfig)
                 .applyFlinkConfiguration()
+                .applyLogConfiguration()
                 .applyImage()
                 .applyImagePullPolicy()
                 .applyServiceAccount()
@@ -209,6 +224,23 @@ public class FlinkConfigBuilder {
                         : KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE;
         effectiveConfig.setString(
                 podConfigOption, createTempFile(mergePodTemplates(basicPod, appendPod)));
+    }
+
+    private static String createLogConfigFiles(String log4jConf, String logbackConf)
+            throws IOException {
+        File tmpDir = Files.createTempDirectory("conf").toFile();
+
+        if (log4jConf != null) {
+            File log4jConfFile = new File(tmpDir.getAbsolutePath(), CONFIG_FILE_LOG4J_NAME);
+            Files.write(log4jConfFile.toPath(), log4jConf.getBytes());
+        }
+
+        if (logbackConf != null) {
+            File logbackConfFile = new File(tmpDir.getAbsolutePath(), CONFIG_FILE_LOGBACK_NAME);
+            Files.write(logbackConfFile.toPath(), logbackConf.getBytes());
+        }
+        tmpDir.deleteOnExit();
+        return tmpDir.getAbsolutePath();
     }
 
     private static String createTempFile(Pod podTemplate) throws IOException {
