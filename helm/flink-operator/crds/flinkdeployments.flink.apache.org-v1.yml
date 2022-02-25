@@ -9057,6 +9057,10 @@ spec:
                     - stateless
                     type: string
                 type: object
+              logConfiguration:
+                additionalProperties:
+                  type: string
+                type: object
             type: object
           status:
             properties:
@@ -18118,6 +18122,10 @@ spec:
                             - last-state
                             - stateless
                             type: string
+                        type: object
+                      logConfiguration:
+                        additionalProperties:
+                          type: string
                         type: object
                     type: object
                 type: object

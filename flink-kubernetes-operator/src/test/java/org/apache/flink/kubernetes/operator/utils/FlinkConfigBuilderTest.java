@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
+import org.apache.flink.configuration.DeploymentOptionsInternal;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
@@ -28,6 +29,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.utils.Constants;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -38,18 +40,23 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Map;
 
 import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE;
 import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE_POLICY;
 import static org.apache.flink.kubernetes.operator.TestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.TestUtils.SERVICE_ACCOUNT;
+import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 
 /** FlinkConfigBuilderTest. */
 public class FlinkConfigBuilderTest {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper(new YAMLFactory());
     private static FlinkDeployment flinkDeployment;
+    private static final String CUSTOM_LOG_CONFIG = "rootLogger.level = INFO";
 
     @BeforeAll
     public static void prepareFlinkDeployment() {
@@ -70,6 +77,9 @@ public class FlinkConfigBuilderTest {
         flinkDeployment.getSpec().getJobManager().setReplicas(2);
         flinkDeployment.getSpec().getTaskManager().setPodTemplate(pod2);
         flinkDeployment.getSpec().getJob().setParallelism(2);
+        flinkDeployment
+                .getSpec()
+                .setLogConfiguration(Map.of(Constants.CONFIG_FILE_LOG4J_NAME, CUSTOM_LOG_CONFIG));
     }
 
     @Test
@@ -97,6 +107,21 @@ public class FlinkConfigBuilderTest {
                         .applyFlinkConfiguration()
                         .build();
         Assert.assertEquals(2, (int) configuration.get(TaskManagerOptions.NUM_TASK_SLOTS));
+    }
+
+    @Test
+    public void testApplyLogConfiguration() throws IOException {
+        final Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyLogConfiguration()
+                        .build();
+
+        final File log4jFile =
+                new File(
+                        configuration.get(DeploymentOptionsInternal.CONF_DIR),
+                        CONFIG_FILE_LOG4J_NAME);
+        Assert.assertTrue(log4jFile.exists() && log4jFile.isFile() && log4jFile.canRead());
+        Assert.assertEquals(CUSTOM_LOG_CONFIG, Files.readString(log4jFile.toPath()));
     }
 
     @Test

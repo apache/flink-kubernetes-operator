@@ -41,4 +41,5 @@ public class FlinkDeploymentSpec {
     private JobManagerSpec jobManager;
     private TaskManagerSpec taskManager;
     private JobSpec job;
+    private Map<String, String> logConfiguration;
 }

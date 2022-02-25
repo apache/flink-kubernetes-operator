@@ -25,11 +25,13 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.utils.Constants;
 
 import org.junit.Assert;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -74,6 +76,20 @@ public class DeploymentValidatorTest {
                                         Collections.singletonMap(
                                                 KubernetesConfigOptions.NAMESPACE.key(), "myns")),
                 "Forbidden Flink config key");
+
+        // Test log config validation
+        testSuccess(
+                dep ->
+                        dep.getSpec()
+                                .setLogConfiguration(
+                                        Map.of(
+                                                Constants.CONFIG_FILE_LOG4J_NAME,
+                                                "rootLogger.level = INFO")));
+
+        testError(
+                dep -> dep.getSpec().setLogConfiguration(Map.of("random", "config")),
+                "Invalid log config key");
+
         testError(
                 dep -> dep.getSpec().getJobManager().setReplicas(2),
                 "High availability should be enabled when starting standby JobManagers.");
