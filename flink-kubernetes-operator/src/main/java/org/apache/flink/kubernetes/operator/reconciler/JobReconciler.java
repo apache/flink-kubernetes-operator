@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
@@ -47,13 +48,10 @@ public class JobReconciler extends BaseReconciler {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobReconciler.class);
 
-    private final KubernetesClient kubernetesClient;
-    private final FlinkService flinkService;
     private final JobStatusObserver observer;
 
     public JobReconciler(KubernetesClient kubernetesClient, FlinkService flinkService) {
-        this.kubernetesClient = kubernetesClient;
-        this.flinkService = flinkService;
+        super(kubernetesClient, flinkService);
         this.observer = new JobStatusObserver(flinkService);
     }
 
@@ -78,7 +76,8 @@ public class JobReconciler extends BaseReconciler {
 
         // wait until the deployment is ready
         UpdateControl<FlinkDeployment> uc =
-                checkJobManagerDeployment(flinkApp, context, effectiveConfig, flinkService);
+                checkJobManagerDeployment(flinkApp, context, effectiveConfig)
+                        .toUpdateControl(flinkApp);
         if (uc != null) {
             return uc;
         }
@@ -178,5 +177,23 @@ public class JobReconciler extends BaseReconciler {
         removeDeployment(flinkApp);
         savepointOpt.ifPresent(jobStatus::setSavepointLocation);
         return savepointOpt;
+    }
+
+    @Override
+    protected void shutdown(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+        if (flinkApp.getStatus().getJobStatus() != null
+                && flinkApp.getStatus().getJobStatus().getJobId() != null) {
+            try {
+                flinkService.cancelJob(
+                        JobID.fromHexString(flinkApp.getStatus().getJobStatus().getJobId()),
+                        UpgradeMode.STATELESS,
+                        effectiveConfig);
+                return;
+            } catch (Exception e) {
+                LOG.error("Could not shut down cluster gracefully, deleting...", e);
+            }
+        }
+
+        FlinkUtils.deleteCluster(flinkApp, kubernetesClient, true);
     }
 }

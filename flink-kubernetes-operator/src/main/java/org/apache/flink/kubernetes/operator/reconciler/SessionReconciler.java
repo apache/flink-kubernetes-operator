@@ -39,12 +39,8 @@ public class SessionReconciler extends BaseReconciler {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
 
-    private final KubernetesClient kubernetesClient;
-    private final FlinkService flinkService;
-
     public SessionReconciler(KubernetesClient kubernetesClient, FlinkService flinkService) {
-        this.kubernetesClient = kubernetesClient;
-        this.flinkService = flinkService;
+        super(kubernetesClient, flinkService);
     }
 
     @Override
@@ -65,7 +61,8 @@ public class SessionReconciler extends BaseReconciler {
         }
 
         UpdateControl<FlinkDeployment> uc =
-                checkJobManagerDeployment(flinkApp, context, effectiveConfig, flinkService);
+                checkJobManagerDeployment(flinkApp, context, effectiveConfig)
+                        .toUpdateControl(flinkApp);
         if (uc != null) {
             return uc;
         }
@@ -81,7 +78,12 @@ public class SessionReconciler extends BaseReconciler {
 
     private void upgradeSessionCluster(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
-        flinkService.stopSessionCluster(flinkApp, effectiveConfig);
+        flinkService.stopSessionCluster(flinkApp, effectiveConfig, false);
         flinkService.submitSessionCluster(flinkApp, effectiveConfig);
+    }
+
+    @Override
+    protected void shutdown(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+        flinkService.stopSessionCluster(flinkApp, effectiveConfig, true);
     }
 }
