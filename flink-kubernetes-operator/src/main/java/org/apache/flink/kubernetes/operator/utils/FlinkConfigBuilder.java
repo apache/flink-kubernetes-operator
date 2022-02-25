@@ -53,7 +53,7 @@ public class FlinkConfigBuilder {
     public FlinkConfigBuilder(FlinkDeployment deploy, Configuration flinkConfig) {
         this.deploy = deploy;
         this.spec = this.deploy.getSpec();
-        this.effectiveConfig = flinkConfig;
+        this.effectiveConfig = new Configuration(flinkConfig);
     }
 
     public FlinkConfigBuilder applyImage() {
