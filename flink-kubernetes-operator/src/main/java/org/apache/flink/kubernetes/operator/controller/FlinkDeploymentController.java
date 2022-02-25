@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.reconciler.BaseReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
 import org.apache.flink.kubernetes.utils.Constants;
 
@@ -86,16 +85,13 @@ public class FlinkDeploymentController
 
     @Override
     public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
-        LOG.info("Cleaning up application cluster {}", flinkApp.getMetadata().getName());
-        FlinkUtils.deleteCluster(flinkApp, kubernetesClient);
-        IngressUtils.updateIngressRules(
-                flinkApp,
-                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig()),
-                operatorNamespace,
-                kubernetesClient,
-                true);
-        getReconciler(flinkApp).removeDeployment(flinkApp);
-        return DeleteControl.defaultDelete();
+        LOG.info("Stopping cluster {}", flinkApp.getMetadata().getName());
+        return getReconciler(flinkApp)
+                .shutdownAndDelete(
+                        operatorNamespace,
+                        flinkApp,
+                        context,
+                        FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig()));
     }
 
     @Override

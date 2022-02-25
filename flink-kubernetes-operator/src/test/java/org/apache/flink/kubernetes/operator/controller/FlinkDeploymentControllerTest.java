@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.BaseReconciler;
+import org.apache.flink.kubernetes.operator.reconciler.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconcilerTest;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
@@ -62,8 +63,10 @@ public class FlinkDeploymentControllerTest {
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                BaseReconciler.PORT_READY_DELAY_SECONDS * 1000,
-                (long) updateControl.getScheduleDelay().get());
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY
+                        .toUpdateControl(appCluster)
+                        .getScheduleDelay(),
+                updateControl.getScheduleDelay());
 
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
@@ -153,6 +156,11 @@ public class FlinkDeploymentControllerTest {
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("savepoint_1", jobs.get(0).f0);
+
+        testController.reconcile(appCluster, context);
+        testController.cleanup(appCluster, context);
+        jobs = flinkService.listJobs();
+        assertEquals(0, jobs.size());
     }
 
     @Test

@@ -31,7 +31,6 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
-import org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
@@ -54,7 +53,6 @@ import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Optional;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /** Service for submitting and interacting with Flink clusters and jobs. */
@@ -161,35 +159,19 @@ public class FlinkService {
                     }
                     final String namespace = conf.getString(KubernetesConfigOptions.NAMESPACE);
                     final String clusterId = clusterClient.getClusterId();
-                    FlinkUtils.deleteCluster(namespace, clusterId, kubernetesClient);
+                    FlinkUtils.deleteCluster(namespace, clusterId, kubernetesClient, false);
                     break;
                 default:
                     throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
             }
         }
-        waitForClusterShutdown(conf);
+        FlinkUtils.waitForClusterShutdown(kubernetesClient, conf);
         return savepointOpt;
     }
 
-    public void stopSessionCluster(FlinkDeployment deployment, Configuration conf)
-            throws Exception {
-        FlinkUtils.deleteCluster(deployment, kubernetesClient);
-        waitForClusterShutdown(conf);
-    }
-
-    /** We need this due to the buggy flink kube cluster client behaviour for now. */
-    private void waitForClusterShutdown(Configuration conf) throws Exception {
-        Fabric8FlinkKubeClient flinkKubeClient =
-                new Fabric8FlinkKubeClient(
-                        conf, kubernetesClient, Executors.newSingleThreadExecutor());
-        for (int i = 0; i < 60; i++) {
-            if (!flinkKubeClient
-                    .getRestEndpoint(conf.get(KubernetesConfigOptions.CLUSTER_ID))
-                    .isPresent()) {
-                break;
-            }
-            LOG.info("Waiting for cluster shutdown... ({})", i);
-            Thread.sleep(1000);
-        }
+    public void stopSessionCluster(
+            FlinkDeployment deployment, Configuration conf, boolean deleteHaData) {
+        FlinkUtils.deleteCluster(deployment, kubernetesClient, deleteHaData);
+        FlinkUtils.waitForClusterShutdown(kubernetesClient, conf);
     }
 }
