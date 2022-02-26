@@ -100,7 +100,7 @@ public class FlinkService {
         LOG.info("Session cluster {} deployed", deployment.getMetadata().getName());
     }
 
-    public boolean isJobManagerReady(Configuration config) {
+    public boolean isJobManagerPortReady(Configuration config) {
         final URI uri;
         try (ClusterClient<String> clusterClient = getClusterClient(config)) {
             uri = URI.create(clusterClient.getWebInterfaceURL());

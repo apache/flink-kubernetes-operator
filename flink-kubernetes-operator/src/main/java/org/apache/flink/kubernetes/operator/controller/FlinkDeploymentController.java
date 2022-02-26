@@ -23,16 +23,15 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
+import org.apache.flink.kubernetes.operator.reconciler.BaseReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
+import org.apache.flink.kubernetes.utils.Constants;
 
 import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
-import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -50,10 +49,8 @@ import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /** Controller that runs the main reconcile loop for Flink deployments. */
 @ControllerConfiguration(generationAwareEventProcessing = false)
@@ -63,33 +60,26 @@ public class FlinkDeploymentController
                 EventSourceInitializer<FlinkDeployment> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
 
-    public static final int REFRESH_SECONDS = 60;
-    public static final int PORT_READY_DELAY_SECONDS = 10;
-
     private final KubernetesClient kubernetesClient;
 
     private final String operatorNamespace;
 
     private final FlinkDeploymentValidator validator;
-    private final JobStatusObserver observer;
     private final JobReconciler jobReconciler;
     private final SessionReconciler sessionReconciler;
     private final DefaultConfig defaultConfig;
-    private final HashSet<String> jobManagerDeployments = new HashSet<>();
 
     public FlinkDeploymentController(
             DefaultConfig defaultConfig,
             KubernetesClient kubernetesClient,
             String operatorNamespace,
             FlinkDeploymentValidator validator,
-            JobStatusObserver observer,
             JobReconciler jobReconciler,
             SessionReconciler sessionReconciler) {
         this.defaultConfig = defaultConfig;
         this.kubernetesClient = kubernetesClient;
         this.operatorNamespace = operatorNamespace;
         this.validator = validator;
-        this.observer = observer;
         this.jobReconciler = jobReconciler;
         this.sessionReconciler = sessionReconciler;
     }
@@ -104,7 +94,7 @@ public class FlinkDeploymentController
                 operatorNamespace,
                 kubernetesClient,
                 true);
-        jobManagerDeployments.remove(flinkApp.getMetadata().getSelfLink());
+        getReconciler(flinkApp).removeDeployment(flinkApp);
         return DeleteControl.defaultDelete();
     }
 
@@ -122,14 +112,11 @@ public class FlinkDeploymentController
         Configuration effectiveConfig =
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
         try {
-            // only check job status when the JM deployment is ready
-            boolean shouldReconcile =
-                    !jobManagerDeployments.contains(flinkApp.getMetadata().getSelfLink())
-                            || observer.observeFlinkJobStatus(flinkApp, effectiveConfig);
-            if (shouldReconcile) {
-                reconcileFlinkDeployment(operatorNamespace, flinkApp, effectiveConfig);
-                updateForReconciliationSuccess(flinkApp);
-            }
+            UpdateControl<FlinkDeployment> updateControl =
+                    getReconciler(flinkApp)
+                            .reconcile(operatorNamespace, flinkApp, context, effectiveConfig);
+            updateForReconciliationSuccess(flinkApp);
+            return updateControl;
         } catch (InvalidDeploymentException ide) {
             LOG.error("Reconciliation failed", ide);
             updateForReconciliationError(flinkApp, ide.getMessage());
@@ -137,62 +124,10 @@ public class FlinkDeploymentController
         } catch (Exception e) {
             throw new ReconciliationException(e);
         }
-
-        return checkJobManagerDeployment(flinkApp, context, effectiveConfig);
     }
 
-    private UpdateControl<FlinkDeployment> checkJobManagerDeployment(
-            FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
-        if (!jobManagerDeployments.contains(flinkApp.getMetadata().getSelfLink())) {
-            Optional<Deployment> deployment = context.getSecondaryResource(Deployment.class);
-            if (deployment.isPresent()) {
-                DeploymentStatus status = deployment.get().getStatus();
-                DeploymentSpec spec = deployment.get().getSpec();
-                if (status != null
-                        && status.getAvailableReplicas() != null
-                        && spec.getReplicas().intValue() == status.getReplicas()
-                        && spec.getReplicas().intValue() == status.getAvailableReplicas()) {
-                    // typically it takes a few seconds for the REST server to be ready
-                    if (observer.isJobManagerReady(effectiveConfig)) {
-                        LOG.info(
-                                "JobManager deployment {} in namespace {} is ready",
-                                flinkApp.getMetadata().getName(),
-                                flinkApp.getMetadata().getNamespace());
-                        jobManagerDeployments.add(flinkApp.getMetadata().getSelfLink());
-                        if (flinkApp.getStatus().getJobStatus() != null) {
-                            // short circuit, if the job was already running
-                            // reschedule for immediate job status check
-                            return UpdateControl.updateStatus(flinkApp).rescheduleAfter(0);
-                        }
-                    }
-                    LOG.info(
-                            "JobManager deployment {} in namespace {} port not ready",
-                            flinkApp.getMetadata().getName(),
-                            flinkApp.getMetadata().getNamespace());
-                    return UpdateControl.updateStatus(flinkApp)
-                            .rescheduleAfter(PORT_READY_DELAY_SECONDS, TimeUnit.SECONDS);
-                } else {
-                    LOG.info(
-                            "JobManager deployment {} in namespace {} not yet ready, status {}",
-                            flinkApp.getMetadata().getName(),
-                            flinkApp.getMetadata().getNamespace(),
-                            status);
-                }
-            }
-        }
-        return UpdateControl.updateStatus(flinkApp)
-                .rescheduleAfter(REFRESH_SECONDS, TimeUnit.SECONDS);
-    }
-
-    private void reconcileFlinkDeployment(
-            String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig)
-            throws Exception {
-
-        if (flinkApp.getSpec().getJob() == null) {
-            sessionReconciler.reconcile(operatorNamespace, flinkApp, effectiveConfig);
-        } else {
-            jobReconciler.reconcile(operatorNamespace, flinkApp, effectiveConfig);
-        }
+    private BaseReconciler getReconciler(FlinkDeployment flinkDeployment) {
+        return flinkDeployment.getSpec().getJob() == null ? sessionReconciler : jobReconciler;
     }
 
     private void updateForReconciliationSuccess(FlinkDeployment flinkApp) {
@@ -217,10 +152,14 @@ public class FlinkDeploymentController
                         .apps()
                         .deployments()
                         .inAnyNamespace()
-                        .withLabel("type", "flink-native-kubernetes")
-                        .withLabel("component", "jobmanager")
+                        .withLabel(Constants.LABEL_TYPE_KEY, Constants.LABEL_TYPE_NATIVE_TYPE)
+                        .withLabel(
+                                Constants.LABEL_COMPONENT_KEY,
+                                Constants.LABEL_COMPONENT_JOB_MANAGER)
                         .runnableInformer(0);
-        return List.of(new InformerEventSource<>(deploymentInformer, Mappers.fromLabel("app")));
+        return List.of(
+                new InformerEventSource<>(
+                        deploymentInformer, Mappers.fromLabel(Constants.LABEL_APP_KEY)));
     }
 
     @Override

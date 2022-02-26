@@ -24,14 +24,18 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * Reconciler responsible for handling the session cluster lifecycle according to the desired and
  * current states.
  */
-public class SessionReconciler {
+public class SessionReconciler extends BaseReconciler {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
 
@@ -43,8 +47,12 @@ public class SessionReconciler {
         this.flinkService = flinkService;
     }
 
-    public void reconcile(
-            String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig)
+    @Override
+    public UpdateControl<FlinkDeployment> reconcile(
+            String operatorNamespace,
+            FlinkDeployment flinkApp,
+            Context context,
+            Configuration effectiveConfig)
             throws Exception {
 
         FlinkDeploymentSpec lastReconciledSpec =
@@ -54,14 +62,21 @@ public class SessionReconciler {
             flinkService.submitSessionCluster(flinkApp, effectiveConfig);
             IngressUtils.updateIngressRules(
                     flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
-            return;
+        }
+
+        UpdateControl<FlinkDeployment> uc =
+                checkJobManagerDeployment(flinkApp, context, effectiveConfig, flinkService);
+        if (uc != null) {
+            return uc;
         }
 
         boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
-
         if (specChanged) {
             upgradeSessionCluster(flinkApp, effectiveConfig);
         }
+
+        return UpdateControl.updateStatus(flinkApp)
+                .rescheduleAfter(REFRESH_SECONDS, TimeUnit.SECONDS);
     }
 
     private void upgradeSessionCluster(FlinkDeployment flinkApp, Configuration effectiveConfig)

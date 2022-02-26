@@ -25,36 +25,45 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Reconciler responsible for handling the job lifecycle according to the desired and current
  * states.
  */
-public class JobReconciler {
+public class JobReconciler extends BaseReconciler {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobReconciler.class);
 
     private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
+    private final JobStatusObserver observer;
 
     public JobReconciler(KubernetesClient kubernetesClient, FlinkService flinkService) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
+        this.observer = new JobStatusObserver(flinkService);
     }
 
-    public void reconcile(
-            String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig)
+    @Override
+    public UpdateControl<FlinkDeployment> reconcile(
+            String operatorNamespace,
+            FlinkDeployment flinkApp,
+            Context context,
+            Configuration effectiveConfig)
             throws Exception {
-
         FlinkDeploymentSpec lastReconciledSpec =
                 flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
         JobSpec jobSpec = flinkApp.getSpec().getJob();
@@ -65,9 +74,22 @@ public class JobReconciler {
                     Optional.ofNullable(jobSpec.getInitialSavepointPath()));
             IngressUtils.updateIngressRules(
                     flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
-            return;
         }
 
+        // wait until the deployment is ready
+        UpdateControl<FlinkDeployment> uc =
+                checkJobManagerDeployment(flinkApp, context, effectiveConfig, flinkService);
+        if (uc != null) {
+            return uc;
+        }
+
+        if (!observer.observeFlinkJobStatus(flinkApp, effectiveConfig)) {
+            return UpdateControl.updateStatus(flinkApp)
+                    .rescheduleAfter(REFRESH_SECONDS, TimeUnit.SECONDS);
+        }
+
+        // TODO: following assumes that current job is running
+        // What if it never enters running state due to bad deployment?
         boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
         if (specChanged) {
             JobState currentJobState = lastReconciledSpec.getJob().getState();
@@ -97,6 +119,9 @@ public class JobReconciler {
                 }
             }
         }
+
+        return UpdateControl.updateStatus(flinkApp)
+                .rescheduleAfter(REFRESH_SECONDS, TimeUnit.SECONDS);
     }
 
     private void deployFlinkJob(
@@ -150,6 +175,7 @@ public class JobReconciler {
                         effectiveConfig);
         JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
         jobStatus.setState("suspended");
+        removeDeployment(flinkApp);
         savepointOpt.ifPresent(jobStatus::setSavepointLocation);
         return savepointOpt;
     }
