@@ -25,24 +25,20 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
-import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
+import org.apache.flink.kubernetes.operator.reconciler.BaseReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
+import org.apache.flink.kubernetes.operator.reconciler.JobReconcilerTest;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
-import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
-import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -53,27 +49,7 @@ import static org.junit.Assert.assertTrue;
 /** @link JobStatusObserver unit tests */
 public class FlinkDeploymentControllerTest {
 
-    private final Context context =
-            new Context() {
-                @Override
-                public Optional<RetryInfo> getRetryInfo() {
-                    return Optional.empty();
-                }
-
-                @Override
-                public <T> Optional<T> getSecondaryResource(
-                        Class<T> expectedType, String eventSourceName) {
-                    DeploymentStatus status = new DeploymentStatus();
-                    status.setAvailableReplicas(1);
-                    status.setReplicas(1);
-                    DeploymentSpec spec = new DeploymentSpec();
-                    spec.setReplicas(1);
-                    Deployment deployment = new Deployment();
-                    deployment.setSpec(spec);
-                    deployment.setStatus(status);
-                    return Optional.of((T) deployment);
-                }
-            };
+    private final Context context = JobReconcilerTest.createContextWithReadyJobManagerDeployment();
 
     @Test
     public void verifyBasicReconcileLoop() {
@@ -86,13 +62,13 @@ public class FlinkDeploymentControllerTest {
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                FlinkDeploymentController.PORT_READY_DELAY_SECONDS * 1000,
+                BaseReconciler.PORT_READY_DELAY_SECONDS * 1000,
                 (long) updateControl.getScheduleDelay().get());
 
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                FlinkDeploymentController.REFRESH_SECONDS * 1000,
+                BaseReconciler.REFRESH_SECONDS * 1000,
                 (long) updateControl.getScheduleDelay().get());
 
         // Validate reconciliation status
@@ -105,7 +81,7 @@ public class FlinkDeploymentControllerTest {
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                FlinkDeploymentController.REFRESH_SECONDS * 1000,
+                BaseReconciler.REFRESH_SECONDS * 1000,
                 (long) updateControl.getScheduleDelay().get());
 
         // Validate job status
@@ -216,7 +192,6 @@ public class FlinkDeploymentControllerTest {
     }
 
     private FlinkDeploymentController createTestController(TestingFlinkService flinkService) {
-        JobStatusObserver observer = new JobStatusObserver(flinkService);
         JobReconciler jobReconciler = new JobReconciler(null, flinkService);
         SessionReconciler sessionReconciler = new SessionReconciler(null, flinkService);
 
@@ -225,7 +200,6 @@ public class FlinkDeploymentControllerTest {
                 null,
                 "test",
                 new DefaultDeploymentValidator(),
-                observer,
                 jobReconciler,
                 sessionReconciler);
     }

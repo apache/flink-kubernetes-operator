@@ -83,10 +83,6 @@ public class JobStatusObserver {
         }
     }
 
-    public boolean isJobManagerReady(Configuration config) {
-        return flinkService.isJobManagerReady(config);
-    }
-
     /** Merge previous job status with the new one from the flink job cluster. */
     private JobStatus mergeJobStatus(
             JobStatus oldStatus, List<JobStatusMessage> clusterJobStatuses) {

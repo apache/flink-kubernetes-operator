@@ -102,7 +102,7 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public boolean isJobManagerReady(Configuration config) {
+    public boolean isJobManagerPortReady(Configuration config) {
         return true;
     }
 }
