@@ -52,3 +52,7 @@ webhook:
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
+
+# (Optional) Exposes metrics port on the container if defined
+metrics:
+  port:
