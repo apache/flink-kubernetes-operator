@@ -46,6 +46,12 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/docker-entrypoint.sh", "operator"]
+          {{- if .Values.metrics.port }}
+          ports:
+            - containerPort: {{ .Values.metrics.port }}
+              name: metrics
+              protocol: TCP
+          {{- end }}
           env:
             - name: OPERATOR_NAMESPACE
               value: {{ .Values.operatorNamespace.name }}
