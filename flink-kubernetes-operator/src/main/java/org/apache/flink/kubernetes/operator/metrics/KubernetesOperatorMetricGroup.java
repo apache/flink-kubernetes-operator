@@ -30,7 +30,7 @@ import java.util.Map;
 public class KubernetesOperatorMetricGroup
         extends AbstractMetricGroup<KubernetesOperatorMetricGroup> {
 
-    private static final String GROUP_NAME = "kubernetes-operator";
+    private static final String GROUP_NAME = "k8soperator";
     private String namespace;
     private String name;
     private String hostname;

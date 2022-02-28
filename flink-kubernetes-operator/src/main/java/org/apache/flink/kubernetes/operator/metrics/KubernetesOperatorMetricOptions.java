@@ -23,9 +23,8 @@ import org.apache.flink.configuration.ConfigOptions;
 /** Configuration options for metrics. */
 public class KubernetesOperatorMetricOptions {
     public static final ConfigOption<String> SCOPE_NAMING_KUBERNETES_OPERATOR =
-            ConfigOptions.key("metrics.scope.kubernetes-operator")
-                    .stringType()
-                    .defaultValue("<host>.kubernetes-operator.<namespace>.<name>")
+            ConfigOptions.key("metrics.scope.k8soperator")
+                    .defaultValue("<host>.k8soperator.<namespace>.<name>")
                     .withDescription(
                             "Defines the scope format string that is applied to all metrics scoped to the kubernetes operator.");
 }
