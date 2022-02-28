@@ -21,6 +21,7 @@ import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
+import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -55,6 +56,7 @@ public class FlinkOperator {
 
         FlinkService flinkService = new FlinkService(client);
 
+        Observer observer = new Observer(flinkService);
         JobReconciler jobReconciler = new JobReconciler(client, flinkService);
         SessionReconciler sessionReconciler = new SessionReconciler(client, flinkService);
 
@@ -66,6 +68,7 @@ public class FlinkOperator {
                         client,
                         namespace,
                         validator,
+                        observer,
                         jobReconciler,
                         sessionReconciler);
 

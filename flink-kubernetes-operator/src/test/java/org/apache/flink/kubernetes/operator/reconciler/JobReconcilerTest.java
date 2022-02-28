@@ -25,7 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
-import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
+import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -115,7 +115,7 @@ public class JobReconcilerTest {
         final String expectedSavepointPath = "savepoint_0";
         final Context context = JobReconcilerTest.createContextWithReadyJobManagerDeployment();
         final TestingFlinkService flinkService = new TestingFlinkService();
-        JobStatusObserver observer = new JobStatusObserver(flinkService);
+        Observer observer = new Observer(flinkService);
 
         final JobReconciler reconciler = new JobReconciler(null, flinkService);
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();

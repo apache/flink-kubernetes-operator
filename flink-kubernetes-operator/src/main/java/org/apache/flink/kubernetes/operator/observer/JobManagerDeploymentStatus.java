@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.reconciler;
+package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 
@@ -44,12 +44,12 @@ public enum JobManagerDeploymentStatus {
     public UpdateControl<FlinkDeployment> toUpdateControl(FlinkDeployment flinkDeployment) {
         switch (this) {
             case DEPLOYING:
+            case READY:
                 return UpdateControl.updateStatus(flinkDeployment)
                         .rescheduleAfter(REFRESH_SECONDS, TimeUnit.SECONDS);
             case DEPLOYED_NOT_READY:
                 return UpdateControl.updateStatus(flinkDeployment)
                         .rescheduleAfter(PORT_READY_DELAY_SECONDS, TimeUnit.SECONDS);
-            case READY:
             case MISSING:
             default:
                 return null;
