@@ -22,6 +22,7 @@ The webhook can be disabled during helm install by passing the `--set webhook.cr
 ### Watching only specific namespaces
 
 The operator supports watching a specific list of namespaces for FlinkDeployment resources. You can enable it by setting the `--set watchNamespaces={flink-test}` parameter.
+When this is enabled role-based access control is only created specifically for these namespaces for the operator and the jobmanagers, otherwise it defaults to cluster scope.
 
 ## User Guide
 ### Create a new Flink deployment

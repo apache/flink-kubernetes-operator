@@ -16,16 +16,10 @@
 # limitations under the License.
 ################################################################################
 
----
-{{- if .Values.rbac.create }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: flink-operator
-  namespace: {{ .Values.operatorNamespace.name }}
-  labels:
-    {{- include "flink-operator.labels" . | nindent 4 }}
+{{/*
+RBAC rules used to create the (cluster)role based on the operator scope
+*/}}
+{{- define "flink-operator.rbacRules" }}
 rules:
   - apiGroups:
       - flink-operator
@@ -73,6 +67,57 @@ rules:
       - ingresses
     verbs:
       - "*"
+{{- end }}
+---
+{{- if .Values.rbac.create }}
+---
+{{/*
+Namespaced scoped RBAC.
+*/}}
+{{- if .Values.watchNamespaces }}
+{{- range .Values.watchNamespaces }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: flink-operator
+  namespace: {{ . }}
+  labels:
+    {{- include "flink-operator.labels" $ | nindent 4 }}
+{{- template "flink-operator.rbacRules" $ }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: flink-operator-role-binding
+  namespace: {{ . }}
+  labels:
+    {{- include "flink-operator.labels" $ | nindent 4 }}
+roleRef:
+  kind: Role
+  name: flink-operator
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: {{ template "flink-operator.serviceAccountName" $ }}
+    namespace: {{ $.Values.operatorNamespace.name }}
+  - kind: ServiceAccount
+    name: {{ template "flink-operator.serviceAccountName" $ }}
+    namespace: {{ . }}
+---
+{{- end }}
+{{ else }}
+{{/*
+Cluster scoped RBAC.
+*/}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flink-operator
+  namespace: {{ .Values.operatorNamespace.name }}
+  labels:
+    {{- include "flink-operator.labels" . | nindent 4 }}
+{{- template "flink-operator.rbacRules" $ }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -89,4 +134,5 @@ subjects:
   - kind: ServiceAccount
     name: {{ template "flink-operator.serviceAccountName" . }}
     namespace: {{ .Values.operatorNamespace.name }}
+{{- end }}
 {{- end }}
