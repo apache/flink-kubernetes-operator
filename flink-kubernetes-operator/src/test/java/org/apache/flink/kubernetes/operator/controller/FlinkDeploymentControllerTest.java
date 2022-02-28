@@ -25,8 +25,9 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.BaseReconciler;
-import org.apache.flink.kubernetes.operator.reconciler.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconcilerTest;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
@@ -122,7 +123,7 @@ public class FlinkDeploymentControllerTest {
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
 
-        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, TestUtils.createEmptyContext());
         List<Tuple2<String, JobStatusMessage>> jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
@@ -143,6 +144,7 @@ public class FlinkDeploymentControllerTest {
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("savepoint_0", jobs.get(0).f0);
+        testController.reconcile(appCluster, context);
 
         // Suspend job
         appCluster = TestUtils.clone(appCluster);
@@ -152,7 +154,7 @@ public class FlinkDeploymentControllerTest {
         // Resume from last savepoint
         appCluster = TestUtils.clone(appCluster);
         appCluster.getSpec().getJob().setState(JobState.RUNNING);
-        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, TestUtils.createEmptyContext());
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("savepoint_1", jobs.get(0).f0);
@@ -171,7 +173,7 @@ public class FlinkDeploymentControllerTest {
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
 
-        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, TestUtils.createEmptyContext());
         List<Tuple2<String, JobStatusMessage>> jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
@@ -180,6 +182,13 @@ public class FlinkDeploymentControllerTest {
         appCluster = TestUtils.clone(appCluster);
         appCluster.getSpec().getJob().setParallelism(100);
 
+        UpdateControl<FlinkDeployment> updateControl =
+                testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY
+                        .toUpdateControl(appCluster)
+                        .getScheduleDelay(),
+                updateControl.getScheduleDelay());
         testController.reconcile(appCluster, context);
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
@@ -200,6 +209,7 @@ public class FlinkDeploymentControllerTest {
     }
 
     private FlinkDeploymentController createTestController(TestingFlinkService flinkService) {
+        Observer observer = new Observer(flinkService);
         JobReconciler jobReconciler = new JobReconciler(null, flinkService);
         SessionReconciler sessionReconciler = new SessionReconciler(null, flinkService);
 
@@ -208,6 +218,7 @@ public class FlinkDeploymentControllerTest {
                 null,
                 "test",
                 new DefaultDeploymentValidator(),
+                observer,
                 jobReconciler,
                 sessionReconciler);
     }

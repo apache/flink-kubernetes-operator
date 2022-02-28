@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
+import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -26,6 +28,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class FlinkDeploymentStatus {
-    private JobStatus jobStatus;
+    private JobStatus jobStatus = new JobStatus();
+    private JobManagerDeploymentStatus jobManagerDeploymentStatus =
+            JobManagerDeploymentStatus.MISSING;
     private ReconciliationStatus reconciliationStatus = new ReconciliationStatus();
 }

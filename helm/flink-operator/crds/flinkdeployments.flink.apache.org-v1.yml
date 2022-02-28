@@ -9073,6 +9073,13 @@ spec:
                   savepointLocation:
                     type: string
                 type: object
+              jobManagerDeploymentStatus:
+                enum:
+                - READY
+                - DEPLOYED_NOT_READY
+                - DEPLOYING
+                - MISSING
+                type: string
               reconciliationStatus:
                 properties:
                   success:

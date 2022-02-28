@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.BaseReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
@@ -64,6 +65,7 @@ public class FlinkDeploymentController
     private final String operatorNamespace;
 
     private final FlinkDeploymentValidator validator;
+    private final Observer observer;
     private final JobReconciler jobReconciler;
     private final SessionReconciler sessionReconciler;
     private final DefaultConfig defaultConfig;
@@ -73,12 +75,14 @@ public class FlinkDeploymentController
             KubernetesClient kubernetesClient,
             String operatorNamespace,
             FlinkDeploymentValidator validator,
+            Observer observer,
             JobReconciler jobReconciler,
             SessionReconciler sessionReconciler) {
         this.defaultConfig = defaultConfig;
         this.kubernetesClient = kubernetesClient;
         this.operatorNamespace = operatorNamespace;
         this.validator = validator;
+        this.observer = observer;
         this.jobReconciler = jobReconciler;
         this.sessionReconciler = sessionReconciler;
     }
@@ -86,12 +90,12 @@ public class FlinkDeploymentController
     @Override
     public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
         LOG.info("Stopping cluster {}", flinkApp.getMetadata().getName());
+        Configuration effectiveConfig =
+                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
+
+        observer.observe(flinkApp, context, effectiveConfig);
         return getReconciler(flinkApp)
-                .shutdownAndDelete(
-                        operatorNamespace,
-                        flinkApp,
-                        context,
-                        FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig()));
+                .shutdownAndDelete(operatorNamespace, flinkApp, effectiveConfig);
     }
 
     @Override
@@ -107,6 +111,12 @@ public class FlinkDeploymentController
 
         Configuration effectiveConfig =
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
+
+        boolean readyToReconcile = observer.observe(flinkApp, context, effectiveConfig);
+        if (!readyToReconcile) {
+            return flinkApp.getStatus().getJobManagerDeploymentStatus().toUpdateControl(flinkApp);
+        }
+
         try {
             UpdateControl<FlinkDeployment> updateControl =
                     getReconciler(flinkApp)

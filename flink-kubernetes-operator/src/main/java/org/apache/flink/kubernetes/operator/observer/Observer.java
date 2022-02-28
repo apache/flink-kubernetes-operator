@@ -27,6 +27,10 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
+import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,20 +38,71 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 /** Observes the actual state of the running jobs on the Flink cluster. */
-public class JobStatusObserver {
+public class Observer {
 
-    private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
+    private static final Logger LOG = LoggerFactory.getLogger(Observer.class);
 
     private final FlinkService flinkService;
 
-    public JobStatusObserver(FlinkService flinkService) {
+    public Observer(FlinkService flinkService) {
         this.flinkService = flinkService;
     }
 
-    public boolean observeFlinkJobStatus(FlinkDeployment flinkApp, Configuration effectiveConfig)
-            throws Exception {
+    public boolean observe(
+            FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
+        observeJmDeployment(flinkApp, context);
+        return isReadyToReconcile(flinkApp, effectiveConfig);
+    }
+
+    private void observeJmDeployment(FlinkDeployment flinkApp, Context context) {
+        FlinkDeploymentStatus deploymentStatus = flinkApp.getStatus();
+        JobManagerDeploymentStatus previousJmStatus =
+                deploymentStatus.getJobManagerDeploymentStatus();
+
+        if (JobManagerDeploymentStatus.READY == previousJmStatus) {
+            return;
+        }
+
+        if (JobManagerDeploymentStatus.DEPLOYED_NOT_READY == previousJmStatus) {
+            deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+            return;
+        }
+
+        Optional<Deployment> deployment = context.getSecondaryResource(Deployment.class);
+        if (deployment.isPresent()) {
+            DeploymentStatus status = deployment.get().getStatus();
+            DeploymentSpec spec = deployment.get().getSpec();
+            if (status != null
+                    && status.getAvailableReplicas() != null
+                    && spec.getReplicas().intValue() == status.getReplicas()
+                    && spec.getReplicas().intValue() == status.getAvailableReplicas()) {
+                // typically it takes a few seconds for the REST server to be ready
+                LOG.info(
+                        "JobManager deployment {} in namespace {} port not ready",
+                        flinkApp.getMetadata().getName(),
+                        flinkApp.getMetadata().getNamespace());
+                deploymentStatus.setJobManagerDeploymentStatus(
+                        JobManagerDeploymentStatus.DEPLOYED_NOT_READY);
+                return;
+            }
+            LOG.info(
+                    "JobManager deployment {} in namespace {} not yet ready, status {}",
+                    flinkApp.getMetadata().getName(),
+                    flinkApp.getMetadata().getNamespace(),
+                    status);
+
+            deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+            return;
+        }
+
+        deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        return;
+    }
+
+    private boolean observeFlinkJobStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
         FlinkDeploymentSpec lastReconciledSpec =
                 flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
 
@@ -70,7 +125,14 @@ public class JobStatusObserver {
         LOG.info("Getting job statuses for {}", flinkApp.getMetadata().getName());
         FlinkDeploymentStatus flinkAppStatus = flinkApp.getStatus();
 
-        Collection<JobStatusMessage> clusterJobStatuses = flinkService.listJobs(effectiveConfig);
+        Collection<JobStatusMessage> clusterJobStatuses;
+        try {
+            clusterJobStatuses = flinkService.listJobs(effectiveConfig);
+        } catch (Exception e) {
+            LOG.error("Exception while listing jobs", e);
+            flinkAppStatus.getJobStatus().setState("UNKNOWN");
+            return false;
+        }
         if (clusterJobStatuses.isEmpty()) {
             LOG.info("No jobs found on {} yet", flinkApp.getMetadata().getName());
             return false;
@@ -80,6 +142,23 @@ public class JobStatusObserver {
                             flinkAppStatus.getJobStatus(), new ArrayList<>(clusterJobStatuses)));
             LOG.info("Job statuses updated for {}", flinkApp.getMetadata().getName());
             return true;
+        }
+    }
+
+    private boolean isReadyToReconcile(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+        JobManagerDeploymentStatus jmDeploymentStatus =
+                flinkApp.getStatus().getJobManagerDeploymentStatus();
+
+        switch (jmDeploymentStatus) {
+            case READY:
+                return observeFlinkJobStatus(flinkApp, effectiveConfig);
+            case MISSING:
+                return true;
+            case DEPLOYING:
+            case DEPLOYED_NOT_READY:
+                return false;
+            default:
+                throw new RuntimeException("Unknown status: " + jmDeploymentStatus);
         }
     }
 

@@ -23,48 +23,68 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.reconciler.JobReconcilerTest;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link JobStatusObserver unit tests */
 public class JobStatusObserverTest {
 
+    private final Context readyContext =
+            JobReconcilerTest.createContextWithReadyJobManagerDeployment();
+
     @Test
     public void observeSessionCluster() throws Exception {
         FlinkService flinkService = new TestingFlinkService();
-        JobStatusObserver observer = new JobStatusObserver(flinkService);
+        Observer observer = new Observer(flinkService);
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         deployment
                 .getStatus()
                 .getReconciliationStatus()
                 .setLastReconciledSpec(deployment.getSpec());
-        assertTrue(
-                observer.observeFlinkJobStatus(
+
+        // First observe should trigger a recheck for sessions (status always empty)
+        assertFalse(
+                observer.observe(
                         deployment,
+                        readyContext,
+                        FlinkUtils.getEffectiveConfig(deployment, new Configuration())));
+
+        assertTrue(
+                observer.observe(
+                        deployment,
+                        readyContext,
                         FlinkUtils.getEffectiveConfig(deployment, new Configuration())));
     }
 
     @Test
     public void observeApplicationCluster() throws Exception {
         TestingFlinkService flinkService = new TestingFlinkService();
-        JobStatusObserver observer = new JobStatusObserver(flinkService);
+        Observer observer = new Observer(flinkService);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
-        assertTrue(observer.observeFlinkJobStatus(deployment, conf));
+        assertTrue(observer.observe(deployment, TestUtils.createEmptyContext(), conf));
+
         deployment.setStatus(new FlinkDeploymentStatus());
         deployment
                 .getStatus()
                 .getReconciliationStatus()
                 .setLastReconciledSpec(deployment.getSpec());
-
+        deployment.getStatus().setJobStatus(new JobStatus());
+        deployment
+                .getStatus()
+                .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYED_NOT_READY);
         flinkService.submitApplicationCluster(deployment, conf);
-        assertTrue(observer.observeFlinkJobStatus(deployment, conf));
+        assertTrue(observer.observe(deployment, readyContext, conf));
 
         assertEquals(
                 deployment.getMetadata().getName(),
@@ -72,6 +92,6 @@ public class JobStatusObserverTest {
 
         deployment.getSpec().getJob().setState(JobState.SUSPENDED);
         flinkService.clear();
-        assertTrue(observer.observeFlinkJobStatus(deployment, conf));
+        assertTrue(observer.observe(deployment, readyContext, conf));
     }
 }

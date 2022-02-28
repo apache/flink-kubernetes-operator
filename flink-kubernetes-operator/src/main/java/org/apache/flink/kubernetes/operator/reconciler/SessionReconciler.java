@@ -60,13 +60,6 @@ public class SessionReconciler extends BaseReconciler {
                     flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
         }
 
-        UpdateControl<FlinkDeployment> uc =
-                checkJobManagerDeployment(flinkApp, context, effectiveConfig)
-                        .toUpdateControl(flinkApp);
-        if (uc != null) {
-            return uc;
-        }
-
         boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
         if (specChanged) {
             upgradeSessionCluster(flinkApp, effectiveConfig);

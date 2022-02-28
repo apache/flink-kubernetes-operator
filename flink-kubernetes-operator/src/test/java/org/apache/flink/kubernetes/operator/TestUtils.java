@@ -33,9 +33,12 @@ import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodSpec;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 /** Testing utilities. */
 public class TestUtils {
@@ -108,5 +111,19 @@ public class TestUtils {
         pod.setApiVersion(apiVersion);
         pod.setSpec(podSpec);
         return pod;
+    }
+
+    public static Context createEmptyContext() {
+        return new Context() {
+            @Override
+            public Optional<RetryInfo> getRetryInfo() {
+                return Optional.empty();
+            }
+
+            @Override
+            public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
+                return Optional.empty();
+            }
+        };
     }
 }
