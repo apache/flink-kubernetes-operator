@@ -29,12 +29,11 @@ import org.apache.flink.kubernetes.operator.reconciler.BaseReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
-import org.apache.flink.kubernetes.utils.Constants;
+import org.apache.flink.util.Preconditions;
 
-import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
@@ -45,13 +44,13 @@ import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
-import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
-import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Controller that runs the main reconcile loop for Flink deployments. */
 @ControllerConfiguration(generationAwareEventProcessing = false)
@@ -71,6 +70,8 @@ public class FlinkDeploymentController
     private final SessionReconciler sessionReconciler;
     private final DefaultConfig defaultConfig;
     private final FlinkOperatorConfiguration operatorConfiguration;
+
+    private FlinkControllerConfig controllerConfig;
 
     public FlinkDeploymentController(
             DefaultConfig defaultConfig,
@@ -156,22 +157,16 @@ public class FlinkDeploymentController
     }
 
     @Override
-    public List<EventSource> prepareEventSources(
-            EventSourceContext<FlinkDeployment> eventSourceContext) {
-        // reconcile when job manager deployment is ready
-        SharedIndexInformer<Deployment> deploymentInformer =
-                kubernetesClient
-                        .apps()
-                        .deployments()
-                        .inAnyNamespace()
-                        .withLabel(Constants.LABEL_TYPE_KEY, Constants.LABEL_TYPE_NATIVE_TYPE)
-                        .withLabel(
-                                Constants.LABEL_COMPONENT_KEY,
-                                Constants.LABEL_COMPONENT_JOB_MANAGER)
-                        .runnableInformer(0);
-        return List.of(
-                new InformerEventSource<>(
-                        deploymentInformer, Mappers.fromLabel(Constants.LABEL_APP_KEY)));
+    public List<EventSource> prepareEventSources(EventSourceContext<FlinkDeployment> ctx) {
+        Preconditions.checkNotNull(controllerConfig, "Controller config cannot be null");
+        Set<String> effectiveNamespaces = controllerConfig.getEffectiveNamespaces();
+        if (effectiveNamespaces.isEmpty()) {
+            return List.of(OperatorUtils.createJmDepInformerEventSource(kubernetesClient));
+        } else {
+            return effectiveNamespaces.stream()
+                    .map(ns -> OperatorUtils.createJmDepInformerEventSource(kubernetesClient, ns))
+                    .collect(Collectors.toList());
+        }
     }
 
     @Override
@@ -186,5 +181,9 @@ public class FlinkDeploymentController
                 flinkApp,
                 (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
         return Optional.of(flinkApp);
+    }
+
+    public void setControllerConfig(FlinkControllerConfig config) {
+        this.controllerConfig = config;
     }
 }

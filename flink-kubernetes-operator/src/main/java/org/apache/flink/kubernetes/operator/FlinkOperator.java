@@ -79,6 +79,7 @@ public class FlinkOperator {
                         sessionReconciler);
 
         FlinkControllerConfig controllerConfig = new FlinkControllerConfig(controller);
+        controller.setControllerConfig(controllerConfig);
         controllerConfig.setConfigurationService(configurationService);
 
         operator.register(controller, controllerConfig);
