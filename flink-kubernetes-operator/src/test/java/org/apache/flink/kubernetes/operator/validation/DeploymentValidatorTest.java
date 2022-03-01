@@ -25,6 +25,8 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
 import org.junit.Assert;
@@ -120,12 +122,15 @@ public class DeploymentValidatorTest {
                 dep -> {
                     dep.setStatus(new FlinkDeploymentStatus());
                     dep.getStatus().setJobStatus(new JobStatus());
-                    dep.getStatus().getJobStatus().setSavepointLocation("sp");
+                    dep.getStatus()
+                            .getJobStatus()
+                            .getSavepointInfo()
+                            .setLastSavepoint(Savepoint.of("sp"));
 
                     dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
                     dep.getStatus()
                             .getReconciliationStatus()
-                            .setLastReconciledSpec(TestUtils.clone(dep.getSpec()));
+                            .setLastReconciledSpec(ReconciliationUtils.clone(dep.getSpec()));
                     dep.getStatus()
                             .getReconciliationStatus()
                             .getLastReconciledSpec()
@@ -143,7 +148,7 @@ public class DeploymentValidatorTest {
                     dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
                     dep.getStatus()
                             .getReconciliationStatus()
-                            .setLastReconciledSpec(TestUtils.clone(dep.getSpec()));
+                            .setLastReconciledSpec(ReconciliationUtils.clone(dep.getSpec()));
                     dep.getStatus()
                             .getReconciliationStatus()
                             .getLastReconciledSpec()
@@ -163,7 +168,7 @@ public class DeploymentValidatorTest {
                     dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
                     dep.getStatus()
                             .getReconciliationStatus()
-                            .setLastReconciledSpec(TestUtils.clone(dep.getSpec()));
+                            .setLastReconciledSpec(ReconciliationUtils.clone(dep.getSpec()));
                     dep.getSpec().setJob(null);
                 },
                 "Cannot switch from job to session cluster");
@@ -176,7 +181,7 @@ public class DeploymentValidatorTest {
                     dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
                     dep.getStatus()
                             .getReconciliationStatus()
-                            .setLastReconciledSpec(TestUtils.clone(dep.getSpec()));
+                            .setLastReconciledSpec(ReconciliationUtils.clone(dep.getSpec()));
                     dep.getStatus().getReconciliationStatus().getLastReconciledSpec().setJob(null);
                 },
                 "Cannot switch from session to job cluster");

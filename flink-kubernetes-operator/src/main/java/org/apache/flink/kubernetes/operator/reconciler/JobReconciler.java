@@ -26,10 +26,12 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -73,6 +75,7 @@ public class JobReconciler extends BaseReconciler {
                     Optional.ofNullable(jobSpec.getInitialSavepointPath()));
             IngressUtils.updateIngressRules(
                     flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
             return JobManagerDeploymentStatus.DEPLOYING.toUpdateControl(
                     flinkApp, operatorConfiguration);
         }
@@ -101,12 +104,20 @@ public class JobReconciler extends BaseReconciler {
                     restoreFromLastSavepoint(flinkApp, effectiveConfig);
                 } else if (upgradeMode == UpgradeMode.LAST_STATE) {
                     final String savepointLocation =
-                            flinkApp.getStatus().getJobStatus().getSavepointLocation();
+                            flinkApp.getStatus()
+                                    .getJobStatus()
+                                    .getSavepointInfo()
+                                    .getLastSavepoint()
+                                    .getLocation();
                     // Upgrade mode changes from savepoint -> last-state
                     deployFlinkJob(
                             flinkApp, effectiveConfig, Optional.ofNullable(savepointLocation));
                 }
             }
+            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
+        } else if (SavepointUtils.shouldTriggerSavepoint(flinkApp)) {
+            triggerSavepoint(flinkApp, effectiveConfig);
+            ReconciliationUtils.updateSavepointReconciliationSuccess(flinkApp);
         }
 
         return UpdateControl.updateStatus(flinkApp)
@@ -136,7 +147,10 @@ public class JobReconciler extends BaseReconciler {
     private void restoreFromLastSavepoint(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
-        deployFlinkJob(flinkApp, effectiveConfig, Optional.of(jobStatus.getSavepointLocation()));
+        deployFlinkJob(
+                flinkApp,
+                effectiveConfig,
+                Optional.of(jobStatus.getSavepointInfo().getLastSavepoint().getLocation()));
     }
 
     private void printCancelLogs(UpgradeMode upgradeMode, String name) {
@@ -166,7 +180,10 @@ public class JobReconciler extends BaseReconciler {
         JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
         jobStatus.setState("suspended");
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
-        savepointOpt.ifPresent(jobStatus::setSavepointLocation);
+        savepointOpt.ifPresent(
+                location -> {
+                    jobStatus.getSavepointInfo().setLastSavepoint(Savepoint.of(location));
+                });
         return savepointOpt;
     }
 
@@ -188,5 +205,10 @@ public class JobReconciler extends BaseReconciler {
         }
 
         FlinkUtils.deleteCluster(flinkApp, kubernetesClient, true);
+    }
+
+    private void triggerSavepoint(FlinkDeployment deployment, Configuration effectiveConfig)
+            throws Exception {
+        flinkService.triggerSavepoint(deployment, effectiveConfig);
     }
 }

@@ -23,6 +23,9 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
+import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -101,6 +104,19 @@ public class TestingFlinkService extends FlinkService {
     public void stopSessionCluster(
             FlinkDeployment deployment, Configuration conf, boolean deleteHa) {
         sessions.remove(deployment.getMetadata().getName());
+    }
+
+    @Override
+    public void triggerSavepoint(FlinkDeployment deployment, Configuration conf) throws Exception {
+        SavepointInfo savepointInfo = deployment.getStatus().getJobStatus().getSavepointInfo();
+        savepointInfo.setTriggerId("trigger_" + savepointCounter);
+        savepointInfo.setTriggerTimestamp(System.currentTimeMillis());
+    }
+
+    @Override
+    public SavepointFetchResult fetchSavepointInfo(FlinkDeployment deployment, Configuration conf)
+            throws Exception {
+        return SavepointFetchResult.completed(Savepoint.of("savepoint_" + savepointCounter++));
     }
 
     @Override

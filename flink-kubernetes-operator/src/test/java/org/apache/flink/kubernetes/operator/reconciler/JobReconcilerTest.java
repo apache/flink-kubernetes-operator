@@ -26,7 +26,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
-import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -88,7 +87,7 @@ public class JobReconcilerTest {
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
 
         // Test stateless upgrade
-        FlinkDeployment statelessUpgrade = TestUtils.clone(deployment);
+        FlinkDeployment statelessUpgrade = ReconciliationUtils.clone(deployment);
         statelessUpgrade.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         statelessUpgrade.getSpec().getFlinkConfiguration().put("new", "conf");
         reconciler.reconcile("test", statelessUpgrade, context, config);
@@ -103,7 +102,7 @@ public class JobReconcilerTest {
                 .setJobId(runningJobs.get(0).f1.getJobId().toHexString());
 
         // Test stateful upgrade
-        FlinkDeployment statefulUpgrade = TestUtils.clone(deployment);
+        FlinkDeployment statefulUpgrade = ReconciliationUtils.clone(deployment);
         statefulUpgrade.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         statefulUpgrade.getSpec().getFlinkConfiguration().put("new", "conf2");
 
@@ -119,7 +118,6 @@ public class JobReconcilerTest {
         final String expectedSavepointPath = "savepoint_0";
         final Context context = JobReconcilerTest.createContextWithReadyJobManagerDeployment();
         final TestingFlinkService flinkService = new TestingFlinkService();
-        Observer observer = new Observer(flinkService);
 
         final JobReconciler reconciler =
                 new JobReconciler(null, flinkService, operatorConfiguration);
@@ -143,7 +141,12 @@ public class JobReconcilerTest {
                         .equalsIgnoreCase(deployment.getStatus().getJobStatus().getState()));
         assertEquals(
                 expectedSavepointPath,
-                deployment.getStatus().getJobStatus().getSavepointLocation());
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
 
         // Resume FlinkDeployment with last-state upgrade mode
         deployment
@@ -163,6 +166,29 @@ public class JobReconcilerTest {
         assertEquals(expectedSavepointPath, runningJobs.get(0).f0);
     }
 
+    @Test
+    public void triggerSavepoint() throws Exception {
+        Context context = JobReconcilerTest.createContextWithReadyJobManagerDeployment();
+        TestingFlinkService flinkService = new TestingFlinkService();
+        JobReconciler reconciler = new JobReconciler(null, flinkService, operatorConfiguration);
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        Configuration config = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
+
+        reconciler.reconcile("test", deployment, context, config);
+        List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs);
+        assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
+        // trigger savepoint
+        FlinkDeployment spDeployment = ReconciliationUtils.clone(deployment);
+        long oldValue = spDeployment.getSpec().getJob().getSavepointTriggerNonce();
+        spDeployment.getSpec().getJob().setSavepointTriggerNonce(oldValue + 1);
+        reconciler.reconcile("test", spDeployment, context, config);
+        assertEquals(
+                "trigger_0",
+                spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+    }
+
     private void verifyAndSetRunningJobsToStatus(
             FlinkDeployment deployment, List<Tuple2<String, JobStatusMessage>> runningJobs) {
         assertEquals(1, runningJobs.size());
@@ -170,7 +196,7 @@ public class JobReconcilerTest {
         deployment
                 .getStatus()
                 .getReconciliationStatus()
-                .setLastReconciledSpec(TestUtils.clone(deployment.getSpec()));
+                .setLastReconciledSpec(ReconciliationUtils.clone(deployment.getSpec()));
 
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobName(runningJobs.get(0).f1.getJobName());

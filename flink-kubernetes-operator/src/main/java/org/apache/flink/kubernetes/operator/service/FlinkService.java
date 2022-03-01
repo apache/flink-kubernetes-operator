@@ -35,9 +35,21 @@ import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorato
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
+import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
+import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
+import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointInfo;
+import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusHeaders;
+import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHeaders;
+import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import org.slf4j.Logger;
@@ -51,6 +63,7 @@ import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.util.Collection;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /** Service for submitting and interacting with Flink clusters and jobs. */
@@ -167,5 +180,79 @@ public class FlinkService {
             FlinkDeployment deployment, Configuration conf, boolean deleteHaData) {
         FlinkUtils.deleteCluster(deployment, kubernetesClient, deleteHaData);
         FlinkUtils.waitForClusterShutdown(kubernetesClient, conf);
+    }
+
+    public void triggerSavepoint(FlinkDeployment deployment, Configuration conf) throws Exception {
+        LOG.info("Triggering savepoint on " + deployment.getMetadata().getName());
+        try (RestClusterClient<String> clusterClient =
+                (RestClusterClient<String>) getClusterClient(conf)) {
+            SavepointTriggerHeaders savepointTriggerHeaders = SavepointTriggerHeaders.getInstance();
+            SavepointTriggerMessageParameters savepointTriggerMessageParameters =
+                    savepointTriggerHeaders.getUnresolvedMessageParameters();
+            savepointTriggerMessageParameters.jobID.resolve(
+                    JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId()));
+
+            TriggerResponse response =
+                    clusterClient
+                            .sendRequest(
+                                    savepointTriggerHeaders,
+                                    savepointTriggerMessageParameters,
+                                    new SavepointTriggerRequestBody(null, false))
+                            .get();
+            LOG.info("Savepoint triggered: " + response.getTriggerId().toHexString());
+
+            org.apache.flink.kubernetes.operator.crd.status.SavepointInfo savepointInfo =
+                    deployment.getStatus().getJobStatus().getSavepointInfo();
+
+            savepointInfo.setTriggerId(response.getTriggerId().toHexString());
+            savepointInfo.setTriggerTimestamp(System.currentTimeMillis());
+        }
+    }
+
+    public SavepointFetchResult fetchSavepointInfo(FlinkDeployment deployment, Configuration conf)
+            throws Exception {
+        LOG.info(
+                "Fetching savepoint result with triggerId: "
+                        + deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        try (RestClusterClient<String> clusterClient =
+                (RestClusterClient<String>) getClusterClient(conf)) {
+            SavepointStatusHeaders savepointStatusHeaders = SavepointStatusHeaders.getInstance();
+            SavepointStatusMessageParameters savepointStatusMessageParameters =
+                    savepointStatusHeaders.getUnresolvedMessageParameters();
+            savepointStatusMessageParameters.jobIdPathParameter.resolve(
+                    JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId()));
+            savepointStatusMessageParameters.triggerIdPathParameter.resolve(
+                    TriggerId.fromHexString(
+                            deployment
+                                    .getStatus()
+                                    .getJobStatus()
+                                    .getSavepointInfo()
+                                    .getTriggerId()));
+            CompletableFuture<AsynchronousOperationResult<SavepointInfo>> response =
+                    clusterClient.sendRequest(
+                            savepointStatusHeaders,
+                            savepointStatusMessageParameters,
+                            EmptyRequestBody.getInstance());
+
+            if (response.get() == null || response.get().resource() == null) {
+                return SavepointFetchResult.notTriggered();
+            }
+
+            if (response.get().resource().getLocation() == null) {
+                if (response.get().resource().getFailureCause() != null) {
+                    LOG.error("Savepoint error", response.get().resource().getFailureCause());
+                    return SavepointFetchResult.error(
+                            response.get().resource().getFailureCause().getMessage());
+                } else {
+                    return SavepointFetchResult.pending();
+                }
+            }
+
+            Savepoint savepoint =
+                    new Savepoint(
+                            System.currentTimeMillis(), response.get().resource().getLocation());
+            LOG.info("Savepoint result: " + savepoint);
+            return SavepointFetchResult.completed(savepoint);
+        }
     }
 }

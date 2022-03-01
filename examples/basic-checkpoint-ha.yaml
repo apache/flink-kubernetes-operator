@@ -58,3 +58,4 @@ spec:
     parallelism: 2
     upgradeMode: savepoint
     state: running
+    savepointTriggerNonce: 0

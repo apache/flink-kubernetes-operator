@@ -15,28 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.spec;
+package org.apache.flink.kubernetes.operator.crd.status;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
-/** Flink job spec. */
+/** Represents information about a finished savepoint. */
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class JobSpec {
-    private String jarURI;
-    private int parallelism;
-    private String entryClass;
-    private String[] args = new String[0];
-    private JobState state = JobState.RUNNING;
+@NoArgsConstructor
+public class Savepoint {
+    private long timeStamp;
+    private String location;
 
-    // The below fields are excluded from equals to avoid triggering job upgrades on changing these
-    @EqualsAndHashCode.Exclude private long savepointTriggerNonce;
-    @EqualsAndHashCode.Exclude private String initialSavepointPath;
-    @EqualsAndHashCode.Exclude private UpgradeMode upgradeMode = UpgradeMode.STATELESS;
+    public static Savepoint of(String location) {
+        return new Savepoint(System.currentTimeMillis(), location);
+    }
 }

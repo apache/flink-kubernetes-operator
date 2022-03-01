@@ -9048,6 +9048,8 @@ spec:
                     - running
                     - suspended
                     type: string
+                  savepointTriggerNonce:
+                    type: integer
                   initialSavepointPath:
                     type: string
                   upgradeMode:
@@ -9074,8 +9076,20 @@ spec:
                     type: string
                   updateTime:
                     type: string
-                  savepointLocation:
-                    type: string
+                  savepointInfo:
+                    properties:
+                      lastSavepoint:
+                        properties:
+                          timeStamp:
+                            type: integer
+                          location:
+                            type: string
+                        type: object
+                      triggerId:
+                        type: string
+                      triggerTimestamp:
+                        type: integer
+                    type: object
                 type: object
               jobManagerDeploymentStatus:
                 enum:
@@ -18121,6 +18135,8 @@ spec:
                             - running
                             - suspended
                             type: string
+                          savepointTriggerNonce:
+                            type: integer
                           initialSavepointPath:
                             type: string
                           upgradeMode:

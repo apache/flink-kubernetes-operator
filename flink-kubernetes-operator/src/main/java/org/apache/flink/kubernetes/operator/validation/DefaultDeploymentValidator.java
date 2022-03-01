@@ -198,7 +198,8 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
             if (oldJob.getState() == JobState.SUSPENDED
                     && newJob.getState() == JobState.RUNNING
                     && newJob.getUpgradeMode() == UpgradeMode.SAVEPOINT
-                    && deployment.getStatus().getJobStatus().getSavepointLocation() == null) {
+                    && (deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint()
+                            == null)) {
                 return Optional.of("Cannot perform savepoint restore without a valid savepoint");
             }
         }
