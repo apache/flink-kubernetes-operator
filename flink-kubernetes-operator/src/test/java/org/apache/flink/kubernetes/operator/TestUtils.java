@@ -27,8 +27,6 @@ import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -42,8 +40,6 @@ import java.util.Optional;
 
 /** Testing utilities. */
 public class TestUtils {
-
-    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public static final String TEST_NAMESPACE = "flink-operator-test";
     public static final String SERVICE_ACCOUNT = "flink-operator";
@@ -75,19 +71,6 @@ public class TestUtils {
                                 .state(JobState.RUNNING)
                                 .build());
         return deployment;
-    }
-
-    public static <T> T clone(T object) {
-        if (object == null) {
-            return null;
-        }
-        try {
-            return (T)
-                    objectMapper.readValue(
-                            objectMapper.writeValueAsString(object), object.getClass());
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException(e);
-        }
     }
 
     public static FlinkDeploymentSpec getTestFlinkDeploymentSpec() {

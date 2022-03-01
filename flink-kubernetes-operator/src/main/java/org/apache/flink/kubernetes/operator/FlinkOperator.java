@@ -58,7 +58,7 @@ public class FlinkOperator {
         FlinkOperatorConfiguration operatorConfiguration =
                 FlinkOperatorConfiguration.fromConfiguration(defaultConfig.getOperatorConfig());
 
-        Observer observer = new Observer(flinkService);
+        Observer observer = new Observer(flinkService, operatorConfiguration);
 
         FlinkDeploymentValidator validator = new DefaultDeploymentValidator();
         ReconcilerFactory factory =

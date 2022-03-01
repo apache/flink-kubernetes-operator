@@ -20,25 +20,17 @@ package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
 
+import lombok.Value;
+
 /** Configuration class for operator. */
+@Value
 public class FlinkOperatorConfiguration {
 
-    private final int reconcileIntervalInSec;
+    int reconcileIntervalInSec;
 
-    private final int portCheckIntervalInSec;
+    int portCheckIntervalInSec;
 
-    public FlinkOperatorConfiguration(int reconcileIntervalInSec, int portCheckIntervalInSec) {
-        this.reconcileIntervalInSec = reconcileIntervalInSec;
-        this.portCheckIntervalInSec = portCheckIntervalInSec;
-    }
-
-    public int getReconcileIntervalInSec() {
-        return reconcileIntervalInSec;
-    }
-
-    public int getPortCheckIntervalInSec() {
-        return portCheckIntervalInSec;
-    }
+    int savepointTriggerGracePeriodInSec;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         int reconcileIntervalInSec =
@@ -47,6 +39,13 @@ public class FlinkOperatorConfiguration {
         int portCheckIntervalInSec =
                 operatorConfig.getInteger(
                         OperatorConfigOptions.OPERATOR_OBSERVER_PORT_CHECK_INTERVAL_IN_SEC);
-        return new FlinkOperatorConfiguration(reconcileIntervalInSec, portCheckIntervalInSec);
+
+        int savepointTriggerGracePeriodInSec =
+                operatorConfig.getInteger(
+                        OperatorConfigOptions
+                                .OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD_IN_SEC);
+
+        return new FlinkOperatorConfiguration(
+                reconcileIntervalInSec, portCheckIntervalInSec, savepointTriggerGracePeriodInSec);
     }
 }

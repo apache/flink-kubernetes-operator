@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -193,7 +194,7 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyTaskManagerSpec() throws Exception {
-        FlinkDeployment deploymentClone = TestUtils.clone(flinkDeployment);
+        FlinkDeployment deploymentClone = ReconciliationUtils.clone(flinkDeployment);
         deploymentClone.getSpec().setPodTemplate(null);
 
         final Configuration configuration =

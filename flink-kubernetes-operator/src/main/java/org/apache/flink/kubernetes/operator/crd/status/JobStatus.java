@@ -32,5 +32,5 @@ public class JobStatus {
     private String jobId;
     private String state;
     private String updateTime;
-    private String savepointLocation;
+    private SavepointInfo savepointInfo = new SavepointInfo();
 }

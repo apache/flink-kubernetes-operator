@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconcilerTest;
 import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -131,7 +132,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
 
         // Send in invalid update
-        appCluster = TestUtils.clone(appCluster);
+        appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().setJob(null);
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
@@ -162,7 +163,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals("s0", jobs.get(0).f0);
 
         List<Tuple2<String, JobStatusMessage>> previousJobs = new ArrayList<>(jobs);
-        appCluster = TestUtils.clone(appCluster);
+        appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().getJob().setInitialSavepointPath("s1");
 
         // Send in a no-op change
@@ -170,7 +171,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(previousJobs, new ArrayList<>(flinkService.listJobs()));
 
         // Upgrade job
-        appCluster = TestUtils.clone(appCluster);
+        appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().getJob().setParallelism(100);
 
         testController.reconcile(appCluster, context);
@@ -180,7 +181,7 @@ public class FlinkDeploymentControllerTest {
         testController.reconcile(appCluster, context);
 
         // Suspend job
-        appCluster = TestUtils.clone(appCluster);
+        appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().getJob().setState(JobState.SUSPENDED);
         testController.reconcile(appCluster, context);
         assertEquals(
@@ -188,7 +189,7 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getJobManagerDeploymentStatus());
 
         // Resume from last savepoint
-        appCluster = TestUtils.clone(appCluster);
+        appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().getJob().setState(JobState.RUNNING);
         testController.reconcile(appCluster, TestUtils.createEmptyContext());
         jobs = flinkService.listJobs();
@@ -213,7 +214,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals("s0", jobs.get(0).f0);
 
         // Upgrade job
-        appCluster = TestUtils.clone(appCluster);
+        appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().getJob().setParallelism(100);
 
         UpdateControl<FlinkDeployment> updateControl =
@@ -229,12 +230,12 @@ public class FlinkDeploymentControllerTest {
         assertEquals(null, jobs.get(0).f0);
 
         // Suspend job
-        appCluster = TestUtils.clone(appCluster);
+        appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().getJob().setState(JobState.SUSPENDED);
         testController.reconcile(appCluster, context);
 
         // Resume from empty state
-        appCluster = TestUtils.clone(appCluster);
+        appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().getJob().setState(JobState.RUNNING);
         testController.reconcile(appCluster, context);
         jobs = flinkService.listJobs();
@@ -277,7 +278,7 @@ public class FlinkDeploymentControllerTest {
 
     private FlinkDeploymentController createTestController(
             KubernetesClient kubernetesClient, TestingFlinkService flinkService) {
-        Observer observer = new Observer(flinkService);
+        Observer observer = new Observer(flinkService, operatorConfiguration);
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(

@@ -64,7 +64,7 @@ public class SessionReconciler extends BaseReconciler {
         if (specChanged) {
             upgradeSessionCluster(flinkApp, effectiveConfig);
         }
-
+        ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
         return UpdateControl.updateStatus(flinkApp)
                 .rescheduleAfter(
                         operatorConfiguration.getReconcileIntervalInSec(), TimeUnit.SECONDS);

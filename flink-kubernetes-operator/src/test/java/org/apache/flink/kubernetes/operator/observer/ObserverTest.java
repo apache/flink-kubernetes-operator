@@ -20,10 +20,12 @@ package org.apache.flink.kubernetes.operator.observer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconcilerTest;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
@@ -32,6 +34,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link Observer unit tests */
@@ -39,11 +42,16 @@ public class ObserverTest {
 
     private final Context readyContext =
             JobReconcilerTest.createContextWithReadyJobManagerDeployment();
+    private final FlinkOperatorConfiguration operatorConfiguration =
+            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
 
     @Test
     public void observeSessionCluster() {
         FlinkService flinkService = new TestingFlinkService();
-        Observer observer = new Observer(flinkService);
+        Observer observer =
+                new Observer(
+                        flinkService,
+                        FlinkOperatorConfiguration.fromConfiguration(new Configuration()));
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         deployment
                 .getStatus()
@@ -74,7 +82,10 @@ public class ObserverTest {
     @Test
     public void observeApplicationCluster() {
         TestingFlinkService flinkService = new TestingFlinkService();
-        Observer observer = new Observer(flinkService);
+        Observer observer =
+                new Observer(
+                        flinkService,
+                        FlinkOperatorConfiguration.fromConfiguration(new Configuration()));
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
@@ -131,5 +142,65 @@ public class ObserverTest {
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
         assertEquals("UNKNOWN", deployment.getStatus().getJobStatus().getState());
+    }
+
+    @Test
+    public void observeSavepoint() throws Exception {
+        TestingFlinkService flinkService = new TestingFlinkService();
+        Observer observer =
+                new Observer(
+                        flinkService,
+                        FlinkOperatorConfiguration.fromConfiguration(new Configuration()));
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        Configuration conf = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
+        flinkService.submitApplicationCluster(deployment, conf);
+        bringToReadyStatus(deployment);
+        assertTrue(observer.observe(deployment, readyContext, conf));
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        flinkService.triggerSavepoint(deployment, conf);
+
+        assertEquals(
+                "trigger_0",
+                deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertTrue(observer.observe(deployment, readyContext, conf));
+        assertEquals(
+                "savepoint_0",
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
+        assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
+        flinkService.triggerSavepoint(deployment, conf);
+        assertEquals(
+                "trigger_1",
+                deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertTrue(observer.observe(deployment, readyContext, conf));
+        assertEquals(
+                "savepoint_1",
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
+        assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+    }
+
+    private void bringToReadyStatus(FlinkDeployment deployment) {
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .setLastReconciledSpec(ReconciliationUtils.clone(deployment.getSpec()));
+        JobStatus jobStatus = new JobStatus();
+        jobStatus.setJobName("jobname");
+        jobStatus.setJobId("0000000000");
+        jobStatus.setState("RUNNING");
+        deployment.getStatus().setJobStatus(jobStatus);
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
     }
 }

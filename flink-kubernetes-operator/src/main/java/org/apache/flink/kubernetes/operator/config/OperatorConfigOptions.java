@@ -38,4 +38,12 @@ public class OperatorConfigOptions {
                     .withDescription(
                             "The interval in second for the controller to reschedule the reconcile process to "
                                     + "wait for deployment to be ready");
+
+    public static final ConfigOption<Integer>
+            OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD_IN_SEC =
+                    ConfigOptions.key("operator.observer.savepoint.trigger.grace-period.sec")
+                            .intType()
+                            .defaultValue(5)
+                            .withDescription(
+                                    "The interval in seconds before a savepoint trigger attempt is marked as unsuccessful");
 }

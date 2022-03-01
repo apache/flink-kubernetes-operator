@@ -21,11 +21,11 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
@@ -106,7 +106,7 @@ public class FlinkDeploymentController
         Optional<String> validationError = validator.validate(flinkApp);
         if (validationError.isPresent()) {
             LOG.error("Reconciliation failed: " + validationError.get());
-            updateForReconciliationError(flinkApp, validationError.get());
+            ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
             return UpdateControl.updateStatus(flinkApp);
         }
 
@@ -125,28 +125,14 @@ public class FlinkDeploymentController
                     reconcilerFactory
                             .getOrCreate(flinkApp)
                             .reconcile(operatorNamespace, flinkApp, context, effectiveConfig);
-            updateForReconciliationSuccess(flinkApp);
             return updateControl;
         } catch (InvalidDeploymentException ide) {
             LOG.error("Reconciliation failed", ide);
-            updateForReconciliationError(flinkApp, ide.getMessage());
+            ReconciliationUtils.updateForReconciliationError(flinkApp, ide.getMessage());
             return UpdateControl.updateStatus(flinkApp);
         } catch (Exception e) {
             throw new ReconciliationException(e);
         }
-    }
-
-    private void updateForReconciliationSuccess(FlinkDeployment flinkApp) {
-        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
-        reconciliationStatus.setSuccess(true);
-        reconciliationStatus.setError(null);
-        reconciliationStatus.setLastReconciledSpec(flinkApp.getSpec());
-    }
-
-    private void updateForReconciliationError(FlinkDeployment flinkApp, String err) {
-        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
-        reconciliationStatus.setSuccess(false);
-        reconciliationStatus.setError(err);
     }
 
     @Override
@@ -170,7 +156,7 @@ public class FlinkDeploymentController
                 retryInfo.getAttemptCount(),
                 retryInfo.isLastAttempt());
 
-        updateForReconciliationError(
+        ReconciliationUtils.updateForReconciliationError(
                 flinkApp,
                 (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
         return Optional.of(flinkApp);

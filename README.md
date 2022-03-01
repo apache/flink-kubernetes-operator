@@ -143,3 +143,15 @@ and apply it on your Kubernetes environment:
 kubectl create -f pod-monitor.yaml
 ```
 Once the custom resource is created in the Kubernetes environment the operator metrics are ready to explore [http://localhost:3000/explore](http://localhost:3000/explore).
+
+# Savepoints
+Savepoints can be triggered manually by defining a random (nonce) value to the variable `savepointTriggerNonce` in the job specification:
+```yaml
+ job:
+    jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
+    parallelism: 2
+    upgradeMode: savepoint
+    state: running
+    savepointTriggerNonce: 123
+```
+The operator will trigger a savepoint every time the modified CR is applied and the nonce is different from the previous value.
