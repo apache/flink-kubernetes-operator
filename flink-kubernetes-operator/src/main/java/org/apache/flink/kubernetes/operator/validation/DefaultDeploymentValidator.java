@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -43,7 +44,7 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
         return firstPresent(
                 validateFlinkConfig(spec.getFlinkConfiguration()),
                 validateJobSpec(spec.getJob()),
-                validateJmSpec(spec.getJobManager()),
+                validateJmSpec(spec.getJobManager(), spec.getFlinkConfiguration()),
                 validateTmSpec(spec.getTaskManager()),
                 validateSpecChange(deployment));
     }
@@ -86,12 +87,26 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
         return Optional.empty();
     }
 
-    private Optional<String> validateJmSpec(JobManagerSpec jmSpec) {
+    private Optional<String> validateJmSpec(JobManagerSpec jmSpec, Map<String, String> confMap) {
         if (jmSpec == null) {
             return Optional.empty();
         }
 
-        return validateResources("JobManager", jmSpec.getResource());
+        return firstPresent(
+                validateResources("JobManager", jmSpec.getResource()),
+                validateJmReplicas("JobManager", jmSpec.getReplicas(), confMap));
+    }
+
+    private Optional<String> validateJmReplicas(
+            String component, int replicas, Map<String, String> confMap) {
+        if (!confMap.containsKey(HighAvailabilityOptions.HA_MODE.key()) && replicas != 1) {
+            return Optional.of(
+                    component
+                            + " replicas should be 1 when "
+                            + HighAvailabilityOptions.HA_MODE.key()
+                            + " is not set.");
+        }
+        return Optional.empty();
     }
 
     private Optional<String> validateTmSpec(TaskManagerSpec tmSpec) {
