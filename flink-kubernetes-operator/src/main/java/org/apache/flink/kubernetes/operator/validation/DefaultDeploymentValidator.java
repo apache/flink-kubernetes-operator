@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -28,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import java.util.Map;
 import java.util.Optional;
@@ -99,12 +99,13 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
 
     private Optional<String> validateJmReplicas(
             String component, int replicas, Map<String, String> confMap) {
-        if (!confMap.containsKey(HighAvailabilityOptions.HA_MODE.key()) && replicas != 1) {
+        if (replicas < 1) {
+            return Optional.of(component + " replicas should not be configured less than one.");
+        } else if (replicas > 1
+                && !HighAvailabilityMode.isHighAvailabilityModeActivated(
+                        Configuration.fromMap(confMap))) {
             return Optional.of(
-                    component
-                            + " replicas should be 1 when "
-                            + HighAvailabilityOptions.HA_MODE.key()
-                            + " is not set.");
+                    "High availability should be enabled when starting standby JobManagers.");
         }
         return Optional.empty();
     }
