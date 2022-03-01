@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
-import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -74,9 +73,10 @@ public class DeploymentValidatorTest {
                 "Forbidden Flink config key");
         testError(
                 dep -> dep.getSpec().getJobManager().setReplicas(2),
-                "JobManager replicas should be 1 when "
-                        + HighAvailabilityOptions.HA_MODE.key()
-                        + " is not set.");
+                "High availability should be enabled when starting standby JobManagers.");
+        testError(
+                dep -> dep.getSpec().getJobManager().setReplicas(0),
+                "JobManager replicas should not be configured less than one.");
 
         // Test resource validation
         testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("1G"));
