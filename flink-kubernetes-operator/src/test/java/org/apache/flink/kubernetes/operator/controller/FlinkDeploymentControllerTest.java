@@ -36,12 +36,22 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import okhttp3.mockwebserver.MockWebServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -56,10 +66,29 @@ public class FlinkDeploymentControllerTest {
     private final FlinkOperatorConfiguration operatorConfiguration =
             FlinkOperatorConfiguration.fromConfiguration(new Configuration());
 
+    private TestingFlinkService flinkService;
+    private FlinkDeploymentController testController;
+
+    private KubernetesMockServer mockServer;
+    private NamespacedKubernetesClient kubernetesClient;
+
+    @BeforeEach
+    public void setup() {
+        flinkService = new TestingFlinkService();
+        mockServer = new KubernetesMockServer(new MockWebServer(), new HashMap<>(), true);
+        mockServer.init();
+        kubernetesClient = mockServer.createClient();
+        testController = createTestController(kubernetesClient, flinkService);
+    }
+
+    @AfterEach
+    public void tearDown() {
+        kubernetesClient.close();
+        mockServer.shutdown();
+    }
+
     @Test
     public void verifyBasicReconcileLoop() {
-        TestingFlinkService flinkService = new TestingFlinkService();
-        FlinkDeploymentController testController = createTestController(flinkService);
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
 
         UpdateControl<FlinkDeployment> updateControl;
@@ -124,8 +153,6 @@ public class FlinkDeploymentControllerTest {
 
     @Test
     public void verifyUpgradeFromSavepoint() {
-        TestingFlinkService flinkService = new TestingFlinkService();
-        FlinkDeploymentController testController = createTestController(flinkService);
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
@@ -177,8 +204,6 @@ public class FlinkDeploymentControllerTest {
 
     @Test
     public void verifyStatelessUpgrade() {
-        TestingFlinkService flinkService = new TestingFlinkService();
-        FlinkDeploymentController testController = createTestController(flinkService);
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
@@ -218,20 +243,57 @@ public class FlinkDeploymentControllerTest {
         assertEquals(null, jobs.get(0).f0);
     }
 
-    private FlinkDeploymentController createTestController(TestingFlinkService flinkService) {
+    @Test
+    public void testPrepareEventSource() {
+        // Test watch all
+        testController.setControllerConfig(
+                new FlinkControllerConfig(testController) {
+                    @Override
+                    public Set<String> getEffectiveNamespaces() {
+                        return Set.of();
+                    }
+                });
+        List<EventSource> eventSources = testController.prepareEventSources(null);
+        assertEquals(1, eventSources.size());
+        assertTrue(eventSources.get(0).name().endsWith("-all"));
+
+        // Test watch namespaces
+        Set<String> namespaces = Set.of("ns1", "ns2", "ns3");
+        testController.setControllerConfig(
+                new FlinkControllerConfig(testController) {
+                    @Override
+                    public Set<String> getEffectiveNamespaces() {
+                        return namespaces;
+                    }
+                });
+        eventSources = testController.prepareEventSources(null);
+        assertEquals(3, eventSources.size());
+        assertEquals(
+                namespaces,
+                eventSources.stream()
+                        .map(EventSource::name)
+                        .map(s -> s.substring(s.length() - 3))
+                        .collect(Collectors.toSet()));
+    }
+
+    private FlinkDeploymentController createTestController(
+            KubernetesClient kubernetesClient, TestingFlinkService flinkService) {
         Observer observer = new Observer(flinkService);
         JobReconciler jobReconciler = new JobReconciler(null, flinkService, operatorConfiguration);
         SessionReconciler sessionReconciler =
                 new SessionReconciler(null, flinkService, operatorConfiguration);
 
-        return new FlinkDeploymentController(
-                FlinkUtils.loadDefaultConfig(),
-                operatorConfiguration,
-                null,
-                "test",
-                new DefaultDeploymentValidator(),
-                observer,
-                jobReconciler,
-                sessionReconciler);
+        FlinkDeploymentController controller =
+                new FlinkDeploymentController(
+                        FlinkUtils.loadDefaultConfig(),
+                        operatorConfiguration,
+                        kubernetesClient,
+                        "test",
+                        new DefaultDeploymentValidator(),
+                        observer,
+                        jobReconciler,
+                        sessionReconciler);
+        controller.setControllerConfig(new FlinkControllerConfig(controller));
+        return controller;
     }
 }
