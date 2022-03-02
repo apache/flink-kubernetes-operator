@@ -17,14 +17,12 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 
 import java.util.concurrent.TimeUnit;
-
-import static org.apache.flink.kubernetes.operator.reconciler.BaseReconciler.PORT_READY_DELAY_SECONDS;
-import static org.apache.flink.kubernetes.operator.reconciler.BaseReconciler.REFRESH_SECONDS;
 
 /** Status of the Flink JobManager Kubernetes deployment. */
 public enum JobManagerDeploymentStatus {
@@ -41,15 +39,20 @@ public enum JobManagerDeploymentStatus {
     /** JobManager deployment not found, probably not started or killed by user. */
     MISSING;
 
-    public UpdateControl<FlinkDeployment> toUpdateControl(FlinkDeployment flinkDeployment) {
+    public UpdateControl<FlinkDeployment> toUpdateControl(
+            FlinkDeployment flinkDeployment, FlinkOperatorConfiguration operatorConfiguration) {
         switch (this) {
             case DEPLOYING:
             case READY:
                 return UpdateControl.updateStatus(flinkDeployment)
-                        .rescheduleAfter(REFRESH_SECONDS, TimeUnit.SECONDS);
+                        .rescheduleAfter(
+                                operatorConfiguration.getReconcileIntervalInSec(),
+                                TimeUnit.SECONDS);
             case DEPLOYED_NOT_READY:
                 return UpdateControl.updateStatus(flinkDeployment)
-                        .rescheduleAfter(PORT_READY_DELAY_SECONDS, TimeUnit.SECONDS);
+                        .rescheduleAfter(
+                                operatorConfiguration.getPortCheckIntervalInSec(),
+                                TimeUnit.SECONDS);
             case MISSING:
             default:
                 return null;

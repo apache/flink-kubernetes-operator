@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -28,23 +29,21 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /** BaseReconciler with functionality that is common to job and session modes. */
 public abstract class BaseReconciler {
 
-    private static final Logger LOG = LoggerFactory.getLogger(BaseReconciler.class);
-
-    public static final int REFRESH_SECONDS = 60;
-    public static final int PORT_READY_DELAY_SECONDS = 10;
-
+    protected final FlinkOperatorConfiguration operatorConfiguration;
     protected final KubernetesClient kubernetesClient;
     protected final FlinkService flinkService;
 
-    public BaseReconciler(KubernetesClient kubernetesClient, FlinkService flinkService) {
+    public BaseReconciler(
+            KubernetesClient kubernetesClient,
+            FlinkService flinkService,
+            FlinkOperatorConfiguration operatorConfiguration) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
+        this.operatorConfiguration = operatorConfiguration;
     }
 
     public abstract UpdateControl<FlinkDeployment> reconcile(

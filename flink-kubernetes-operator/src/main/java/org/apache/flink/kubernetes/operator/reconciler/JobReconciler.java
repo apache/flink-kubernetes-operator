@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
@@ -48,8 +49,11 @@ public class JobReconciler extends BaseReconciler {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobReconciler.class);
 
-    public JobReconciler(KubernetesClient kubernetesClient, FlinkService flinkService) {
-        super(kubernetesClient, flinkService);
+    public JobReconciler(
+            KubernetesClient kubernetesClient,
+            FlinkService flinkService,
+            FlinkOperatorConfiguration operatorConfiguration) {
+        super(kubernetesClient, flinkService, operatorConfiguration);
     }
 
     @Override
@@ -69,7 +73,8 @@ public class JobReconciler extends BaseReconciler {
                     Optional.ofNullable(jobSpec.getInitialSavepointPath()));
             IngressUtils.updateIngressRules(
                     flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
-            return JobManagerDeploymentStatus.DEPLOYING.toUpdateControl(flinkApp);
+            return JobManagerDeploymentStatus.DEPLOYING.toUpdateControl(
+                    flinkApp, operatorConfiguration);
         }
 
         // TODO: following assumes that current job is running
@@ -105,7 +110,8 @@ public class JobReconciler extends BaseReconciler {
         }
 
         return UpdateControl.updateStatus(flinkApp)
-                .rescheduleAfter(REFRESH_SECONDS, TimeUnit.SECONDS);
+                .rescheduleAfter(
+                        operatorConfiguration.getReconcileIntervalInSec(), TimeUnit.SECONDS);
     }
 
     private void deployFlinkJob(

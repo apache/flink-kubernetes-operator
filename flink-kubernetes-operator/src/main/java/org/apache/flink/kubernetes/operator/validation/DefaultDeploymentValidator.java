@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
@@ -38,7 +39,9 @@ import java.util.Set;
 public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
 
     private static final String[] FORBIDDEN_CONF_KEYS =
-            new String[] {"kubernetes.namespace", "kubernetes.cluster-id"};
+            new String[] {
+                KubernetesConfigOptions.NAMESPACE.key(), KubernetesConfigOptions.CLUSTER_ID.key()
+            };
 
     private static final Set<String> ALLOWED_LOG_CONF_KEYS =
             Set.of(Constants.CONFIG_FILE_LOG4J_NAME, Constants.CONFIG_FILE_LOGBACK_NAME);
@@ -121,13 +124,12 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
 
         return firstPresent(
                 validateResources("JobManager", jmSpec.getResource()),
-                validateJmReplicas("JobManager", jmSpec.getReplicas(), confMap));
+                validateJmReplicas(jmSpec.getReplicas(), confMap));
     }
 
-    private Optional<String> validateJmReplicas(
-            String component, int replicas, Map<String, String> confMap) {
+    private Optional<String> validateJmReplicas(int replicas, Map<String, String> confMap) {
         if (replicas < 1) {
-            return Optional.of(component + " replicas should not be configured less than one.");
+            return Optional.of("JobManager replicas should not be configured less than one.");
         } else if (replicas > 1
                 && !HighAvailabilityMode.isHighAvailabilityModeActivated(
                         Configuration.fromMap(confMap))) {
