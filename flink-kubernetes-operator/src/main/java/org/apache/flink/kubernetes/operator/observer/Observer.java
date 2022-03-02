@@ -123,9 +123,7 @@ public class Observer {
             LOG.info("No jobs found on {} yet", flinkApp.getMetadata().getName());
             return false;
         } else {
-            flinkAppStatus.setJobStatus(
-                    mergeJobStatus(
-                            flinkAppStatus.getJobStatus(), new ArrayList<>(clusterJobStatuses)));
+            updateJobStatus(flinkAppStatus.getJobStatus(), new ArrayList<>(clusterJobStatuses));
             LOG.info("Job statuses updated for {}", flinkApp.getMetadata().getName());
             return true;
         }
@@ -148,33 +146,16 @@ public class Observer {
         }
     }
 
-    /** Merge previous job status with the new one from the flink job cluster. */
-    private JobStatus mergeJobStatus(
-            JobStatus oldStatus, List<JobStatusMessage> clusterJobStatuses) {
-        JobStatus newStatus = oldStatus;
+    /** Update previous job status based on the job list from the cluster. */
+    private void updateJobStatus(JobStatus status, List<JobStatusMessage> clusterJobStatuses) {
         Collections.sort(
-                clusterJobStatuses,
-                (j1, j2) -> -1 * Long.compare(j1.getStartTime(), j2.getStartTime()));
+                clusterJobStatuses, (j1, j2) -> Long.compare(j2.getStartTime(), j1.getStartTime()));
         JobStatusMessage newJob = clusterJobStatuses.get(0);
 
-        if (newStatus == null) {
-            newStatus = createJobStatus(newJob);
-        } else {
-            newStatus.setState(newJob.getJobState().name());
-            newStatus.setJobName(newJob.getJobName());
-            newStatus.setJobId(newJob.getJobId().toHexString());
-            // track the start time, changing timestamp would cause busy reconciliation
-            newStatus.setUpdateTime(String.valueOf(newJob.getStartTime()));
-        }
-        return newStatus;
-    }
-
-    public static JobStatus createJobStatus(JobStatusMessage message) {
-        JobStatus jobStatus = new JobStatus();
-        jobStatus.setJobId(message.getJobId().toHexString());
-        jobStatus.setJobName(message.getJobName());
-        jobStatus.setState(message.getJobState().name());
-        jobStatus.setUpdateTime(String.valueOf(message.getStartTime()));
-        return jobStatus;
+        status.setState(newJob.getJobState().name());
+        status.setJobName(newJob.getJobName());
+        status.setJobId(newJob.getJobId().toHexString());
+        // track the start time, changing timestamp would cause busy reconciliation
+        status.setUpdateTime(String.valueOf(newJob.getStartTime()));
     }
 }

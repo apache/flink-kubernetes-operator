@@ -109,7 +109,7 @@ public class ObserverTest {
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
 
-        // Stable rady
+        // Stable ready
         assertTrue(observer.observe(deployment, readyContext, conf));
         assertEquals(
                 JobManagerDeploymentStatus.READY,
@@ -123,5 +123,13 @@ public class ObserverTest {
         assertEquals(
                 deployment.getMetadata().getName(),
                 deployment.getStatus().getJobStatus().getJobName());
+
+        // Test listing failure
+        flinkService.clear();
+        assertFalse(observer.observe(deployment, readyContext, conf));
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        assertEquals("UNKNOWN", deployment.getStatus().getJobStatus().getState());
     }
 }
