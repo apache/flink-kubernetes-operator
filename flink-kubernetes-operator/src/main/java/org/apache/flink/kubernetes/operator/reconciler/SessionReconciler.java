@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -26,8 +27,6 @@ import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 
@@ -37,10 +36,11 @@ import java.util.concurrent.TimeUnit;
  */
 public class SessionReconciler extends BaseReconciler {
 
-    private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
-
-    public SessionReconciler(KubernetesClient kubernetesClient, FlinkService flinkService) {
-        super(kubernetesClient, flinkService);
+    public SessionReconciler(
+            KubernetesClient kubernetesClient,
+            FlinkService flinkService,
+            FlinkOperatorConfiguration operatorConfiguration) {
+        super(kubernetesClient, flinkService, operatorConfiguration);
     }
 
     @Override
@@ -66,7 +66,8 @@ public class SessionReconciler extends BaseReconciler {
         }
 
         return UpdateControl.updateStatus(flinkApp)
-                .rescheduleAfter(REFRESH_SECONDS, TimeUnit.SECONDS);
+                .rescheduleAfter(
+                        operatorConfiguration.getReconcileIntervalInSec(), TimeUnit.SECONDS);
     }
 
     private void upgradeSessionCluster(FlinkDeployment flinkApp, Configuration effectiveConfig)

@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
@@ -55,16 +56,21 @@ public class FlinkOperator {
         Operator operator = new Operator(client, configurationService);
 
         FlinkService flinkService = new FlinkService(client);
+        FlinkOperatorConfiguration operatorConfiguration =
+                FlinkOperatorConfiguration.fromConfiguration(defaultConfig.getOperatorConfig());
 
         Observer observer = new Observer(flinkService);
-        JobReconciler jobReconciler = new JobReconciler(client, flinkService);
-        SessionReconciler sessionReconciler = new SessionReconciler(client, flinkService);
+        JobReconciler jobReconciler =
+                new JobReconciler(client, flinkService, operatorConfiguration);
+        SessionReconciler sessionReconciler =
+                new SessionReconciler(client, flinkService, operatorConfiguration);
 
         FlinkDeploymentValidator validator = new DefaultDeploymentValidator();
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(
                         defaultConfig,
+                        operatorConfiguration,
                         client,
                         namespace,
                         validator,

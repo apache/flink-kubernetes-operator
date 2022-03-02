@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
@@ -69,9 +70,11 @@ public class FlinkDeploymentController
     private final JobReconciler jobReconciler;
     private final SessionReconciler sessionReconciler;
     private final DefaultConfig defaultConfig;
+    private final FlinkOperatorConfiguration operatorConfiguration;
 
     public FlinkDeploymentController(
             DefaultConfig defaultConfig,
+            FlinkOperatorConfiguration operatorConfiguration,
             KubernetesClient kubernetesClient,
             String operatorNamespace,
             FlinkDeploymentValidator validator,
@@ -79,6 +82,7 @@ public class FlinkDeploymentController
             JobReconciler jobReconciler,
             SessionReconciler sessionReconciler) {
         this.defaultConfig = defaultConfig;
+        this.operatorConfiguration = operatorConfiguration;
         this.kubernetesClient = kubernetesClient;
         this.operatorNamespace = operatorNamespace;
         this.validator = validator;
@@ -114,7 +118,9 @@ public class FlinkDeploymentController
 
         boolean readyToReconcile = observer.observe(flinkApp, context, effectiveConfig);
         if (!readyToReconcile) {
-            return flinkApp.getStatus().getJobManagerDeploymentStatus().toUpdateControl(flinkApp);
+            return flinkApp.getStatus()
+                    .getJobManagerDeploymentStatus()
+                    .toUpdateControl(flinkApp, operatorConfiguration);
         }
 
         try {

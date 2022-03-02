@@ -21,6 +21,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
@@ -46,6 +47,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link JobStatusObserver unit tests */
 public class JobReconcilerTest {
+
+    private final FlinkOperatorConfiguration operatorConfiguration =
+            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
 
     public static Context createContextWithReadyJobManagerDeployment() {
         return new Context() {
@@ -75,7 +79,7 @@ public class JobReconcilerTest {
         Context context = JobReconcilerTest.createContextWithReadyJobManagerDeployment();
         TestingFlinkService flinkService = new TestingFlinkService();
 
-        JobReconciler reconciler = new JobReconciler(null, flinkService);
+        JobReconciler reconciler = new JobReconciler(null, flinkService, operatorConfiguration);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration config = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
@@ -117,7 +121,8 @@ public class JobReconcilerTest {
         final TestingFlinkService flinkService = new TestingFlinkService();
         Observer observer = new Observer(flinkService);
 
-        final JobReconciler reconciler = new JobReconciler(null, flinkService);
+        final JobReconciler reconciler =
+                new JobReconciler(null, flinkService, operatorConfiguration);
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         final Configuration config = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
