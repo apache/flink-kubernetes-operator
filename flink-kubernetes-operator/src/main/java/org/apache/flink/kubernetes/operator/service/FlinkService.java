@@ -35,11 +35,9 @@ import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorato
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
-import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import org.slf4j.Logger;
@@ -153,10 +151,6 @@ public class FlinkService {
                     savepointOpt = Optional.of(savepoint);
                     break;
                 case LAST_STATE:
-                    if (!HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
-                        throw new InvalidDeploymentException(
-                                "Job could not be upgraded with last-state while HA disabled");
-                    }
                     final String namespace = conf.getString(KubernetesConfigOptions.NAMESPACE);
                     final String clusterId = clusterClient.getClusterId();
                     FlinkUtils.deleteCluster(namespace, clusterId, kubernetesClient, false);

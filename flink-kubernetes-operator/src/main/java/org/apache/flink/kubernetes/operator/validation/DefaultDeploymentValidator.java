@@ -43,7 +43,7 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
         FlinkDeploymentSpec spec = deployment.getSpec();
         return firstPresent(
                 validateFlinkConfig(spec.getFlinkConfiguration()),
-                validateJobSpec(spec.getJob()),
+                validateJobSpec(spec.getJob(), spec.getFlinkConfiguration()),
                 validateJmSpec(spec.getJobManager(), spec.getFlinkConfiguration()),
                 validateTmSpec(spec.getTaskManager()),
                 validateSpecChange(deployment));
@@ -71,7 +71,7 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
         return Optional.empty();
     }
 
-    private Optional<String> validateJobSpec(JobSpec job) {
+    private Optional<String> validateJobSpec(JobSpec job, Map<String, String> confMap) {
         if (job == null) {
             return Optional.empty();
         }
@@ -82,6 +82,12 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
 
         if (job.getJarURI() == null) {
             return Optional.of("Jar URI must be defined");
+        }
+
+        if (job.getUpgradeMode() == UpgradeMode.LAST_STATE
+                && !HighAvailabilityMode.isHighAvailabilityModeActivated(
+                        Configuration.fromMap(confMap))) {
+            return Optional.of("Job could not be upgraded with last-state while HA disabled");
         }
 
         return Optional.empty();
