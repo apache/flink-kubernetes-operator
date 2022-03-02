@@ -63,13 +63,17 @@ function debug_and_show_logs {
 
     echo "Flink logs:"
     kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | while read pod;do
-        echo "Current logs for $pod: "
-        kubectl logs $pod;
-        restart_count=$(kubectl get pod $pod -o jsonpath='{.status.containerStatuses[0].restartCount}')
-        if [[ ${restart_count} -gt 0 ]];then
-          echo "Previous logs for $pod: "
-          kubectl logs $pod --previous
-        fi
+        containers=(`kubectl get pods  $pod -o jsonpath='{.spec.containers[*].name}'`)
+        i=0
+        for container in "${containers[@]}"; do
+          echo "Current logs for $pod:$container: "
+          kubectl logs $pod $container;
+          restart_count=$(kubectl get pod $pod -o jsonpath='{.status.containerStatuses['$i'].restartCount}')
+          if [[ ${restart_count} -gt 0 ]];then
+            echo "Previous logs for $pod: "
+            kubectl logs $pod $container --previous
+          fi
+        done
     done
 }
 
