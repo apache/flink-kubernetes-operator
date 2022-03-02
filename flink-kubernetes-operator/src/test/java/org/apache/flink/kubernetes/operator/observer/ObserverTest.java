@@ -21,7 +21,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconcilerTest;
@@ -35,14 +34,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** @link JobStatusObserver unit tests */
-public class JobStatusObserverTest {
+/** @link Observer unit tests */
+public class ObserverTest {
 
     private final Context readyContext =
             JobReconcilerTest.createContextWithReadyJobManagerDeployment();
 
     @Test
-    public void observeSessionCluster() throws Exception {
+    public void observeSessionCluster() {
         FlinkService flinkService = new TestingFlinkService();
         Observer observer = new Observer(flinkService);
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
@@ -51,22 +50,29 @@ public class JobStatusObserverTest {
                 .getReconciliationStatus()
                 .setLastReconciledSpec(deployment.getSpec());
 
-        // First observe should trigger a recheck for sessions (status always empty)
         assertFalse(
                 observer.observe(
                         deployment,
                         readyContext,
                         FlinkUtils.getEffectiveConfig(deployment, new Configuration())));
 
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
         assertTrue(
                 observer.observe(
                         deployment,
                         readyContext,
                         FlinkUtils.getEffectiveConfig(deployment, new Configuration())));
+
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
     }
 
     @Test
-    public void observeApplicationCluster() throws Exception {
+    public void observeApplicationCluster() {
         TestingFlinkService flinkService = new TestingFlinkService();
         Observer observer = new Observer(flinkService);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
@@ -80,18 +86,42 @@ public class JobStatusObserverTest {
                 .getReconciliationStatus()
                 .setLastReconciledSpec(deployment.getSpec());
         deployment.getStatus().setJobStatus(new JobStatus());
-        deployment
-                .getStatus()
-                .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYED_NOT_READY);
         flinkService.submitApplicationCluster(deployment, conf);
+
+        // Validate port check logic
+        flinkService.setPortReady(false);
+
+        // Port not ready
+        assertFalse(observer.observe(deployment, readyContext, conf));
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        assertFalse(observer.observe(deployment, readyContext, conf));
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        flinkService.setPortReady(true);
+        // Port ready but we have to recheck once again
+        assertFalse(observer.observe(deployment, readyContext, conf));
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        // Stable rady
         assertTrue(observer.observe(deployment, readyContext, conf));
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        assertTrue(observer.observe(deployment, readyContext, conf));
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
 
         assertEquals(
                 deployment.getMetadata().getName(),
                 deployment.getStatus().getJobStatus().getJobName());
-
-        deployment.getSpec().getJob().setState(JobState.SUSPENDED);
-        flinkService.clear();
-        assertTrue(observer.observe(deployment, readyContext, conf));
     }
 }

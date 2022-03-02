@@ -41,6 +41,7 @@ public class TestingFlinkService extends FlinkService {
 
     private List<Tuple2<String, JobStatusMessage>> jobs = new ArrayList<>();
     private Set<String> sessions = new HashSet<>();
+    private boolean isPortReady = true;
 
     public TestingFlinkService() {
         super(null);
@@ -104,6 +105,10 @@ public class TestingFlinkService extends FlinkService {
 
     @Override
     public boolean isJobManagerPortReady(Configuration config) {
-        return true;
+        return isPortReady;
+    }
+
+    public void setPortReady(boolean isPortReady) {
+        this.isPortReady = isPortReady;
     }
 }

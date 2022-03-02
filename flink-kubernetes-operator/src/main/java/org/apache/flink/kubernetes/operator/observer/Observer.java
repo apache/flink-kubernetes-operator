@@ -19,9 +19,6 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -53,11 +50,12 @@ public class Observer {
 
     public boolean observe(
             FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
-        observeJmDeployment(flinkApp, context);
+        observeJmDeployment(flinkApp, context, effectiveConfig);
         return isReadyToReconcile(flinkApp, effectiveConfig);
     }
 
-    private void observeJmDeployment(FlinkDeployment flinkApp, Context context) {
+    private void observeJmDeployment(
+            FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
         FlinkDeploymentStatus deploymentStatus = flinkApp.getStatus();
         JobManagerDeploymentStatus previousJmStatus =
                 deploymentStatus.getJobManagerDeploymentStatus();
@@ -78,10 +76,12 @@ public class Observer {
             if (status != null
                     && status.getAvailableReplicas() != null
                     && spec.getReplicas().intValue() == status.getReplicas()
-                    && spec.getReplicas().intValue() == status.getAvailableReplicas()) {
+                    && spec.getReplicas().intValue() == status.getAvailableReplicas()
+                    && flinkService.isJobManagerPortReady(effectiveConfig)) {
+
                 // typically it takes a few seconds for the REST server to be ready
                 LOG.info(
-                        "JobManager deployment {} in namespace {} port not ready",
+                        "JobManager deployment {} in namespace {} port ready, waiting for the REST API...",
                         flinkApp.getMetadata().getName(),
                         flinkApp.getMetadata().getNamespace());
                 deploymentStatus.setJobManagerDeploymentStatus(
@@ -89,7 +89,7 @@ public class Observer {
                 return;
             }
             LOG.info(
-                    "JobManager deployment {} in namespace {} not yet ready, status {}",
+                    "JobManager deployment {} in namespace {} exists but not ready yet, status {}",
                     flinkApp.getMetadata().getName(),
                     flinkApp.getMetadata().getNamespace(),
                     status);
@@ -99,29 +99,15 @@ public class Observer {
         }
 
         deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
-        return;
     }
 
     private boolean observeFlinkJobStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
-        FlinkDeploymentSpec lastReconciledSpec =
-                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
 
-        if (lastReconciledSpec == null) {
-            // This is the first run, nothing to observe
+        // No need to observe job status for session clusters
+        if (flinkApp.getSpec().getJob() == null) {
             return true;
         }
 
-        JobSpec jobSpec = lastReconciledSpec.getJob();
-
-        if (jobSpec == null) {
-            // This is a session cluster, nothing to observe
-            return true;
-        }
-
-        if (!jobSpec.getState().equals(JobState.RUNNING)) {
-            // The job is not running, nothing to observe
-            return true;
-        }
         LOG.info("Getting job statuses for {}", flinkApp.getMetadata().getName());
         FlinkDeploymentStatus flinkAppStatus = flinkApp.getStatus();
 

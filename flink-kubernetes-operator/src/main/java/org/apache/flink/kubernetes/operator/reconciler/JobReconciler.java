@@ -168,7 +168,7 @@ public class JobReconciler extends BaseReconciler {
     protected void shutdown(FlinkDeployment flinkApp, Configuration effectiveConfig) {
         if (org.apache.flink.api.common.JobStatus.RUNNING
                 .name()
-                .equals(flinkApp.getStatus().getJobStatus().getState())) {
+                .equalsIgnoreCase(flinkApp.getStatus().getJobStatus().getState())) {
             LOG.info("Job is running, attempting graceful shutdown.");
             try {
                 flinkService.cancelJob(

@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.Observer;
-import org.apache.flink.kubernetes.operator.reconciler.BaseReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconcilerTest;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
@@ -61,19 +60,11 @@ public class FlinkDeploymentControllerTest {
 
         UpdateControl<FlinkDeployment> updateControl;
 
-        updateControl = testController.reconcile(appCluster, context);
+        updateControl = testController.reconcile(appCluster, TestUtils.createEmptyContext());
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                JobManagerDeploymentStatus.DEPLOYED_NOT_READY
-                        .toUpdateControl(appCluster)
-                        .getScheduleDelay(),
+                JobManagerDeploymentStatus.DEPLOYING.toUpdateControl(appCluster).getScheduleDelay(),
                 updateControl.getScheduleDelay());
-
-        updateControl = testController.reconcile(appCluster, context);
-        assertTrue(updateControl.isUpdateStatus());
-        assertEquals(
-                BaseReconciler.REFRESH_SECONDS * 1000,
-                (long) updateControl.getScheduleDelay().get());
 
         // Validate reconciliation status
         ReconciliationStatus reconciliationStatus =
@@ -85,8 +76,16 @@ public class FlinkDeploymentControllerTest {
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                BaseReconciler.REFRESH_SECONDS * 1000,
-                (long) updateControl.getScheduleDelay().get());
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY
+                        .toUpdateControl(appCluster)
+                        .getScheduleDelay(),
+                updateControl.getScheduleDelay());
+
+        updateControl = testController.reconcile(appCluster, context);
+        assertTrue(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.READY.toUpdateControl(appCluster).getScheduleDelay(),
+                updateControl.getScheduleDelay());
 
         // Validate job status
         JobStatus jobStatus = appCluster.getStatus().getJobStatus();
@@ -150,6 +149,9 @@ public class FlinkDeploymentControllerTest {
         appCluster = TestUtils.clone(appCluster);
         appCluster.getSpec().getJob().setState(JobState.SUSPENDED);
         testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.MISSING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
 
         // Resume from last savepoint
         appCluster = TestUtils.clone(appCluster);
