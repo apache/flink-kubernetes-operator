@@ -57,6 +57,9 @@ public class DeploymentValidatorTest {
         testError(
                 dep -> dep.getSpec().getJob().setParallelism(-1),
                 "Job parallelism must be larger than 0");
+        testError(
+                dep -> dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE),
+                "Job could not be upgraded with last-state while HA disabled");
 
         // Test conf validation
         testSuccess(

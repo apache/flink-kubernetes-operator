@@ -26,7 +26,6 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestingClusterClient;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.runtime.messages.Acknowledge;
 
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -44,7 +43,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link FlinkService unit tests */
@@ -138,19 +136,6 @@ public class FlinkServiceTest {
                         .inNamespace(TESTING_NAMESPACE)
                         .withName(CLUSTER_ID)
                         .get());
-    }
-
-    @Test
-    public void testCancelJobWithLastStateUpgradeModeWhenHADisabled() {
-        configuration.set(HighAvailabilityOptions.HA_MODE, "None");
-        final TestingClusterClient<String> testingClusterClient =
-                new TestingClusterClient<>(CLUSTER_ID);
-        final FlinkService flinkService = createFlinkService(testingClusterClient);
-
-        final JobID jobID = JobID.generate();
-        assertThrows(
-                InvalidDeploymentException.class,
-                () -> flinkService.cancelJob(jobID, UpgradeMode.LAST_STATE, configuration));
     }
 
     private FlinkService createFlinkService(ClusterClient<String> clusterClient) {
