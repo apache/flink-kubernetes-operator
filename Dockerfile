@@ -40,7 +40,7 @@ FROM openjdk:11-jre
 ENV FLINK_HOME=/opt/flink
 ENV OPERATOR_VERSION=1.0-SNAPSHOT
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
-ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION-shaded.jar
+ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION.jar
 
 WORKDIR /
 RUN groupadd --system --gid=9999 flink && \
