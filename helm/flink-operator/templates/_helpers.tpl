@@ -68,12 +68,23 @@ app.kubernetes.io/name: {{ include "flink-operator.name" . }}
 {{- end }}
 
 {{/*
-Create the name of the service account to use
+Create the name of the operator service account to use
 */}}
 {{- define "flink-operator.serviceAccountName" -}}
-{{- if .Values.serviceAccount.create }}
-{{- default (include "flink-operator.fullname" .) .Values.serviceAccount.name }}
+{{- if .Values.operatorServiceAccount.create }}
+{{- default (include "flink-operator.fullname" .) .Values.operatorServiceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create the name of the job service account to use
+*/}}
+{{- define "flink-operator.jobServiceAccountName" -}}
+{{- if .Values.jobServiceAccount.create }}
+{{- default (include "flink-operator.fullname" .) .Values.jobServiceAccount.name }}
+{{- else }}
+{{- default "default" .Values.jobServiceAccount.name }}
 {{- end }}
 {{- end }}

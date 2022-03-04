@@ -30,7 +30,7 @@ spec:
     high-availability.storageDir: file:///opt/flink/volume/flink-ha
     state.checkpoints.dir: file:///opt/flink/volume/flink-cp
     state.savepoints.dir: file:///opt/flink/volume/flink-sp
-  serviceAccount: flink-operator
+  serviceAccount: flink
   podTemplate:
     apiVersion: v1
     kind: Pod
