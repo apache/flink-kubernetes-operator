@@ -58,18 +58,27 @@ public class IngressUtils {
                                                     .removeFromRules(ingressRule)
                                                     .endSpec()
                                                     .build();
+                                    LOG.info("Remove ingress rules {}", ingress);
+                                    client.resourceList(updated)
+                                            .inNamespace(operatorNamespace)
+                                            .createOrReplace();
                                 } else {
-                                    updated =
-                                            new IngressBuilder(ingress)
-                                                    .editSpec()
-                                                    .addToRules(ingressRule)
-                                                    .endSpec()
-                                                    .build();
+                                    if (!new IngressBuilder(ingress)
+                                            .getSpec()
+                                            .getRules()
+                                            .contains(ingressRule)) {
+                                        updated =
+                                                new IngressBuilder(ingress)
+                                                        .editSpec()
+                                                        .addToRules(ingressRule)
+                                                        .endSpec()
+                                                        .build();
+                                        LOG.info("Add ingress rules {}", ingress);
+                                        client.resourceList(updated)
+                                                .inNamespace(operatorNamespace)
+                                                .createOrReplace();
+                                    }
                                 }
-                                LOG.info("Updating ingress rules {}", ingress);
-                                client.resourceList(updated)
-                                        .inNamespace(operatorNamespace)
-                                        .createOrReplace();
                             });
         }
     }

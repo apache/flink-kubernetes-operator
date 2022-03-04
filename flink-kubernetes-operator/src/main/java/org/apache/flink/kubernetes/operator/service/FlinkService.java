@@ -109,11 +109,11 @@ public class FlinkService {
         try {
             socket.connect(socketAddress, 1000);
             socket.close();
-            return true;
+            return false;
         } catch (SocketTimeoutException ste) {
         } catch (IOException e) {
         }
-        return false;
+        return true;
     }
 
     public Collection<JobStatusMessage> listJobs(Configuration conf) throws Exception {

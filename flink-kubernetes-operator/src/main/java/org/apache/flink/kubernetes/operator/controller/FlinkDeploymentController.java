@@ -24,11 +24,13 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.BaseReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
 import org.apache.flink.kubernetes.utils.Constants;
 
@@ -118,6 +120,11 @@ public class FlinkDeploymentController
 
         boolean readyToReconcile = observer.observe(flinkApp, context, effectiveConfig);
         if (!readyToReconcile) {
+            if (JobManagerDeploymentStatus.DEPLOYING
+                    == flinkApp.getStatus().getJobManagerDeploymentStatus()) {
+                IngressUtils.updateIngressRules(
+                        flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
+            }
             return flinkApp.getStatus()
                     .getJobManagerDeploymentStatus()
                     .toUpdateControl(flinkApp, operatorConfiguration);
