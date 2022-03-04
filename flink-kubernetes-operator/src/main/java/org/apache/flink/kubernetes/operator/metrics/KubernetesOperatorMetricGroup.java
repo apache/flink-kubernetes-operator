@@ -31,9 +31,9 @@ public class KubernetesOperatorMetricGroup
         extends AbstractMetricGroup<KubernetesOperatorMetricGroup> {
 
     private static final String GROUP_NAME = "k8soperator";
-    private String namespace;
-    private String name;
-    private String hostname;
+    private final String namespace;
+    private final String name;
+    private final String hostname;
 
     private KubernetesOperatorMetricGroup(
             MetricRegistry registry,
