@@ -23,8 +23,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.Observer;
-import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
-import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
+import org.apache.flink.kubernetes.operator.reconciler.FlinkReconcilerFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
@@ -60,12 +59,10 @@ public class FlinkOperator {
                 FlinkOperatorConfiguration.fromConfiguration(defaultConfig.getOperatorConfig());
 
         Observer observer = new Observer(flinkService);
-        JobReconciler jobReconciler =
-                new JobReconciler(client, flinkService, operatorConfiguration);
-        SessionReconciler sessionReconciler =
-                new SessionReconciler(client, flinkService, operatorConfiguration);
 
         FlinkDeploymentValidator validator = new DefaultDeploymentValidator();
+        FlinkReconcilerFactory factory =
+                new FlinkReconcilerFactory(client, flinkService, operatorConfiguration);
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(
@@ -75,8 +72,7 @@ public class FlinkOperator {
                         namespace,
                         validator,
                         observer,
-                        jobReconciler,
-                        sessionReconciler);
+                        factory);
 
         FlinkControllerConfig controllerConfig = new FlinkControllerConfig(controller);
         controller.setControllerConfig(controllerConfig);
