@@ -19,12 +19,14 @@
 FROM maven:3.8.4-openjdk-11 AS build
 
 WORKDIR /app
+ENV SHADED_DIR=flink-kubernetes-shaded
 ENV OPERATOR_DIR=flink-kubernetes-operator
 ENV WEBHOOK_DIR=flink-kubernetes-webhook
 
 RUN mkdir $OPERATOR_DIR $WEBHOOK_DIR
 
 COPY pom.xml .
+COPY $SHADED_DIR/pom.xml ./$SHADED_DIR/
 COPY $WEBHOOK_DIR/pom.xml ./$WEBHOOK_DIR/
 COPY $OPERATOR_DIR/pom.xml ./$OPERATOR_DIR/
 
