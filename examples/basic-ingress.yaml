@@ -29,7 +29,7 @@ spec:
 #    rest.address: basic-example.flink.k8s.io
 #    rest.port: "80"
     taskmanager.numberOfTaskSlots: "2"
-  serviceAccount: flink-operator
+  serviceAccount: flink
   jobManager:
     replicas: 1
     resource:

@@ -36,10 +36,16 @@ rbac:
 ingress:
   create: false
 
-serviceAccount:
+operatorServiceAccount:
   create: true
   annotations: {}
   name: "flink-operator"
+
+jobServiceAccount:
+  create: true
+  annotations:
+    "helm.sh/resource-policy": keep
+  name: "flink"
 
 webhook:
   create: true

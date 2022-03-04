@@ -40,7 +40,7 @@ spec:
       cpu: 1
   podTemplate:
     spec:
-      serviceAccount: flink-operator
+      serviceAccount: flink
       containers:
         - name: flink-main-container
           volumeMounts:
