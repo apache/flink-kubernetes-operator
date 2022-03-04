@@ -40,10 +40,10 @@ public class KubernetesOperatorMetricGroupTest {
                 KubernetesOperatorMetricGroup.create(
                         registry, configuration, "default", "flink-operator", "localhost");
         assertArrayEquals(
-                new String[] {"localhost", "kubernetes-operator", "default", "flink-operator"},
+                new String[] {"localhost", "k8soperator", "default", "flink-operator"},
                 group.getScopeComponents());
         assertEquals(
-                "localhost.kubernetes-operator.default.flink-operator.test",
+                "localhost.k8soperator.default.flink-operator.test",
                 group.getMetricIdentifier("test"));
 
         assertEquals(

@@ -46,6 +46,12 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/docker-entrypoint.sh", "operator"]
+          {{- if .Values.metrics.port }}
+          ports:
+            - containerPort: {{ .Values.metrics.port }}
+              name: metrics
+              protocol: TCP
+          {{- end }}
           env:
             - name: OPERATOR_NAMESPACE
               value: {{ .Values.operatorNamespace.name }}
@@ -136,7 +142,7 @@ data:
   flink-conf.yaml: |+
     metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
     metrics.reporter.slf4j.interval: 1 MINUTE
-    # metrics.scope.kubernetes-operator: <host>.kubernetes-operator.<namespace>.<name>
+    # metrics.scope.k8soperator: <host>.k8soperator.<namespace>.<name>
   log4j2.properties: |+
     rootLogger.level = DEBUG
     rootLogger.appenderRef.console.ref = ConsoleAppender
