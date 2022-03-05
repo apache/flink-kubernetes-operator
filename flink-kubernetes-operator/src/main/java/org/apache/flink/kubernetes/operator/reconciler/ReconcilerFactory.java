@@ -28,14 +28,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** The factory to create reconciler based on app mode. */
-public class FlinkReconcilerFactory {
+public class ReconcilerFactory {
 
     private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
     private final FlinkOperatorConfiguration operatorConfiguration;
-    private final Map<Mode, FlinkReconciler> reconcilerMap;
+    private final Map<Mode, Reconciler> reconcilerMap;
 
-    public FlinkReconcilerFactory(
+    public ReconcilerFactory(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkOperatorConfiguration operatorConfiguration) {
@@ -45,7 +45,7 @@ public class FlinkReconcilerFactory {
         this.reconcilerMap = new ConcurrentHashMap<>();
     }
 
-    public FlinkReconciler getOrCreate(FlinkDeployment flinkApp) {
+    public Reconciler getOrCreate(FlinkDeployment flinkApp) {
         return reconcilerMap.computeIfAbsent(
                 getMode(flinkApp),
                 mode -> {

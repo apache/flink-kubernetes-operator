@@ -23,7 +23,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.Observer;
-import org.apache.flink.kubernetes.operator.reconciler.FlinkReconcilerFactory;
+import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
@@ -61,8 +61,8 @@ public class FlinkOperator {
         Observer observer = new Observer(flinkService);
 
         FlinkDeploymentValidator validator = new DefaultDeploymentValidator();
-        FlinkReconcilerFactory factory =
-                new FlinkReconcilerFactory(client, flinkService, operatorConfiguration);
+        ReconcilerFactory factory =
+                new ReconcilerFactory(client, flinkService, operatorConfiguration);
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(

@@ -29,8 +29,8 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.Observer;
-import org.apache.flink.kubernetes.operator.reconciler.FlinkReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.JobReconcilerTest;
+import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -287,7 +287,7 @@ public class FlinkDeploymentControllerTest {
                         "test",
                         new DefaultDeploymentValidator(),
                         observer,
-                        new FlinkReconcilerFactory(
+                        new ReconcilerFactory(
                                 kubernetesClient, flinkService, operatorConfiguration));
         controller.setControllerConfig(new FlinkControllerConfig(controller));
         return controller;

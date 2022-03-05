@@ -25,7 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
-import org.apache.flink.kubernetes.operator.reconciler.FlinkReconcilerFactory;
+import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
@@ -64,7 +64,7 @@ public class FlinkDeploymentController
 
     private final FlinkDeploymentValidator validator;
     private final Observer observer;
-    private final FlinkReconcilerFactory reconcilerFactory;
+    private final ReconcilerFactory reconcilerFactory;
     private final DefaultConfig defaultConfig;
     private final FlinkOperatorConfiguration operatorConfiguration;
 
@@ -77,7 +77,7 @@ public class FlinkDeploymentController
             String operatorNamespace,
             FlinkDeploymentValidator validator,
             Observer observer,
-            FlinkReconcilerFactory reconcilerFactory) {
+            ReconcilerFactory reconcilerFactory) {
         this.defaultConfig = defaultConfig;
         this.operatorConfiguration = operatorConfiguration;
         this.kubernetesClient = kubernetesClient;
