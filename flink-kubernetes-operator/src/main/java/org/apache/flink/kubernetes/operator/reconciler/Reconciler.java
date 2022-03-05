@@ -29,7 +29,7 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 public interface Reconciler {
 
     /**
-     * This is called when receiving the create or update event of the FlinkDeployment resource
+     * This is called when receiving the create or update event of the FlinkDeployment resource.
      *
      * @param operatorNamespace The namespace of the operator
      * @param flinkApp the FlinkDeployment resource that has been created or updated
