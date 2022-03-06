@@ -25,9 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
-import org.apache.flink.kubernetes.operator.reconciler.BaseReconciler;
-import org.apache.flink.kubernetes.operator.reconciler.JobReconciler;
-import org.apache.flink.kubernetes.operator.reconciler.SessionReconciler;
+import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
@@ -66,8 +64,7 @@ public class FlinkDeploymentController
 
     private final FlinkDeploymentValidator validator;
     private final Observer observer;
-    private final JobReconciler jobReconciler;
-    private final SessionReconciler sessionReconciler;
+    private final ReconcilerFactory reconcilerFactory;
     private final DefaultConfig defaultConfig;
     private final FlinkOperatorConfiguration operatorConfiguration;
 
@@ -80,16 +77,14 @@ public class FlinkDeploymentController
             String operatorNamespace,
             FlinkDeploymentValidator validator,
             Observer observer,
-            JobReconciler jobReconciler,
-            SessionReconciler sessionReconciler) {
+            ReconcilerFactory reconcilerFactory) {
         this.defaultConfig = defaultConfig;
         this.operatorConfiguration = operatorConfiguration;
         this.kubernetesClient = kubernetesClient;
         this.operatorNamespace = operatorNamespace;
         this.validator = validator;
         this.observer = observer;
-        this.jobReconciler = jobReconciler;
-        this.sessionReconciler = sessionReconciler;
+        this.reconcilerFactory = reconcilerFactory;
     }
 
     @Override
@@ -99,8 +94,9 @@ public class FlinkDeploymentController
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
 
         observer.observe(flinkApp, context, effectiveConfig);
-        return getReconciler(flinkApp)
-                .shutdownAndDelete(operatorNamespace, flinkApp, effectiveConfig);
+        return reconcilerFactory
+                .getOrCreate(flinkApp)
+                .cleanup(operatorNamespace, flinkApp, effectiveConfig);
     }
 
     @Override
@@ -126,7 +122,8 @@ public class FlinkDeploymentController
 
         try {
             UpdateControl<FlinkDeployment> updateControl =
-                    getReconciler(flinkApp)
+                    reconcilerFactory
+                            .getOrCreate(flinkApp)
                             .reconcile(operatorNamespace, flinkApp, context, effectiveConfig);
             updateForReconciliationSuccess(flinkApp);
             return updateControl;
@@ -137,10 +134,6 @@ public class FlinkDeploymentController
         } catch (Exception e) {
             throw new ReconciliationException(e);
         }
-    }
-
-    private BaseReconciler getReconciler(FlinkDeployment flinkDeployment) {
-        return flinkDeployment.getSpec().getJob() == null ? sessionReconciler : jobReconciler;
     }
 
     private void updateForReconciliationSuccess(FlinkDeployment flinkApp) {

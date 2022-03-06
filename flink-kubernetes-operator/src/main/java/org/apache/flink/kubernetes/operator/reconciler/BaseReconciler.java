@@ -26,12 +26,10 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 
 /** BaseReconciler with functionality that is common to job and session modes. */
-public abstract class BaseReconciler {
+public abstract class BaseReconciler implements Reconciler {
 
     protected final FlinkOperatorConfiguration operatorConfiguration;
     protected final KubernetesClient kubernetesClient;
@@ -46,14 +44,13 @@ public abstract class BaseReconciler {
         this.operatorConfiguration = operatorConfiguration;
     }
 
-    public abstract UpdateControl<FlinkDeployment> reconcile(
-            String operatorNamespace,
-            FlinkDeployment flinkApp,
-            Context context,
-            Configuration effectiveConfig)
-            throws Exception;
+    @Override
+    public DeleteControl cleanup(
+            String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig) {
+        return shutdownAndDelete(operatorNamespace, flinkApp, effectiveConfig);
+    }
 
-    public DeleteControl shutdownAndDelete(
+    private DeleteControl shutdownAndDelete(
             String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig) {
 
         if (JobManagerDeploymentStatus.READY
