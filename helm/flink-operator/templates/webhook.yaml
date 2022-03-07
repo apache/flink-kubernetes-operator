@@ -106,6 +106,6 @@ webhooks:
     matchExpressions:
       - key: kubernetes.io/metadata.name
         operator: In
-        values: {{ .Values.watchNamespaces }}
+        values: [{{- range .Values.watchNamespaces }}{{ . | quote }},{{- end}}]
   {{- end }}
   {{- end }}
