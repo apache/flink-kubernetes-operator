@@ -37,11 +37,14 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponse;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.LastHttpContent;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.QueryStringDecoder;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 
@@ -56,7 +59,9 @@ import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVer
 /** Rest endpoint for validation requests. */
 @ChannelHandler.Sharable
 public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
+    private static final Logger LOG = LoggerFactory.getLogger(AdmissionHandler.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String VALIDATE_REQUEST_PATH = "/validate";
 
     private final AdmissionController<GenericKubernetesResource> validatingController;
 
@@ -66,15 +71,26 @@ public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, HttpRequest httpRequest) {
-        final ByteBuf msgContent = ((FullHttpRequest) httpRequest).content();
-        AdmissionReview review;
-        try {
-            InputStream in = new ByteBufInputStream(msgContent);
-            review = objectMapper.readValue(in, AdmissionReview.class);
-            AdmissionReview response = validatingController.handle(review);
-            sendResponse(ctx, objectMapper.writeValueAsString(response));
-        } catch (Exception e) {
-            sendError(ctx, ExceptionUtils.getStackTrace(e));
+        QueryStringDecoder decoder = new QueryStringDecoder(httpRequest.uri());
+        String path = decoder.path();
+        if (VALIDATE_REQUEST_PATH.equals(path)) {
+            final ByteBuf msgContent = ((FullHttpRequest) httpRequest).content();
+            AdmissionReview review;
+            try {
+                InputStream in = new ByteBufInputStream(msgContent);
+                review = objectMapper.readValue(in, AdmissionReview.class);
+                AdmissionReview response = validatingController.handle(review);
+                sendResponse(ctx, objectMapper.writeValueAsString(response));
+            } catch (Exception e) {
+                sendError(ctx, ExceptionUtils.getStackTrace(e));
+            }
+        } else {
+            String error =
+                    String.format(
+                            "Illegal path requested: %s. Only %s is accepted.",
+                            path, VALIDATE_REQUEST_PATH);
+            LOG.error(error);
+            sendError(ctx, error);
         }
     }
 
