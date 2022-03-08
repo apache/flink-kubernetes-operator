@@ -31,10 +31,10 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultFullHtt
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultHttpResponse;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.FullHttpRequest;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaderValues;
-import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaders;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpRequest;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponse;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpUtil;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.LastHttpContent;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.QueryStringDecoder;
@@ -52,8 +52,9 @@ import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.concurrent.CompletableFuture;
 
+import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
+import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaderValues.APPLICATION_JSON;
-import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpHeaders.Names.CONTENT_TYPE;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
 
 /** Rest endpoint for validation requests. */
@@ -61,7 +62,7 @@ import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVer
 public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
     private static final Logger LOG = LoggerFactory.getLogger(AdmissionHandler.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
-    private static final String VALIDATE_REQUEST_PATH = "/validate";
+    protected static final String VALIDATE_REQUEST_PATH = "/validate";
 
     private final AdmissionController<GenericKubernetesResource> validatingController;
 
@@ -102,15 +103,14 @@ public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
                             HttpResponseStatus.INTERNAL_SERVER_ERROR,
                             Unpooled.wrappedBuffer(error.getBytes(Charset.defaultCharset())));
 
-            response.headers().set(HttpHeaders.Names.CONTENT_TYPE, HttpHeaderValues.TEXT_PLAIN);
-            response.headers()
-                    .set(HttpHeaders.Names.CONTENT_LENGTH, response.content().readableBytes());
+            response.headers().set(CONTENT_TYPE, HttpHeaderValues.TEXT_PLAIN);
+            response.headers().set(CONTENT_LENGTH, response.content().readableBytes());
 
             ctx.writeAndFlush(response);
         }
     }
 
-    public static CompletableFuture<Void> sendResponse(
+    public static void sendResponse(
             @Nonnull ChannelHandlerContext channelHandlerContext, @Nonnull String json) {
         HttpResponse response = new DefaultHttpResponse(HTTP_1_1, HttpResponseStatus.OK);
 
@@ -118,7 +118,7 @@ public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
 
         byte[] buf = json.getBytes(Charset.defaultCharset());
         ByteBuf b = Unpooled.copiedBuffer(buf);
-        HttpHeaders.setContentLength(response, buf.length);
+        HttpUtil.setContentLength(response, buf.length);
 
         // write the initial line and the header.
         channelHandlerContext.write(response);
@@ -135,6 +135,5 @@ public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
                         completableFuture.completeExceptionally(future.cause());
                     }
                 });
-        return completableFuture;
     }
 }

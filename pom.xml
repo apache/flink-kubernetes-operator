@@ -226,6 +226,8 @@ under the License.
                             <!-- Generated CRD -->
                             <exclude>helm/flink-operator/crds/flinkdeployments.flink.apache.org-v1.yml</exclude>
                             <exclude>rio.yml</exclude>
+                            <!-- JSON files -->
+                            <exclude>**/*.json</exclude>
                         </excludes>
                     </configuration>
                 </plugin>
