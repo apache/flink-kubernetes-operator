@@ -37,7 +37,11 @@ public enum JobManagerDeploymentStatus {
     DEPLOYING,
 
     /** JobManager deployment not found, probably not started or killed by user. */
-    MISSING;
+    // TODO: currently a mix of SUSPENDED and ERROR, needs cleanup
+    MISSING,
+
+    /** Deployment in terminal error, requires spec change for reconciliation to continue. */
+    ERROR;
 
     public UpdateControl<FlinkDeployment> toUpdateControl(
             FlinkDeployment flinkDeployment, FlinkOperatorConfiguration operatorConfiguration) {
@@ -54,8 +58,9 @@ public enum JobManagerDeploymentStatus {
                                 operatorConfiguration.getPortCheckIntervalInSec(),
                                 TimeUnit.SECONDS);
             case MISSING:
+            case ERROR:
             default:
-                return null;
+                return UpdateControl.noUpdate();
         }
     }
 }

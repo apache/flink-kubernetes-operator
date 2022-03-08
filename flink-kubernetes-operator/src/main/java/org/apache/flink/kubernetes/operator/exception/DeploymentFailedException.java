@@ -17,14 +17,18 @@
 
 package org.apache.flink.kubernetes.operator.exception;
 
-/** Exception for encountering invalid FlinkDeployment resources. */
-public class InvalidDeploymentException extends Exception {
+import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 
-    public InvalidDeploymentException(String msg) {
-        super(msg);
-    }
+/** Exception to signal terminal deployment failure. */
+public class DeploymentFailedException extends RuntimeException {
+    public static final String COMPONENT_JOBMANAGER = "JobManagerDeployment";
 
-    public InvalidDeploymentException(String msg, Throwable cause) {
-        super(msg, cause);
+    public final String component;
+    public final DeploymentCondition deployCondition;
+
+    public DeploymentFailedException(String component, DeploymentCondition deployCondition) {
+        super(deployCondition.getMessage());
+        this.component = component;
+        this.deployCondition = deployCondition;
     }
 }

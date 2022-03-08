@@ -21,8 +21,10 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.exception.InvalidDeploymentException;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -31,6 +33,7 @@ import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
 import org.apache.flink.util.Preconditions;
 
+import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -92,8 +95,11 @@ public class FlinkDeploymentController
         LOG.info("Stopping cluster {}", flinkApp.getMetadata().getName());
         Configuration effectiveConfig =
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
-
-        observer.observe(flinkApp, context, effectiveConfig);
+        try {
+            observer.observe(flinkApp, context, effectiveConfig);
+        } catch (DeploymentFailedException dfe) {
+            // ignore during cleanup
+        }
         return reconcilerFactory
                 .getOrCreate(flinkApp)
                 .cleanup(operatorNamespace, flinkApp, effectiveConfig);
@@ -113,26 +119,80 @@ public class FlinkDeploymentController
         Configuration effectiveConfig =
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
 
-        boolean readyToReconcile = observer.observe(flinkApp, context, effectiveConfig);
-        if (!readyToReconcile) {
-            return flinkApp.getStatus()
-                    .getJobManagerDeploymentStatus()
-                    .toUpdateControl(flinkApp, operatorConfiguration);
-        }
-
         try {
+            boolean readyToReconcile = observer.observe(flinkApp, context, effectiveConfig);
+            if (!readyToReconcile) {
+                return flinkApp.getStatus()
+                        .getJobManagerDeploymentStatus()
+                        .toUpdateControl(flinkApp, operatorConfiguration);
+            }
+
             UpdateControl<FlinkDeployment> updateControl =
                     reconcilerFactory
                             .getOrCreate(flinkApp)
                             .reconcile(operatorNamespace, flinkApp, context, effectiveConfig);
             return updateControl;
-        } catch (InvalidDeploymentException ide) {
-            LOG.error("Reconciliation failed", ide);
-            ReconciliationUtils.updateForReconciliationError(flinkApp, ide.getMessage());
+        } catch (DeploymentFailedException dfe) {
+            updateForDeploymentFailed(flinkApp, dfe);
             return UpdateControl.updateStatus(flinkApp);
         } catch (Exception e) {
             throw new ReconciliationException(e);
         }
+    }
+
+    private void updateForDeploymentFailed(
+            FlinkDeployment flinkApp, DeploymentFailedException dfe) {
+        LOG.error(
+                "Deployment {}/{} failed with {}",
+                flinkApp.getMetadata().getNamespace(),
+                flinkApp.getMetadata().getName(),
+                dfe.getMessage());
+        flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
+        updateForReconciliationError(flinkApp, dfe.getMessage());
+
+        // TODO: avoid repeated event
+        EventBuilder evtb =
+                new EventBuilder()
+                        .withApiVersion("v1")
+                        .withNewInvolvedObject()
+                        .withKind(flinkApp.getKind())
+                        .withName(flinkApp.getMetadata().getName())
+                        .withNamespace(flinkApp.getMetadata().getNamespace())
+                        .withUid(flinkApp.getMetadata().getUid())
+                        .endInvolvedObject()
+                        .withType(dfe.deployCondition.getType())
+                        .withReason(dfe.deployCondition.getReason())
+                        // TODO: timestamp
+                        // .withEventTime(new MicroTime("2006-01-02T15:04:05.000000Z"))
+                        // .withNewEventTime(timeFormat)
+                        .withFirstTimestamp(dfe.deployCondition.getLastTransitionTime())
+                        .withLastTimestamp(dfe.deployCondition.getLastUpdateTime())
+                        .withMessage(dfe.getMessage())
+                        .withNewMetadata()
+                        .withGenerateName(flinkApp.getMetadata().getName())
+                        .withNamespace(flinkApp.getMetadata().getNamespace())
+                        .endMetadata()
+                        .withNewSource()
+                        .withComponent(dfe.component)
+                        .endSource();
+        kubernetesClient
+                .v1()
+                .events()
+                .inNamespace(flinkApp.getMetadata().getNamespace())
+                .create(evtb.build());
+    }
+
+    private void updateForReconciliationSuccess(FlinkDeployment flinkApp) {
+        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
+        reconciliationStatus.setSuccess(true);
+        reconciliationStatus.setError(null);
+        reconciliationStatus.setLastReconciledSpec(flinkApp.getSpec());
+    }
+
+    private void updateForReconciliationError(FlinkDeployment flinkApp, String err) {
+        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
+        reconciliationStatus.setSuccess(false);
+        reconciliationStatus.setError(err);
     }
 
     @Override

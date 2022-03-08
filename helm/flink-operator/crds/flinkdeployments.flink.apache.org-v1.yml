@@ -9097,6 +9097,7 @@ spec:
                 - DEPLOYED_NOT_READY
                 - DEPLOYING
                 - MISSING
+                - ERROR
                 type: string
               reconciliationStatus:
                 properties:
