@@ -23,12 +23,14 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
+import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -100,6 +102,19 @@ public class Observer {
                     flinkApp.getMetadata().getNamespace(),
                     status);
 
+            List<DeploymentCondition> conditions = status.getConditions();
+            for (DeploymentCondition dc : conditions) {
+                if ("FailedCreate".equals(dc.getReason())
+                        && "ReplicaFailure".equals(dc.getType())) {
+                    // throw only when not already in error status to allow for spec update
+                    if (!JobManagerDeploymentStatus.ERROR.equals(
+                            deploymentStatus.getJobManagerDeploymentStatus())) {
+                        throw new DeploymentFailedException(
+                                DeploymentFailedException.COMPONENT_JOBMANAGER, dc);
+                    }
+                    return;
+                }
+            }
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
             return;
         }
@@ -181,6 +196,7 @@ public class Observer {
                 return observeFlinkJobStatus(flinkApp, effectiveConfig)
                         && observeSavepointStatus(flinkApp, effectiveConfig);
             case MISSING:
+            case ERROR:
                 return true;
             case DEPLOYING:
             case DEPLOYED_NOT_READY:

@@ -31,6 +31,10 @@ import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodSpec;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
+import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
+import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 
@@ -106,6 +110,64 @@ public class TestUtils {
             @Override
             public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
                 return Optional.empty();
+            }
+        };
+    }
+
+    public static Context createContextWithReadyJobManagerDeployment() {
+        return new Context() {
+            @Override
+            public Optional<RetryInfo> getRetryInfo() {
+                return Optional.empty();
+            }
+
+            @Override
+            public <T> Optional<T> getSecondaryResource(
+                    Class<T> expectedType, String eventSourceName) {
+                DeploymentStatus status = new DeploymentStatus();
+                status.setAvailableReplicas(1);
+                status.setReplicas(1);
+                DeploymentSpec spec = new DeploymentSpec();
+                spec.setReplicas(1);
+                Deployment deployment = new Deployment();
+                deployment.setSpec(spec);
+                deployment.setStatus(status);
+                return Optional.of((T) deployment);
+            }
+        };
+    }
+
+    public static final String DEPLOYMENT_ERROR = "test deployment error message";
+
+    public static Context createContextWithFailedJobManagerDeployment() {
+        return new Context() {
+            @Override
+            public Optional<RetryInfo> getRetryInfo() {
+                return Optional.empty();
+            }
+
+            @Override
+            public <T> Optional<T> getSecondaryResource(
+                    Class<T> expectedType, String eventSourceName) {
+                DeploymentStatus status = new DeploymentStatus();
+                status.setAvailableReplicas(0);
+                status.setReplicas(1);
+                List<DeploymentCondition> conditions =
+                        Collections.singletonList(
+                                new DeploymentCondition(
+                                        null,
+                                        null,
+                                        DEPLOYMENT_ERROR,
+                                        "FailedCreate",
+                                        "status",
+                                        "ReplicaFailure"));
+                status.setConditions(conditions);
+                DeploymentSpec spec = new DeploymentSpec();
+                spec.setReplicas(1);
+                Deployment deployment = new Deployment();
+                deployment.setSpec(spec);
+                deployment.setStatus(status);
+                return Optional.of((T) deployment);
             }
         };
     }

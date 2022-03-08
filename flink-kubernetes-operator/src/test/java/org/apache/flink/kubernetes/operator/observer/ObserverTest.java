@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
-import org.apache.flink.kubernetes.operator.reconciler.JobReconcilerTest;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -40,10 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** @link Observer unit tests */
 public class ObserverTest {
 
-    private final Context readyContext =
-            JobReconcilerTest.createContextWithReadyJobManagerDeployment();
-    private final FlinkOperatorConfiguration operatorConfiguration =
-            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
+    private final Context readyContext = TestUtils.createContextWithReadyJobManagerDeployment();
 
     @Test
     public void observeSessionCluster() {
