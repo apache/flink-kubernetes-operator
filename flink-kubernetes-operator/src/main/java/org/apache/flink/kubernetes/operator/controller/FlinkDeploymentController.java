@@ -51,7 +51,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /** Controller that runs the main reconcile loop for Flink deployments. */
-@ControllerConfiguration(generationAwareEventProcessing = false)
+@ControllerConfiguration
 public class FlinkDeploymentController
         implements Reconciler<FlinkDeployment>,
                 ErrorStatusHandler<FlinkDeployment>,
