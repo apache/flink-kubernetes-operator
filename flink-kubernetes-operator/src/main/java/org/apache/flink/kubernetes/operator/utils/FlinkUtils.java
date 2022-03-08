@@ -177,7 +177,7 @@ public class FlinkUtils {
                                 .withLabels(KubernetesUtils.getJobManagerSelectors(clusterId))
                                 .list();
 
-                if (jmPodList.getItems().isEmpty()) {
+                if (jmPodList == null || jmPodList.getItems().isEmpty()) {
                     jobManagerRunning = false;
                 }
             }

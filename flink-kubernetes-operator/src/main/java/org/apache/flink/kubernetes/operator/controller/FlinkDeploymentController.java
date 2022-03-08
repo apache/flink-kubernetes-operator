@@ -119,24 +119,17 @@ public class FlinkDeploymentController
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
 
         try {
-            boolean readyToReconcile = observer.observe(flinkApp, context, effectiveConfig);
-            if (!readyToReconcile) {
-                return flinkApp.getStatus()
-                        .getJobManagerDeploymentStatus()
-                        .toUpdateControl(flinkApp, operatorConfiguration);
-            }
-
-            UpdateControl<FlinkDeployment> updateControl =
-                    reconcilerFactory
-                            .getOrCreate(flinkApp)
-                            .reconcile(operatorNamespace, flinkApp, context, effectiveConfig);
-            return updateControl;
+            observer.observe(flinkApp, context, effectiveConfig);
+            reconcilerFactory
+                    .getOrCreate(flinkApp)
+                    .reconcile(operatorNamespace, flinkApp, context, effectiveConfig);
         } catch (DeploymentFailedException dfe) {
             handleDeploymentFailed(flinkApp, dfe);
-            return UpdateControl.updateStatus(flinkApp);
         } catch (Exception e) {
             throw new ReconciliationException(e);
         }
+
+        return getUpdateControl(flinkApp);
     }
 
     private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
@@ -155,6 +148,13 @@ public class FlinkDeploymentController
                 .events()
                 .inNamespace(flinkApp.getMetadata().getNamespace())
                 .create(event);
+    }
+
+    private UpdateControl<FlinkDeployment> getUpdateControl(FlinkDeployment deployment) {
+        return deployment
+                .getStatus()
+                .getJobManagerDeploymentStatus()
+                .toUpdateControl(deployment, operatorConfiguration);
     }
 
     @Override

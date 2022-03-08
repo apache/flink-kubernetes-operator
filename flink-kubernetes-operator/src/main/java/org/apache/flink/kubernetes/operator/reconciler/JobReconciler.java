@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
@@ -36,12 +37,12 @@ import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
+
+import static org.apache.flink.kubernetes.operator.observer.Observer.JOB_STATE_UNKNOWN;
 
 /**
  * Reconciler responsible for handling the job lifecycle according to the desired and current
@@ -59,12 +60,13 @@ public class JobReconciler extends BaseReconciler {
     }
 
     @Override
-    public UpdateControl<FlinkDeployment> reconcile(
+    public void reconcile(
             String operatorNamespace,
             FlinkDeployment flinkApp,
             Context context,
             Configuration effectiveConfig)
             throws Exception {
+
         FlinkDeploymentSpec lastReconciledSpec =
                 flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
         JobSpec jobSpec = flinkApp.getSpec().getJob();
@@ -76,14 +78,18 @@ public class JobReconciler extends BaseReconciler {
             IngressUtils.updateIngressRules(
                     flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
-            return JobManagerDeploymentStatus.DEPLOYING.toUpdateControl(
-                    flinkApp, operatorConfiguration);
+            return;
         }
 
-        // TODO: following assumes that current job is running
-        // What if it never enters running state due to bad deployment?
+        if (SavepointUtils.savepointInProgress(flinkApp)) {
+            LOG.info(
+                    "Savepoint currently in progress for {}, delaying reconcile...",
+                    flinkApp.getMetadata().getName());
+            return;
+        }
+
         boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
-        if (specChanged) {
+        if (specChanged && readyForSpecChanges(flinkApp)) {
             JobState currentJobState = lastReconciledSpec.getJob().getState();
             JobState desiredJobState = jobSpec.getState();
 
@@ -94,7 +100,7 @@ public class JobReconciler extends BaseReconciler {
                 }
                 if (desiredJobState.equals(JobState.SUSPENDED)) {
                     printCancelLogs(upgradeMode, flinkApp.getMetadata().getName());
-                    cancelJob(flinkApp, upgradeMode, effectiveConfig);
+                    suspendJob(flinkApp, upgradeMode, effectiveConfig);
                 }
             }
             if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
@@ -115,14 +121,29 @@ public class JobReconciler extends BaseReconciler {
                 }
             }
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
-        } else if (SavepointUtils.shouldTriggerSavepoint(flinkApp)) {
+        } else if (SavepointUtils.shouldTriggerSavepoint(flinkApp) && isJobRunning(flinkApp)) {
             triggerSavepoint(flinkApp, effectiveConfig);
             ReconciliationUtils.updateSavepointReconciliationSuccess(flinkApp);
         }
+    }
 
-        return UpdateControl.updateStatus(flinkApp)
-                .rescheduleAfter(
-                        operatorConfiguration.getReconcileIntervalInSec(), TimeUnit.SECONDS);
+    private boolean readyForSpecChanges(FlinkDeployment deployment) {
+        if (deployment.getSpec().getJob().getUpgradeMode() != UpgradeMode.SAVEPOINT) {
+            // Only savepoint upgrade mode needs a running job
+            return true;
+        }
+        return deployment.getStatus().getJobManagerDeploymentStatus()
+                        == JobManagerDeploymentStatus.MISSING
+                || isJobRunning(deployment);
+    }
+
+    private boolean isJobRunning(FlinkDeployment deployment) {
+        FlinkDeploymentStatus status = deployment.getStatus();
+        JobManagerDeploymentStatus deploymentStatus = status.getJobManagerDeploymentStatus();
+        return deploymentStatus == JobManagerDeploymentStatus.READY
+                && org.apache.flink.api.common.JobStatus.RUNNING
+                        .name()
+                        .equals(status.getJobStatus().getState());
     }
 
     private void deployFlinkJob(
@@ -134,13 +155,15 @@ public class JobReconciler extends BaseReconciler {
             effectiveConfig.removeConfig(SavepointConfigOptions.SAVEPOINT_PATH);
         }
         flinkService.submitApplicationCluster(flinkApp, effectiveConfig);
+        flinkApp.getStatus().getJobStatus().setState(JOB_STATE_UNKNOWN);
+        flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
     }
 
     private void upgradeFlinkJob(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         LOG.info("Upgrading running job");
         final Optional<String> savepoint =
-                cancelJob(flinkApp, flinkApp.getSpec().getJob().getUpgradeMode(), effectiveConfig);
+                suspendJob(flinkApp, flinkApp.getSpec().getJob().getUpgradeMode(), effectiveConfig);
         deployFlinkJob(flinkApp, effectiveConfig, savepoint);
     }
 
@@ -169,16 +192,24 @@ public class JobReconciler extends BaseReconciler {
         }
     }
 
-    private Optional<String> cancelJob(
+    private Optional<String> suspendJob(
             FlinkDeployment flinkApp, UpgradeMode upgradeMode, Configuration effectiveConfig)
             throws Exception {
-        Optional<String> savepointOpt =
-                flinkService.cancelJob(
-                        JobID.fromHexString(flinkApp.getStatus().getJobStatus().getJobId()),
-                        upgradeMode,
-                        effectiveConfig);
+
+        Optional<String> savepointOpt = Optional.empty();
+        if (upgradeMode == UpgradeMode.STATELESS) {
+            shutdown(flinkApp, effectiveConfig);
+        } else {
+            String jobIdString = flinkApp.getStatus().getJobStatus().getJobId();
+            savepointOpt =
+                    flinkService.cancelJob(
+                            jobIdString != null ? JobID.fromHexString(jobIdString) : null,
+                            upgradeMode,
+                            effectiveConfig);
+        }
+
         JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
-        jobStatus.setState("suspended");
+        jobStatus.setState(JobState.SUSPENDED.name());
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
         savepointOpt.ifPresent(
                 location -> {
@@ -189,9 +220,7 @@ public class JobReconciler extends BaseReconciler {
 
     @Override
     protected void shutdown(FlinkDeployment flinkApp, Configuration effectiveConfig) {
-        if (org.apache.flink.api.common.JobStatus.RUNNING
-                .name()
-                .equalsIgnoreCase(flinkApp.getStatus().getJobStatus().getState())) {
+        if (isJobRunning(flinkApp)) {
             LOG.info("Job is running, attempting graceful shutdown.");
             try {
                 flinkService.cancelJob(

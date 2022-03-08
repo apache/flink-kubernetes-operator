@@ -42,7 +42,6 @@ import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
-import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,14 +49,13 @@ import org.junit.jupiter.api.Test;
 
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -78,7 +76,7 @@ public class FlinkDeploymentControllerTest {
     @BeforeEach
     public void setup() {
         flinkService = new TestingFlinkService();
-        mockServer = new KubernetesMockServer(new MockWebServer(), new HashMap<>(), true);
+        mockServer = new KubernetesMockServer();
         mockServer.init();
         kubernetesClient = mockServer.createClient();
         testController = createTestController(kubernetesClient, flinkService);
@@ -156,7 +154,6 @@ public class FlinkDeploymentControllerTest {
 
     @Test
     public void verifyFailedDeployment() throws Exception {
-
         mockServer
                 .expect()
                 .post()
@@ -169,11 +166,15 @@ public class FlinkDeploymentControllerTest {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         UpdateControl<FlinkDeployment> updateControl;
 
-        updateControl =
-                testController.reconcile(
-                        appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+        updateControl = testController.reconcile(appCluster, TestUtils.createEmptyContext());
+        testController.reconcile(
+                appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
         assertTrue(updateControl.isUpdateStatus());
-        assertEquals(Optional.empty(), updateControl.getScheduleDelay());
+        assertEquals(
+                JobManagerDeploymentStatus.ERROR
+                        .toUpdateControl(appCluster, operatorConfiguration)
+                        .getScheduleDelay(),
+                updateControl.getScheduleDelay());
 
         RecordedRequest recordedRequest = mockServer.getLastRequest();
         assertEquals("POST", recordedRequest.getMethod());
@@ -265,6 +266,9 @@ public class FlinkDeploymentControllerTest {
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
 
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+
         // Upgrade job
         appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().getJob().setParallelism(100);
@@ -272,7 +276,7 @@ public class FlinkDeploymentControllerTest {
         UpdateControl<FlinkDeployment> updateControl =
                 testController.reconcile(appCluster, context);
         assertEquals(
-                JobManagerDeploymentStatus.DEPLOYED_NOT_READY
+                JobManagerDeploymentStatus.DEPLOYING
                         .toUpdateControl(appCluster, operatorConfiguration)
                         .getScheduleDelay(),
                 updateControl.getScheduleDelay());
@@ -280,6 +284,9 @@ public class FlinkDeploymentControllerTest {
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals(null, jobs.get(0).f0);
+
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
 
         // Suspend job
         appCluster = ReconciliationUtils.clone(appCluster);
@@ -293,6 +300,113 @@ public class FlinkDeploymentControllerTest {
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals(null, jobs.get(0).f0);
+    }
+
+    @Test
+    public void testUpgradeNotReadyCluster() {
+        testUpgradeNotReadyCluster(TestUtils.buildSessionCluster(), true);
+
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
+        testUpgradeNotReadyCluster(appCluster, true);
+
+        appCluster = TestUtils.buildApplicationCluster();
+        appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        testUpgradeNotReadyCluster(appCluster, true);
+
+        appCluster = TestUtils.buildApplicationCluster();
+        appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        testUpgradeNotReadyCluster(appCluster, false);
+    }
+
+    public void testUpgradeNotReadyCluster(FlinkDeployment appCluster, boolean allowUpgrade) {
+        mockServer
+                .expect()
+                .delete()
+                .withPath("/apis/apps/v1/namespaces/flink-operator-test/deployments/test-cluster")
+                .andReturn(
+                        HttpURLConnection.HTTP_CREATED,
+                        new EventBuilder().withNewMetadata().endMetadata().build())
+                .always();
+
+        mockServer
+                .expect()
+                .get()
+                .withPath(
+                        "/api/v1/namespaces/flink-operator-test/pods?labelSelector=app%3Dtest-cluster%2Ccomponent%3Djobmanager%2Ctype%3Dflink-native-kubernetes")
+                .andReturn(
+                        HttpURLConnection.HTTP_CREATED,
+                        new EventBuilder().withNewMetadata().endMetadata().build())
+                .always();
+
+        testController.reconcile(appCluster, TestUtils.createEmptyContext());
+        assertEquals(
+                appCluster.getSpec(),
+                appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec());
+
+        flinkService.setPortReady(false);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        // trigger change
+        appCluster.getSpec().setServiceAccount(appCluster.getSpec().getServiceAccount() + "-2");
+
+        // Verify that even in DEPLOYING state we still redeploy
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        if (allowUpgrade) {
+            assertEquals(
+                    JobManagerDeploymentStatus.DEPLOYING,
+                    appCluster.getStatus().getJobManagerDeploymentStatus());
+            assertEquals(
+                    appCluster.getSpec(),
+                    appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec());
+
+            flinkService.setPortReady(true);
+            testController.reconcile(appCluster, context);
+            testController.reconcile(appCluster, context);
+
+            if (appCluster.getSpec().getJob() != null) {
+                assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+            } else {
+                assertNull(appCluster.getStatus().getJobStatus().getState());
+            }
+            assertEquals(
+                    JobManagerDeploymentStatus.READY,
+                    appCluster.getStatus().getJobManagerDeploymentStatus());
+        } else {
+            assertEquals(
+                    JobManagerDeploymentStatus.DEPLOYING,
+                    appCluster.getStatus().getJobManagerDeploymentStatus());
+            assertNotEquals(
+                    appCluster.getSpec(),
+                    appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec());
+
+            flinkService.setPortReady(true);
+            testController.reconcile(appCluster, context);
+            testController.reconcile(appCluster, context);
+
+            assertEquals(
+                    JobManagerDeploymentStatus.DEPLOYING,
+                    appCluster.getStatus().getJobManagerDeploymentStatus());
+            assertEquals(
+                    appCluster.getSpec(),
+                    appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec());
+
+            testController.reconcile(appCluster, context);
+            assertEquals(
+                    JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                    appCluster.getStatus().getJobManagerDeploymentStatus());
+
+            testController.reconcile(appCluster, context);
+
+            assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+            assertEquals(
+                    JobManagerDeploymentStatus.READY,
+                    appCluster.getStatus().getJobManagerDeploymentStatus());
+        }
     }
 
     @Test

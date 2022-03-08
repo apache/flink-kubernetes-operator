@@ -89,6 +89,11 @@ public class TestingFlinkService extends FlinkService {
     public Optional<String> cancelJob(JobID jobID, UpgradeMode upgradeMode, Configuration conf)
             throws Exception {
 
+        if (upgradeMode == UpgradeMode.LAST_STATE) {
+            jobs.clear();
+            return Optional.empty();
+        }
+
         if (!jobs.removeIf(js -> js.f1.getJobId().equals(jobID))) {
             throw new Exception("Job not found");
         }

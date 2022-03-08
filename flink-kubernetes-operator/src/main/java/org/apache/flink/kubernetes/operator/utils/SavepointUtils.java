@@ -25,8 +25,13 @@ import java.util.concurrent.TimeUnit;
 
 /** Savepoint utilities. */
 public class SavepointUtils {
+
+    public static boolean savepointInProgress(FlinkDeployment flinkDeployment) {
+        return flinkDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId() != null;
+    }
+
     public static boolean shouldTriggerSavepoint(FlinkDeployment flinkDeployment) {
-        if (flinkDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId() != null) {
+        if (savepointInProgress(flinkDeployment)) {
             return false;
         }
         return flinkDeployment.getSpec().getJob().getSavepointTriggerNonce()

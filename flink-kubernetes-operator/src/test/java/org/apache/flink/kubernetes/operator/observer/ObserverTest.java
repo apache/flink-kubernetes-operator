@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -32,9 +33,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link Observer unit tests */
 public class ObserverTest {
@@ -54,21 +53,19 @@ public class ObserverTest {
                 .getReconciliationStatus()
                 .setLastReconciledSpec(deployment.getSpec());
 
-        assertFalse(
-                observer.observe(
-                        deployment,
-                        readyContext,
-                        FlinkUtils.getEffectiveConfig(deployment, new Configuration())));
+        observer.observe(
+                deployment,
+                readyContext,
+                FlinkUtils.getEffectiveConfig(deployment, new Configuration()));
 
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
 
-        assertTrue(
-                observer.observe(
-                        deployment,
-                        readyContext,
-                        FlinkUtils.getEffectiveConfig(deployment, new Configuration())));
+        observer.observe(
+                deployment,
+                readyContext,
+                FlinkUtils.getEffectiveConfig(deployment, new Configuration()));
 
         assertEquals(
                 JobManagerDeploymentStatus.READY,
@@ -85,7 +82,7 @@ public class ObserverTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
-        assertTrue(observer.observe(deployment, TestUtils.createEmptyContext(), conf));
+        observer.observe(deployment, TestUtils.createEmptyContext(), conf);
 
         deployment.setStatus(new FlinkDeploymentStatus());
         deployment
@@ -99,33 +96,35 @@ public class ObserverTest {
         flinkService.setPortReady(false);
 
         // Port not ready
-        assertFalse(observer.observe(deployment, readyContext, conf));
+        observer.observe(deployment, readyContext, conf);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
                 deployment.getStatus().getJobManagerDeploymentStatus());
 
-        assertFalse(observer.observe(deployment, readyContext, conf));
+        observer.observe(deployment, readyContext, conf);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
                 deployment.getStatus().getJobManagerDeploymentStatus());
 
         flinkService.setPortReady(true);
         // Port ready but we have to recheck once again
-        assertFalse(observer.observe(deployment, readyContext, conf));
+        observer.observe(deployment, readyContext, conf);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
 
         // Stable ready
-        assertTrue(observer.observe(deployment, readyContext, conf));
+        observer.observe(deployment, readyContext, conf);
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(JobState.RUNNING.name(), deployment.getStatus().getJobStatus().getState());
 
-        assertTrue(observer.observe(deployment, readyContext, conf));
+        observer.observe(deployment, readyContext, conf);
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(JobState.RUNNING.name(), deployment.getStatus().getJobStatus().getState());
 
         assertEquals(
                 deployment.getMetadata().getName(),
@@ -133,11 +132,11 @@ public class ObserverTest {
 
         // Test listing failure
         flinkService.clear();
-        assertFalse(observer.observe(deployment, readyContext, conf));
+        observer.observe(deployment, readyContext, conf);
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
-        assertEquals("UNKNOWN", deployment.getStatus().getJobStatus().getState());
+        assertEquals(Observer.JOB_STATE_UNKNOWN, deployment.getStatus().getJobStatus().getState());
     }
 
     @Test
@@ -151,7 +150,7 @@ public class ObserverTest {
         Configuration conf = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
         flinkService.submitApplicationCluster(deployment, conf);
         bringToReadyStatus(deployment);
-        assertTrue(observer.observe(deployment, readyContext, conf));
+        observer.observe(deployment, readyContext, conf);
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
@@ -160,7 +159,7 @@ public class ObserverTest {
         assertEquals(
                 "trigger_0",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
-        assertTrue(observer.observe(deployment, readyContext, conf));
+        observer.observe(deployment, readyContext, conf);
         assertEquals(
                 "savepoint_0",
                 deployment
@@ -175,7 +174,7 @@ public class ObserverTest {
         assertEquals(
                 "trigger_1",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
-        assertTrue(observer.observe(deployment, readyContext, conf));
+        observer.observe(deployment, readyContext, conf);
         assertEquals(
                 "savepoint_1",
                 deployment
@@ -195,7 +194,7 @@ public class ObserverTest {
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobName("jobname");
         jobStatus.setJobId("0000000000");
-        jobStatus.setState("RUNNING");
+        jobStatus.setState(JobState.RUNNING.name());
         deployment.getStatus().setJobStatus(jobStatus);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
     }

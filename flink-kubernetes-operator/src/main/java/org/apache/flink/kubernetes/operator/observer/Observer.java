@@ -48,6 +48,8 @@ public class Observer {
 
     private static final Logger LOG = LoggerFactory.getLogger(Observer.class);
 
+    public static final String JOB_STATE_UNKNOWN = "UNKNOWN";
+
     private final FlinkService flinkService;
     private final FlinkOperatorConfiguration operatorConfiguration;
 
@@ -56,10 +58,20 @@ public class Observer {
         this.operatorConfiguration = operatorConfiguration;
     }
 
-    public boolean observe(
-            FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
+    public void observe(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
         observeJmDeployment(flinkApp, context, effectiveConfig);
-        return isReadyToReconcile(flinkApp, effectiveConfig);
+        if (isApplicationClusterReady(flinkApp)) {
+            boolean jobFound = observeFlinkJobStatus(flinkApp, effectiveConfig);
+            if (jobFound) {
+                observeSavepointStatus(flinkApp, effectiveConfig);
+            }
+        }
+    }
+
+    private boolean isApplicationClusterReady(FlinkDeployment dep) {
+        return dep.getSpec().getJob() != null
+                && dep.getStatus().getJobManagerDeploymentStatus()
+                        == JobManagerDeploymentStatus.READY;
     }
 
     private void observeJmDeployment(
@@ -123,12 +135,6 @@ public class Observer {
     }
 
     private boolean observeFlinkJobStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
-
-        // No need to observe job status for session clusters
-        if (flinkApp.getSpec().getJob() == null) {
-            return true;
-        }
-
         LOG.info("Getting job statuses for {}", flinkApp.getMetadata().getName());
         FlinkDeploymentStatus flinkAppStatus = flinkApp.getStatus();
 
@@ -137,32 +143,32 @@ public class Observer {
             clusterJobStatuses = flinkService.listJobs(effectiveConfig);
         } catch (Exception e) {
             LOG.error("Exception while listing jobs", e);
-            flinkAppStatus.getJobStatus().setState("UNKNOWN");
+            flinkAppStatus.getJobStatus().setState(JOB_STATE_UNKNOWN);
             return false;
         }
         if (clusterJobStatuses.isEmpty()) {
             LOG.info("No jobs found on {} yet", flinkApp.getMetadata().getName());
+            flinkAppStatus.getJobStatus().setState(JOB_STATE_UNKNOWN);
             return false;
-        } else {
-            updateJobStatus(flinkAppStatus.getJobStatus(), new ArrayList<>(clusterJobStatuses));
-            LOG.info("Job statuses updated for {}", flinkApp.getMetadata().getName());
-            return true;
         }
+
+        updateJobStatus(flinkAppStatus.getJobStatus(), new ArrayList<>(clusterJobStatuses));
+        LOG.info("Job statuses updated for {}", flinkApp.getMetadata().getName());
+        return true;
     }
 
-    private boolean observeSavepointStatus(
-            FlinkDeployment flinkApp, Configuration effectiveConfig) {
+    private void observeSavepointStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
         SavepointInfo savepointInfo = flinkApp.getStatus().getJobStatus().getSavepointInfo();
-        if (savepointInfo.getTriggerId() == null) {
+        if (!SavepointUtils.savepointInProgress(flinkApp)) {
             LOG.debug("Checkpointing not in progress");
-            return true;
+            return;
         }
         SavepointFetchResult savepointFetchResult;
         try {
             savepointFetchResult = flinkService.fetchSavepointInfo(flinkApp, effectiveConfig);
         } catch (Exception e) {
             LOG.error("Exception while fetching savepoint info", e);
-            return false;
+            return;
         }
 
         if (!savepointFetchResult.isTriggered()) {
@@ -173,37 +179,17 @@ public class Observer {
                 LOG.error(errorMsg);
                 savepointInfo.setTriggerId(null);
                 ReconciliationUtils.updateForReconciliationError(flinkApp, errorMsg);
-                return false;
+                return;
             }
             LOG.info("Savepoint operation not running, waiting within grace period");
         }
         if (savepointFetchResult.getSavepoint() == null) {
             LOG.info("Savepoint not completed yet");
-            return false;
+            return;
         }
 
         savepointInfo.setLastSavepoint(savepointFetchResult.getSavepoint());
         savepointInfo.setTriggerId(null);
-        return true;
-    }
-
-    private boolean isReadyToReconcile(FlinkDeployment flinkApp, Configuration effectiveConfig) {
-        JobManagerDeploymentStatus jmDeploymentStatus =
-                flinkApp.getStatus().getJobManagerDeploymentStatus();
-
-        switch (jmDeploymentStatus) {
-            case READY:
-                return observeFlinkJobStatus(flinkApp, effectiveConfig)
-                        && observeSavepointStatus(flinkApp, effectiveConfig);
-            case MISSING:
-            case ERROR:
-                return true;
-            case DEPLOYING:
-            case DEPLOYED_NOT_READY:
-                return false;
-            default:
-                throw new RuntimeException("Unknown status: " + jmDeploymentStatus);
-        }
     }
 
     /** Update previous job status based on the job list from the cluster. */

@@ -48,6 +48,8 @@ public enum JobManagerDeploymentStatus {
         switch (this) {
             case DEPLOYING:
             case READY:
+            case MISSING:
+            case ERROR:
                 return UpdateControl.updateStatus(flinkDeployment)
                         .rescheduleAfter(
                                 operatorConfiguration.getReconcileIntervalInSec(),
@@ -57,10 +59,8 @@ public enum JobManagerDeploymentStatus {
                         .rescheduleAfter(
                                 operatorConfiguration.getPortCheckIntervalInSec(),
                                 TimeUnit.SECONDS);
-            case MISSING:
-            case ERROR:
             default:
-                return UpdateControl.noUpdate();
+                throw new RuntimeException("Unknown status: " + this);
         }
     }
 }
