@@ -17,8 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
-import org.apache.flink.util.FileUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
 import org.apache.flink.shaded.netty4.io.netty.channel.embedded.EmbeddedChannel;
@@ -26,19 +27,20 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultFullHtt
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultFullHttpResponse;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultHttpResponse;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import io.fabric8.kubernetes.api.model.admission.v1.AdmissionRequest;
+import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
 import org.junit.jupiter.api.Test;
 
-import java.io.File;
 import java.io.IOException;
-import java.util.Objects;
 
 import static org.apache.flink.kubernetes.operator.admission.AdmissionHandler.VALIDATE_REQUEST_PATH;
+import static org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation.CREATE;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpMethod.GET;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.OK;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
-import static org.apache.flink.shaded.netty4.io.netty.util.CharsetUtil.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -81,21 +83,22 @@ public class AdmissionHandlerTest {
     @Test
     public void testHandleValidateRequestWithAdmissionReview() throws IOException {
         final EmbeddedChannel embeddedChannel = new EmbeddedChannel(admissionHandler);
+        final FlinkDeployment flinkDeployment = new FlinkDeployment();
+        flinkDeployment.setSpec(new FlinkDeploymentSpec());
+        final AdmissionRequest admissionRequest = new AdmissionRequest();
+        admissionRequest.setOperation(CREATE.name());
+        admissionRequest.setObject(flinkDeployment);
+        final AdmissionReview admissionReview = new AdmissionReview();
+        admissionReview.setRequest(admissionRequest);
         embeddedChannel.writeInbound(
                 new DefaultFullHttpRequest(
                         HTTP_1_1,
                         GET,
                         VALIDATE_REQUEST_PATH,
                         Unpooled.wrappedBuffer(
-                                FileUtils.readFileUtf8(
-                                                new File(
-                                                        Objects.requireNonNull(
-                                                                        getClass()
-                                                                                .getClassLoader()
-                                                                                .getResource(
-                                                                                        "admission-review.json"))
-                                                                .getPath()))
-                                        .getBytes(UTF_8))));
+                                new ObjectMapper()
+                                        .writeValueAsString(admissionReview)
+                                        .getBytes())));
         embeddedChannel.writeOutbound(new DefaultFullHttpResponse(HTTP_1_1, OK));
         final DefaultHttpResponse response = embeddedChannel.readOutbound();
         assertEquals(OK, response.status());
