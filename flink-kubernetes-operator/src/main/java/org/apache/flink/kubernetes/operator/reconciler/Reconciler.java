@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 
 /** The interface of reconciler. */
 public interface Reconciler {
@@ -35,10 +34,8 @@ public interface Reconciler {
      * @param flinkApp the FlinkDeployment resource that has been created or updated
      * @param context the context with which the operation is executed
      * @param effectiveConfig the effective config of the flinkApp
-     * @return UpdateControl to manage updates on the custom resource (usually the status) after
-     *     reconciliation.
      */
-    UpdateControl<FlinkDeployment> reconcile(
+    void reconcile(
             String operatorNamespace,
             FlinkDeployment flinkApp,
             Context context,

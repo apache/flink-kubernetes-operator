@@ -17,7 +17,9 @@
 
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
@@ -25,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 
 import io.fabric8.kubernetes.api.model.Container;
@@ -39,7 +42,9 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** Testing utilities. */
@@ -72,19 +77,26 @@ public class TestUtils {
                         JobSpec.builder()
                                 .jarURI(SAMPLE_JAR)
                                 .parallelism(1)
+                                .upgradeMode(UpgradeMode.STATELESS)
                                 .state(JobState.RUNNING)
                                 .build());
         return deployment;
     }
 
     public static FlinkDeploymentSpec getTestFlinkDeploymentSpec() {
+        Map<String, String> conf = new HashMap<>();
+        conf.put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+        conf.put(
+                HighAvailabilityOptions.HA_MODE.key(),
+                KubernetesHaServicesFactory.class.getCanonicalName());
+        conf.put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), "test");
+
         return FlinkDeploymentSpec.builder()
                 .image(IMAGE)
                 .imagePullPolicy(IMAGE_POLICY)
                 .serviceAccount(SERVICE_ACCOUNT)
                 .flinkVersion(FLINK_VERSION)
-                .flinkConfiguration(
-                        Collections.singletonMap(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2"))
+                .flinkConfiguration(conf)
                 .jobManager(new JobManagerSpec(new Resource(1, "2048m"), 1, null))
                 .taskManager(new TaskManagerSpec(new Resource(1, "2048m"), null))
                 .build();

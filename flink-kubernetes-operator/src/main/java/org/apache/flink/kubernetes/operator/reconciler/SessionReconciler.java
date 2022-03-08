@@ -21,14 +21,12 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
-
-import java.util.concurrent.TimeUnit;
 
 /**
  * Reconciler responsible for handling the session cluster lifecycle according to the desired and
@@ -44,7 +42,7 @@ public class SessionReconciler extends BaseReconciler {
     }
 
     @Override
-    public UpdateControl<FlinkDeployment> reconcile(
+    public void reconcile(
             String operatorNamespace,
             FlinkDeployment flinkApp,
             Context context,
@@ -56,6 +54,8 @@ public class SessionReconciler extends BaseReconciler {
 
         if (lastReconciledSpec == null) {
             flinkService.submitSessionCluster(flinkApp, effectiveConfig);
+            flinkApp.getStatus()
+                    .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
             IngressUtils.updateIngressRules(
                     flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
         }
@@ -65,15 +65,13 @@ public class SessionReconciler extends BaseReconciler {
             upgradeSessionCluster(flinkApp, effectiveConfig);
         }
         ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
-        return UpdateControl.updateStatus(flinkApp)
-                .rescheduleAfter(
-                        operatorConfiguration.getReconcileIntervalInSec(), TimeUnit.SECONDS);
     }
 
     private void upgradeSessionCluster(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         flinkService.stopSessionCluster(flinkApp, effectiveConfig, false);
         flinkService.submitSessionCluster(flinkApp, effectiveConfig);
+        flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
     }
 
     @Override

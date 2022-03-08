@@ -33,6 +33,7 @@ import org.junit.Assert;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -62,7 +63,10 @@ public class DeploymentValidatorTest {
                 dep -> dep.getSpec().getJob().setParallelism(-1),
                 "Job parallelism must be larger than 0");
         testError(
-                dep -> dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE),
+                dep -> {
+                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
+                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+                },
                 "Job could not be upgraded with last-state while HA disabled");
 
         // Test conf validation
@@ -93,7 +97,10 @@ public class DeploymentValidatorTest {
                 "Invalid log config key");
 
         testError(
-                dep -> dep.getSpec().getJobManager().setReplicas(2),
+                dep -> {
+                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
+                    dep.getSpec().getJobManager().setReplicas(2);
+                },
                 "High availability should be enabled when starting standby JobManagers.");
         testError(
                 dep -> dep.getSpec().getJobManager().setReplicas(0),
