@@ -106,8 +106,13 @@ public class Observer {
             for (DeploymentCondition dc : conditions) {
                 if ("FailedCreate".equals(dc.getReason())
                         && "ReplicaFailure".equals(dc.getType())) {
-                    throw new DeploymentFailedException(
-                            DeploymentFailedException.COMPONENT_JOBMANAGER, dc);
+                    // throw only when not already in error status to allow for spec update
+                    if (!JobManagerDeploymentStatus.ERROR.equals(
+                            deploymentStatus.getJobManagerDeploymentStatus())) {
+                        throw new DeploymentFailedException(
+                                DeploymentFailedException.COMPONENT_JOBMANAGER, dc);
+                    }
+                    return;
                 }
             }
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
@@ -191,6 +196,7 @@ public class Observer {
                 return observeFlinkJobStatus(flinkApp, effectiveConfig)
                         && observeSavepointStatus(flinkApp, effectiveConfig);
             case MISSING:
+            case ERROR:
                 return true;
             case DEPLOYING:
             case DEPLOYED_NOT_READY:
