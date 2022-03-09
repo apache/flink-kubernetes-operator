@@ -158,13 +158,6 @@ public class FlinkDeploymentController
                 .create(event);
     }
 
-    private void updateForReconciliationSuccess(FlinkDeployment flinkApp) {
-        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
-        reconciliationStatus.setSuccess(true);
-        reconciliationStatus.setError(null);
-        reconciliationStatus.setLastReconciledSpec(flinkApp.getSpec());
-    }
-
     private void updateForReconciliationError(FlinkDeployment flinkApp, String err) {
         ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
         reconciliationStatus.setSuccess(false);
