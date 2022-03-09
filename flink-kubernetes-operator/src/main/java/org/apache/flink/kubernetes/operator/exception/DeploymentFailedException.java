@@ -17,6 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.exception;
 
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+
+import io.fabric8.kubernetes.api.model.Event;
+import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 
 /** Exception to signal terminal deployment failure. */
@@ -30,5 +34,30 @@ public class DeploymentFailedException extends RuntimeException {
         super(deployCondition.getMessage());
         this.component = component;
         this.deployCondition = deployCondition;
+    }
+
+    public static Event asEvent(DeploymentFailedException dfe, FlinkDeployment flinkApp) {
+        EventBuilder evtb =
+                new EventBuilder()
+                        .withApiVersion("v1")
+                        .withNewInvolvedObject()
+                        .withKind(flinkApp.getKind())
+                        .withName(flinkApp.getMetadata().getName())
+                        .withNamespace(flinkApp.getMetadata().getNamespace())
+                        .withUid(flinkApp.getMetadata().getUid())
+                        .endInvolvedObject()
+                        .withType(dfe.deployCondition.getType())
+                        .withReason(dfe.deployCondition.getReason())
+                        .withFirstTimestamp(dfe.deployCondition.getLastTransitionTime())
+                        .withLastTimestamp(dfe.deployCondition.getLastUpdateTime())
+                        .withMessage(dfe.getMessage())
+                        .withNewMetadata()
+                        .withGenerateName(flinkApp.getMetadata().getName())
+                        .withNamespace(flinkApp.getMetadata().getNamespace())
+                        .endMetadata()
+                        .withNewSource()
+                        .withComponent(dfe.component)
+                        .endSource();
+        return evtb.build();
     }
 }

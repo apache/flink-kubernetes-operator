@@ -33,7 +33,7 @@ import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
 import org.apache.flink.util.Preconditions;
 
-import io.fabric8.kubernetes.api.model.EventBuilder;
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -133,15 +133,14 @@ public class FlinkDeploymentController
                             .reconcile(operatorNamespace, flinkApp, context, effectiveConfig);
             return updateControl;
         } catch (DeploymentFailedException dfe) {
-            updateForDeploymentFailed(flinkApp, dfe);
+            handleDeploymentFailed(flinkApp, dfe);
             return UpdateControl.updateStatus(flinkApp);
         } catch (Exception e) {
             throw new ReconciliationException(e);
         }
     }
 
-    private void updateForDeploymentFailed(
-            FlinkDeployment flinkApp, DeploymentFailedException dfe) {
+    private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
         LOG.error(
                 "Deployment {}/{} failed with {}",
                 flinkApp.getMetadata().getNamespace(),
@@ -151,35 +150,12 @@ public class FlinkDeploymentController
         updateForReconciliationError(flinkApp, dfe.getMessage());
 
         // TODO: avoid repeated event
-        EventBuilder evtb =
-                new EventBuilder()
-                        .withApiVersion("v1")
-                        .withNewInvolvedObject()
-                        .withKind(flinkApp.getKind())
-                        .withName(flinkApp.getMetadata().getName())
-                        .withNamespace(flinkApp.getMetadata().getNamespace())
-                        .withUid(flinkApp.getMetadata().getUid())
-                        .endInvolvedObject()
-                        .withType(dfe.deployCondition.getType())
-                        .withReason(dfe.deployCondition.getReason())
-                        // TODO: timestamp
-                        // .withEventTime(new MicroTime("2006-01-02T15:04:05.000000Z"))
-                        // .withNewEventTime(timeFormat)
-                        .withFirstTimestamp(dfe.deployCondition.getLastTransitionTime())
-                        .withLastTimestamp(dfe.deployCondition.getLastUpdateTime())
-                        .withMessage(dfe.getMessage())
-                        .withNewMetadata()
-                        .withGenerateName(flinkApp.getMetadata().getName())
-                        .withNamespace(flinkApp.getMetadata().getNamespace())
-                        .endMetadata()
-                        .withNewSource()
-                        .withComponent(dfe.component)
-                        .endSource();
+        Event event = DeploymentFailedException.asEvent(dfe, flinkApp);
         kubernetesClient
                 .v1()
                 .events()
                 .inNamespace(flinkApp.getMetadata().getNamespace())
-                .create(evtb.build());
+                .create(event);
     }
 
     private void updateForReconciliationSuccess(FlinkDeployment flinkApp) {

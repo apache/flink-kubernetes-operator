@@ -30,15 +30,10 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
-import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
-import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -50,32 +45,9 @@ public class JobReconcilerTest {
     private final FlinkOperatorConfiguration operatorConfiguration =
             FlinkOperatorConfiguration.fromConfiguration(new Configuration());
 
-    public static Context createContextWithReadyJobManagerDeployment() {
-        return new Context() {
-            @Override
-            public Optional<RetryInfo> getRetryInfo() {
-                return Optional.empty();
-            }
-
-            @Override
-            public <T> Optional<T> getSecondaryResource(
-                    Class<T> expectedType, String eventSourceName) {
-                DeploymentStatus status = new DeploymentStatus();
-                status.setAvailableReplicas(1);
-                status.setReplicas(1);
-                DeploymentSpec spec = new DeploymentSpec();
-                spec.setReplicas(1);
-                Deployment deployment = new Deployment();
-                deployment.setSpec(spec);
-                deployment.setStatus(status);
-                return Optional.of((T) deployment);
-            }
-        };
-    }
-
     @Test
     public void testUpgrade() throws Exception {
-        Context context = JobReconcilerTest.createContextWithReadyJobManagerDeployment();
+        Context context = TestUtils.createContextWithReadyJobManagerDeployment();
         TestingFlinkService flinkService = new TestingFlinkService();
 
         JobReconciler reconciler = new JobReconciler(null, flinkService, operatorConfiguration);
@@ -116,7 +88,7 @@ public class JobReconcilerTest {
     @Test
     public void testUpgradeModeChangeFromSavepointToLastState() throws Exception {
         final String expectedSavepointPath = "savepoint_0";
-        final Context context = JobReconcilerTest.createContextWithReadyJobManagerDeployment();
+        final Context context = TestUtils.createContextWithReadyJobManagerDeployment();
         final TestingFlinkService flinkService = new TestingFlinkService();
 
         final JobReconciler reconciler =
