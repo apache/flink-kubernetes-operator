@@ -140,7 +140,7 @@ public class JobReconcilerTest {
 
     @Test
     public void triggerSavepoint() throws Exception {
-        Context context = JobReconcilerTest.createContextWithReadyJobManagerDeployment();
+        Context context = TestUtils.createContextWithReadyJobManagerDeployment();
         TestingFlinkService flinkService = new TestingFlinkService();
         JobReconciler reconciler = new JobReconciler(null, flinkService, operatorConfiguration);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
