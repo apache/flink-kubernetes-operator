@@ -147,7 +147,10 @@ public class FlinkDeploymentController
                 flinkApp.getMetadata().getName(),
                 dfe.getMessage());
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-        updateForReconciliationError(flinkApp, dfe.getMessage());
+
+        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
+        reconciliationStatus.setSuccess(false);
+        reconciliationStatus.setError(dfe.getMessage());
 
         // TODO: avoid repeated event
         Event event = DeploymentFailedException.asEvent(dfe, flinkApp);
@@ -156,12 +159,6 @@ public class FlinkDeploymentController
                 .events()
                 .inNamespace(flinkApp.getMetadata().getNamespace())
                 .create(event);
-    }
-
-    private void updateForReconciliationError(FlinkDeployment flinkApp, String err) {
-        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
-        reconciliationStatus.setSuccess(false);
-        reconciliationStatus.setError(err);
     }
 
     @Override
