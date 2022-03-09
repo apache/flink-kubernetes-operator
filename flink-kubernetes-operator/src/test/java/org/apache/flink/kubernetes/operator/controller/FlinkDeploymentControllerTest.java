@@ -163,10 +163,7 @@ public class FlinkDeploymentControllerTest {
                 .withPath("/api/v1/namespaces/flink-operator-test/events")
                 .andReturn(
                         HttpURLConnection.HTTP_CREATED,
-                        new EventBuilder()
-                                .withNewMetadata()
-                                .endMetadata()
-                                .build())
+                        new EventBuilder().withNewMetadata().endMetadata().build())
                 .once();
 
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
