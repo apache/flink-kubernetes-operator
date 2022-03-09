@@ -187,6 +187,20 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getReconciliationStatus();
         assertFalse(reconciliationStatus.isSuccess());
         assertNotNull(reconciliationStatus.getError());
+
+        // next cycle should not create another event
+        updateControl =
+                testController.reconcile(
+                        appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+        assertEquals(
+                JobManagerDeploymentStatus.ERROR,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertTrue(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.READY
+                        .toUpdateControl(appCluster, operatorConfiguration)
+                        .getScheduleDelay(),
+                updateControl.getScheduleDelay());
     }
 
     @Test
