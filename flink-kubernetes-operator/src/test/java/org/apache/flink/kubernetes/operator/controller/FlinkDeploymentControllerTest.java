@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -50,7 +49,9 @@ import org.junit.jupiter.api.Test;
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
@@ -65,7 +66,7 @@ public class FlinkDeploymentControllerTest {
 
     private final Context context = TestUtils.createContextWithReadyJobManagerDeployment();
     private final FlinkOperatorConfiguration operatorConfiguration =
-            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
+            new FlinkOperatorConfiguration(1, 2, 3, 4);
 
     private TestingFlinkService flinkService;
     private FlinkDeploymentController testController;
@@ -97,9 +98,9 @@ public class FlinkDeploymentControllerTest {
         updateControl = testController.reconcile(appCluster, TestUtils.createEmptyContext());
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                JobManagerDeploymentStatus.DEPLOYING
-                        .toUpdateControl(appCluster, operatorConfiguration)
-                        .getScheduleDelay(),
+                Optional.of(
+                        TimeUnit.SECONDS.toMillis(
+                                operatorConfiguration.getProgressCheckIntervalSeconds())),
                 updateControl.getScheduleDelay());
 
         // Validate reconciliation status
@@ -112,17 +113,17 @@ public class FlinkDeploymentControllerTest {
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                JobManagerDeploymentStatus.DEPLOYED_NOT_READY
-                        .toUpdateControl(appCluster, operatorConfiguration)
-                        .getScheduleDelay(),
+                Optional.of(
+                        TimeUnit.SECONDS.toMillis(
+                                operatorConfiguration.getRestApiReadyDelaySeconds())),
                 updateControl.getScheduleDelay());
 
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                JobManagerDeploymentStatus.READY
-                        .toUpdateControl(appCluster, operatorConfiguration)
-                        .getScheduleDelay(),
+                Optional.of(
+                        TimeUnit.SECONDS.toMillis(
+                                operatorConfiguration.getReconcileIntervalSeconds())),
                 updateControl.getScheduleDelay());
 
         // Validate job status
@@ -166,14 +167,15 @@ public class FlinkDeploymentControllerTest {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         UpdateControl<FlinkDeployment> updateControl;
 
-        updateControl = testController.reconcile(appCluster, TestUtils.createEmptyContext());
-        testController.reconcile(
-                appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+        testController.reconcile(appCluster, TestUtils.createEmptyContext());
+        updateControl =
+                testController.reconcile(
+                        appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                JobManagerDeploymentStatus.ERROR
-                        .toUpdateControl(appCluster, operatorConfiguration)
-                        .getScheduleDelay(),
+                Optional.of(
+                        TimeUnit.SECONDS.toMillis(
+                                operatorConfiguration.getReconcileIntervalSeconds())),
                 updateControl.getScheduleDelay());
 
         RecordedRequest recordedRequest = mockServer.getLastRequest();

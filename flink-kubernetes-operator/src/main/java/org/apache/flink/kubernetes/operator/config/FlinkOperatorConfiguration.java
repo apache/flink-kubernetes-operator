@@ -26,26 +26,33 @@ import lombok.Value;
 @Value
 public class FlinkOperatorConfiguration {
 
-    int reconcileIntervalInSec;
-
-    int portCheckIntervalInSec;
-
-    int savepointTriggerGracePeriodInSec;
+    int reconcileIntervalSeconds;
+    int progressCheckIntervalSeconds;
+    int restApiReadyDelaySeconds;
+    int savepointTriggerGracePeriodSeconds;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
-        int reconcileIntervalInSec =
+        int reconcileIntervalSeconds =
                 operatorConfig.getInteger(
                         OperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL_IN_SEC);
-        int portCheckIntervalInSec =
-                operatorConfig.getInteger(
-                        OperatorConfigOptions.OPERATOR_OBSERVER_PORT_CHECK_INTERVAL_IN_SEC);
 
-        int savepointTriggerGracePeriodInSec =
+        int restApiReadyDelaySeconds =
+                operatorConfig.getInteger(
+                        OperatorConfigOptions.OPERATOR_OBSERVER_REST_READY_DELAY_IN_SEC);
+
+        int progressCheckIntervalSeconds =
+                operatorConfig.getInteger(
+                        OperatorConfigOptions.OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL_IN_SEC);
+
+        int savepointTriggerGracePeriodSeconds =
                 operatorConfig.getInteger(
                         OperatorConfigOptions
                                 .OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD_IN_SEC);
 
         return new FlinkOperatorConfiguration(
-                reconcileIntervalInSec, portCheckIntervalInSec, savepointTriggerGracePeriodInSec);
+                reconcileIntervalSeconds,
+                progressCheckIntervalSeconds,
+                restApiReadyDelaySeconds,
+                savepointTriggerGracePeriodSeconds);
     }
 }
