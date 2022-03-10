@@ -55,10 +55,32 @@ webhook:
   #   name: jks-password-secret
   #   key: password-key
 
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+operatorConfiguration:
+  create: true
+  # Set append to false to replace configuration files
+  # append: true
+  flink-conf.yaml: |+
+    metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
+    metrics.reporter.slf4j.interval: 5 MINUTE
+
+    operator.reconciler.reschedule.interval.sec: 15
+    operator.observer.progress-check.interval.sec: 5
+  log4j2.properties: |+
+    rootLogger.level = DEBUG
+
+flinkDefaultConfiguration:
+   create: true
+   # Set append to false to replace configuration files
+   # append: true
+   # flink-conf.yaml: |+
+   #   ...
+   # log4j-console.properties: |+
+   #   ...
 
 # (Optional) Exposes metrics port on the container if defined
 metrics:
   port:
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
