@@ -130,7 +130,7 @@ spec:
               path: keystore.p12
         {{- end }}
 ---
-
+{{- if .Values.operatorConfiguration.create }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -140,23 +140,22 @@ metadata:
     {{- include "flink-operator.labels" . | nindent 4 }}
 data:
   flink-conf.yaml: |+
-    metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
-    metrics.reporter.slf4j.interval: 1 MINUTE
-    # metrics.scope.k8soperator: <host>.k8soperator.<namespace>.<name>
+{{- if not (eq (.Values.operatorConfiguration).append false) }}
+  {{- $.Files.Get "conf/flink-operator-config/flink-conf.yaml"  | nindent 4 -}}
+{{- end }}
+{{- if index (.Values.operatorConfiguration) "flink-conf.yaml" }}
+  {{- index (.Values.operatorConfiguration) "flink-conf.yaml" | nindent 4 -}}
+{{- end }}
   log4j2.properties: |+
-    rootLogger.level = DEBUG
-    rootLogger.appenderRef.console.ref = ConsoleAppender
-
-    logger.spring-web.name= org.springframework.web.filter
-    logger.spring-web.level = DEBUG
-
-    # Log all infos to the console
-    appender.console.name = ConsoleAppender
-    appender.console.type = CONSOLE
-    appender.console.layout.type = PatternLayout
-    appender.console.layout.pattern = %style{%d}{yellow} %style{%-30c{1.}}{cyan} %highlight{[%-5level] %msg%n%throwable}
+{{- if not (eq (.Values.operatorConfiguration).append false) }}
+  {{- $.Files.Get "conf/flink-operator-config/log4j2.properties"  | nindent 4 -}}
+{{- end }}
+{{- if index (.Values.operatorConfiguration) "log4j2.properties" }}
+  {{- index (.Values.operatorConfiguration) "log4j2.properties" | nindent 4 -}}
+{{- end }}
+{{- end }}
 ---
-
+{{- if .Values.flinkDefaultConfiguration.create }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -166,56 +165,17 @@ metadata:
     {{- include "flink-operator.labels" . | nindent 4 }}
 data:
   flink-conf.yaml: |+
-    taskmanager.numberOfTaskSlots: 2
-    blob.server.port: 6124
-    jobmanager.rpc.port: 6123
-    taskmanager.rpc.port: 6122
-    queryable-state.proxy.ports: 6125
-    jobmanager.memory.process.size: 1600m
-    taskmanager.memory.process.size: 1728m
-    parallelism.default: 2
+{{- if not (eq (.Values.flinkDefaultConfiguration).append false) }}
+  {{- $.Files.Get "conf/flink-default-config/flink-conf.yaml"  | nindent 4 -}}
+{{- end }}
+{{- if index (.Values.flinkDefaultConfiguration) "flink-conf.yaml" }}
+  {{- index (.Values.flinkDefaultConfiguration) "flink-conf.yaml" | nindent 4 -}}
+{{- end }}
   log4j-console.properties: |+
-    # This affects logging for both user code and Flink
-    rootLogger.level = INFO
-    rootLogger.appenderRef.console.ref = ConsoleAppender
-    rootLogger.appenderRef.rolling.ref = RollingFileAppender
-
-    # Uncomment this if you want to _only_ change Flink's logging
-    #logger.flink.name = org.apache.flink
-    #logger.flink.level = INFO
-
-    # The following lines keep the log level of common libraries/connectors on
-    # log level INFO. The root logger does not override this. You have to manually
-    # change the log levels here.
-    logger.akka.name = akka
-    logger.akka.level = INFO
-    logger.kafka.name= org.apache.kafka
-    logger.kafka.level = INFO
-    logger.hadoop.name = org.apache.hadoop
-    logger.hadoop.level = INFO
-    logger.zookeeper.name = org.apache.zookeeper
-    logger.zookeeper.level = INFO
-
-    # Log all infos to the console
-    appender.console.name = ConsoleAppender
-    appender.console.type = CONSOLE
-    appender.console.layout.type = PatternLayout
-    appender.console.layout.pattern = %d{yyyy-MM-dd HH:mm:ss,SSS} %-5p %-60c %x - %m%n
-
-    # Log all infos in the given rolling file
-    appender.rolling.name = RollingFileAppender
-    appender.rolling.type = RollingFile
-    appender.rolling.append = false
-    appender.rolling.fileName = ${sys:log.file}
-    appender.rolling.filePattern = ${sys:log.file}.%i
-    appender.rolling.layout.type = PatternLayout
-    appender.rolling.layout.pattern = %d{yyyy-MM-dd HH:mm:ss,SSS} %-5p %-60c %x - %m%n
-    appender.rolling.policies.type = Policies
-    appender.rolling.policies.size.type = SizeBasedTriggeringPolicy
-    appender.rolling.policies.size.size=100MB
-    appender.rolling.strategy.type = DefaultRolloverStrategy
-    appender.rolling.strategy.max = 10
-
-    # Suppress the irrelevant (wrong) warnings from the Netty channel handler
-    logger.netty.name = org.apache.flink.shaded.akka.org.jboss.netty.channel.DefaultChannelPipeline
-    logger.netty.level = OFF
+{{- if not (eq (.Values.flinkDefaultConfiguration).append false) }}
+  {{- $.Files.Get "conf/flink-default-config/log4j-console.properties"  | nindent 4 -}}
+{{- end }}
+{{- if index (.Values.flinkDefaultConfiguration) "log4j-console.properties" }}
+  {{- index (.Values.flinkDefaultConfiguration) "log4j-console.properties" | nindent 4 -}}
+{{- end }}
+{{- end }}
