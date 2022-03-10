@@ -30,5 +30,20 @@ import lombok.NoArgsConstructor;
 public class SavepointInfo {
     private Savepoint lastSavepoint;
     private String triggerId;
-    private long triggerTimestamp;
+    private Long triggerTimestamp;
+
+    public void setTrigger(String triggerId) {
+        this.triggerId = triggerId;
+        this.triggerTimestamp = System.currentTimeMillis();
+    }
+
+    public void resetTrigger() {
+        this.triggerId = null;
+        this.triggerTimestamp = null;
+    }
+
+    public void updateLastSavepoint(Savepoint savepoint) {
+        lastSavepoint = savepoint;
+        resetTrigger();
+    }
 }

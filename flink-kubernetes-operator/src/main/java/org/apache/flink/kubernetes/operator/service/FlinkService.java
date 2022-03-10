@@ -203,8 +203,7 @@ public class FlinkService {
 
             org.apache.flink.kubernetes.operator.crd.status.SavepointInfo savepointInfo =
                     deployment.getStatus().getJobStatus().getSavepointInfo();
-
-            savepointInfo.setTriggerId(response.getTriggerId().toHexString());
+            savepointInfo.setTrigger(response.getTriggerId().toHexString());
             savepointInfo.setTriggerTimestamp(System.currentTimeMillis());
         }
     }

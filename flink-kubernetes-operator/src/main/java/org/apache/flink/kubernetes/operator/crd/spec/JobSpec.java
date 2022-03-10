@@ -36,7 +36,7 @@ public class JobSpec {
     private JobState state = JobState.RUNNING;
 
     // The below fields are excluded from equals to avoid triggering job upgrades on changing these
-    @EqualsAndHashCode.Exclude private long savepointTriggerNonce;
+    @EqualsAndHashCode.Exclude private Long savepointTriggerNonce;
     @EqualsAndHashCode.Exclude private String initialSavepointPath;
     @EqualsAndHashCode.Exclude private UpgradeMode upgradeMode = UpgradeMode.STATELESS;
 }

@@ -154,8 +154,8 @@ public class ObserverTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
-        flinkService.triggerSavepoint(deployment, conf);
 
+        flinkService.triggerSavepoint(deployment, conf);
         assertEquals(
                 "trigger_0",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
@@ -169,6 +169,7 @@ public class ObserverTest {
                         .getLastSavepoint()
                         .getLocation());
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerTimestamp());
 
         flinkService.triggerSavepoint(deployment, conf);
         assertEquals(
@@ -184,6 +185,7 @@ public class ObserverTest {
                         .getLastSavepoint()
                         .getLocation());
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerTimestamp());
     }
 
     private void bringToReadyStatus(FlinkDeployment deployment) {

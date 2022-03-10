@@ -41,6 +41,7 @@ import java.util.stream.Collectors;
 public class TestingFlinkService extends FlinkService {
 
     private int savepointCounter = 0;
+    private int triggerCounter = 0;
 
     private List<Tuple2<String, JobStatusMessage>> jobs = new ArrayList<>();
     private Set<String> sessions = new HashSet<>();
@@ -114,8 +115,7 @@ public class TestingFlinkService extends FlinkService {
     @Override
     public void triggerSavepoint(FlinkDeployment deployment, Configuration conf) throws Exception {
         SavepointInfo savepointInfo = deployment.getStatus().getJobStatus().getSavepointInfo();
-        savepointInfo.setTriggerId("trigger_" + savepointCounter);
-        savepointInfo.setTriggerTimestamp(System.currentTimeMillis());
+        savepointInfo.setTrigger("trigger_" + triggerCounter++);
     }
 
     @Override

@@ -36,7 +36,7 @@ public class ReconciliationUtils {
         FlinkDeploymentSpec clonedSpec = clone(flinkApp.getSpec());
         if (reconciliationStatus.getLastReconciledSpec() != null
                 && reconciliationStatus.getLastReconciledSpec().getJob() != null) {
-            long oldSavepointTriggerNonce =
+            Long oldSavepointTriggerNonce =
                     reconciliationStatus
                             .getLastReconciledSpec()
                             .getJob()
