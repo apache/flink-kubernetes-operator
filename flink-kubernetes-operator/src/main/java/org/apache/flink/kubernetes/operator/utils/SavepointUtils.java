@@ -45,7 +45,7 @@ public class SavepointUtils {
 
     public static boolean gracePeriodEnded(
             FlinkOperatorConfiguration configuration, SavepointInfo savepointInfo) {
-        int gracePeriod = configuration.getSavepointTriggerGracePeriodInSec();
+        int gracePeriod = configuration.getSavepointTriggerGracePeriodSeconds();
         long triggerTimestamp = savepointInfo.getTriggerTimestamp();
         return (System.currentTimeMillis() - triggerTimestamp)
                 > TimeUnit.SECONDS.toMillis(gracePeriod);

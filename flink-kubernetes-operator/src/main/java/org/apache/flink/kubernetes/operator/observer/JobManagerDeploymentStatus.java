@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 
@@ -45,22 +46,28 @@ public enum JobManagerDeploymentStatus {
 
     public UpdateControl<FlinkDeployment> toUpdateControl(
             FlinkDeployment flinkDeployment, FlinkOperatorConfiguration operatorConfiguration) {
+        int rescheduleAfterSec;
         switch (this) {
             case DEPLOYING:
+                rescheduleAfterSec = operatorConfiguration.getProgressCheckIntervalSeconds();
+                break;
             case READY:
+                rescheduleAfterSec =
+                        SavepointUtils.savepointInProgress(flinkDeployment)
+                                ? operatorConfiguration.getProgressCheckIntervalSeconds()
+                                : operatorConfiguration.getReconcileIntervalSeconds();
+                break;
             case MISSING:
             case ERROR:
-                return UpdateControl.updateStatus(flinkDeployment)
-                        .rescheduleAfter(
-                                operatorConfiguration.getReconcileIntervalInSec(),
-                                TimeUnit.SECONDS);
+                rescheduleAfterSec = operatorConfiguration.getReconcileIntervalSeconds();
+                break;
             case DEPLOYED_NOT_READY:
-                return UpdateControl.updateStatus(flinkDeployment)
-                        .rescheduleAfter(
-                                operatorConfiguration.getPortCheckIntervalInSec(),
-                                TimeUnit.SECONDS);
+                rescheduleAfterSec = operatorConfiguration.getRestApiReadyDelaySeconds();
+                break;
             default:
                 throw new RuntimeException("Unknown status: " + this);
         }
+        return UpdateControl.updateStatus(flinkDeployment)
+                .rescheduleAfter(rescheduleAfterSec, TimeUnit.SECONDS);
     }
 }
