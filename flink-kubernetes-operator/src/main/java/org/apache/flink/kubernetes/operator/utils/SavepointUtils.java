@@ -34,13 +34,18 @@ public class SavepointUtils {
         if (savepointInProgress(flinkDeployment)) {
             return false;
         }
-        return flinkDeployment.getSpec().getJob().getSavepointTriggerNonce()
-                != flinkDeployment
-                        .getStatus()
-                        .getReconciliationStatus()
-                        .getLastReconciledSpec()
+        return flinkDeployment.getSpec().getJob().getSavepointTriggerNonce() != null
+                && !flinkDeployment
+                        .getSpec()
                         .getJob()
-                        .getSavepointTriggerNonce();
+                        .getSavepointTriggerNonce()
+                        .equals(
+                                flinkDeployment
+                                        .getStatus()
+                                        .getReconciliationStatus()
+                                        .getLastReconciledSpec()
+                                        .getJob()
+                                        .getSavepointTriggerNonce());
     }
 
     public static boolean gracePeriodEnded(

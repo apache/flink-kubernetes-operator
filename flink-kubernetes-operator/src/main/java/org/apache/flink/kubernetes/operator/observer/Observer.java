@@ -177,7 +177,7 @@ public class Observer {
                     || SavepointUtils.gracePeriodEnded(operatorConfiguration, savepointInfo)) {
                 String errorMsg = error != null ? error : "Savepoint status unknown";
                 LOG.error(errorMsg);
-                savepointInfo.setTriggerId(null);
+                savepointInfo.resetTrigger();
                 ReconciliationUtils.updateForReconciliationError(flinkApp, errorMsg);
                 return;
             }
@@ -187,9 +187,7 @@ public class Observer {
             LOG.info("Savepoint not completed yet");
             return;
         }
-
-        savepointInfo.setLastSavepoint(savepointFetchResult.getSavepoint());
-        savepointInfo.setTriggerId(null);
+        savepointInfo.updateLastSavepoint(savepointFetchResult.getSavepoint());
     }
 
     /** Update previous job status based on the job list from the cluster. */

@@ -35,6 +35,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -154,12 +155,48 @@ public class JobReconcilerTest {
 
         // trigger savepoint
         FlinkDeployment spDeployment = ReconciliationUtils.clone(deployment);
-        long oldValue = spDeployment.getSpec().getJob().getSavepointTriggerNonce();
-        spDeployment.getSpec().getJob().setSavepointTriggerNonce(oldValue + 1);
+
+        // don't trigger if nonce is missing
+        reconciler.reconcile("test", spDeployment, context, config);
+        assertNull(spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
+        // trigger when nonce is defined
+        spDeployment
+                .getSpec()
+                .getJob()
+                .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
         reconciler.reconcile("test", spDeployment, context, config);
         assertEquals(
                 "trigger_0",
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
+        // don't trigger when savepoint is in progress
+        reconciler.reconcile("test", spDeployment, context, config);
+        assertEquals(
+                "trigger_0",
+                spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        spDeployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId(null);
+
+        // don't trigger when nonce is the same
+        reconciler.reconcile("test", spDeployment, context, config);
+        assertNull(spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        spDeployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId(null);
+
+        // trigger when new nonce is defined
+        spDeployment
+                .getSpec()
+                .getJob()
+                .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
+        reconciler.reconcile("test", spDeployment, context, config);
+        assertEquals(
+                "trigger_1",
+                spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        spDeployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId(null);
+
+        // don't trigger nonce is cleared
+        spDeployment.getSpec().getJob().setSavepointTriggerNonce(null);
+        reconciler.reconcile("test", spDeployment, context, config);
+        assertNull(spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
     }
 
     private void verifyAndSetRunningJobsToStatus(
