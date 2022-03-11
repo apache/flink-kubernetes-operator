@@ -19,6 +19,7 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
 import lombok.Value;
 
@@ -30,6 +31,7 @@ public class FlinkOperatorConfiguration {
     int progressCheckIntervalSeconds;
     int restApiReadyDelaySeconds;
     int savepointTriggerGracePeriodSeconds;
+    String flinkServiceHostOverride;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         int reconcileIntervalSeconds =
@@ -49,10 +51,17 @@ public class FlinkOperatorConfiguration {
                         OperatorConfigOptions
                                 .OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD_IN_SEC);
 
+        String flinkServiceHostOverride = null;
+        if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {
+            // not running in k8s, simplify local development
+            flinkServiceHostOverride = "localhost";
+        }
+
         return new FlinkOperatorConfiguration(
                 reconcileIntervalSeconds,
                 progressCheckIntervalSeconds,
                 restApiReadyDelaySeconds,
-                savepointTriggerGracePeriodSeconds);
+                savepointTriggerGracePeriodSeconds,
+                flinkServiceHostOverride);
     }
 }

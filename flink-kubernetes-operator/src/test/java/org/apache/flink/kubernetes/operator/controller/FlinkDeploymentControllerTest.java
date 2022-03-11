@@ -66,7 +66,7 @@ public class FlinkDeploymentControllerTest {
 
     private final Context context = TestUtils.createContextWithReadyJobManagerDeployment();
     private final FlinkOperatorConfiguration operatorConfiguration =
-            new FlinkOperatorConfiguration(1, 2, 3, 4);
+            new FlinkOperatorConfiguration(1, 2, 3, 4, null);
 
     private TestingFlinkService flinkService;
     private FlinkDeploymentController testController;
