@@ -7,7 +7,7 @@ A Kubernetes operator for Apache Flink, implemented in Java. See [FLIP-212](http
 The operator is managed helm chart. To install run:
 ```
  cd helm/flink-operator
- helm install flink-operator .
+ helm install flink-operator . --namespace flink-operator --create-namespace
 ```
 
 ### Validating webhook
