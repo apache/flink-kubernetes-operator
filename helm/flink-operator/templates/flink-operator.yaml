@@ -20,7 +20,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "flink-operator.name" . }}
-  namespace: {{ .Values.operatorNamespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
 spec:
@@ -54,7 +54,7 @@ spec:
           {{- end }}
           env:
             - name: OPERATOR_NAMESPACE
-              value: {{ .Values.operatorNamespace.name }}
+              value: {{ .Release.Namespace }}
             - name: OPERATOR_NAME
               value: {{ include "flink-operator.name" . }}
             - name: FLINK_CONF_DIR
@@ -135,7 +135,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: flink-operator-config
-  namespace: {{ .Values.operatorNamespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
 data:
@@ -160,7 +160,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: flink-default-config
-  namespace: {{ .Values.operatorNamespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
 data:

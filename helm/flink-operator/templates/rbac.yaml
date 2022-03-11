@@ -131,7 +131,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "flink-operator.serviceAccountName" $ }}
-    namespace: {{ $.Values.operatorNamespace.name }}
+    namespace: {{ $.Release.Namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -161,7 +161,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: flink-operator
-  namespace: {{ .Values.operatorNamespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
 {{- template "flink-operator.rbacRules" $ }}
@@ -170,7 +170,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: flink
-  namespace: {{ .Values.operatorNamespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
   annotations:
@@ -181,7 +181,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: flink-operator-cluster-role-binding
-  namespace: {{ .Values.operatorNamespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
 roleRef:
@@ -191,13 +191,13 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "flink-operator.serviceAccountName" . }}
-    namespace: {{ .Values.operatorNamespace.name }}
+    namespace: {{ .Release.Namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: flink-role-binding
-  namespace: {{ .Values.operatorNamespace.name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
   annotations:
@@ -209,6 +209,6 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "flink-operator.jobServiceAccountName" . }}
-    namespace: {{ .Values.operatorNamespace.name }}
+    namespace: {{ .Release.Namespace }}
 {{- end }}
 {{- end }}

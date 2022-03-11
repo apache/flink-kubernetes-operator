@@ -18,9 +18,6 @@
 
 ---
 
-operatorNamespace:
-  name: default
-
 # List of kubernetes namespaces to watch for FlinkDeployment changes, empty means all namespaces.
 # When enabled RBAC is only created for said namespaces, otherwise it is done for the cluster scope.
 # watchNamespaces: ["flink"]

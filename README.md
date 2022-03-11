@@ -4,11 +4,20 @@ A Kubernetes operator for Apache Flink, implemented in Java. See [FLIP-212](http
 
 ## Installation
 
-The operator is managed helm chart. To install run:
+The operator installation is managed by a helm chart. To install run:
+
 ```
- cd helm/flink-operator
- helm install flink-operator .
+helm install flink-operator helm/flink-operator
 ```
+
+Alternatively to install the operator (and also the helm chart) to a specific namespace:
+
+```
+helm install flink-operator helm/flink-operator --namespace flink-operator --create-namespace
+```
+
+Note that in this case you will need to update the namespace in the examples accordingly or the `default`
+namespace to the [watched namespaces](#watching-only-specific-namespaces).
 
 ### Validating webhook
 
