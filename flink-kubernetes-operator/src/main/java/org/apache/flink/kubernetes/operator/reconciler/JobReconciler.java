@@ -106,18 +106,9 @@ public class JobReconciler extends BaseReconciler {
             if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
                 if (upgradeMode == UpgradeMode.STATELESS) {
                     deployFlinkJob(flinkApp, effectiveConfig, Optional.empty());
-                } else if (upgradeMode == UpgradeMode.SAVEPOINT) {
+                } else if (upgradeMode == UpgradeMode.LAST_STATE
+                        || upgradeMode == UpgradeMode.SAVEPOINT) {
                     restoreFromLastSavepoint(flinkApp, effectiveConfig);
-                } else if (upgradeMode == UpgradeMode.LAST_STATE) {
-                    final String savepointLocation =
-                            flinkApp.getStatus()
-                                    .getJobStatus()
-                                    .getSavepointInfo()
-                                    .getLastSavepoint()
-                                    .getLocation();
-                    // Upgrade mode changes from savepoint -> last-state
-                    deployFlinkJob(
-                            flinkApp, effectiveConfig, Optional.ofNullable(savepointLocation));
                 }
             }
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
