@@ -54,9 +54,11 @@ public class FlinkOperator {
         DefaultConfigurationService configurationService = DefaultConfigurationService.instance();
         Operator operator = new Operator(client, configurationService);
 
-        FlinkService flinkService = new FlinkService(client);
         FlinkOperatorConfiguration operatorConfiguration =
                 FlinkOperatorConfiguration.fromConfiguration(defaultConfig.getOperatorConfig());
+
+        FlinkService flinkService = new FlinkService(client, operatorConfiguration);
+
         FlinkDeploymentValidator validator = new DefaultDeploymentValidator();
         ReconcilerFactory reconcilerFactory =
                 new ReconcilerFactory(client, flinkService, operatorConfiguration);

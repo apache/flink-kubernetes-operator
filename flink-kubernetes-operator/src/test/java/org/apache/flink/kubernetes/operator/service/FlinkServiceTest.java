@@ -139,7 +139,7 @@ public class FlinkServiceTest {
     }
 
     private FlinkService createFlinkService(ClusterClient<String> clusterClient) {
-        return new FlinkService((NamespacedKubernetesClient) client) {
+        return new FlinkService((NamespacedKubernetesClient) client, null) {
             @Override
             protected ClusterClient<String> getClusterClient(Configuration config) {
                 return clusterClient;

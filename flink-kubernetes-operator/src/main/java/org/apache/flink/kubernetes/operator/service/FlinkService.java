@@ -32,6 +32,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
@@ -52,6 +53,7 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMes
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
+import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,9 +74,13 @@ public class FlinkService {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkService.class);
 
     private final NamespacedKubernetesClient kubernetesClient;
+    private final FlinkOperatorConfiguration operatorConfiguration;
 
-    public FlinkService(NamespacedKubernetesClient kubernetesClient) {
+    public FlinkService(
+            NamespacedKubernetesClient kubernetesClient,
+            FlinkOperatorConfiguration operatorConfiguration) {
         this.kubernetesClient = kubernetesClient;
+        this.operatorConfiguration = operatorConfiguration;
     }
 
     public void submitApplicationCluster(FlinkDeployment deployment, Configuration conf)
@@ -141,7 +147,10 @@ public class FlinkService {
         final String namespace = config.get(KubernetesConfigOptions.NAMESPACE);
         final int port = config.getInteger(RestOptions.PORT);
         final String host =
-                ExternalServiceDecorator.getNamespacedExternalServiceName(clusterId, namespace);
+                ObjectUtils.firstNonNull(
+                        operatorConfiguration.getFlinkServiceHostOverride(),
+                        ExternalServiceDecorator.getNamespacedExternalServiceName(
+                                clusterId, namespace));
         final String restServerAddress = String.format("http://%s:%s", host, port);
         LOG.debug("Creating RestClusterClient({})", restServerAddress);
         return new RestClusterClient<>(

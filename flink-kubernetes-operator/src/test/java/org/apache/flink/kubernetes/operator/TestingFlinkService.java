@@ -48,7 +48,7 @@ public class TestingFlinkService extends FlinkService {
     private boolean isPortReady = true;
 
     public TestingFlinkService() {
-        super(null);
+        super(null, null);
     }
 
     public void clear() {
