@@ -27,7 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.observer.Observer;
+import org.apache.flink.kubernetes.operator.observer.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -446,7 +446,6 @@ public class FlinkDeploymentControllerTest {
 
     private FlinkDeploymentController createTestController(
             KubernetesClient kubernetesClient, TestingFlinkService flinkService) {
-        Observer observer = new Observer(flinkService, operatorConfiguration);
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(
@@ -455,9 +454,9 @@ public class FlinkDeploymentControllerTest {
                         kubernetesClient,
                         "test",
                         new DefaultDeploymentValidator(),
-                        observer,
                         new ReconcilerFactory(
-                                kubernetesClient, flinkService, operatorConfiguration));
+                                kubernetesClient, flinkService, operatorConfiguration),
+                        new ObserverFactory(flinkService, operatorConfiguration));
         controller.setControllerConfig(new FlinkControllerConfig(controller));
         return controller;
     }

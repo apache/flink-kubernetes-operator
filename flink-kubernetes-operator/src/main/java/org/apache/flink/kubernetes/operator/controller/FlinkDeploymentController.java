@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.observer.Observer;
+import org.apache.flink.kubernetes.operator.observer.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -65,8 +65,8 @@ public class FlinkDeploymentController
     private final String operatorNamespace;
 
     private final FlinkDeploymentValidator validator;
-    private final Observer observer;
     private final ReconcilerFactory reconcilerFactory;
+    private final ObserverFactory observerFactory;
     private final DefaultConfig defaultConfig;
     private final FlinkOperatorConfiguration operatorConfiguration;
 
@@ -78,15 +78,15 @@ public class FlinkDeploymentController
             KubernetesClient kubernetesClient,
             String operatorNamespace,
             FlinkDeploymentValidator validator,
-            Observer observer,
-            ReconcilerFactory reconcilerFactory) {
+            ReconcilerFactory reconcilerFactory,
+            ObserverFactory observerFactory) {
         this.defaultConfig = defaultConfig;
         this.operatorConfiguration = operatorConfiguration;
         this.kubernetesClient = kubernetesClient;
         this.operatorNamespace = operatorNamespace;
         this.validator = validator;
-        this.observer = observer;
         this.reconcilerFactory = reconcilerFactory;
+        this.observerFactory = observerFactory;
     }
 
     @Override
@@ -95,7 +95,7 @@ public class FlinkDeploymentController
         Configuration effectiveConfig =
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
         try {
-            observer.observe(flinkApp, context, effectiveConfig);
+            observerFactory.getOrCreate(flinkApp).observe(flinkApp, context, effectiveConfig);
         } catch (DeploymentFailedException dfe) {
             // ignore during cleanup
         }
@@ -119,7 +119,7 @@ public class FlinkDeploymentController
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
 
         try {
-            observer.observe(flinkApp, context, effectiveConfig);
+            observerFactory.getOrCreate(flinkApp).observe(flinkApp, context, effectiveConfig);
             reconcilerFactory
                     .getOrCreate(flinkApp)
                     .reconcile(operatorNamespace, flinkApp, context, effectiveConfig);

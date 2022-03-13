@@ -16,47 +16,39 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.reconciler;
+package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** The factory to create reconciler based on app mode. */
-public class ReconcilerFactory {
+/** The factory to create the observer based ob the {@link FlinkDeployment} mode. */
+public class ObserverFactory {
 
-    private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
     private final FlinkOperatorConfiguration operatorConfiguration;
-    private final Map<Mode, Reconciler> reconcilerMap;
+    private final Map<Mode, Observer> observerMap;
 
-    public ReconcilerFactory(
-            KubernetesClient kubernetesClient,
-            FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration) {
-        this.kubernetesClient = kubernetesClient;
+    public ObserverFactory(
+            FlinkService flinkService, FlinkOperatorConfiguration operatorConfiguration) {
         this.flinkService = flinkService;
         this.operatorConfiguration = operatorConfiguration;
-        this.reconcilerMap = new ConcurrentHashMap<>();
+        this.observerMap = new ConcurrentHashMap<>();
     }
 
-    public Reconciler getOrCreate(FlinkDeployment flinkApp) {
-        return reconcilerMap.computeIfAbsent(
+    public Observer getOrCreate(FlinkDeployment flinkApp) {
+        return observerMap.computeIfAbsent(
                 Mode.getMode(flinkApp),
                 mode -> {
                     switch (mode) {
                         case SESSION:
-                            return new SessionReconciler(
-                                    kubernetesClient, flinkService, operatorConfiguration);
+                            return new SessionObserver(flinkService, operatorConfiguration);
                         case APPLICATION:
-                            return new JobReconciler(
-                                    kubernetesClient, flinkService, operatorConfiguration);
+                            return new JobObserver(flinkService, operatorConfiguration);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));
