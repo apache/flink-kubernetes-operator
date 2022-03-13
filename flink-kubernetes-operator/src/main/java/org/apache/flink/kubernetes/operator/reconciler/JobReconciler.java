@@ -42,7 +42,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 
-import static org.apache.flink.kubernetes.operator.observer.Observer.JOB_STATE_UNKNOWN;
+import static org.apache.flink.kubernetes.operator.observer.BaseObserver.JOB_STATE_UNKNOWN;
 
 /**
  * Reconciler responsible for handling the job lifecycle according to the desired and current
