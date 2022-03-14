@@ -25,6 +25,10 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
+import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
+import io.fabric8.kubernetes.api.model.ContainerStatus;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
@@ -42,6 +46,7 @@ public abstract class BaseObserver implements Observer {
     protected final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     public static final String JOB_STATE_UNKNOWN = "UNKNOWN";
+
     protected final FlinkService flinkService;
     protected final FlinkOperatorConfiguration operatorConfiguration;
 
@@ -56,10 +61,6 @@ public abstract class BaseObserver implements Observer {
         FlinkDeploymentStatus deploymentStatus = flinkApp.getStatus();
         JobManagerDeploymentStatus previousJmStatus =
                 deploymentStatus.getJobManagerDeploymentStatus();
-
-        if (JobManagerDeploymentStatus.READY == previousJmStatus) {
-            return;
-        }
 
         if (JobManagerDeploymentStatus.DEPLOYED_NOT_READY == previousJmStatus) {
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
@@ -86,7 +87,7 @@ public abstract class BaseObserver implements Observer {
                 return;
             }
             logger.info(
-                    "JobManager deployment {} in namespace {} exists but not ready yet, status {}",
+                    "JobManager deployment {} in namespace {} exists but not ready, status {}",
                     flinkApp.getMetadata().getName(),
                     flinkApp.getMetadata().getNamespace(),
                     status);
@@ -104,6 +105,18 @@ public abstract class BaseObserver implements Observer {
                     return;
                 }
             }
+
+            // checking the pod is expensive; only do it when the deployment isn't ready
+            try {
+                checkCrashLoopBackoff(flinkApp, effectiveConfig);
+            } catch (DeploymentFailedException dfe) {
+                if (!JobManagerDeploymentStatus.ERROR.equals(
+                        deploymentStatus.getJobManagerDeploymentStatus())) {
+                    throw dfe;
+                }
+                return;
+            }
+
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
             return;
         }
@@ -117,6 +130,20 @@ public abstract class BaseObserver implements Observer {
                 operatorConfiguration.getWatchedNamespaces().size() > 1
                         ? flinkApp.getMetadata().getNamespace()
                         : null);
+    }
+
+    private void checkCrashLoopBackoff(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+        PodList jmPods = flinkService.getJmPodList(flinkApp, effectiveConfig);
+        for (Pod pod : jmPods.getItems()) {
+            for (ContainerStatus cs : pod.getStatus().getContainerStatuses()) {
+                ContainerStateWaiting csw = cs.getState().getWaiting();
+                if (DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF.equals(csw.getReason())) {
+                    logger.warn("JobManager pod fails: {} {}", csw.getReason(), csw.getMessage());
+                    throw new DeploymentFailedException(
+                            DeploymentFailedException.COMPONENT_JOBMANAGER, "Warning", csw);
+                }
+            }
+        }
     }
 
     protected boolean isClusterReady(FlinkDeployment dep) {

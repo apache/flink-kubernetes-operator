@@ -126,6 +126,18 @@ public class TestUtils {
         };
     }
 
+    public static Deployment createDeployment(boolean ready) {
+        DeploymentStatus status = new DeploymentStatus();
+        status.setAvailableReplicas(ready ? 1 : 0);
+        status.setReplicas(1);
+        DeploymentSpec spec = new DeploymentSpec();
+        spec.setReplicas(1);
+        Deployment deployment = new Deployment();
+        deployment.setSpec(spec);
+        deployment.setStatus(status);
+        return deployment;
+    }
+
     public static Context createContextWithReadyJobManagerDeployment() {
         return new Context() {
             @Override
@@ -136,15 +148,22 @@ public class TestUtils {
             @Override
             public <T> Optional<T> getSecondaryResource(
                     Class<T> expectedType, String eventSourceName) {
-                DeploymentStatus status = new DeploymentStatus();
-                status.setAvailableReplicas(1);
-                status.setReplicas(1);
-                DeploymentSpec spec = new DeploymentSpec();
-                spec.setReplicas(1);
-                Deployment deployment = new Deployment();
-                deployment.setSpec(spec);
-                deployment.setStatus(status);
-                return Optional.of((T) deployment);
+                return Optional.of((T) createDeployment(true));
+            }
+        };
+    }
+
+    public static Context createContextWithInProgressDeployment() {
+        return new Context() {
+            @Override
+            public Optional<RetryInfo> getRetryInfo() {
+                return Optional.empty();
+            }
+
+            @Override
+            public <T> Optional<T> getSecondaryResource(
+                    Class<T> expectedType, String eventSourceName) {
+                return Optional.of((T) createDeployment(false));
             }
         };
     }

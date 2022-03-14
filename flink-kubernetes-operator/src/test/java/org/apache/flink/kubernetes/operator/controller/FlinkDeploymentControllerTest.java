@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
@@ -34,7 +35,12 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import io.fabric8.kubernetes.api.model.ContainerStatus;
+import io.fabric8.kubernetes.api.model.ContainerStatusBuilder;
 import io.fabric8.kubernetes.api.model.EventBuilder;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodListBuilder;
+import io.fabric8.kubernetes.api.model.PodStatusBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
@@ -182,6 +188,79 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getReconciliationStatus();
         assertFalse(reconciliationStatus.isSuccess());
         assertNotNull(reconciliationStatus.getError());
+
+        // next cycle should not create another event
+        updateControl =
+                testController.reconcile(
+                        appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+        assertEquals(
+                JobManagerDeploymentStatus.ERROR,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertFalse(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.READY
+                        .rescheduleAfter(appCluster, operatorConfiguration)
+                        .toMillis(),
+                updateControl.getScheduleDelay().get());
+    }
+
+    @Test
+    public void verifyInProgressDeploymentWithCrashLoopBackoff() throws Exception {
+        mockServer
+                .expect()
+                .post()
+                .withPath("/api/v1/namespaces/flink-operator-test/events")
+                .andReturn(
+                        HttpURLConnection.HTTP_CREATED,
+                        new EventBuilder().withNewMetadata().endMetadata().build())
+                .once();
+
+        String crashLoopMessage = "container fails";
+        ContainerStatus cs =
+                new ContainerStatusBuilder()
+                        .withNewState()
+                        .withNewWaiting()
+                        .withReason(DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF)
+                        .withMessage(crashLoopMessage)
+                        .endWaiting()
+                        .endState()
+                        .build();
+
+        Pod pod = TestUtils.getTestPod("host", "apiVersion", Collections.emptyList());
+        pod.setStatus(
+                new PodStatusBuilder()
+                        .withContainerStatuses(Collections.singletonList(cs))
+                        .build());
+        flinkService.setJmPodList(new PodListBuilder().withItems(pod).build());
+
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        UpdateControl<FlinkDeployment> updateControl;
+
+        testController.reconcile(appCluster, TestUtils.createEmptyContext());
+        updateControl =
+                testController.reconcile(
+                        appCluster, TestUtils.createContextWithInProgressDeployment());
+        assertTrue(updateControl.isUpdateStatus());
+        assertEquals(
+                Optional.of(
+                        TimeUnit.SECONDS.toMillis(
+                                operatorConfiguration.getReconcileIntervalSeconds())),
+                updateControl.getScheduleDelay());
+
+        RecordedRequest recordedRequest = mockServer.getLastRequest();
+        assertEquals("POST", recordedRequest.getMethod());
+        String recordedRequestBody = recordedRequest.getBody().readUtf8();
+        assertTrue(
+                recordedRequestBody.contains(DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF));
+        assertTrue(recordedRequestBody.contains(crashLoopMessage));
+        assertEquals(
+                JobManagerDeploymentStatus.ERROR,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        // Validate reconciliation status
+        ReconciliationStatus reconciliationStatus =
+                appCluster.getStatus().getReconciliationStatus();
+        assertFalse(reconciliationStatus.isSuccess());
 
         // next cycle should not create another event
         updateControl =

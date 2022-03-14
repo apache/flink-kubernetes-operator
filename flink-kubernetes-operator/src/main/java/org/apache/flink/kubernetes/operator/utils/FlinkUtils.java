@@ -170,12 +170,7 @@ public class FlinkUtils {
 
         for (int i = 0; i < 60; i++) {
             if (jobManagerRunning) {
-                PodList jmPodList =
-                        kubernetesClient
-                                .pods()
-                                .inNamespace(namespace)
-                                .withLabels(KubernetesUtils.getJobManagerSelectors(clusterId))
-                                .list();
+                PodList jmPodList = getJmPodList(kubernetesClient, namespace, clusterId);
 
                 if (jmPodList == null || jmPodList.getItems().isEmpty()) {
                     jobManagerRunning = false;
@@ -216,5 +211,14 @@ public class FlinkUtils {
                 kubernetesClient,
                 conf.getString(KubernetesConfigOptions.NAMESPACE),
                 conf.getString(KubernetesConfigOptions.CLUSTER_ID));
+    }
+
+    public static PodList getJmPodList(
+            KubernetesClient kubernetesClient, String namespace, String clusterId) {
+        return kubernetesClient
+                .pods()
+                .inNamespace(namespace)
+                .withLabels(KubernetesUtils.getJobManagerSelectors(clusterId))
+                .list();
     }
 }

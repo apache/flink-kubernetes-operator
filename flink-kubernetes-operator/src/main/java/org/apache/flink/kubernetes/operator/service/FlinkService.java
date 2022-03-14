@@ -52,6 +52,7 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHea
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 
+import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
@@ -262,5 +263,16 @@ public class FlinkService {
             LOG.info("Savepoint result: " + savepoint);
             return SavepointFetchResult.completed(savepoint);
         }
+    }
+
+    public PodList getJmPodList(FlinkDeployment deployment, Configuration conf) {
+        final String namespace = conf.getString(KubernetesConfigOptions.NAMESPACE);
+        final String clusterId;
+        try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
+            clusterId = clusterClient.getClusterId();
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        }
+        return FlinkUtils.getJmPodList(kubernetesClient, namespace, clusterId);
     }
 }

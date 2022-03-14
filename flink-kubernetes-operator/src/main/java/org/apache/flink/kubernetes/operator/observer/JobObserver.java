@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeoutException;
 
 /** The observer of {@link org.apache.flink.kubernetes.operator.config.Mode#APPLICATION} cluster. */
 public class JobObserver extends BaseObserver {
@@ -46,16 +47,20 @@ public class JobObserver extends BaseObserver {
 
     @Override
     public void observe(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
-        observeJmDeployment(flinkApp, context, effectiveConfig);
+        if (JobManagerDeploymentStatus.READY
+                != flinkApp.getStatus().getJobManagerDeploymentStatus()) {
+            observeJmDeployment(flinkApp, context, effectiveConfig);
+        }
         if (isClusterReady(flinkApp)) {
-            boolean jobFound = observeFlinkJobStatus(flinkApp, effectiveConfig);
+            boolean jobFound = observeFlinkJobStatus(flinkApp, context, effectiveConfig);
             if (jobFound) {
                 observeSavepointStatus(flinkApp, effectiveConfig);
             }
         }
     }
 
-    private boolean observeFlinkJobStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+    private boolean observeFlinkJobStatus(
+            FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
         logger.info("Getting job statuses for {}", flinkApp.getMetadata().getName());
         FlinkDeploymentStatus flinkAppStatus = flinkApp.getStatus();
 
@@ -65,6 +70,10 @@ public class JobObserver extends BaseObserver {
         } catch (Exception e) {
             logger.error("Exception while listing jobs", e);
             flinkAppStatus.getJobStatus().setState(JOB_STATE_UNKNOWN);
+            if (e instanceof TimeoutException) {
+                // check for problems with the underlying deployment
+                observeJmDeployment(flinkApp, context, effectiveConfig);
+            }
             return false;
         }
         if (clusterJobStatuses.isEmpty()) {
