@@ -36,13 +36,12 @@ import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import okhttp3.mockwebserver.RecordedRequest;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -62,6 +61,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /** @link JobStatusObserver unit tests */
+@EnableKubernetesMockClient(crud = true)
 public class FlinkDeploymentControllerTest {
 
     private final Context context = TestUtils.createContextWithReadyJobManagerDeployment();
@@ -72,21 +72,12 @@ public class FlinkDeploymentControllerTest {
     private FlinkDeploymentController testController;
 
     private KubernetesMockServer mockServer;
-    private NamespacedKubernetesClient kubernetesClient;
+    private KubernetesClient kubernetesClient;
 
     @BeforeEach
     public void setup() {
         flinkService = new TestingFlinkService();
-        mockServer = new KubernetesMockServer();
-        mockServer.init();
-        kubernetesClient = mockServer.createClient();
         testController = createTestController(kubernetesClient, flinkService);
-    }
-
-    @AfterEach
-    public void tearDown() {
-        kubernetesClient.close();
-        mockServer.shutdown();
     }
 
     @Test
@@ -322,25 +313,6 @@ public class FlinkDeploymentControllerTest {
     }
 
     public void testUpgradeNotReadyCluster(FlinkDeployment appCluster, boolean allowUpgrade) {
-        mockServer
-                .expect()
-                .delete()
-                .withPath("/apis/apps/v1/namespaces/flink-operator-test/deployments/test-cluster")
-                .andReturn(
-                        HttpURLConnection.HTTP_CREATED,
-                        new EventBuilder().withNewMetadata().endMetadata().build())
-                .always();
-
-        mockServer
-                .expect()
-                .get()
-                .withPath(
-                        "/api/v1/namespaces/flink-operator-test/pods?labelSelector=app%3Dtest-cluster%2Ccomponent%3Djobmanager%2Ctype%3Dflink-native-kubernetes")
-                .andReturn(
-                        HttpURLConnection.HTTP_CREATED,
-                        new EventBuilder().withNewMetadata().endMetadata().build())
-                .always();
-
         testController.reconcile(appCluster, TestUtils.createEmptyContext());
         assertEquals(
                 appCluster.getSpec(),
