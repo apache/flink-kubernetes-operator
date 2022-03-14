@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
+import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 
 import lombok.AllArgsConstructor;
@@ -24,6 +25,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** Current status of the Flink deployment. */
+@Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

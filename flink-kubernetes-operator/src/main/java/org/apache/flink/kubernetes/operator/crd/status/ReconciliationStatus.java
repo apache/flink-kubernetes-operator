@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
+import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 
 import lombok.AllArgsConstructor;
@@ -25,6 +26,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** Status of the Flink deployment reconciliation flow. */
+@Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
