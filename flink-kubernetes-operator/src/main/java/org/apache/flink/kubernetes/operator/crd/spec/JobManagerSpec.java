@@ -30,7 +30,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class JobManagerSpec {
+    /** Resource specification for the JobManager pods. */
     private Resource resource;
+
+    /** Number of JobManager replicas. Must be 1 for non-HA deployments. */
     private int replicas;
+
+    /** JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
     private Pod podTemplate;
 }

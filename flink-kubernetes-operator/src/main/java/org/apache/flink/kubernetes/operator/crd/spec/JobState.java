@@ -24,8 +24,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 /** Enum describing the desired job state. */
 @Experimental
 public enum JobState {
+
+    /** Job is expected to be processing data. */
     @JsonProperty("running")
     RUNNING,
+
+    /** Processing is suspended with the intention of continuing later. */
     @JsonProperty("suspended")
     SUSPENDED
 }

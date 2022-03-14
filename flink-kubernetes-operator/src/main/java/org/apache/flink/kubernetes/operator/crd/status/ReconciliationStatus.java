@@ -25,14 +25,22 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Status of the Flink deployment reconciliation flow. */
+/** Status of the last reconcile step for the deployment. */
 @Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class ReconciliationStatus {
+    /** True if last reconciliation step was successful. */
     private boolean success;
+
+    /** If success == false, error information about the reconciliation failure. */
     private String error;
+
+    /**
+     * Last reconciled deployment spec. Used to decide whether further reconciliation steps are
+     * necessary.
+     */
     private FlinkDeploymentSpec lastReconciledSpec;
 }

@@ -24,14 +24,18 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Current status of the Flink deployment. */
+/** Last observed status of the Flink deployment. */
 @Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class FlinkDeploymentStatus {
+    /** Last observed status of the Flink job on Application deployments. */
     private JobStatus jobStatus = new JobStatus();
+
+    /** Last observed status of the JobManager deployment. */
     private JobManagerDeploymentStatus jobManagerDeploymentStatus =
             JobManagerDeploymentStatus.MISSING;
+    /** Status of the last reconcile operation. */
     private ReconciliationStatus reconciliationStatus = new ReconciliationStatus();
 }

@@ -31,8 +31,13 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 public class SavepointInfo {
+    /** Last completed savepoint by the operator. */
     private Savepoint lastSavepoint;
+
+    /** Trigger id of a pending savepoint operation. */
     private String triggerId;
+
+    /** Trigger timestamp of a pending savepoint operation. */
     private Long triggerTimestamp;
 
     public void setTrigger(String triggerId) {

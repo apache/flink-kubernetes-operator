@@ -32,14 +32,37 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 public class JobSpec {
+
+    /**
+     * URI of the job jar within the Flink docker container. For example: Example:
+     * local:///opt/flink/examples/streaming/StateMachineExample.jar
+     */
     private String jarURI;
+
+    /** Parallelism of the Flink job. */
     private int parallelism;
+
+    /** Fully qualified main class name of the Flink job. */
     private String entryClass;
+
+    /** Arguments for the Flink job main class. */
     private String[] args = new String[0];
+
+    /** Desired state for the job. */
     private JobState state = JobState.RUNNING;
 
-    // The below fields are excluded from equals to avoid triggering job upgrades on changing these
+    /**
+     * Nonce used to manually trigger savepoint for the running job. In order to trigger a
+     * savepoint, change the number to anything other than the current value.
+     */
     @EqualsAndHashCode.Exclude private Long savepointTriggerNonce;
+
+    /**
+     * Savepoint path used by the job the first time it is deployed. Upgrades/redeployments will not
+     * be affected.
+     */
     @EqualsAndHashCode.Exclude private String initialSavepointPath;
+
+    /** Upgrade mode of the Flink job. */
     @EqualsAndHashCode.Exclude private UpgradeMode upgradeMode = UpgradeMode.STATELESS;
 }

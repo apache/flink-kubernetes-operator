@@ -21,10 +21,10 @@ under the License.
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-      <groupId>org.apache.flink</groupId>
-      <artifactId>flink-kubernetes-operator-parent</artifactId>
-      <version>1.0-SNAPSHOT</version>
-      <relativePath>..</relativePath>
+        <groupId>org.apache.flink</groupId>
+        <artifactId>flink-kubernetes-operator-parent</artifactId>
+        <version>1.0-SNAPSHOT</version>
+        <relativePath>..</relativePath>
     </parent>
 
     <artifactId>flink-kubernetes-operator</artifactId>
@@ -44,9 +44,9 @@ under the License.
         </dependency>
 
         <dependency>
-          <groupId>io.fabric8</groupId>
-          <artifactId>kubernetes-client</artifactId>
-          <version>${fabric8.version}</version>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-client</artifactId>
+            <version>${fabric8.version}</version>
         </dependency>
 
         <dependency>
@@ -178,13 +178,16 @@ under the License.
                                 </includes>
                             </artifactSet>
                             <transformers combine.children="append">
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>org.apache.flink.kubernetes.operator.FlinkOperator</mainClass>
                                 </transformer>
                                 <!-- The service transformer is needed to merge META-INF/services files -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <!-- The ApacheNoticeResourceTransformer collects and aggregates NOTICE files -->
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ApacheNoticeResourceTransformer">
                                     <projectName>Apache Flink</projectName>
                                     <encoding>UTF-8</encoding>
                                 </transformer>
@@ -248,5 +251,49 @@ under the License.
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>generate-docs</id>
+            <activation>
+                <activeByDefault>false</activeByDefault>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.3.2</version>
+                        <executions>
+                            <execution>
+                                <id>doc</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>javadoc</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <doclet>org.apache.flink.kubernetes.operator.docs.CrdReferenceDoclet</doclet>
+                            <docletArtifacts>
+                                <docletArtifact>
+                                    <groupId>org.apache.flink</groupId>
+                                    <artifactId>flink-kubernetes-operator</artifactId>
+                                    <version>${project.version}</version>
+                                </docletArtifact>
+                            </docletArtifacts>
+                            <additionalOptions>
+                                <additionalOption>--outputFile</additionalOption>
+                                <additionalOption>${project.basedir}/../docs/content/docs/custom-resource/reference.md
+                                </additionalOption>
+                                <additionalOption>--templateFile</additionalOption>
+                                <additionalOption>${project.basedir}/../docs/template/crd-ref.template</additionalOption>
+                            </additionalOptions>
+                            <useStandardDocletOptions>false</useStandardDocletOptions>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

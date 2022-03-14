@@ -30,6 +30,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TaskManagerSpec {
+    /** Resource specification for the TaskManager pods. */
     private Resource resource;
+
+    /** TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
     private Pod podTemplate;
 }
