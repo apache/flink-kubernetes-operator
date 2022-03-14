@@ -27,22 +27,49 @@ import lombok.NoArgsConstructor;
 
 import java.util.Map;
 
-/** Spec that describes a Flink application deployment. */
+/** Spec that describes a Flink application or session cluster deployment. */
 @Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class FlinkDeploymentSpec {
+    /** Flink docker image used to start the Job and TaskManager pods. */
     private String image;
+
+    /** Image pull policy of the Flink docker image. */
     private String imagePullPolicy;
+
+    /** Kubernetes service used by the Flink deployment. */
     private String serviceAccount;
+
+    /** Flink image version. */
     private String flinkVersion;
+
+    /** Ingress domain for the Flink deployment. */
     private String ingressDomain;
+
+    /** Flink configuration overrides for the Flink deployment. */
     private Map<String, String> flinkConfiguration;
+
+    /**
+     * Base pod template for job and task manager pods. Can be overridden by the jobManager and
+     * taskManager pod templates.
+     */
     private Pod podTemplate;
+
+    /** JobManager specs. */
     private JobManagerSpec jobManager;
+
+    /** TaskManager specs. */
     private TaskManagerSpec taskManager;
+
+    /** Job specification for application deployments. Null for session clusters. */
     private JobSpec job;
+
+    /**
+     * Log configuration overrides for the Flink deployment. Format logConfigFileName ->
+     * configContent.
+     */
     private Map<String, String> logConfiguration;
 }

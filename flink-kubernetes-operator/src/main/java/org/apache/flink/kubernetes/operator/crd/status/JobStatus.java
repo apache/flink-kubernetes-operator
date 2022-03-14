@@ -24,16 +24,25 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Status of an individual job within the Flink deployment. */
+/** Last observed status of the Flink job within an application deployment. */
 @Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 public class JobStatus {
+    /** Name of the job. */
     private String jobName;
+
+    /** Flink JobId of the Job. */
     private String jobId;
+
+    /** Last observed state of the job. */
     private String state;
+
+    /** Start time of the job. */
     private String updateTime;
+
+    /** Information about pending and last savepoint for the job. */
     private SavepointInfo savepointInfo = new SavepointInfo();
 }

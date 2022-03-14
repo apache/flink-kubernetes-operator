@@ -21,13 +21,22 @@ import org.apache.flink.annotation.Experimental;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-/** Enum to control Flink job restore behavior on upgrade/start. */
+/** Enum to control Flink job upgrade behavior. */
 @Experimental
 public enum UpgradeMode {
+
+    /**
+     * Job is upgraded by first taking a savepoint of the running job, shutting it down and
+     * restoring from the savepoint.
+     */
     @JsonProperty("savepoint")
     SAVEPOINT,
+
+    /** Job is upgraded using any latest checkpoint or savepoint available. */
     @JsonProperty("last-state")
     LAST_STATE,
+
+    /** Job is upgraded with empty state. */
     @JsonProperty("stateless")
     STATELESS
 }

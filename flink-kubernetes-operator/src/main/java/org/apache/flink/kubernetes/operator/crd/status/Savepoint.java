@@ -29,7 +29,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class Savepoint {
+    /** Millisecond timestamp at the start of the savepoint operation. */
     private long timeStamp;
+
+    /** External pointer of the savepoint can be used to recover jobs. */
     private String location;
 
     public static Savepoint of(String location) {
