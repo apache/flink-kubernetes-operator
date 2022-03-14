@@ -17,9 +17,12 @@
 
 package org.apache.flink.kubernetes.operator.crd.spec;
 
+import org.apache.flink.annotation.Experimental;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /** Enum to control Flink job cancel behavior. */
+@Experimental
 public enum CancelMode {
     @JsonProperty("savepoint")
     SAVEPOINT,

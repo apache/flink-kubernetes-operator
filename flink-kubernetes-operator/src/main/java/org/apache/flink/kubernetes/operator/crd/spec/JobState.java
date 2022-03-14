@@ -17,9 +17,12 @@
 
 package org.apache.flink.kubernetes.operator.crd.spec;
 
+import org.apache.flink.annotation.Experimental;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /** Enum describing the desired job state. */
+@Experimental
 public enum JobState {
     @JsonProperty("running")
     RUNNING,
