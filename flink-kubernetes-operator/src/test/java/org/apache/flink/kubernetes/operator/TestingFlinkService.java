@@ -30,6 +30,8 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
+import io.fabric8.kubernetes.api.model.PodList;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -46,6 +48,7 @@ public class TestingFlinkService extends FlinkService {
     private List<Tuple2<String, JobStatusMessage>> jobs = new ArrayList<>();
     private Set<String> sessions = new HashSet<>();
     private boolean isPortReady = true;
+    private PodList podList = new PodList();
 
     public TestingFlinkService() {
         super(null, null);
@@ -131,5 +134,14 @@ public class TestingFlinkService extends FlinkService {
 
     public void setPortReady(boolean isPortReady) {
         this.isPortReady = isPortReady;
+    }
+
+    @Override
+    public PodList getJmPodList(FlinkDeployment deployment, Configuration conf) {
+        return podList;
+    }
+
+    public void setJmPodList(PodList podList) {
+        this.podList = podList;
     }
 }
