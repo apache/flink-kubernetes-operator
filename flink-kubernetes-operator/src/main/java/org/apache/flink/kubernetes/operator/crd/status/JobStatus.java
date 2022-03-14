@@ -17,12 +17,15 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
+import org.apache.flink.annotation.Experimental;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** Status of an individual job within the Flink deployment. */
+@Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

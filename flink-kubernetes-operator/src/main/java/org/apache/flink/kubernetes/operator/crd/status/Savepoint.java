@@ -17,11 +17,14 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
+import org.apache.flink.annotation.Experimental;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** Represents information about a finished savepoint. */
+@Experimental
 @Data
 @AllArgsConstructor
 @NoArgsConstructor

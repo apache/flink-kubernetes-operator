@@ -17,12 +17,15 @@
 
 package org.apache.flink.kubernetes.operator.crd.spec;
 
+import org.apache.flink.annotation.Experimental;
+
 import io.fabric8.kubernetes.api.model.Pod;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** JobManager spec. */
+@Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

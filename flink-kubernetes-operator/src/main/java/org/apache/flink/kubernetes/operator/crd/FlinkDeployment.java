@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.crd;
 
+import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 
@@ -29,6 +30,7 @@ import io.fabric8.kubernetes.model.annotation.ShortNames;
 import io.fabric8.kubernetes.model.annotation.Version;
 
 /** Flink deployment object (spec + status). */
+@Experimental
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonDeserialize()
 @Group("flink.apache.org")

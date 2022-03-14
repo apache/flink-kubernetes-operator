@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.crd.spec;
 
+import org.apache.flink.annotation.Experimental;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,6 +26,7 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 /** Flink job spec. */
+@Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

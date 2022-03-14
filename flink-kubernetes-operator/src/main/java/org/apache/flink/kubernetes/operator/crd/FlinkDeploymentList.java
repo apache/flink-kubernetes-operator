@@ -17,7 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.crd;
 
+import org.apache.flink.annotation.Experimental;
+
 import io.fabric8.kubernetes.client.CustomResourceList;
 
 /** Multiple Flink deployments. */
+@Experimental
 public class FlinkDeploymentList extends CustomResourceList<FlinkDeployment> {}

@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.crd.spec;
 
+import org.apache.flink.annotation.Experimental;
+
 import io.fabric8.kubernetes.api.model.Pod;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -26,6 +28,7 @@ import lombok.NoArgsConstructor;
 import java.util.Map;
 
 /** Spec that describes a Flink application deployment. */
+@Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
