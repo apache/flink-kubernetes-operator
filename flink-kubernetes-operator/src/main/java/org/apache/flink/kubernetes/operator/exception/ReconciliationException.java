@@ -20,6 +20,8 @@ package org.apache.flink.kubernetes.operator.exception;
 /** Exception for wrapping reconciliation errors. */
 public class ReconciliationException extends RuntimeException {
 
+    private static final long serialVersionUID = 2260638990044248181L;
+
     public ReconciliationException(Throwable cause) {
         super(cause);
     }

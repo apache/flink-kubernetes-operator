@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
@@ -45,7 +46,9 @@ public enum JobManagerDeploymentStatus {
     ERROR;
 
     public UpdateControl<FlinkDeployment> toUpdateControl(
-            FlinkDeployment flinkDeployment, FlinkOperatorConfiguration operatorConfiguration) {
+            FlinkDeployment originalCopy,
+            FlinkDeployment flinkDeployment,
+            FlinkOperatorConfiguration operatorConfiguration) {
         int rescheduleAfterSec;
         switch (this) {
             case DEPLOYING:
@@ -67,7 +70,7 @@ public enum JobManagerDeploymentStatus {
             default:
                 throw new RuntimeException("Unknown status: " + this);
         }
-        return UpdateControl.updateStatus(flinkDeployment)
+        return ReconciliationUtils.toUpdateControl(originalCopy, flinkDeployment)
                 .rescheduleAfter(rescheduleAfterSec, TimeUnit.SECONDS);
     }
 }

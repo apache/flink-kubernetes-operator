@@ -106,13 +106,14 @@ public class FlinkDeploymentController
 
     @Override
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context) {
+        FlinkDeployment originalCopy = ReconciliationUtils.clone(flinkApp);
         LOG.info("Reconciling {}", flinkApp.getMetadata().getName());
 
         Optional<String> validationError = validator.validate(flinkApp);
         if (validationError.isPresent()) {
             LOG.error("Reconciliation failed: " + validationError.get());
             ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
-            return UpdateControl.updateStatus(flinkApp);
+            return ReconciliationUtils.toUpdateControl(originalCopy, flinkApp);
         }
 
         Configuration effectiveConfig =
@@ -129,7 +130,7 @@ public class FlinkDeploymentController
             throw new ReconciliationException(e);
         }
 
-        return getUpdateControl(flinkApp);
+        return getUpdateControl(originalCopy, flinkApp);
     }
 
     private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
@@ -150,11 +151,12 @@ public class FlinkDeploymentController
                 .create(event);
     }
 
-    private UpdateControl<FlinkDeployment> getUpdateControl(FlinkDeployment deployment) {
+    private UpdateControl<FlinkDeployment> getUpdateControl(
+            FlinkDeployment originalCopy, FlinkDeployment deployment) {
         return deployment
                 .getStatus()
                 .getJobManagerDeploymentStatus()
-                .toUpdateControl(deployment, operatorConfiguration);
+                .toUpdateControl(originalCopy, deployment, operatorConfiguration);
     }
 
     @Override
