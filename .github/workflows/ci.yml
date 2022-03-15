@@ -52,7 +52,7 @@ jobs:
           export SHELL=/bin/bash
           export DOCKER_BUILDKIT=1
           eval $(minikube -p minikube docker-env)
-          docker build -f ./Dockerfile -t flink-kubernetes-operator:ci-latest .
+          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest .
           docker images
       - name: Start the operator
         run: |
@@ -107,7 +107,7 @@ jobs:
           export SHELL=/bin/bash
           export DOCKER_BUILDKIT=1
           eval $(minikube -p minikube docker-env)
-          docker build -f ./Dockerfile -t flink-kubernetes-operator:ci-latest .
+          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain .
           docker images
       - name: Start the operator
         run: |

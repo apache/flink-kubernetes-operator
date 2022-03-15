@@ -35,7 +35,7 @@ COPY $WEBHOOK_DIR/src ./$WEBHOOK_DIR/src
 
 COPY tools ./tools
 
-RUN --mount=type=cache,target=/root/.m2 mvn clean install
+RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install
 
 # stage
 FROM openjdk:11-jre
