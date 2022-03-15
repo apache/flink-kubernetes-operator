@@ -28,9 +28,17 @@ import io.fabric8.kubernetes.client.dsl.FilterWatchListDeletable;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
 import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 /** Operator SDK related utility functions. */
 public class OperatorUtils {
+
+    private static final String NAMESPACES_SPLITTER_KEY = ",";
 
     public static InformerEventSource<Deployment, HasMetadata> createJmDepInformerEventSource(
             KubernetesClient kubernetesClient, String namespace) {
@@ -57,8 +65,18 @@ public class OperatorUtils {
         return new InformerEventSource<>(informer, Mappers.fromLabel(Constants.LABEL_APP_KEY)) {
             @Override
             public String name() {
-                return super.name() + "-" + name;
+                return name;
             }
         };
+    }
+
+    public static Set<String> getWatchedNamespaces() {
+        String watchedNamespaces = EnvUtils.get(EnvUtils.ENV_WATCHED_NAMESPACES);
+
+        if (StringUtils.isEmpty(watchedNamespaces)) {
+            return Collections.emptySet();
+        } else {
+            return new HashSet<>(Arrays.asList(watchedNamespaces.split(NAMESPACES_SPLITTER_KEY)));
+        }
     }
 }

@@ -47,6 +47,7 @@ import org.junit.jupiter.api.Test;
 
 import java.net.HttpURLConnection;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -66,7 +67,7 @@ public class FlinkDeploymentControllerTest {
 
     private final Context context = TestUtils.createContextWithReadyJobManagerDeployment();
     private final FlinkOperatorConfiguration operatorConfiguration =
-            new FlinkOperatorConfiguration(1, 2, 3, 4, null);
+            new FlinkOperatorConfiguration(1, 2, 3, 4, null, Collections.emptySet());
 
     private TestingFlinkService flinkService;
     private FlinkDeploymentController testController;
@@ -387,33 +388,19 @@ public class FlinkDeploymentControllerTest {
     public void testPrepareEventSource() {
         // Test watch all
         testController.setControllerConfig(
-                new FlinkControllerConfig(testController) {
-                    @Override
-                    public Set<String> getEffectiveNamespaces() {
-                        return Set.of();
-                    }
-                });
+                new FlinkControllerConfig(testController, Collections.emptySet()));
         List<EventSource> eventSources = testController.prepareEventSources(null);
         assertEquals(1, eventSources.size());
-        assertTrue(eventSources.get(0).name().endsWith("-all"));
+        assertEquals("all", eventSources.get(0).name());
 
         // Test watch namespaces
         Set<String> namespaces = Set.of("ns1", "ns2", "ns3");
-        testController.setControllerConfig(
-                new FlinkControllerConfig(testController) {
-                    @Override
-                    public Set<String> getEffectiveNamespaces() {
-                        return namespaces;
-                    }
-                });
+        testController.setControllerConfig(new FlinkControllerConfig(testController, namespaces));
         eventSources = testController.prepareEventSources(null);
         assertEquals(3, eventSources.size());
         assertEquals(
                 namespaces,
-                eventSources.stream()
-                        .map(EventSource::name)
-                        .map(s -> s.substring(s.length() - 3))
-                        .collect(Collectors.toSet()));
+                eventSources.stream().map(EventSource::name).collect(Collectors.toSet()));
     }
 
     private FlinkDeploymentController createTestController(
@@ -429,7 +416,8 @@ public class FlinkDeploymentControllerTest {
                         new ReconcilerFactory(
                                 kubernetesClient, flinkService, operatorConfiguration),
                         new ObserverFactory(flinkService, operatorConfiguration));
-        controller.setControllerConfig(new FlinkControllerConfig(controller));
+        controller.setControllerConfig(
+                new FlinkControllerConfig(controller, Collections.emptySet()));
         return controller;
     }
 }

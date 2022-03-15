@@ -74,7 +74,8 @@ public class FlinkOperator {
                         reconcilerFactory,
                         observerFactory);
 
-        FlinkControllerConfig controllerConfig = new FlinkControllerConfig(controller);
+        FlinkControllerConfig controllerConfig =
+                new FlinkControllerConfig(controller, operatorConfiguration.getWatchedNamespaces());
         controller.setControllerConfig(controllerConfig);
         controllerConfig.setConfigurationService(configurationService);
 

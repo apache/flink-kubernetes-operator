@@ -26,10 +26,20 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
+import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** {@link SessionObserver} unit tests. */
 public class SessionObserverTest {
@@ -65,5 +75,89 @@ public class SessionObserverTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
+    }
+
+    @Test
+    public void testWatchMultipleNamespaces() {
+        FlinkService flinkService = new TestingFlinkService();
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .setLastReconciledSpec(deployment.getSpec());
+
+        FlinkOperatorConfiguration allNsConfig =
+                new FlinkOperatorConfiguration(1, 2, 3, 4, null, Collections.emptySet());
+        FlinkOperatorConfiguration specificNsConfig =
+                new FlinkOperatorConfiguration(
+                        1, 2, 3, 4, null, Set.of(deployment.getMetadata().getNamespace()));
+        FlinkOperatorConfiguration multipleNsConfig =
+                new FlinkOperatorConfiguration(
+                        1, 2, 3, 4, null, Set.of(deployment.getMetadata().getNamespace(), "ns"));
+
+        Deployment k8sDeployment = new Deployment();
+        k8sDeployment.setSpec(new DeploymentSpec());
+        k8sDeployment.setStatus(new DeploymentStatus());
+
+        AtomicInteger secondaryResourceAccessed = new AtomicInteger(0);
+        Observer allNsObserver = new SessionObserver(flinkService, allNsConfig);
+        allNsObserver.observe(
+                deployment,
+                new Context() {
+                    @Override
+                    public Optional<RetryInfo> getRetryInfo() {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
+                        assertNull(s);
+                        secondaryResourceAccessed.addAndGet(1);
+                        return Optional.of((T) k8sDeployment);
+                    }
+                },
+                FlinkUtils.getEffectiveConfig(deployment, new Configuration()));
+
+        assertEquals(1, secondaryResourceAccessed.get());
+
+        Observer specificNsObserver = new SessionObserver(flinkService, specificNsConfig);
+        specificNsObserver.observe(
+                deployment,
+                new Context() {
+                    @Override
+                    public Optional<RetryInfo> getRetryInfo() {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
+                        assertNull(s);
+                        secondaryResourceAccessed.addAndGet(1);
+                        return Optional.of((T) k8sDeployment);
+                    }
+                },
+                FlinkUtils.getEffectiveConfig(deployment, new Configuration()));
+
+        assertEquals(2, secondaryResourceAccessed.get());
+
+        Observer multipleNsObserver = new SessionObserver(flinkService, multipleNsConfig);
+        multipleNsObserver.observe(
+                deployment,
+                new Context() {
+                    @Override
+                    public Optional<RetryInfo> getRetryInfo() {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
+                        assertEquals(deployment.getMetadata().getNamespace(), s);
+                        secondaryResourceAccessed.addAndGet(1);
+                        return Optional.of((T) k8sDeployment);
+                    }
+                },
+                FlinkUtils.getEffectiveConfig(deployment, new Configuration()));
+
+        assertEquals(3, secondaryResourceAccessed.get());
     }
 }
