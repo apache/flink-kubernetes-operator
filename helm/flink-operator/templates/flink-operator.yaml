@@ -140,14 +140,14 @@ metadata:
     {{- include "flink-operator.labels" . | nindent 4 }}
 data:
   flink-conf.yaml: |+
-{{- if not (eq (.Values.operatorConfiguration).append false) }}
+{{- if .Values.operatorConfiguration.append }}
   {{- $.Files.Get "conf/flink-operator-config/flink-conf.yaml"  | nindent 4 -}}
 {{- end }}
 {{- if index (.Values.operatorConfiguration) "flink-conf.yaml" }}
   {{- index (.Values.operatorConfiguration) "flink-conf.yaml" | nindent 4 -}}
 {{- end }}
   log4j2.properties: |+
-{{- if not (eq (.Values.operatorConfiguration).append false) }}
+{{- if .Values.operatorConfiguration.append }}
   {{- $.Files.Get "conf/flink-operator-config/log4j2.properties"  | nindent 4 -}}
 {{- end }}
 {{- if index (.Values.operatorConfiguration) "log4j2.properties" }}
@@ -165,14 +165,14 @@ metadata:
     {{- include "flink-operator.labels" . | nindent 4 }}
 data:
   flink-conf.yaml: |+
-{{- if not (eq (.Values.flinkDefaultConfiguration).append false) }}
+{{- if .Values.flinkDefaultConfiguration.append }}
   {{- $.Files.Get "conf/flink-default-config/flink-conf.yaml"  | nindent 4 -}}
 {{- end }}
 {{- if index (.Values.flinkDefaultConfiguration) "flink-conf.yaml" }}
   {{- index (.Values.flinkDefaultConfiguration) "flink-conf.yaml" | nindent 4 -}}
 {{- end }}
   log4j-console.properties: |+
-{{- if not (eq (.Values.flinkDefaultConfiguration).append false) }}
+{{- if .Values.flinkDefaultConfiguration.append }}
   {{- $.Files.Get "conf/flink-default-config/log4j-console.properties"  | nindent 4 -}}
 {{- end }}
 {{- if index (.Values.flinkDefaultConfiguration) "log4j-console.properties" }}
