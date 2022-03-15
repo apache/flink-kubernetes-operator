@@ -29,7 +29,7 @@ import io.fabric8.kubernetes.model.annotation.Group;
 import io.fabric8.kubernetes.model.annotation.ShortNames;
 import io.fabric8.kubernetes.model.annotation.Version;
 
-/** Flink deployment object (spec + status). */
+/** Custom resource definition that represents both Application and Session deployments. */
 @Experimental
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonDeserialize()

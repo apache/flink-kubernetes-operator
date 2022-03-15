@@ -23,6 +23,19 @@ under the License.
 -->
 
 # FlinkDeployment Reference
+
+This page serves as a full reference for FlinkDeployment custom resource definition including all the possible configuration parameters.
+
+## FlinkDeployment
+**Class**: org.apache.flink.kubernetes.operator.crd.FlinkDeployment
+
+**Description**: Custom resource that represents both Application and Session deployments.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| spec | org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec | Spec that describes a Flink application or session cluster deployment. |
+| status | org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus | Last observed status of the Flink deployment. |
+
 ## Spec
 
 ### FlinkDeploymentSpec
