@@ -66,7 +66,7 @@ public abstract class BaseObserver implements Observer {
             return;
         }
 
-        Optional<Deployment> deployment = context.getSecondaryResource(Deployment.class);
+        Optional<Deployment> deployment = getSecondaryResource(flinkApp, context);
         if (deployment.isPresent()) {
             DeploymentStatus status = deployment.get().getStatus();
             DeploymentSpec spec = deployment.get().getSpec();
@@ -109,6 +109,14 @@ public abstract class BaseObserver implements Observer {
         }
 
         deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+    }
+
+    private Optional<Deployment> getSecondaryResource(FlinkDeployment flinkApp, Context context) {
+        return context.getSecondaryResource(
+                Deployment.class,
+                operatorConfiguration.getWatchedNamespaces().size() > 1
+                        ? flinkApp.getMetadata().getNamespace()
+                        : null);
     }
 
     protected boolean isClusterReady(FlinkDeployment dep) {
