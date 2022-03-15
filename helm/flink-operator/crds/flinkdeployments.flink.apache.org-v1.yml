@@ -9074,6 +9074,8 @@ spec:
                     type: string
                   state:
                     type: string
+                  startTime:
+                    type: string
                   updateTime:
                     type: string
                   savepointInfo:

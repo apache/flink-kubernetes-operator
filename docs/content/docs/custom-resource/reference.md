@@ -135,7 +135,8 @@ under the License.
 | jobName | java.lang.String | Name of the job. |
 | jobId | java.lang.String | Flink JobId of the Job. |
 | state | java.lang.String | Last observed state of the job. |
-| updateTime | java.lang.String | Start time of the job. |
+| startTime | java.lang.String | Start time of the job. |
+| updateTime | java.lang.String | Update time of the job. |
 | savepointInfo | org.apache.flink.kubernetes.operator.crd.status.SavepointInfo | Information about pending and last savepoint for the job. |
 
 ### ReconciliationStatus

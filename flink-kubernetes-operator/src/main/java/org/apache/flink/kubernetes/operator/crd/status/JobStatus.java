@@ -41,6 +41,9 @@ public class JobStatus {
     private String state;
 
     /** Start time of the job. */
+    private String startTime;
+
+    /** Update time of the job. */
     private String updateTime;
 
     /** Information about pending and last savepoint for the job. */
