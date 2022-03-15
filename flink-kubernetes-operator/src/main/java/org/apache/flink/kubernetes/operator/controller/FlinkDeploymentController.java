@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -48,6 +47,7 @@ import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -131,12 +131,12 @@ public class FlinkDeploymentController
             throw new ReconciliationException(e);
         }
 
-        Time rescheduleAfter =
+        Duration rescheduleAfter =
                 flinkApp.getStatus()
                         .getJobManagerDeploymentStatus()
                         .rescheduleAfter(flinkApp, operatorConfiguration);
         return ReconciliationUtils.toUpdateControl(originalCopy, flinkApp)
-                .rescheduleAfter(rescheduleAfter.getSize(), rescheduleAfter.getUnit());
+                .rescheduleAfter(rescheduleAfter.toMillis());
     }
 
     private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {

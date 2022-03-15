@@ -202,7 +202,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY
                         .rescheduleAfter(appCluster, operatorConfiguration)
-                        .toMilliseconds(),
+                        .toMillis(),
                 updateControl.getScheduleDelay().get());
     }
 
@@ -280,7 +280,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING
                         .rescheduleAfter(appCluster, operatorConfiguration)
-                        .toMilliseconds(),
+                        .toMillis(),
                 updateControl.getScheduleDelay().get());
         testController.reconcile(appCluster, context);
         jobs = flinkService.listJobs();
