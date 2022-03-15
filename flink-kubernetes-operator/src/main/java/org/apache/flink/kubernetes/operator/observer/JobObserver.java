@@ -96,8 +96,8 @@ public class JobObserver extends BaseObserver {
         status.setState(newJob.getJobState().name());
         status.setJobName(newJob.getJobName());
         status.setJobId(newJob.getJobId().toHexString());
-        // track the start time, changing timestamp would cause busy reconciliation
-        status.setUpdateTime(String.valueOf(newJob.getStartTime()));
+        status.setStartTime(String.valueOf(newJob.getStartTime()));
+        status.setUpdateTime(String.valueOf(System.currentTimeMillis()));
     }
 
     private void observeSavepointStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {

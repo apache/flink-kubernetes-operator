@@ -96,6 +96,11 @@ public class JobObserverTest {
         assertEquals(
                 deployment.getMetadata().getName(),
                 deployment.getStatus().getJobStatus().getJobName());
+        assertEquals(
+                Long.valueOf(deployment.getStatus().getJobStatus().getUpdateTime())
+                        .compareTo(
+                                Long.valueOf(deployment.getStatus().getJobStatus().getStartTime())),
+                1);
 
         // Test listing failure
         flinkService.clear();
