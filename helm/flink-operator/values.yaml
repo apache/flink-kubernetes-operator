@@ -30,9 +30,6 @@ image:
 rbac:
   create: true
 
-ingress:
-  create: false
-
 operatorServiceAccount:
   create: true
   annotations: {}

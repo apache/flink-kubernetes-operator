@@ -42,11 +42,7 @@ public class SessionReconciler extends BaseReconciler {
     }
 
     @Override
-    public void reconcile(
-            String operatorNamespace,
-            FlinkDeployment flinkApp,
-            Context context,
-            Configuration effectiveConfig)
+    public void reconcile(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig)
             throws Exception {
 
         FlinkDeploymentSpec lastReconciledSpec =
@@ -56,13 +52,13 @@ public class SessionReconciler extends BaseReconciler {
             flinkService.submitSessionCluster(flinkApp, effectiveConfig);
             flinkApp.getStatus()
                     .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-            IngressUtils.updateIngressRules(
-                    flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
+            IngressUtils.updateIngressRules(flinkApp, effectiveConfig, kubernetesClient);
         }
 
         boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
         if (specChanged) {
             upgradeSessionCluster(flinkApp, effectiveConfig);
+            IngressUtils.updateIngressRules(flinkApp, effectiveConfig, kubernetesClient);
         }
         ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
     }

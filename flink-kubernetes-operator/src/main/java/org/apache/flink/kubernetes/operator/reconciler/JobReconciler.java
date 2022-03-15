@@ -60,11 +60,7 @@ public class JobReconciler extends BaseReconciler {
     }
 
     @Override
-    public void reconcile(
-            String operatorNamespace,
-            FlinkDeployment flinkApp,
-            Context context,
-            Configuration effectiveConfig)
+    public void reconcile(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig)
             throws Exception {
 
         FlinkDeploymentSpec lastReconciledSpec =
@@ -75,8 +71,7 @@ public class JobReconciler extends BaseReconciler {
                     flinkApp,
                     effectiveConfig,
                     Optional.ofNullable(jobSpec.getInitialSavepointPath()));
-            IngressUtils.updateIngressRules(
-                    flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, false);
+            IngressUtils.updateIngressRules(flinkApp, effectiveConfig, kubernetesClient);
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
             return;
         }
@@ -111,6 +106,7 @@ public class JobReconciler extends BaseReconciler {
                     restoreFromLastSavepoint(flinkApp, effectiveConfig);
                 }
             }
+            IngressUtils.updateIngressRules(flinkApp, effectiveConfig, kubernetesClient);
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
         } else if (SavepointUtils.shouldTriggerSavepoint(flinkApp) && isJobRunning(flinkApp)) {
             triggerSavepoint(flinkApp, effectiveConfig);

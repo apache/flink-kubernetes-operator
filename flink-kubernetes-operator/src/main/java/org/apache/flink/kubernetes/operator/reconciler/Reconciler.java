@@ -30,27 +30,20 @@ public interface Reconciler {
     /**
      * This is called when receiving the create or update event of the FlinkDeployment resource.
      *
-     * @param operatorNamespace The namespace of the operator
      * @param flinkApp the FlinkDeployment resource that has been created or updated
      * @param context the context with which the operation is executed
      * @param effectiveConfig the effective config of the flinkApp
      */
-    void reconcile(
-            String operatorNamespace,
-            FlinkDeployment flinkApp,
-            Context context,
-            Configuration effectiveConfig)
+    void reconcile(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig)
             throws Exception;
 
     /**
      * This is called when receiving the delete event of FlinkDeployment resource. This method is
      * meant to cleanup the associated components like the Flink job components.
      *
-     * @param operatorNamespace The namespace of the operator
      * @param flinkApp the FlinkDeployment resource that has been deleted
      * @param effectiveConfig the effective config of the flinkApp
      * @return DeleteControl to manage the delete behavior
      */
-    DeleteControl cleanup(
-            String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig);
+    DeleteControl cleanup(FlinkDeployment flinkApp, Configuration effectiveConfig);
 }

@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
@@ -45,13 +44,12 @@ public abstract class BaseReconciler implements Reconciler {
     }
 
     @Override
-    public DeleteControl cleanup(
-            String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig) {
-        return shutdownAndDelete(operatorNamespace, flinkApp, effectiveConfig);
+    public DeleteControl cleanup(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+        return shutdownAndDelete(flinkApp, effectiveConfig);
     }
 
     private DeleteControl shutdownAndDelete(
-            String operatorNamespace, FlinkDeployment flinkApp, Configuration effectiveConfig) {
+            FlinkDeployment flinkApp, Configuration effectiveConfig) {
 
         if (JobManagerDeploymentStatus.READY
                 == flinkApp.getStatus().getJobManagerDeploymentStatus()) {
@@ -59,8 +57,6 @@ public abstract class BaseReconciler implements Reconciler {
         } else {
             FlinkUtils.deleteCluster(flinkApp, kubernetesClient, true);
         }
-        IngressUtils.updateIngressRules(
-                flinkApp, effectiveConfig, operatorNamespace, kubernetesClient, true);
 
         return DeleteControl.defaultDelete();
     }

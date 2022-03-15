@@ -100,9 +100,7 @@ public class FlinkDeploymentController
         } catch (DeploymentFailedException dfe) {
             // ignore during cleanup
         }
-        return reconcilerFactory
-                .getOrCreate(flinkApp)
-                .cleanup(operatorNamespace, flinkApp, effectiveConfig);
+        return reconcilerFactory.getOrCreate(flinkApp).cleanup(flinkApp, effectiveConfig);
     }
 
     @Override
@@ -122,9 +120,7 @@ public class FlinkDeploymentController
 
         try {
             observerFactory.getOrCreate(flinkApp).observe(flinkApp, context, effectiveConfig);
-            reconcilerFactory
-                    .getOrCreate(flinkApp)
-                    .reconcile(operatorNamespace, flinkApp, context, effectiveConfig);
+            reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context, effectiveConfig);
         } catch (DeploymentFailedException dfe) {
             handleDeploymentFailed(flinkApp, dfe);
         } catch (Exception e) {
