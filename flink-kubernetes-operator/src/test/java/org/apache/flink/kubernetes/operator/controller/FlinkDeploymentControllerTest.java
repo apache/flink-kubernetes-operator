@@ -53,12 +53,12 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link JobStatusObserver unit tests */
 @EnableKubernetesMockClient(crud = true)
@@ -189,12 +189,12 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.ERROR,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertTrue(updateControl.isUpdateStatus());
+        assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 JobManagerDeploymentStatus.READY
-                        .toUpdateControl(appCluster, operatorConfiguration)
-                        .getScheduleDelay(),
-                updateControl.getScheduleDelay());
+                        .rescheduleAfter(appCluster, operatorConfiguration)
+                        .toMillis(),
+                updateControl.getScheduleDelay().get());
     }
 
     @Test
@@ -270,9 +270,9 @@ public class FlinkDeploymentControllerTest {
                 testController.reconcile(appCluster, context);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING
-                        .toUpdateControl(appCluster, operatorConfiguration)
-                        .getScheduleDelay(),
-                updateControl.getScheduleDelay());
+                        .rescheduleAfter(appCluster, operatorConfiguration)
+                        .toMillis(),
+                updateControl.getScheduleDelay().get());
         testController.reconcile(appCluster, context);
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());

@@ -21,9 +21,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
-import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
-
-import java.util.concurrent.TimeUnit;
+import java.time.Duration;
 
 /** Status of the Flink JobManager Kubernetes deployment. */
 public enum JobManagerDeploymentStatus {
@@ -44,7 +42,7 @@ public enum JobManagerDeploymentStatus {
     /** Deployment in terminal error, requires spec change for reconciliation to continue. */
     ERROR;
 
-    public UpdateControl<FlinkDeployment> toUpdateControl(
+    public Duration rescheduleAfter(
             FlinkDeployment flinkDeployment, FlinkOperatorConfiguration operatorConfiguration) {
         int rescheduleAfterSec;
         switch (this) {
@@ -67,7 +65,6 @@ public enum JobManagerDeploymentStatus {
             default:
                 throw new RuntimeException("Unknown status: " + this);
         }
-        return UpdateControl.updateStatus(flinkDeployment)
-                .rescheduleAfter(rescheduleAfterSec, TimeUnit.SECONDS);
+        return Duration.ofSeconds(rescheduleAfterSec);
     }
 }

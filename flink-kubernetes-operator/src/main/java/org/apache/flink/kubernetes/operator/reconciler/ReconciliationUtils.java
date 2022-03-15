@@ -23,6 +23,9 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+
+import java.util.Objects;
 
 /** Reconciliation utilities. */
 public class ReconciliationUtils {
@@ -73,5 +76,23 @@ public class ReconciliationUtils {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    public static UpdateControl<FlinkDeployment> toUpdateControl(
+            FlinkDeployment originalCopy, FlinkDeployment current) {
+        UpdateControl<FlinkDeployment> updateControl;
+        if (!Objects.equals(originalCopy.getSpec(), current.getSpec())) {
+            throw new UnsupportedOperationException(
+                    "Detected spec change after reconcile, this probably indicates a bug.");
+        }
+
+        boolean statusChanged = !Objects.equals(originalCopy.getStatus(), current.getStatus());
+
+        if (statusChanged) {
+            updateControl = UpdateControl.updateStatus(current);
+        } else {
+            updateControl = UpdateControl.noUpdate();
+        }
+        return updateControl;
     }
 }

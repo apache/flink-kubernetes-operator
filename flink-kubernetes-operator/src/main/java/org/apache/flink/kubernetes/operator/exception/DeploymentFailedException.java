@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 /** Exception to signal terminal deployment failure. */
 public class DeploymentFailedException extends RuntimeException {
     public static final String COMPONENT_JOBMANAGER = "JobManagerDeployment";
+    private static final long serialVersionUID = -1070179896083579221L;
 
     public final String component;
     public final DeploymentCondition deployCondition;
