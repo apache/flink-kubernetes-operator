@@ -56,7 +56,7 @@ public class JobReconcilerTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration config = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
-        reconciler.reconcile("test", deployment, context, config);
+        reconciler.reconcile(deployment, context, config);
         List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
 
@@ -64,7 +64,7 @@ public class JobReconcilerTest {
         FlinkDeployment statelessUpgrade = ReconciliationUtils.clone(deployment);
         statelessUpgrade.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         statelessUpgrade.getSpec().getFlinkConfiguration().put("new", "conf");
-        reconciler.reconcile("test", statelessUpgrade, context, config);
+        reconciler.reconcile(statelessUpgrade, context, config);
 
         runningJobs = flinkService.listJobs();
         assertEquals(1, runningJobs.size());
@@ -80,7 +80,7 @@ public class JobReconcilerTest {
         statefulUpgrade.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         statefulUpgrade.getSpec().getFlinkConfiguration().put("new", "conf2");
 
-        reconciler.reconcile("test", statefulUpgrade, context, new Configuration(config));
+        reconciler.reconcile(statefulUpgrade, context, new Configuration(config));
 
         runningJobs = flinkService.listJobs();
         assertEquals(1, runningJobs.size());
@@ -98,7 +98,7 @@ public class JobReconcilerTest {
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         final Configuration config = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
-        reconciler.reconcile("test", deployment, context, config);
+        reconciler.reconcile(deployment, context, config);
         List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
 
@@ -107,7 +107,7 @@ public class JobReconcilerTest {
         deployment.getSpec().getJob().setState(JobState.SUSPENDED);
         deployment.getSpec().setImage("new-image-1");
 
-        reconciler.reconcile("test", deployment, context, config);
+        reconciler.reconcile(deployment, context, config);
         assertEquals(0, flinkService.listJobs().size());
         assertTrue(
                 JobState.SUSPENDED
@@ -133,7 +133,7 @@ public class JobReconcilerTest {
         deployment.getSpec().getJob().setState(JobState.RUNNING);
         deployment.getSpec().setImage("new-image-2");
 
-        reconciler.reconcile("test", deployment, context, config);
+        reconciler.reconcile(deployment, context, config);
         runningJobs = flinkService.listJobs();
         assertEquals(expectedSavepointPath, config.get(SavepointConfigOptions.SAVEPOINT_PATH));
         assertEquals(1, runningJobs.size());
@@ -148,7 +148,7 @@ public class JobReconcilerTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration config = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
-        reconciler.reconcile("test", deployment, context, config);
+        reconciler.reconcile(deployment, context, config);
         List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
@@ -157,7 +157,7 @@ public class JobReconcilerTest {
         FlinkDeployment spDeployment = ReconciliationUtils.clone(deployment);
 
         // don't trigger if nonce is missing
-        reconciler.reconcile("test", spDeployment, context, config);
+        reconciler.reconcile(spDeployment, context, config);
         assertNull(spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
 
         // trigger when nonce is defined
@@ -165,20 +165,20 @@ public class JobReconcilerTest {
                 .getSpec()
                 .getJob()
                 .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
-        reconciler.reconcile("test", spDeployment, context, config);
+        reconciler.reconcile(spDeployment, context, config);
         assertEquals(
                 "trigger_0",
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
 
         // don't trigger when savepoint is in progress
-        reconciler.reconcile("test", spDeployment, context, config);
+        reconciler.reconcile(spDeployment, context, config);
         assertEquals(
                 "trigger_0",
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         spDeployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId(null);
 
         // don't trigger when nonce is the same
-        reconciler.reconcile("test", spDeployment, context, config);
+        reconciler.reconcile(spDeployment, context, config);
         assertNull(spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         spDeployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId(null);
 
@@ -187,7 +187,7 @@ public class JobReconcilerTest {
                 .getSpec()
                 .getJob()
                 .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
-        reconciler.reconcile("test", spDeployment, context, config);
+        reconciler.reconcile(spDeployment, context, config);
         assertEquals(
                 "trigger_1",
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
@@ -195,7 +195,7 @@ public class JobReconcilerTest {
 
         // don't trigger nonce is cleared
         spDeployment.getSpec().getJob().setSavepointTriggerNonce(null);
-        reconciler.reconcile("test", spDeployment, context, config);
+        reconciler.reconcile(spDeployment, context, config);
         assertNull(spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
     }
 

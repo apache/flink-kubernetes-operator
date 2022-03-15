@@ -21,6 +21,10 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.api.model.OwnerReference;
+import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.networking.v1.HTTPIngressRuleValueBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressBuilder;
@@ -29,12 +33,12 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Optional;
+import java.util.Collections;
+import java.util.List;
 
 /** Ingress utilities. */
 public class IngressUtils {
 
-    private static final String INGRESS_NAME = "flink-operator";
     private static final String REST_SVC_NAME_SUFFIX = "-rest";
 
     private static final Logger LOG = LoggerFactory.getLogger(IngressUtils.class);
@@ -42,46 +46,35 @@ public class IngressUtils {
     public static void updateIngressRules(
             FlinkDeployment flinkDeployment,
             Configuration effectiveConfig,
-            String operatorNamespace,
-            KubernetesClient client,
-            boolean remove) {
+            KubernetesClient client) {
         if (flinkDeployment.getSpec().getIngressDomain() != null) {
             final IngressRule ingressRule = fromDeployment(flinkDeployment, effectiveConfig);
-            getIngress(operatorNamespace, client)
-                    .ifPresent(
-                            ingress -> {
-                                Ingress updated;
-                                if (remove) {
-                                    updated =
-                                            new IngressBuilder(ingress)
-                                                    .editSpec()
-                                                    .removeFromRules(ingressRule)
-                                                    .endSpec()
-                                                    .build();
-                                } else {
-                                    updated =
-                                            new IngressBuilder(ingress)
-                                                    .editSpec()
-                                                    .addToRules(ingressRule)
-                                                    .endSpec()
-                                                    .build();
-                                }
-                                LOG.info("Updating ingress rules {}", ingress);
-                                client.resourceList(updated)
-                                        .inNamespace(operatorNamespace)
-                                        .createOrReplace();
-                            });
+            Ingress ingress =
+                    new IngressBuilder()
+                            .withNewMetadata()
+                            .withName(flinkDeployment.getMetadata().getName())
+                            .withNamespace(flinkDeployment.getMetadata().getNamespace())
+                            .endMetadata()
+                            .withNewSpec()
+                            .withRules(ingressRule)
+                            .endSpec()
+                            .build();
+            Deployment deployment =
+                    client.apps()
+                            .deployments()
+                            .inNamespace(flinkDeployment.getMetadata().getNamespace())
+                            .withName(flinkDeployment.getMetadata().getName())
+                            .get();
+            if (deployment == null) {
+                LOG.warn("Could not find deployment {}", flinkDeployment.getMetadata().getName());
+            } else {
+                setOwnerReference(deployment, Collections.singletonList(ingress));
+            }
+            LOG.info("Updating ingress rules {}", ingress);
+            client.resourceList(ingress)
+                    .inNamespace(flinkDeployment.getMetadata().getNamespace())
+                    .createOrReplace();
         }
-    }
-
-    private static Optional<Ingress> getIngress(String operatorNamespace, KubernetesClient client) {
-        return Optional.ofNullable(
-                client.network()
-                        .v1()
-                        .ingresses()
-                        .inNamespace(operatorNamespace)
-                        .withName(INGRESS_NAME)
-                        .get());
     }
 
     private static IngressRule fromDeployment(
@@ -107,6 +100,26 @@ public class IngressUtils {
     }
 
     private static String getIngressHost(FlinkDeployment flinkDeployment, String clusterId) {
-        return String.format("%s.%s", clusterId, flinkDeployment.getSpec().getIngressDomain());
+        return String.format(
+                "%s.%s.%s",
+                clusterId,
+                flinkDeployment.getMetadata().getNamespace(),
+                flinkDeployment.getSpec().getIngressDomain());
+    }
+
+    public static void setOwnerReference(HasMetadata owner, List<HasMetadata> resources) {
+        final OwnerReference ownerReference =
+                new OwnerReferenceBuilder()
+                        .withName(owner.getMetadata().getName())
+                        .withApiVersion(owner.getApiVersion())
+                        .withUid(owner.getMetadata().getUid())
+                        .withKind(owner.getKind())
+                        .withController(true)
+                        .withBlockOwnerDeletion(true)
+                        .build();
+        resources.forEach(
+                resource ->
+                        resource.getMetadata()
+                                .setOwnerReferences(Collections.singletonList(ownerReference)));
     }
 }
