@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.api.common.time.Time;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -130,7 +131,12 @@ public class FlinkDeploymentController
             throw new ReconciliationException(e);
         }
 
-        return getUpdateControl(originalCopy, flinkApp);
+        Time rescheduleAfter =
+                flinkApp.getStatus()
+                        .getJobManagerDeploymentStatus()
+                        .rescheduleAfter(flinkApp, operatorConfiguration);
+        return ReconciliationUtils.toUpdateControl(originalCopy, flinkApp)
+                .rescheduleAfter(rescheduleAfter.getSize(), rescheduleAfter.getUnit());
     }
 
     private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
@@ -149,14 +155,6 @@ public class FlinkDeploymentController
                 .events()
                 .inNamespace(flinkApp.getMetadata().getNamespace())
                 .create(event);
-    }
-
-    private UpdateControl<FlinkDeployment> getUpdateControl(
-            FlinkDeployment originalCopy, FlinkDeployment deployment) {
-        return deployment
-                .getStatus()
-                .getJobManagerDeploymentStatus()
-                .toUpdateControl(originalCopy, deployment, operatorConfiguration);
     }
 
     @Override

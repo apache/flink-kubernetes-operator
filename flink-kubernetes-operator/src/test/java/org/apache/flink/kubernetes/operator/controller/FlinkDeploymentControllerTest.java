@@ -192,7 +192,6 @@ public class FlinkDeploymentControllerTest {
         assertNotNull(reconciliationStatus.getError());
 
         // next cycle should not create another event
-        FlinkDeployment previous = ReconciliationUtils.clone(appCluster);
         updateControl =
                 testController.reconcile(
                         appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
@@ -202,9 +201,9 @@ public class FlinkDeploymentControllerTest {
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 JobManagerDeploymentStatus.READY
-                        .toUpdateControl(previous, appCluster, operatorConfiguration)
-                        .getScheduleDelay(),
-                updateControl.getScheduleDelay());
+                        .rescheduleAfter(appCluster, operatorConfiguration)
+                        .toMilliseconds(),
+                updateControl.getScheduleDelay().get());
     }
 
     @Test
@@ -276,14 +275,13 @@ public class FlinkDeploymentControllerTest {
         appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().getJob().setParallelism(100);
 
-        FlinkDeployment previous = ReconciliationUtils.clone(appCluster);
         UpdateControl<FlinkDeployment> updateControl =
                 testController.reconcile(appCluster, context);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING
-                        .toUpdateControl(previous, appCluster, operatorConfiguration)
-                        .getScheduleDelay(),
-                updateControl.getScheduleDelay());
+                        .rescheduleAfter(appCluster, operatorConfiguration)
+                        .toMilliseconds(),
+                updateControl.getScheduleDelay().get());
         testController.reconcile(appCluster, context);
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());

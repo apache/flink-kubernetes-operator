@@ -17,14 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
+import org.apache.flink.api.common.time.Time;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
-
-import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
-
-import java.util.concurrent.TimeUnit;
 
 /** Status of the Flink JobManager Kubernetes deployment. */
 public enum JobManagerDeploymentStatus {
@@ -45,10 +41,8 @@ public enum JobManagerDeploymentStatus {
     /** Deployment in terminal error, requires spec change for reconciliation to continue. */
     ERROR;
 
-    public UpdateControl<FlinkDeployment> toUpdateControl(
-            FlinkDeployment originalCopy,
-            FlinkDeployment flinkDeployment,
-            FlinkOperatorConfiguration operatorConfiguration) {
+    public Time rescheduleAfter(
+            FlinkDeployment flinkDeployment, FlinkOperatorConfiguration operatorConfiguration) {
         int rescheduleAfterSec;
         switch (this) {
             case DEPLOYING:
@@ -70,7 +64,6 @@ public enum JobManagerDeploymentStatus {
             default:
                 throw new RuntimeException("Unknown status: " + this);
         }
-        return ReconciliationUtils.toUpdateControl(originalCopy, flinkDeployment)
-                .rescheduleAfter(rescheduleAfterSec, TimeUnit.SECONDS);
+        return Time.seconds(rescheduleAfterSec);
     }
 }

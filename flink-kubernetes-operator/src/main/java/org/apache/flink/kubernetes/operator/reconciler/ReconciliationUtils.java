@@ -83,7 +83,7 @@ public class ReconciliationUtils {
         UpdateControl<FlinkDeployment> updateControl;
         if (!Objects.equals(originalCopy.getSpec(), current.getSpec())) {
             throw new UnsupportedOperationException(
-                    "The spec changed during reconcile is not supported.");
+                    "Detected spec change after reconcile, this probably indicates a bug.");
         }
 
         boolean statusChanged = !Objects.equals(originalCopy.getStatus(), current.getStatus());
