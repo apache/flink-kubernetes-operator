@@ -43,6 +43,7 @@ import java.nio.file.Files;
 import java.util.Collections;
 
 import static org.apache.flink.configuration.DeploymentOptionsInternal.CONF_DIR;
+import static org.apache.flink.kubernetes.configuration.KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE;
 import static org.apache.flink.kubernetes.operator.utils.FlinkUtils.mergePodTemplates;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOGBACK_NAME;
@@ -80,6 +81,13 @@ public class FlinkConfigBuilder {
         if (spec.getFlinkConfiguration() != null && !spec.getFlinkConfiguration().isEmpty()) {
             spec.getFlinkConfiguration().forEach(effectiveConfig::setString);
         }
+
+        // Adapt default rest service type from 1.15+
+        if (!effectiveConfig.contains(REST_SERVICE_EXPOSED_TYPE)) {
+            effectiveConfig.set(
+                    REST_SERVICE_EXPOSED_TYPE,
+                    KubernetesConfigOptions.ServiceExposedType.ClusterIP);
+        }
         return this;
     }
 
@@ -107,7 +115,7 @@ public class FlinkConfigBuilder {
         // Web UI
         if (spec.getIngressDomain() != null) {
             effectiveConfig.set(
-                    KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE,
+                    REST_SERVICE_EXPOSED_TYPE,
                     KubernetesConfigOptions.ServiceExposedType.ClusterIP);
         }
         return this;
