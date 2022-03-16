@@ -103,11 +103,30 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyFlinkConfiguration() {
-        final Configuration configuration =
+        Configuration configuration =
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyFlinkConfiguration()
                         .build();
         Assert.assertEquals(2, (int) configuration.get(TaskManagerOptions.NUM_TASK_SLOTS));
+        Assert.assertEquals(
+                KubernetesConfigOptions.ServiceExposedType.ClusterIP,
+                configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
+
+        FlinkDeployment deployment = ReconciliationUtils.clone(flinkDeployment);
+        deployment
+                .getSpec()
+                .setFlinkConfiguration(
+                        Map.of(
+                                KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE.key(),
+                                KubernetesConfigOptions.ServiceExposedType.LoadBalancer.name()));
+
+        configuration =
+                new FlinkConfigBuilder(deployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .build();
+        Assert.assertEquals(
+                KubernetesConfigOptions.ServiceExposedType.LoadBalancer,
+                configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
     }
 
     @Test
