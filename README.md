@@ -63,9 +63,13 @@ kubectl describe flinkdep {dep_name}
 ### Building docker images
 ```
 docker build . -t <repo>/flink-java-operator:latest
-docker push <repo>flink-java-operator:latest
-helm install flink-operator . --set image.repository=<repo> --set image.tag=latest
+docker push <repo>/flink-java-operator:latest
 ```
+### Installing the operator locally
+```
+helm install flink-operator helm/flink-operator --set image.repository=<repo> --set image.tag=latest
+```
+
 ### Running the operator locally
 You can run or debug the `FlinkOperator` from your preferred IDE. The operator itself is accessing the deployed Flink clusters through the REST interface. When running locally the `rest.port` and `rest.address` Flink configuration parameters must be modified to a locally accessible value.
 
