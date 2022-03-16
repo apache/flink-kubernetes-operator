@@ -22,6 +22,7 @@ import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
@@ -50,6 +51,7 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
     public Optional<String> validate(FlinkDeployment deployment) {
         FlinkDeploymentSpec spec = deployment.getSpec();
         return firstPresent(
+                validateFlinkVersion(spec.getFlinkVersion()),
                 validateFlinkConfig(spec.getFlinkConfiguration()),
                 validateLogConfig(spec.getLogConfiguration()),
                 validateJobSpec(spec.getJob(), spec.getFlinkConfiguration()),
@@ -63,6 +65,16 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
             if (opt.isPresent()) {
                 return opt;
             }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateFlinkVersion(FlinkVersion version) {
+        if (version == null) {
+            return Optional.of("Flink Version must be defined.");
+        }
+        if (!version.isNewerVersionThan(FlinkVersion.v1_13)) {
+            return Optional.of("Only Flink versions 1.14 and above are supported.");
         }
         return Optional.empty();
     }

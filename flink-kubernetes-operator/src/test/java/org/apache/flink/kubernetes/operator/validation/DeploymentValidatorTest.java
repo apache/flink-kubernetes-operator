@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.validation;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
@@ -192,6 +193,14 @@ public class DeploymentValidatorTest {
                     dep.getStatus().getReconciliationStatus().getLastReconciledSpec().setJob(null);
                 },
                 "Cannot switch from session to job cluster");
+
+        testError(dep -> dep.getSpec().setFlinkVersion(null), "Flink Version must be defined.");
+
+        testError(
+                dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_13),
+                "Only Flink versions 1.14 and above are supported.");
+
+        testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_15));
     }
 
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {

@@ -23,7 +23,7 @@ metadata:
   name: flink-example-statemachine
 spec:
   image: flink:1.14.3
-  flinkVersion: 1.14.3
+  flinkVersion: v1_14
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
     high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory

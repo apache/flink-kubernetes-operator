@@ -23,7 +23,7 @@ metadata:
   name: basic-ingress
 spec:
   image: flink:1.14.3
-  flinkVersion: 1.14.3
+  flinkVersion: v1_14
   ingressDomain: flink.k8s.io
   flinkConfiguration:
 #    rest.address: basic-example.flink.k8s.io

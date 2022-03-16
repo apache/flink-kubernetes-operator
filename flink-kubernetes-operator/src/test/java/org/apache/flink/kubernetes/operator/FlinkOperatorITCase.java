@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
@@ -106,7 +107,7 @@ public class FlinkOperatorITCase {
                         .build());
         FlinkDeploymentSpec spec = new FlinkDeploymentSpec();
         spec.setImage(IMAGE);
-        spec.setFlinkVersion(FLINK_VERSION);
+        spec.setFlinkVersion(FlinkVersion.v1_14);
         spec.setServiceAccount(SERVICE_ACCOUNT);
         Resource resource = new Resource();
         resource.setMemory("2048m");
