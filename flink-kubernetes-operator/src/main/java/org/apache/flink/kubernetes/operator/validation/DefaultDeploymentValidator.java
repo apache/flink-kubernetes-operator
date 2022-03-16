@@ -73,9 +73,6 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
         if (version == null) {
             return Optional.of("Flink Version must be defined.");
         }
-        if (!version.isNewerVersionThan(FlinkVersion.v1_13)) {
-            return Optional.of("Only Flink versions 1.14 and above are supported.");
-        }
         return Optional.empty();
     }
 

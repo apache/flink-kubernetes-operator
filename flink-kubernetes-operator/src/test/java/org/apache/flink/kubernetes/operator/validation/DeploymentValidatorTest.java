@@ -196,10 +196,6 @@ public class DeploymentValidatorTest {
 
         testError(dep -> dep.getSpec().setFlinkVersion(null), "Flink Version must be defined.");
 
-        testError(
-                dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_13),
-                "Only Flink versions 1.14 and above are supported.");
-
         testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_15));
     }
 
