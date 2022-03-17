@@ -26,6 +26,10 @@ spec:
               serviceAccount:
                 type: string
               flinkVersion:
+                enum:
+                - v1_14
+                - v1_15
+                - v1_16
                 type: string
               ingressDomain:
                 type: string
@@ -9116,6 +9120,10 @@ spec:
                       serviceAccount:
                         type: string
                       flinkVersion:
+                        enum:
+                        - v1_14
+                        - v1_15
+                        - v1_16
                         type: string
                       ingressDomain:
                         type: string

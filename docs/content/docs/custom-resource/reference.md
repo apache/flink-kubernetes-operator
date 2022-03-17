@@ -48,7 +48,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | image | java.lang.String | Flink docker image used to start the Job and TaskManager pods. |
 | imagePullPolicy | java.lang.String | Image pull policy of the Flink docker image. |
 | serviceAccount | java.lang.String | Kubernetes service used by the Flink deployment. |
-| flinkVersion | java.lang.String | Flink image version. |
+| flinkVersion | org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion | Flink image version. |
 | ingressDomain | java.lang.String | Ingress domain for the Flink deployment. |
 | flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment. |
 | podTemplate | io.fabric8.kubernetes.api.model.Pod | Base pod template for job and task manager pods. Can be overridden by the jobManager and  taskManager pod templates. |
@@ -56,6 +56,17 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | taskManager | org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec | TaskManager specs. |
 | job | org.apache.flink.kubernetes.operator.crd.spec.JobSpec | Job specification for application deployments. Null for session clusters. |
 | logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the Flink deployment. Format logConfigFileName ->  configContent. |
+
+### FlinkVersion
+**Class**: org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion
+
+**Description**: Enumeration for supported Flink versions.
+
+| Value | Docs |
+| ----- | ---- |
+| v1_14 |  |
+| v1_15 |  |
+| v1_16 |  |
 
 ### JobManagerSpec
 **Class**: org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec

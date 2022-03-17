@@ -22,6 +22,7 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
@@ -95,7 +96,7 @@ public class TestUtils {
                 .image(IMAGE)
                 .imagePullPolicy(IMAGE_POLICY)
                 .serviceAccount(SERVICE_ACCOUNT)
-                .flinkVersion(FLINK_VERSION)
+                .flinkVersion(FlinkVersion.v1_14)
                 .flinkConfiguration(conf)
                 .jobManager(new JobManagerSpec(new Resource(1, "2048m"), 1, null))
                 .taskManager(new TaskManagerSpec(new Resource(1, "2048m"), null))

@@ -82,6 +82,7 @@ The spec contains all the information the operator need to deploy and manage you
 
 Most deployments will define at least the following fields:
  - `image` : Docker used to run Flink job and task manager processes
+ - `flinkVersion` : Flink version used in the image (`v1_14`, `v1_15`...)
  - `serviceAccount` : Kubernetes service account used by the Flink pods
  - `taskManager, jobManager` : Job and Task manager pod resource specs (cpu, memory, etc.)
  - `flinkConfiguration` : Map of Flink configuration overrides such as HA and checkpointing configs

@@ -44,7 +44,7 @@ public class FlinkDeploymentSpec {
     private String serviceAccount;
 
     /** Flink image version. */
-    private String flinkVersion;
+    private FlinkVersion flinkVersion;
 
     /** Ingress domain for the Flink deployment. */
     private String ingressDomain;
