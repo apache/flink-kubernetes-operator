@@ -47,8 +47,7 @@ public class JobObserver extends BaseObserver {
 
     @Override
     public void observe(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
-        if (JobManagerDeploymentStatus.READY
-                != flinkApp.getStatus().getJobManagerDeploymentStatus()) {
+        if (!isClusterReady(flinkApp)) {
             observeJmDeployment(flinkApp, context, effectiveConfig);
         }
         if (isClusterReady(flinkApp)) {
