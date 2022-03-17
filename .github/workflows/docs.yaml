@@ -15,6 +15,9 @@
 
 name: "Build documentation"
 on:
+  schedule:
+    # At the end of every day
+    - 0 0 * * *
   workflow_dispatch:
 jobs:
   build-documentation:
