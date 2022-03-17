@@ -68,7 +68,11 @@ public class JobObserver extends BaseObserver {
         try {
             clusterJobStatuses = flinkService.listJobs(effectiveConfig);
         } catch (Exception e) {
-            logger.error("Exception while listing jobs", e);
+            logger.error(
+                    "Exception while listing jobs for {} in namespace {}",
+                    flinkApp.getMetadata().getName(),
+                    flinkApp.getMetadata().getNamespace(),
+                    e);
             flinkAppStatus.getJobStatus().setState(JOB_STATE_UNKNOWN);
             if (e instanceof TimeoutException) {
                 // check for problems with the underlying deployment
@@ -103,14 +107,17 @@ public class JobObserver extends BaseObserver {
     private void observeSavepointStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
         SavepointInfo savepointInfo = flinkApp.getStatus().getJobStatus().getSavepointInfo();
         if (!SavepointUtils.savepointInProgress(flinkApp)) {
-            logger.debug("Checkpointing not in progress");
+            logger.debug("Checkpointing not in progress on {}", flinkApp.getMetadata().getName());
             return;
         }
         SavepointFetchResult savepointFetchResult;
         try {
             savepointFetchResult = flinkService.fetchSavepointInfo(flinkApp, effectiveConfig);
         } catch (Exception e) {
-            logger.error("Exception while fetching savepoint info", e);
+            logger.error(
+                    "Exception while fetching savepoint info on {}",
+                    flinkApp.getMetadata().getName(),
+                    e);
             return;
         }
 
@@ -124,10 +131,12 @@ public class JobObserver extends BaseObserver {
                 ReconciliationUtils.updateForReconciliationError(flinkApp, errorMsg);
                 return;
             }
-            logger.info("Savepoint operation not running, waiting within grace period");
+            logger.info(
+                    "Savepoint operation on {} not running, waiting within grace period",
+                    flinkApp.getMetadata().getName());
         }
         if (savepointFetchResult.getSavepoint() == null) {
-            logger.info("Savepoint not completed yet");
+            logger.info("Savepoint on {} not completed yet", flinkApp.getMetadata().getName());
             return;
         }
         savepointInfo.updateLastSavepoint(savepointFetchResult.getSavepoint());

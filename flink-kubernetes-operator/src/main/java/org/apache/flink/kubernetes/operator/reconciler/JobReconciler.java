@@ -152,7 +152,7 @@ public class JobReconciler extends BaseReconciler {
 
     private void upgradeFlinkJob(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
-        LOG.info("Upgrading running job");
+        LOG.info("Upgrading running job on {}", flinkApp.getMetadata().getName());
         final Optional<String> savepoint =
                 suspendJob(flinkApp, flinkApp.getSpec().getJob().getUpgradeMode(), effectiveConfig);
         deployFlinkJob(flinkApp, effectiveConfig, savepoint);
@@ -212,7 +212,9 @@ public class JobReconciler extends BaseReconciler {
     @Override
     protected void shutdown(FlinkDeployment flinkApp, Configuration effectiveConfig) {
         if (isJobRunning(flinkApp)) {
-            LOG.info("Job is running, attempting graceful shutdown.");
+            LOG.info(
+                    "Job on {} is running, attempting graceful shutdown.",
+                    flinkApp.getMetadata().getName());
             try {
                 flinkService.cancelJob(
                         JobID.fromHexString(flinkApp.getStatus().getJobStatus().getJobId()),
@@ -220,7 +222,10 @@ public class JobReconciler extends BaseReconciler {
                         effectiveConfig);
                 return;
             } catch (Exception e) {
-                LOG.error("Could not shut down cluster gracefully, deleting...", e);
+                LOG.error(
+                        "Could not shut down cluster of {} gracefully, deleting...",
+                        flinkApp.getMetadata().getName(),
+                        e);
             }
         }
 

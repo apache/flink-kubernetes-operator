@@ -138,7 +138,12 @@ public abstract class BaseObserver implements Observer {
             for (ContainerStatus cs : pod.getStatus().getContainerStatuses()) {
                 ContainerStateWaiting csw = cs.getState().getWaiting();
                 if (DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF.equals(csw.getReason())) {
-                    logger.warn("JobManager pod fails: {} {}", csw.getReason(), csw.getMessage());
+                    logger.warn(
+                            "JobManager pod from deployment {} in namespace {} fails: {} {}",
+                            flinkApp.getMetadata().getName(),
+                            flinkApp.getMetadata().getNamespace(),
+                            csw.getReason(),
+                            csw.getMessage());
                     throw new DeploymentFailedException(
                             DeploymentFailedException.COMPONENT_JOBMANAGER, "Warning", csw);
                 }
