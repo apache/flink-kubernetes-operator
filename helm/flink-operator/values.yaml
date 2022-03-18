@@ -57,8 +57,8 @@ operatorConfiguration:
     metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
     metrics.reporter.slf4j.interval: 5 MINUTE
 
-    operator.reconciler.reschedule.interval.sec: 15
-    operator.observer.progress-check.interval.sec: 5
+    operator.reconciler.reschedule.interval: 15 s
+    operator.observer.progress-check.interval: 5 s
   log4j2.properties: |+
     rootLogger.level = DEBUG
 

@@ -21,7 +21,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 
-import java.util.concurrent.TimeUnit;
+import java.time.Duration;
 
 /** Savepoint utilities. */
 public class SavepointUtils {
@@ -50,9 +50,8 @@ public class SavepointUtils {
 
     public static boolean gracePeriodEnded(
             FlinkOperatorConfiguration configuration, SavepointInfo savepointInfo) {
-        int gracePeriod = configuration.getSavepointTriggerGracePeriodSeconds();
+        Duration gracePeriod = configuration.getSavepointTriggerGracePeriod();
         long triggerTimestamp = savepointInfo.getTriggerTimestamp();
-        return (System.currentTimeMillis() - triggerTimestamp)
-                > TimeUnit.SECONDS.toMillis(gracePeriod);
+        return (System.currentTimeMillis() - triggerTimestamp) > gracePeriod.toMillis();
     }
 }

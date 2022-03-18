@@ -33,6 +33,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
@@ -87,13 +88,29 @@ public class SessionObserverTest {
                 .setLastReconciledSpec(deployment.getSpec());
 
         FlinkOperatorConfiguration allNsConfig =
-                new FlinkOperatorConfiguration(1, 2, 3, 4, null, Collections.emptySet());
+                new FlinkOperatorConfiguration(
+                        Duration.ofSeconds(1),
+                        Duration.ofSeconds(2),
+                        Duration.ofSeconds(3),
+                        Duration.ofSeconds(4),
+                        null,
+                        Collections.emptySet());
         FlinkOperatorConfiguration specificNsConfig =
                 new FlinkOperatorConfiguration(
-                        1, 2, 3, 4, null, Set.of(deployment.getMetadata().getNamespace()));
+                        Duration.ofSeconds(1),
+                        Duration.ofSeconds(2),
+                        Duration.ofSeconds(3),
+                        Duration.ofSeconds(4),
+                        null,
+                        Set.of(deployment.getMetadata().getNamespace()));
         FlinkOperatorConfiguration multipleNsConfig =
                 new FlinkOperatorConfiguration(
-                        1, 2, 3, 4, null, Set.of(deployment.getMetadata().getNamespace(), "ns"));
+                        Duration.ofSeconds(1),
+                        Duration.ofSeconds(2),
+                        Duration.ofSeconds(3),
+                        Duration.ofSeconds(4),
+                        null,
+                        Set.of(deployment.getMetadata().getNamespace(), "ns"));
 
         Deployment k8sDeployment = new Deployment();
         k8sDeployment.setSpec(new DeploymentSpec());

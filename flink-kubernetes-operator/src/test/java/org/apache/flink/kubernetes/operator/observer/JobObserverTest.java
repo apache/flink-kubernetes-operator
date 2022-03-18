@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link JobObserver} unit tests. */
 public class JobObserverTest {
@@ -96,11 +97,15 @@ public class JobObserverTest {
         assertEquals(
                 deployment.getMetadata().getName(),
                 deployment.getStatus().getJobStatus().getJobName());
-        assertEquals(
+        assertTrue(
                 Long.valueOf(deployment.getStatus().getJobStatus().getUpdateTime())
-                        .compareTo(
-                                Long.valueOf(deployment.getStatus().getJobStatus().getStartTime())),
-                1);
+                                .compareTo(
+                                        Long.valueOf(
+                                                deployment
+                                                        .getStatus()
+                                                        .getJobStatus()
+                                                        .getStartTime()))
+                        >= 0);
 
         // Test listing failure
         flinkService.clear();

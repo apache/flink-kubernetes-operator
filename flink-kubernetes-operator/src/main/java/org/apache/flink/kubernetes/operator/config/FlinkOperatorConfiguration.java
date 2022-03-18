@@ -24,36 +24,33 @@ import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 
 import lombok.Value;
 
+import java.time.Duration;
 import java.util.Set;
 
 /** Configuration class for operator. */
 @Value
 public class FlinkOperatorConfiguration {
 
-    int reconcileIntervalSeconds;
-    int progressCheckIntervalSeconds;
-    int restApiReadyDelaySeconds;
-    int savepointTriggerGracePeriodSeconds;
+    Duration reconcileInterval;
+    Duration progressCheckInterval;
+    Duration restApiReadyDelay;
+    Duration savepointTriggerGracePeriod;
     String flinkServiceHostOverride;
     Set<String> watchedNamespaces;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
-        int reconcileIntervalSeconds =
-                operatorConfig.getInteger(
-                        OperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL_IN_SEC);
+        Duration reconcileInterval =
+                operatorConfig.get(OperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL);
 
-        int restApiReadyDelaySeconds =
-                operatorConfig.getInteger(
-                        OperatorConfigOptions.OPERATOR_OBSERVER_REST_READY_DELAY_IN_SEC);
+        Duration restApiReadyDelay =
+                operatorConfig.get(OperatorConfigOptions.OPERATOR_OBSERVER_REST_READY_DELAY);
 
-        int progressCheckIntervalSeconds =
-                operatorConfig.getInteger(
-                        OperatorConfigOptions.OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL_IN_SEC);
+        Duration progressCheckInterval =
+                operatorConfig.get(OperatorConfigOptions.OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL);
 
-        int savepointTriggerGracePeriodSeconds =
-                operatorConfig.getInteger(
-                        OperatorConfigOptions
-                                .OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD_IN_SEC);
+        Duration savepointTriggerGracePeriod =
+                operatorConfig.get(
+                        OperatorConfigOptions.OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD);
 
         String flinkServiceHostOverride = null;
         if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {
@@ -64,10 +61,10 @@ public class FlinkOperatorConfiguration {
         Set<String> watchedNamespaces = OperatorUtils.getWatchedNamespaces();
 
         return new FlinkOperatorConfiguration(
-                reconcileIntervalSeconds,
-                progressCheckIntervalSeconds,
-                restApiReadyDelaySeconds,
-                savepointTriggerGracePeriodSeconds,
+                reconcileInterval,
+                progressCheckInterval,
+                restApiReadyDelay,
+                savepointTriggerGracePeriod,
                 flinkServiceHostOverride,
                 watchedNamespaces);
     }
