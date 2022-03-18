@@ -35,6 +35,7 @@ public class FlinkOperatorConfiguration {
     Duration progressCheckInterval;
     Duration restApiReadyDelay;
     Duration savepointTriggerGracePeriod;
+    Duration flinkClientTimeout;
     String flinkServiceHostOverride;
     Set<String> watchedNamespaces;
 
@@ -52,6 +53,9 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         OperatorConfigOptions.OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD);
 
+        Duration flinkClientTimeout =
+                operatorConfig.get(OperatorConfigOptions.OPERATOR_OBSERVER_FLINK_CLIENT_TIMEOUT);
+
         String flinkServiceHostOverride = null;
         if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {
             // not running in k8s, simplify local development
@@ -65,6 +69,7 @@ public class FlinkOperatorConfiguration {
                 progressCheckInterval,
                 restApiReadyDelay,
                 savepointTriggerGracePeriod,
+                flinkClientTimeout,
                 flinkServiceHostOverride,
                 watchedNamespaces);
     }

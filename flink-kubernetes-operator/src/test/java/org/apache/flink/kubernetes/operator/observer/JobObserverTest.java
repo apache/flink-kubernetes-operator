@@ -106,6 +106,22 @@ public class JobObserverTest {
                                                         .getJobStatus()
                                                         .getStartTime()))
                         >= 0);
+        // Test job manager is unavailable suddenly
+        flinkService.setPortReady(false);
+        observer.observe(deployment, readyContext, conf);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        // Job manager recovers
+        flinkService.setPortReady(true);
+        observer.observe(deployment, readyContext, conf);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        observer.observe(deployment, readyContext, conf);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
 
         // Test listing failure
         flinkService.clear();

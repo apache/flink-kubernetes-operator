@@ -53,4 +53,11 @@ public class OperatorConfigOptions {
                     .defaultValue(Duration.ofSeconds(10))
                     .withDescription(
                             "The interval before a savepoint trigger attempt is marked as unsuccessful");
+
+    public static final ConfigOption<Duration> OPERATOR_OBSERVER_FLINK_CLIENT_TIMEOUT =
+            ConfigOptions.key("operator.observer.flink.client.timeout.sec")
+                    .durationType()
+                    .defaultValue(Duration.ofSeconds(10))
+                    .withDescription(
+                            "The timeout for the observer to wait the flink rest client to return.");
 }

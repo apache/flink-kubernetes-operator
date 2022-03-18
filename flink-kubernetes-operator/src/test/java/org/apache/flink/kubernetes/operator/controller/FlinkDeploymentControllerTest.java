@@ -78,6 +78,7 @@ public class FlinkDeploymentControllerTest {
                     Duration.ofSeconds(2),
                     Duration.ofSeconds(3),
                     Duration.ofSeconds(4),
+                    Duration.ofSeconds(5),
                     null,
                     Collections.emptySet());
 
