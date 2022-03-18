@@ -47,6 +47,8 @@ kubectl wait --for=condition=Ready --timeout=${TIMEOUT}s pod/$jm_pod_name || exi
 wait_for_logs $jm_pod_name "Rest endpoint listening at" ${TIMEOUT} || exit 1
 
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
+check_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymentStatus' READY
+check_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING
 
 job_id=$(kubectl logs $jm_pod_name | grep -E -o 'Job [a-z0-9]+ is submitted' | awk '{print $2}')
 
@@ -57,6 +59,8 @@ kubectl exec $jm_pod_name -- /bin/sh -c "kill 1"
 # Check the new JobManager recovering from latest successful checkpoint
 wait_for_logs $jm_pod_name "Restoring job $job_id from Checkpoint" ${TIMEOUT} || exit 1
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
+check_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymentStatus' READY
+check_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING
 
 echo "Successfully run the Flink Kubernetes application HA test"
 

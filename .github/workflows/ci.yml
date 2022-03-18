@@ -78,6 +78,15 @@ jobs:
           stop_minikube
   e2e_ci:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config:
+          - description: 'Default configuration'
+            namespace: default
+            extraArgs: ''
+          - description: 'WatchNamespaces enabled'
+            namespace: flink
+            extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
     name: e2e_ci
     steps:
       - uses: actions/checkout@v2
@@ -111,8 +120,8 @@ jobs:
           docker images
       - name: Start the operator
         run: |
-          helm install flink-operator helm/flink-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest
-          kubectl wait --for=condition=Available --timeout=120s deploy/flink-operator
+          helm install flink-operator -n ${{ matrix.config.namespace }} helm/flink-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.config.extraArgs }}
+          kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.config.namespace }} deploy/flink-operator
           kubectl get pods
       - name: Run Flink e2e tests
         run: |
@@ -122,7 +131,7 @@ jobs:
           done
       - name: Stop the operator
         run: |
-          helm uninstall flink-operator
+          helm uninstall -n ${{ matrix.config.namespace }} flink-operator
       - name: Stop minikube
         run: |
           source e2e-tests/utils.sh

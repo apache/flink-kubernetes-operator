@@ -36,6 +36,20 @@ function wait_for_logs {
   exit 1
 }
 
+function check_status {
+  local resource=$1
+  local status_path=$2
+  local expected_status=$3
+
+  status=$(kubectl get -oyaml $resource | yq $status_path)
+  if [ "$status" == "$expected_status" ]; then
+    echo "Successfully verified that $resource$status_path is in $expected_status state."
+  else
+    echo "Status verification for $resource$status_path failed. It is $status instead of $expected_status."
+    exit 1
+  fi
+}
+
 function retry_times() {
     local retriesNumber=$1
     local backoff=$2
