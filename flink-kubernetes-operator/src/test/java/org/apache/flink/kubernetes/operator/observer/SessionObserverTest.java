@@ -76,6 +76,15 @@ public class SessionObserverTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
+
+        observer.observe(
+                deployment,
+                readyContext,
+                FlinkUtils.getEffectiveConfig(deployment, new Configuration()));
+
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
     }
 
     @Test

@@ -25,6 +25,8 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
+import java.util.concurrent.TimeoutException;
+
 /** The observer of the {@link org.apache.flink.kubernetes.operator.config.Mode#SESSION} cluster. */
 public class SessionObserver extends BaseObserver {
 
@@ -35,6 +37,19 @@ public class SessionObserver extends BaseObserver {
 
     @Override
     public void observe(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
-        observeJmDeployment(flinkApp, context, effectiveConfig);
+        if (isClusterReady(flinkApp)) {
+            // Check if session cluster can serve rest calls following our practice in JobObserver
+            try {
+                flinkService.listJobs(effectiveConfig);
+            } catch (Exception e) {
+                logger.error("REST service in session cluster is bad now", e);
+                if (e instanceof TimeoutException) {
+                    // check for problems with the underlying deployment
+                    observeJmDeployment(flinkApp, context, effectiveConfig);
+                }
+            }
+        } else {
+            observeJmDeployment(flinkApp, context, effectiveConfig);
+        }
     }
 }
