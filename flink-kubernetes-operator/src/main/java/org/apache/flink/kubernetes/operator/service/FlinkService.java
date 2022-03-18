@@ -138,7 +138,11 @@ public class FlinkService {
 
     public Collection<JobStatusMessage> listJobs(Configuration conf) throws Exception {
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
-            return clusterClient.listJobs().get(10, TimeUnit.SECONDS);
+            return clusterClient
+                    .listJobs()
+                    .get(
+                            operatorConfiguration.getFlinkClientTimeout().getSeconds(),
+                            TimeUnit.SECONDS);
         }
     }
 

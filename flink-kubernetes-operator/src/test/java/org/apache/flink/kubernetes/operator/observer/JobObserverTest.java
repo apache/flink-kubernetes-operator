@@ -99,12 +99,12 @@ public class JobObserverTest {
                 deployment.getStatus().getJobStatus().getJobName());
         assertTrue(
                 Long.valueOf(deployment.getStatus().getJobStatus().getUpdateTime())
-                        .compareTo(
-                                Long.valueOf(
-                                        deployment
-                                                .getStatus()
-                                                .getJobStatus()
-                                                .getStartTime()))
+                                .compareTo(
+                                        Long.valueOf(
+                                                deployment
+                                                        .getStatus()
+                                                        .getJobStatus()
+                                                        .getStartTime()))
                         >= 0);
         // Test job manager is unavailable suddenly
         flinkService.setPortReady(false);
@@ -112,6 +112,7 @@ public class JobObserverTest {
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
                 deployment.getStatus().getJobManagerDeploymentStatus());
+        // Job manager recovers
         flinkService.setPortReady(true);
         observer.observe(deployment, readyContext, conf);
         assertEquals(

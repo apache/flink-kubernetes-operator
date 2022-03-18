@@ -48,40 +48,50 @@ public class SessionObserverTest {
 
     @Test
     public void observeSessionCluster() {
-        FlinkService flinkService = new TestingFlinkService();
+        TestingFlinkService flinkService = new TestingFlinkService();
         SessionObserver observer =
                 new SessionObserver(
                         flinkService,
                         FlinkOperatorConfiguration.fromConfiguration(new Configuration()));
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        Configuration conf = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
         deployment
                 .getStatus()
                 .getReconciliationStatus()
                 .setLastReconciledSpec(deployment.getSpec());
 
-        observer.observe(
-                deployment,
-                readyContext,
-                FlinkUtils.getEffectiveConfig(deployment, new Configuration()));
+        observer.observe(deployment, readyContext, conf);
 
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
 
-        observer.observe(
-                deployment,
-                readyContext,
-                FlinkUtils.getEffectiveConfig(deployment, new Configuration()));
+        observer.observe(deployment, readyContext, conf);
+
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        // Observe again, the JM should be READY
+        observer.observe(deployment, readyContext, conf);
 
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
 
-        observer.observe(
-                deployment,
-                readyContext,
-                FlinkUtils.getEffectiveConfig(deployment, new Configuration()));
+        // Test job manager is unavailable suddenly
+        flinkService.setPortReady(false);
+        observer.observe(deployment, readyContext, conf);
 
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        // Job manager recovers
+        flinkService.setPortReady(true);
+        observer.observe(deployment, readyContext, conf);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        observer.observe(deployment, readyContext, conf);
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
@@ -102,6 +112,7 @@ public class SessionObserverTest {
                         Duration.ofSeconds(2),
                         Duration.ofSeconds(3),
                         Duration.ofSeconds(4),
+                        Duration.ofSeconds(5),
                         null,
                         Collections.emptySet());
         FlinkOperatorConfiguration specificNsConfig =
@@ -110,6 +121,7 @@ public class SessionObserverTest {
                         Duration.ofSeconds(2),
                         Duration.ofSeconds(3),
                         Duration.ofSeconds(4),
+                        Duration.ofSeconds(5),
                         null,
                         Set.of(deployment.getMetadata().getNamespace()));
         FlinkOperatorConfiguration multipleNsConfig =
@@ -118,6 +130,7 @@ public class SessionObserverTest {
                         Duration.ofSeconds(2),
                         Duration.ofSeconds(3),
                         Duration.ofSeconds(4),
+                        Duration.ofSeconds(5),
                         null,
                         Set.of(deployment.getMetadata().getNamespace(), "ns"));
 
