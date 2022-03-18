@@ -44,27 +44,27 @@ public enum JobManagerDeploymentStatus {
 
     public Duration rescheduleAfter(
             FlinkDeployment flinkDeployment, FlinkOperatorConfiguration operatorConfiguration) {
-        int rescheduleAfterSec;
+        Duration rescheduleAfter;
         switch (this) {
             case DEPLOYING:
-                rescheduleAfterSec = operatorConfiguration.getProgressCheckIntervalSeconds();
+                rescheduleAfter = operatorConfiguration.getProgressCheckInterval();
                 break;
             case READY:
-                rescheduleAfterSec =
+                rescheduleAfter =
                         SavepointUtils.savepointInProgress(flinkDeployment)
-                                ? operatorConfiguration.getProgressCheckIntervalSeconds()
-                                : operatorConfiguration.getReconcileIntervalSeconds();
+                                ? operatorConfiguration.getProgressCheckInterval()
+                                : operatorConfiguration.getReconcileInterval();
                 break;
             case MISSING:
             case ERROR:
-                rescheduleAfterSec = operatorConfiguration.getReconcileIntervalSeconds();
+                rescheduleAfter = operatorConfiguration.getReconcileInterval();
                 break;
             case DEPLOYED_NOT_READY:
-                rescheduleAfterSec = operatorConfiguration.getRestApiReadyDelaySeconds();
+                rescheduleAfter = operatorConfiguration.getRestApiReadyDelay();
                 break;
             default:
                 throw new RuntimeException("Unknown status: " + this);
         }
-        return Duration.ofSeconds(rescheduleAfterSec);
+        return rescheduleAfter;
     }
 }

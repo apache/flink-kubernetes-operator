@@ -16,10 +16,10 @@
 # limitations under the License.
 ################################################################################
 
-# operator.reconciler.reschedule.interval.sec: 60
-# operator.observer.rest-ready.delay.sec: 10
-# operator.observer.progress-check.interval.sec: 10
-# operator.observer.savepoint.trigger.grace-period.sec: 10
+# operator.reconciler.reschedule.interval: 60 s
+# operator.observer.rest-ready.delay: 10 s
+# operator.observer.progress-check.interval: 10 s
+# operator.observer.savepoint.trigger.grace-period: 10 s
 
 # metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
 # metrics.reporter.slf4j.interval: 5 MINUTE
