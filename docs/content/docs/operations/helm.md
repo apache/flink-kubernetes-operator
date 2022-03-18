@@ -25,3 +25,32 @@ under the License.
 -->
 
 # Helm installation
+
+The operator installation is managed by a helm chart. To install run:
+
+```
+helm install flink-operator helm/flink-operator
+```
+
+Alternatively to install the operator (and also the helm chart) to a specific namespace:
+
+```
+helm install flink-operator helm/flink-operator --namespace flink-operator --create-namespace
+```
+
+Note that in this case you will need to update the namespace in the examples accordingly or the `default`
+namespace to the [watched namespaces](#watching-only-specific-namespaces).
+
+## Validating webhook
+
+In order to use the webhook for FlinkDeployment validation, you must install the cert-manager on the Kubernetes cluster:
+```
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.7.1/cert-manager.yaml
+```
+
+The webhook can be disabled during helm install by passing the `--set webhook.create=false` parameter or editing the `values.yaml` directly.
+
+## Watching only specific namespaces
+
+The operator supports watching a specific list of namespaces for FlinkDeployment resources. You can enable it by setting the `--set watchNamespaces={flink-test}` parameter.
+When this is enabled role-based access control is only created specifically for these namespaces for the operator and the jobmanagers, otherwise it defaults to cluster scope.
