@@ -37,6 +37,9 @@ public class SessionObserver extends BaseObserver {
 
     @Override
     public void observe(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
+        if (!isClusterReady(flinkApp)) {
+            observeJmDeployment(flinkApp, context, effectiveConfig);
+        }
         if (isClusterReady(flinkApp)) {
             // Check if session cluster can serve rest calls following our practice in JobObserver
             try {
@@ -48,8 +51,6 @@ public class SessionObserver extends BaseObserver {
                     observeJmDeployment(flinkApp, context, effectiveConfig);
                 }
             }
-        } else {
-            observeJmDeployment(flinkApp, context, effectiveConfig);
         }
     }
 }
