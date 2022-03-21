@@ -28,6 +28,8 @@ The Flink Kubernetes Operator extends the [Kubernetes](https://kubernetes.io/) A
 Flink Deployments. It features periodic savepoint triggers, stateful Flink job upgrades on configuration change and 
 admission control on job submission amongst others.
 
+{{< img src="/img/concepts/overview.svg" alt="Flink Operator Overview" >}}
+
 {{< columns >}}
 ## Try the Flink Kubernetes Operator
 
