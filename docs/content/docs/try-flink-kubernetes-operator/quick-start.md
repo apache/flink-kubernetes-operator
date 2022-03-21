@@ -81,7 +81,7 @@ kubectl create -f https://github.com/jetstack/cert-manager/releases/download/v1.
 ```
 You can deploy the operator via the included helm chart:
 ```bash
-helm install flink-operator helm/flink
+helm install flink-operator helm/flink-operator
 ```
 You may verify your installation via `kubectl` and `helm`:
 ```bash
