@@ -20,12 +20,15 @@ apiVersion: flink.apache.org/v1alpha1
 kind: FlinkDeployment
 metadata:
   namespace: default
-  name: basic-ingress
+  name: advanced-ingress
 spec:
   image: flink:1.14.3
   flinkVersion: v1_14
   ingress:
-    template: "{{name}}.{{namespace}}.flink.k8s.io"
+    template: "/{{namespace}}/{{name}}(/|$)(.*)"
+    className: "nginx"
+    annotations:
+      nginx.ingress.kubernetes.io/rewrite-target: "/$2"
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
   serviceAccount: flink

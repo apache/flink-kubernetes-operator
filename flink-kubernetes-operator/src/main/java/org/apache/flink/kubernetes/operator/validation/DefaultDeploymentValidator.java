@@ -23,12 +23,15 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
@@ -53,6 +56,10 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
         return firstPresent(
                 validateFlinkVersion(spec.getFlinkVersion()),
                 validateFlinkConfig(spec.getFlinkConfiguration()),
+                validateIngress(
+                        spec.getIngress(),
+                        deployment.getMetadata().getName(),
+                        deployment.getMetadata().getNamespace()),
                 validateLogConfig(spec.getLogConfiguration()),
                 validateJobSpec(spec.getJob(), spec.getFlinkConfiguration()),
                 validateJmSpec(spec.getJobManager(), spec.getFlinkConfiguration()),
@@ -73,6 +80,22 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
         if (version == null) {
             return Optional.of("Flink Version must be defined.");
         }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateIngress(IngressSpec ingress, String name, String namespace) {
+        if (ingress == null) {
+            return Optional.empty();
+        }
+        if (ingress.getTemplate() == null) {
+            return Optional.of("Ingress template must be defined");
+        }
+        try {
+            IngressUtils.getIngressUrl(ingress.getTemplate(), name, namespace);
+        } catch (ReconciliationException e) {
+            return Optional.of(e.getMessage());
+        }
+
         return Optional.empty();
     }
 

@@ -20,6 +20,8 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.OwnerReference;
@@ -29,15 +31,27 @@ import io.fabric8.kubernetes.api.model.networking.v1.HTTPIngressRuleValueBuilder
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRule;
+import io.fabric8.kubernetes.api.model.networking.v1.IngressRuleBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /** Ingress utilities. */
 public class IngressUtils {
+
+    private static final Pattern NAME_PTN =
+            Pattern.compile("\\{\\{name\\}\\}", Pattern.CASE_INSENSITIVE);
+    private static final Pattern NAMESPACE_PTN =
+            Pattern.compile("\\{\\{namespace\\}\\}", Pattern.CASE_INSENSITIVE);
+    private static final Pattern URL_PROTOCOL_REGEX =
+            Pattern.compile("^https?://", Pattern.CASE_INSENSITIVE);
 
     private static final String REST_SVC_NAME_SUFFIX = "-rest";
 
@@ -47,18 +61,23 @@ public class IngressUtils {
             FlinkDeployment flinkDeployment,
             Configuration effectiveConfig,
             KubernetesClient client) {
-        if (flinkDeployment.getSpec().getIngressDomain() != null) {
-            final IngressRule ingressRule = fromDeployment(flinkDeployment, effectiveConfig);
+        if (flinkDeployment.getSpec().getIngress() != null) {
+
             Ingress ingress =
                     new IngressBuilder()
                             .withNewMetadata()
+                            .withAnnotations(
+                                    flinkDeployment.getSpec().getIngress().getAnnotations())
                             .withName(flinkDeployment.getMetadata().getName())
                             .withNamespace(flinkDeployment.getMetadata().getNamespace())
                             .endMetadata()
                             .withNewSpec()
-                            .withRules(ingressRule)
+                            .withIngressClassName(
+                                    flinkDeployment.getSpec().getIngress().getClassName())
+                            .withRules(getIngressRule(flinkDeployment, effectiveConfig))
                             .endSpec()
                             .build();
+
             Deployment deployment =
                     client.apps()
                             .deployments()
@@ -66,10 +85,11 @@ public class IngressUtils {
                             .withName(flinkDeployment.getMetadata().getName())
                             .get();
             if (deployment == null) {
-                LOG.warn("Could not find deployment {}", flinkDeployment.getMetadata().getName());
+                LOG.error("Could not find deployment {}", flinkDeployment.getMetadata().getName());
             } else {
                 setOwnerReference(deployment, Collections.singletonList(ingress));
             }
+
             LOG.info("Updating ingress rules {}", ingress);
             client.resourceList(ingress)
                     .inNamespace(flinkDeployment.getMetadata().getNamespace())
@@ -77,13 +97,19 @@ public class IngressUtils {
         }
     }
 
-    private static IngressRule fromDeployment(
+    private static IngressRule getIngressRule(
             FlinkDeployment flinkDeployment, Configuration effectiveConfig) {
         final String clusterId = flinkDeployment.getMetadata().getName();
         final int restPort = effectiveConfig.getInteger(RestOptions.PORT);
-        final String ingressHost = getIngressHost(flinkDeployment, clusterId);
-        return new IngressRule(
-                ingressHost,
+
+        URL ingressUrl =
+                getIngressUrl(
+                        flinkDeployment.getSpec().getIngress().getTemplate(),
+                        flinkDeployment.getMetadata().getName(),
+                        flinkDeployment.getMetadata().getNamespace());
+
+        IngressRuleBuilder ingressRuleBuilder = new IngressRuleBuilder();
+        ingressRuleBuilder.withHttp(
                 new HTTPIngressRuleValueBuilder()
                         .addNewPath()
                         .withPathType("ImplementationSpecific")
@@ -97,17 +123,23 @@ public class IngressUtils {
                         .endBackend()
                         .endPath()
                         .build());
+
+        if (!StringUtils.isBlank(ingressUrl.getHost())) {
+            ingressRuleBuilder.withHost(ingressUrl.getHost());
+        }
+
+        if (!StringUtils.isBlank(ingressUrl.getPath())) {
+            ingressRuleBuilder
+                    .editHttp()
+                    .editFirstPath()
+                    .withPath(ingressUrl.getPath())
+                    .endPath()
+                    .endHttp();
+        }
+        return ingressRuleBuilder.build();
     }
 
-    private static String getIngressHost(FlinkDeployment flinkDeployment, String clusterId) {
-        return String.format(
-                "%s.%s.%s",
-                clusterId,
-                flinkDeployment.getMetadata().getNamespace(),
-                flinkDeployment.getSpec().getIngressDomain());
-    }
-
-    public static void setOwnerReference(HasMetadata owner, List<HasMetadata> resources) {
+    private static void setOwnerReference(HasMetadata owner, List<HasMetadata> resources) {
         final OwnerReference ownerReference =
                 new OwnerReferenceBuilder()
                         .withName(owner.getMetadata().getName())
@@ -121,5 +153,28 @@ public class IngressUtils {
                 resource ->
                         resource.getMetadata()
                                 .setOwnerReferences(Collections.singletonList(ownerReference)));
+    }
+
+    public static URL getIngressUrl(String ingressTemplate, String name, String namespace) {
+        String template = addProtocol(ingressTemplate);
+        template = NAME_PTN.matcher(template).replaceAll(name);
+        template = NAMESPACE_PTN.matcher(template).replaceAll(namespace);
+        try {
+            return new URL(template);
+        } catch (MalformedURLException e) {
+            LOG.error(e.getMessage());
+            throw new ReconciliationException(
+                    String.format(
+                            "Unable to process the Ingress template(%s). Error: %s",
+                            ingressTemplate, e.getMessage()));
+        }
+    }
+
+    private static String addProtocol(String url) {
+        Preconditions.checkNotNull(url);
+        if (!URL_PROTOCOL_REGEX.matcher(url).find()) {
+            url = "http://" + url;
+        }
+        return url;
     }
 }

@@ -46,8 +46,8 @@ public class FlinkDeploymentSpec {
     /** Flink image version. */
     private FlinkVersion flinkVersion;
 
-    /** Ingress domain for the Flink deployment. */
-    private String ingressDomain;
+    /** Ingress specs. */
+    private IngressSpec ingress;
 
     /** Flink configuration overrides for the Flink deployment. */
     private Map<String, String> flinkConfiguration;

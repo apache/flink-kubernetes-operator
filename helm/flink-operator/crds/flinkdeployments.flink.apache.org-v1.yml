@@ -31,8 +31,17 @@ spec:
                 - v1_15
                 - v1_16
                 type: string
-              ingressDomain:
-                type: string
+              ingress:
+                properties:
+                  template:
+                    type: string
+                  className:
+                    type: string
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    type: object
+                type: object
               flinkConfiguration:
                 additionalProperties:
                   type: string
@@ -9125,8 +9134,17 @@ spec:
                         - v1_15
                         - v1_16
                         type: string
-                      ingressDomain:
-                        type: string
+                      ingress:
+                        properties:
+                          template:
+                            type: string
+                          className:
+                            type: string
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        type: object
                       flinkConfiguration:
                         additionalProperties:
                           type: string

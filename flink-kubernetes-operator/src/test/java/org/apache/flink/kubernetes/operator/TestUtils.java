@@ -52,6 +52,7 @@ import java.util.Optional;
 public class TestUtils {
 
     public static final String TEST_NAMESPACE = "flink-operator-test";
+    public static final String TEST_DEPLOYMENT_NAME = "test-cluster";
     public static final String SERVICE_ACCOUNT = "flink-operator";
     public static final String FLINK_VERSION = "latest";
     public static final String IMAGE = String.format("flink:%s", FLINK_VERSION);
@@ -63,7 +64,7 @@ public class TestUtils {
         deployment.setStatus(new FlinkDeploymentStatus());
         deployment.setMetadata(
                 new ObjectMetaBuilder()
-                        .withName("test-cluster")
+                        .withName(TEST_DEPLOYMENT_NAME)
                         .withNamespace(TEST_NAMESPACE)
                         .build());
         deployment.setSpec(getTestFlinkDeploymentSpec());
