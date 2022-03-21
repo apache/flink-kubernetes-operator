@@ -25,10 +25,13 @@ under the License.
 # Flink Kubernetes Operator
 
 The Flink Kubernetes Operator extends the [Kubernetes](https://kubernetes.io/) API with the ability to manage and operate 
-Flink Deployments. It features periodic savepoint triggers, stateful Flink job upgrades on configuration change and 
-admission control on job submission amongst others.
+Flink Deployments. The operator features the following amongst others:
+- Deploy and monitor Flink Application and Session deployments
+- Upgrade, suspend and delete deployments
+- Full logging and metrics integration
+- Flexible deployments and native integration with Kubernetes tooling
 
-{{< img src="/img/concepts/overview.svg" alt="Flink Operator Overview" >}}
+{{< img src="/img/overview.svg" alt="Flink Operator Overview" >}}
 
 {{< columns >}}
 ## Try the Flink Kubernetes Operator
