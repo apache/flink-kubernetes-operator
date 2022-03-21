@@ -59,8 +59,8 @@ operatorConfiguration:
 
     operator.reconciler.reschedule.interval: 15 s
     operator.observer.progress-check.interval: 5 s
-  log4j2.properties: |+
-    rootLogger.level = DEBUG
+  # log4j2.properties: |+
+  #   rootLogger.level = DEBUG
 
 flinkDefaultConfiguration:
    create: true

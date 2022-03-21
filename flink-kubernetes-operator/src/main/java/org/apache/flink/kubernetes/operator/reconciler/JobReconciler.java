@@ -77,9 +77,7 @@ public class JobReconciler extends BaseReconciler {
         }
 
         if (SavepointUtils.savepointInProgress(flinkApp)) {
-            LOG.info(
-                    "Savepoint currently in progress for {}, delaying reconcile...",
-                    flinkApp.getMetadata().getName());
+            LOG.info("Delaying job reconciliation until pending savepoint is completed");
             return;
         }
 
@@ -166,13 +164,13 @@ public class JobReconciler extends BaseReconciler {
     private void printCancelLogs(UpgradeMode upgradeMode, String name) {
         switch (upgradeMode) {
             case STATELESS:
-                LOG.info("Cancelling {}", name);
+                LOG.info("Cancelling job");
                 break;
             case SAVEPOINT:
-                LOG.info("Suspending {}", name);
+                LOG.info("Suspending job");
                 break;
             case LAST_STATE:
-                LOG.info("Cancelling {} with last state retained", name);
+                LOG.info("Cancelling job with last state retained");
                 break;
             default:
                 throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);

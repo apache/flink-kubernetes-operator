@@ -60,7 +60,7 @@ public class JobObserver extends BaseObserver {
 
     private boolean observeFlinkJobStatus(
             FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
-        logger.info("Getting job statuses for {}", flinkApp.getMetadata().getName());
+        logger.info("Observing job status");
         FlinkDeploymentStatus flinkAppStatus = flinkApp.getStatus();
 
         Collection<JobStatusMessage> clusterJobStatuses;
@@ -76,13 +76,13 @@ public class JobObserver extends BaseObserver {
             return false;
         }
         if (clusterJobStatuses.isEmpty()) {
-            logger.info("No jobs found on {} yet", flinkApp.getMetadata().getName());
+            logger.info("No job found on yet");
             flinkAppStatus.getJobStatus().setState(JOB_STATE_UNKNOWN);
             return false;
         }
 
         updateJobStatus(flinkAppStatus.getJobStatus(), new ArrayList<>(clusterJobStatuses));
-        logger.info("Job statuses updated for {}", flinkApp.getMetadata().getName());
+        logger.info("Job status successfully updated");
         return true;
     }
 
@@ -102,9 +102,11 @@ public class JobObserver extends BaseObserver {
     private void observeSavepointStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
         SavepointInfo savepointInfo = flinkApp.getStatus().getJobStatus().getSavepointInfo();
         if (!SavepointUtils.savepointInProgress(flinkApp)) {
-            logger.debug("Checkpointing not in progress");
+            logger.debug("Savepoint not in progress");
             return;
         }
+        logger.info("Observing savepoint status");
+
         SavepointFetchResult savepointFetchResult;
         try {
             savepointFetchResult = flinkService.fetchSavepointInfo(flinkApp, effectiveConfig);
@@ -123,12 +125,13 @@ public class JobObserver extends BaseObserver {
                 ReconciliationUtils.updateForReconciliationError(flinkApp, errorMsg);
                 return;
             }
-            logger.info("Savepoint operation not running, waiting within grace period");
+            logger.info("Savepoint operation not running, waiting within grace period...");
         }
         if (savepointFetchResult.getSavepoint() == null) {
-            logger.info("Savepoint not completed yet");
+            logger.info("Savepoint is still in progress...");
             return;
         }
+        logger.info("Savepoint status updated with latest completed savepoint info");
         savepointInfo.updateLastSavepoint(savepointFetchResult.getSavepoint());
     }
 }

@@ -62,6 +62,8 @@ public abstract class BaseObserver implements Observer {
         JobManagerDeploymentStatus previousJmStatus =
                 deploymentStatus.getJobManagerDeploymentStatus();
 
+        logger.info("Observing JobManager deployment status");
+
         if (JobManagerDeploymentStatus.DEPLOYED_NOT_READY == previousJmStatus) {
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
             return;
@@ -79,18 +81,12 @@ public abstract class BaseObserver implements Observer {
 
                 // typically it takes a few seconds for the REST server to be ready
                 logger.info(
-                        "JobManager deployment {} in namespace {} port ready, waiting for the REST API...",
-                        flinkApp.getMetadata().getName(),
-                        flinkApp.getMetadata().getNamespace());
+                        "JobManager deployment port is ready, waiting for the Flink REST API...");
                 deploymentStatus.setJobManagerDeploymentStatus(
                         JobManagerDeploymentStatus.DEPLOYED_NOT_READY);
                 return;
             }
-            logger.info(
-                    "JobManager deployment {} in namespace {} exists but not ready, status {}",
-                    flinkApp.getMetadata().getName(),
-                    flinkApp.getMetadata().getNamespace(),
-                    status);
+            logger.info("JobManager deployment exists but not ready, status {}", status);
 
             try {
                 checkFailedCreate(status);
