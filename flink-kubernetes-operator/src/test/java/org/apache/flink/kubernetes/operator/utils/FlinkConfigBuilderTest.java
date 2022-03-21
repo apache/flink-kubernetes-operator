@@ -73,7 +73,7 @@ public class FlinkConfigBuilderTest {
                 TestUtils.getTestPod("pod2 hostname", "pod2 api version", new ArrayList<>());
 
         flinkDeployment.getSpec().setPodTemplate(pod0);
-        flinkDeployment.getSpec().setIngressDomain("test.com");
+        flinkDeployment.getSpec().getIngress().setTemplate("test.com");
         flinkDeployment.getSpec().getJobManager().setPodTemplate(pod1);
         flinkDeployment.getSpec().getJobManager().setReplicas(2);
         flinkDeployment.getSpec().getTaskManager().setPodTemplate(pod2);

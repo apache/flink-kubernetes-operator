@@ -21,6 +21,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
@@ -92,6 +93,24 @@ public class DeploymentValidatorTest {
                                         Map.of(
                                                 Constants.CONFIG_FILE_LOG4J_NAME,
                                                 "rootLogger.level = INFO")));
+
+        testError(
+                dep -> dep.getSpec().setIngress(new IngressSpec()),
+                "Ingress template must be defined");
+
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .setIngress(
+                                        IngressSpec.builder().template("example.com:port").build()),
+                "Unable to process the Ingress template(example.com:port). Error: Error at index 0 in: \"port\"");
+        testSuccess(
+                dep ->
+                        dep.getSpec()
+                                .setIngress(
+                                        IngressSpec.builder()
+                                                .template("example.com/{{namespace}}/{{name}}")
+                                                .build()));
 
         testError(
                 dep -> dep.getSpec().setLogConfiguration(Map.of("random", "config")),
