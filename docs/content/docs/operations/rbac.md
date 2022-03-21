@@ -25,3 +25,24 @@ under the License.
 -->
 
 # Role-based Access Control Model
+
+To be able to deploy the operator itself and Flink jobs, we define two separate Kubernetes 
+[roles](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#role-and-clusterrole). 
+The former, called `flink-operator` role is used to manage the `flinkdeployments`, to create and manage the 
+[JobManager](https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/flink-architecture/#jobmanager) deployment
+for each Flink job and other resources like [services](https://kubernetes.io/docs/concepts/services-networking/service/).
+The latter, called the `flink` role is used by the JobManagers of the jobs to create and manage the 
+[TaskManagers](https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/flink-architecture/#taskmanagers) and
+[ConfigMaps](https://kubernetes.io/docs/concepts/configuration/configmap/) for the job.
+
+{{< img src="/img/operations/rbac.svg" alt="Flink Operator RBAC Model" >}}
+
+These service accounts and roles can be created via the operator Helm [chart]({{< ref "docs/operations/helm" >}}).
+By default the `flink-operator` role is cluster scoped (created as a `clusterrole`) and thus allowing a single operator
+instance to be responsible for all Flink deployments in a Kubernetes cluster regardless of the namespace they are
+deployed to. Certain environments are more restrictive and only allow namespaced roles, so we also support this option
+via [watchNamespaces]({{< ref "docs/operations/helm" >}}#watching-only-specific-namespaces).
+
+The `flink` role is always namespaced, by default it is created in the namespace of the operator. When 
+[watchNamespaces]({{< ref "docs/operations/helm" >}}#watching-only-specific-namespaces) is enabled it is created for all
+watched namespaces individually. 

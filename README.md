@@ -2,7 +2,7 @@
 
 A Kubernetes operator for Apache Flink, implemented in Java. It allows users to manage Flink applications and their lifecycle through native k8s tooling like kubectl.
 
-<img alt="Operator Overview" width="100%" src="docs/static/img/concepts/overview.svg">
+<img alt="Operator Overview" width="100%" src="docs/static/img/overview.svg">
 
 ## Documentation & Getting Started
 
