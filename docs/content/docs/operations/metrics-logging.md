@@ -104,6 +104,13 @@ operatorConfiguration:
     rootLogger.level = DEBUG
 ```
 
+{{< hint info >}}
+Logging in the operator is intentionally succinct and does not include contextual information such as namespace or name of the FlinkDeployment objects.
+We rely on the MDC provided by the operator-sdk to access this information and use it directly in the log layout.
+
+See the [Java Operator SDK docs](https://javaoperatorsdk.io/docs/features#contextual-info-for-logging-with-mdc) for more detail.
+{{< /hint >}}
+
 To append/override the default log configuration properties for Flink applications use:
 ```yaml
 flinkDefaultConfiguration:

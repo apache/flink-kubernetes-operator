@@ -140,6 +140,7 @@ public class FlinkUtils {
             String clusterId,
             KubernetesClient kubernetesClient,
             boolean deleteHaConfigmaps) {
+        LOG.info("Deleting Flink cluster resources");
         kubernetesClient
                 .apps()
                 .deployments()

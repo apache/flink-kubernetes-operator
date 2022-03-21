@@ -27,12 +27,16 @@ import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reconciler responsible for handling the session cluster lifecycle according to the desired and
  * current states.
  */
 public class SessionReconciler extends BaseReconciler {
+
+    private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
 
     public SessionReconciler(
             KubernetesClient kubernetesClient,
@@ -65,6 +69,7 @@ public class SessionReconciler extends BaseReconciler {
 
     private void upgradeSessionCluster(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
+        LOG.info("Upgrading session cluster");
         flinkService.stopSessionCluster(flinkApp, effectiveConfig, false);
         flinkService.submitSessionCluster(flinkApp, effectiveConfig);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
@@ -72,6 +77,7 @@ public class SessionReconciler extends BaseReconciler {
 
     @Override
     protected void shutdown(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+        LOG.info("Stopping session cluster");
         flinkService.stopSessionCluster(flinkApp, effectiveConfig, true);
     }
 }

@@ -86,7 +86,7 @@ public class FlinkService {
 
     public void submitApplicationCluster(FlinkDeployment deployment, Configuration conf)
             throws Exception {
-        LOG.info("Deploying application cluster {}", deployment.getMetadata().getName());
+        LOG.info("Deploying application cluster");
         final ClusterClientServiceLoader clusterClientServiceLoader =
                 new DefaultClusterClientServiceLoader();
         final ApplicationDeployer deployer =
@@ -99,12 +99,12 @@ public class FlinkService {
                         jobSpec.getEntryClass());
 
         deployer.run(conf, applicationConfiguration);
-        LOG.info("Application cluster {} deployed", deployment.getMetadata().getName());
+        LOG.info("Application cluster successfully deployed");
     }
 
     public void submitSessionCluster(FlinkDeployment deployment, Configuration conf)
             throws Exception {
-        LOG.info("Deploying session cluster {}", deployment.getMetadata().getName());
+        LOG.info("Deploying session cluster");
         final ClusterClientServiceLoader clusterClientServiceLoader =
                 new DefaultClusterClientServiceLoader();
         final ClusterClientFactory<String> kubernetesClusterClientFactory =
@@ -114,7 +114,7 @@ public class FlinkService {
             kubernetesClusterDescriptor.deploySessionCluster(
                     kubernetesClusterClientFactory.getClusterSpecification(conf));
         }
-        LOG.info("Session cluster {} deployed", deployment.getMetadata().getName());
+        LOG.info("Session cluster successfully deployed");
     }
 
     public boolean isJobManagerPortReady(Configuration config) {
@@ -197,7 +197,7 @@ public class FlinkService {
     }
 
     public void triggerSavepoint(FlinkDeployment deployment, Configuration conf) throws Exception {
-        LOG.info("Triggering savepoint on " + deployment.getMetadata().getName());
+        LOG.info("Triggering new savepoint");
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
             SavepointTriggerHeaders savepointTriggerHeaders = SavepointTriggerHeaders.getInstance();
@@ -213,7 +213,7 @@ public class FlinkService {
                                     savepointTriggerMessageParameters,
                                     new SavepointTriggerRequestBody(null, false))
                             .get();
-            LOG.info("Savepoint triggered: " + response.getTriggerId().toHexString());
+            LOG.info("Savepoint successfully triggered: " + response.getTriggerId().toHexString());
 
             org.apache.flink.kubernetes.operator.crd.status.SavepointInfo savepointInfo =
                     deployment.getStatus().getJobStatus().getSavepointInfo();

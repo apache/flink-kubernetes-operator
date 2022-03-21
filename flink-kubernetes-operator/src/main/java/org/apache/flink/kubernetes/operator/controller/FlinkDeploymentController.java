@@ -92,7 +92,7 @@ public class FlinkDeploymentController
 
     @Override
     public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
-        LOG.info("Stopping cluster {}", flinkApp.getMetadata().getName());
+        LOG.info("Deleting FlinkDeployment");
         Configuration effectiveConfig =
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
         try {
@@ -106,11 +106,11 @@ public class FlinkDeploymentController
     @Override
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context) {
         FlinkDeployment originalCopy = ReconciliationUtils.clone(flinkApp);
-        LOG.info("Reconciling {}", flinkApp.getMetadata().getName());
+        LOG.info("Starting reconciliation");
 
         Optional<String> validationError = validator.validate(flinkApp);
         if (validationError.isPresent()) {
-            LOG.error("Reconciliation failed: " + validationError.get());
+            LOG.error("Validation failed: " + validationError.get());
             ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
             return ReconciliationUtils.toUpdateControl(originalCopy, flinkApp);
         }
@@ -136,11 +136,7 @@ public class FlinkDeploymentController
     }
 
     private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
-        LOG.error(
-                "Deployment {}/{} failed with {}",
-                flinkApp.getMetadata().getNamespace(),
-                flinkApp.getMetadata().getName(),
-                dfe.getMessage());
+        LOG.error("Flink Deployment failed", dfe);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
         ReconciliationUtils.updateForReconciliationError(flinkApp, dfe.getMessage());
 
@@ -170,7 +166,7 @@ public class FlinkDeploymentController
     public Optional<FlinkDeployment> updateErrorStatus(
             FlinkDeployment flinkApp, RetryInfo retryInfo, RuntimeException e) {
         LOG.warn(
-                "attempt count: {}, last attempt: {}",
+                "Attempt count: {}, last attempt: {}",
                 retryInfo.getAttemptCount(),
                 retryInfo.isLastAttempt());
 
