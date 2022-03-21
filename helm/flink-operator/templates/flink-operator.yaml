@@ -32,6 +32,8 @@ spec:
     metadata:
       labels:
         {{- include "flink-operator.selectorLabels" . | nindent 8 }}
+      annotations:
+        kubectl.kubernetes.io/default-container: {{ .Chart.Name }}
     spec:
       securityContext:
         runAsUser: 9999
