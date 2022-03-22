@@ -76,6 +76,7 @@ public class FlinkDeploymentControllerTest {
     private final FlinkOperatorConfiguration operatorConfiguration =
             new FlinkOperatorConfiguration(
                     Duration.ofSeconds(1),
+                    -1,
                     Duration.ofSeconds(2),
                     Duration.ofSeconds(3),
                     Duration.ofSeconds(4),

@@ -21,6 +21,8 @@ package org.apache.flink.kubernetes.operator.config;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 
+import io.javaoperatorsdk.operator.api.config.ConfigurationService;
+
 import java.time.Duration;
 
 /** This class holds configuration constants used by flink operator. */
@@ -39,6 +41,13 @@ public class OperatorConfigOptions {
                     .defaultValue(Duration.ofSeconds(10))
                     .withDescription(
                             "Final delay before deployment is marked ready after port becomes accessible.");
+
+    public static final ConfigOption<Integer> OPERATOR_RECONCILER_MAX_PARALLELISM =
+            ConfigOptions.key("operator.reconciler.max.parallelism")
+                    .intType()
+                    .defaultValue(ConfigurationService.DEFAULT_RECONCILIATION_THREADS_NUMBER)
+                    .withDescription(
+                            "The maximum number of threads running the reconciliation loop. Use -1 for infinite.");
 
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL =
             ConfigOptions.key("operator.observer.progress-check.interval")

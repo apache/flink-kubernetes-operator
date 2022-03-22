@@ -32,6 +32,7 @@ import java.util.Set;
 public class FlinkOperatorConfiguration {
 
     Duration reconcileInterval;
+    int reconcilerMaxParallelism;
     Duration progressCheckInterval;
     Duration restApiReadyDelay;
     Duration savepointTriggerGracePeriod;
@@ -42,6 +43,10 @@ public class FlinkOperatorConfiguration {
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
                 operatorConfig.get(OperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL);
+
+        int reconcilerMaxParallelism =
+                operatorConfig.getInteger(
+                        OperatorConfigOptions.OPERATOR_RECONCILER_MAX_PARALLELISM);
 
         Duration restApiReadyDelay =
                 operatorConfig.get(OperatorConfigOptions.OPERATOR_OBSERVER_REST_READY_DELAY);
@@ -66,6 +71,7 @@ public class FlinkOperatorConfiguration {
 
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
+                reconcilerMaxParallelism,
                 progressCheckInterval,
                 restApiReadyDelay,
                 savepointTriggerGracePeriod,
