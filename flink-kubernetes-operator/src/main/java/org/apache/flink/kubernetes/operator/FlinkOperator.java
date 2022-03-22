@@ -31,6 +31,8 @@ import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
+import io.javaoperatorsdk.operator.api.config.ConfigurationService;
+import io.javaoperatorsdk.operator.api.config.ConfigurationServiceOverrider;
 import io.javaoperatorsdk.operator.config.runtime.DefaultConfigurationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +53,11 @@ public class FlinkOperator {
             namespace = "default";
         }
 
-        DefaultConfigurationService configurationService = DefaultConfigurationService.instance();
+        ConfigurationService configurationService =
+                new ConfigurationServiceOverrider(DefaultConfigurationService.instance())
+                        .checkingCRDAndValidateLocalModel(false)
+                        .build();
+
         Operator operator = new Operator(client, configurationService);
 
         FlinkOperatorConfiguration operatorConfiguration =

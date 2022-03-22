@@ -58,7 +58,7 @@ under the License.
         <maven-failsafe-plugin.version>3.0.0-M4</maven-failsafe-plugin.version>
         <maven-resources-plugin.version>3.2.0</maven-resources-plugin.version>
 
-        <operator.sdk.version>2.1.1</operator.sdk.version>
+        <operator.sdk.version>2.1.2</operator.sdk.version>
         <fabric8.version>5.12.1</fabric8.version>
         <lombok.version>1.18.22</lombok.version>
 
