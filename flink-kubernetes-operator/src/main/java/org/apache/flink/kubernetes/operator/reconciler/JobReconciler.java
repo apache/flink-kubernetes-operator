@@ -34,6 +34,7 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
+import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -82,7 +83,11 @@ public class JobReconciler extends BaseReconciler {
         }
 
         boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
-        if (specChanged && readyForSpecChanges(flinkApp)) {
+        if (specChanged) {
+            if (!inUpgradeableState(flinkApp)) {
+                LOG.info("Waiting for upgradeable state");
+                return;
+            }
             JobState currentJobState = lastReconciledSpec.getJob().getState();
             JobState desiredJobState = jobSpec.getState();
 
@@ -92,7 +97,7 @@ public class JobReconciler extends BaseReconciler {
                 if (desiredJobState == JobState.RUNNING) {
                     LOG.info("Upgrading running job, suspending first...");
                 }
-                printCancelLogs(upgradeMode, flinkApp.getMetadata().getName());
+                printCancelLogs(upgradeMode);
                 suspendJob(flinkApp, upgradeMode, effectiveConfig);
                 stateAfterReconcile = JobState.SUSPENDED;
             }
@@ -113,9 +118,12 @@ public class JobReconciler extends BaseReconciler {
         }
     }
 
-    private boolean readyForSpecChanges(FlinkDeployment deployment) {
-        if (deployment.getSpec().getJob().getUpgradeMode() != UpgradeMode.SAVEPOINT) {
-            // Only savepoint upgrade mode needs a running job
+    private boolean inUpgradeableState(FlinkDeployment deployment) {
+        if (deployment.getSpec().getJob().getUpgradeMode() != UpgradeMode.SAVEPOINT
+                && !ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
+                        deployment)) {
+            // Only savepoint upgrade mode or changed from stateless/savepoint to last-state while
+            // HA disabled previously need a running job
             return true;
         }
         return deployment.getStatus().getJobManagerDeploymentStatus()
@@ -155,7 +163,7 @@ public class JobReconciler extends BaseReconciler {
         deployFlinkJob(flinkApp, effectiveConfig, savepointOpt);
     }
 
-    private void printCancelLogs(UpgradeMode upgradeMode, String name) {
+    private void printCancelLogs(UpgradeMode upgradeMode) {
         switch (upgradeMode) {
             case STATELESS:
                 LOG.info("Cancelling job");
@@ -171,30 +179,40 @@ public class JobReconciler extends BaseReconciler {
         }
     }
 
-    private Optional<String> suspendJob(
+    private Optional<String> internalSuspendJob(
             FlinkDeployment flinkApp, UpgradeMode upgradeMode, Configuration effectiveConfig)
             throws Exception {
-
-        Optional<String> savepointOpt = Optional.empty();
+        final String jobIdString = flinkApp.getStatus().getJobStatus().getJobId();
+        // Always trigger a savepoint when upgrade mode changes from stateless/savepoint to
+        // last-state and HA is disabled previously. This is a safeguard to ensure the state is
+        // never lost.
+        if (ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(flinkApp)) {
+            return flinkService.cancelJob(
+                    JobID.fromHexString(Preconditions.checkNotNull(jobIdString)),
+                    UpgradeMode.SAVEPOINT,
+                    effectiveConfig);
+        }
         if (upgradeMode == UpgradeMode.STATELESS) {
             shutdown(flinkApp, effectiveConfig);
-        } else {
-            String jobIdString = flinkApp.getStatus().getJobStatus().getJobId();
-            savepointOpt =
-                    flinkService.cancelJob(
-                            jobIdString != null ? JobID.fromHexString(jobIdString) : null,
-                            upgradeMode,
-                            effectiveConfig);
+            return Optional.empty();
         }
+        return flinkService.cancelJob(
+                jobIdString != null ? JobID.fromHexString(jobIdString) : null,
+                upgradeMode,
+                effectiveConfig);
+    }
+
+    private void suspendJob(
+            FlinkDeployment flinkApp, UpgradeMode upgradeMode, Configuration effectiveConfig)
+            throws Exception {
+        final Optional<String> savepointOpt =
+                internalSuspendJob(flinkApp, upgradeMode, effectiveConfig);
 
         JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
         jobStatus.setState(JobState.SUSPENDED.name());
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
         savepointOpt.ifPresent(
-                location -> {
-                    jobStatus.getSavepointInfo().setLastSavepoint(Savepoint.of(location));
-                });
-        return savepointOpt;
+                location -> jobStatus.getSavepointInfo().setLastSavepoint(Savepoint.of(location)));
     }
 
     @Override
