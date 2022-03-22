@@ -36,18 +36,25 @@ function wait_for_logs {
   exit 1
 }
 
-function check_status {
+function wait_for_status {
   local resource=$1
   local status_path=$2
   local expected_status=$3
+  local timeout=$4
 
-  status=$(kubectl get -oyaml $resource | yq $status_path)
-  if [ "$status" == "$expected_status" ]; then
-    echo "Successfully verified that $resource$status_path is in $expected_status state."
-  else
-    echo "Status verification for $resource$status_path failed. It is $status instead of $expected_status."
-    exit 1
-  fi
+  echo "Waiting for $resource$status_path converging to $expected_status state..."
+  for i in $(seq 1 ${timeout}); do
+    status=$(kubectl get -oyaml $resource | yq $status_path)
+    if [ "$status" == "$expected_status" ]; then
+      echo "Successfully verified that $resource$status_path is in $expected_status state."
+      return
+    fi
+
+    sleep 1
+  done
+  echo "Status verification for $resource$status_path failed with timeout of ${timeout}."
+  echo "Status converged to $status instead of $expected_status."
+  exit 1
 }
 
 function retry_times() {
