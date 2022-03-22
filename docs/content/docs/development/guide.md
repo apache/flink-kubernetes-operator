@@ -50,7 +50,7 @@ minikube image load <repo>/flink-java-operator:latest
 You can cut a corner via using the docker daemon of your minikube installation directly as follows:
 ```bash
 eval $(minikube docker-env)
-DOCKER_BUILDKIT=1 docker build . -t <repo>/flink-operator
+DOCKER_BUILDKIT=1 docker build . -t <repo>/flink-java-operator:latest
 ```
 
 When you want to reset your environment to the defaults you can do the following:
@@ -72,7 +72,7 @@ docker@minikube:~$ exit
 
 ### Installing the operator locally
 ```bash
-helm install flink-operator helm/flink-operator --set image.repository=<repo> --set image.tag=latest
+helm install flink-operator helm/flink-operator --set image.repository=<repo>/flink-java-operator --set image.tag=latest
 ```
 ### Running the operator locally
 You can run or debug the `FlinkOperator` from your preferred IDE. The operator itself is accessing the deployed Flink clusters through the REST interface. When running locally the `rest.port` and `rest.address` Flink configuration parameters must be modified to a locally accessible value.
