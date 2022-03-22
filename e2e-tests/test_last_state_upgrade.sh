@@ -51,8 +51,8 @@ retry_times 5 30 "kubectl apply -f e2e-tests/data/cr.yaml" || exit 1
 wait_for_jobmanager_running
 
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
-check_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymentStatus' READY
-check_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING
+wait_for_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
+wait_for_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 
 job_id=$(kubectl logs $jm_pod_name | grep -E -o 'Job [a-z0-9]+ is submitted' | awk '{print $2}')
 
@@ -65,8 +65,8 @@ wait_for_jobmanager_running
 # Check the new JobManager recovering from latest successful checkpoint
 wait_for_logs $jm_pod_name "Restoring job $job_id from Checkpoint" ${TIMEOUT} || exit 1
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
-check_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymentStatus' READY
-check_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING
+wait_for_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
+wait_for_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 
 echo "Successfully run the last-state upgrade test"
 
