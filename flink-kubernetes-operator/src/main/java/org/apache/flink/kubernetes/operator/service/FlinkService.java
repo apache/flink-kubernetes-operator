@@ -53,7 +53,7 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMes
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 
 import io.fabric8.kubernetes.api.model.PodList;
-import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,12 +74,11 @@ public class FlinkService {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkService.class);
 
-    private final NamespacedKubernetesClient kubernetesClient;
+    private final KubernetesClient kubernetesClient;
     private final FlinkOperatorConfiguration operatorConfiguration;
 
     public FlinkService(
-            NamespacedKubernetesClient kubernetesClient,
-            FlinkOperatorConfiguration operatorConfiguration) {
+            KubernetesClient kubernetesClient, FlinkOperatorConfiguration operatorConfiguration) {
         this.kubernetesClient = kubernetesClient;
         this.operatorConfiguration = operatorConfiguration;
     }

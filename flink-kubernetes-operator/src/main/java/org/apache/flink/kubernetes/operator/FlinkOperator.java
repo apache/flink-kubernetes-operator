@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
@@ -30,6 +31,7 @@ import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidato
 import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
 import io.javaoperatorsdk.operator.api.config.ConfigurationServiceOverrider;
@@ -37,31 +39,37 @@ import io.javaoperatorsdk.operator.config.runtime.DefaultConfigurationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.Executors;
+
 /** Main Class for Flink native k8s operator. */
 public class FlinkOperator {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkOperator.class);
 
-    public static void main(String... args) {
+    private final Operator operator;
+    private final FlinkDeploymentController controller;
+    private final FlinkControllerConfig controllerConfig;
+
+    public FlinkOperator() {
+        this(FlinkUtils.loadDefaultConfig());
+    }
+
+    public FlinkOperator(DefaultConfig defaultConfig) {
 
         LOG.info("Starting Flink Kubernetes Operator");
-        DefaultConfig defaultConfig = FlinkUtils.loadDefaultConfig();
         OperatorMetricUtils.initOperatorMetrics(defaultConfig.getOperatorConfig());
 
-        DefaultKubernetesClient client = new DefaultKubernetesClient();
+        KubernetesClient client = new DefaultKubernetesClient();
         String namespace = client.getNamespace();
         if (namespace == null) {
             namespace = "default";
         }
 
-        ConfigurationService configurationService =
-                new ConfigurationServiceOverrider(DefaultConfigurationService.instance())
-                        .checkingCRDAndValidateLocalModel(false)
-                        .build();
-
-        Operator operator = new Operator(client, configurationService);
-
         FlinkOperatorConfiguration operatorConfiguration =
                 FlinkOperatorConfiguration.fromConfiguration(defaultConfig.getOperatorConfig());
+
+        ConfigurationService configurationService = getConfigurationService(operatorConfiguration);
+
+        operator = new Operator(client, configurationService);
 
         FlinkService flinkService = new FlinkService(client, operatorConfiguration);
 
@@ -70,7 +78,7 @@ public class FlinkOperator {
                 new ReconcilerFactory(client, flinkService, operatorConfiguration);
         ObserverFactory observerFactory = new ObserverFactory(flinkService, operatorConfiguration);
 
-        FlinkDeploymentController controller =
+        controller =
                 new FlinkDeploymentController(
                         defaultConfig,
                         operatorConfiguration,
@@ -80,13 +88,40 @@ public class FlinkOperator {
                         reconcilerFactory,
                         observerFactory);
 
-        FlinkControllerConfig controllerConfig =
+        controllerConfig =
                 new FlinkControllerConfig(controller, operatorConfiguration.getWatchedNamespaces());
         controller.setControllerConfig(controllerConfig);
         controllerConfig.setConfigurationService(configurationService);
+    }
 
+    private ConfigurationService getConfigurationService(
+            FlinkOperatorConfiguration operatorConfiguration) {
+
+        ConfigurationServiceOverrider configOverrider =
+                new ConfigurationServiceOverrider(DefaultConfigurationService.instance())
+                        .checkingCRDAndValidateLocalModel(false);
+
+        int parallelism = operatorConfiguration.getReconcilerMaxParallelism();
+        if (parallelism == -1) {
+            configOverrider = configOverrider.withExecutorService(Executors.newCachedThreadPool());
+        } else {
+            configOverrider = configOverrider.withConcurrentReconciliationThreads(parallelism);
+        }
+        return configOverrider.build();
+    }
+
+    public void run() {
         operator.register(controller, controllerConfig);
         operator.installShutdownHook();
         operator.start();
+    }
+
+    @VisibleForTesting
+    protected Operator getOperator() {
+        return operator;
+    }
+
+    public static void main(String... args) {
+        new FlinkOperator().run();
     }
 }

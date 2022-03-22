@@ -109,6 +109,7 @@ public class SessionObserverTest {
         FlinkOperatorConfiguration allNsConfig =
                 new FlinkOperatorConfiguration(
                         Duration.ofSeconds(1),
+                        -1,
                         Duration.ofSeconds(2),
                         Duration.ofSeconds(3),
                         Duration.ofSeconds(4),
@@ -118,6 +119,7 @@ public class SessionObserverTest {
         FlinkOperatorConfiguration specificNsConfig =
                 new FlinkOperatorConfiguration(
                         Duration.ofSeconds(1),
+                        -1,
                         Duration.ofSeconds(2),
                         Duration.ofSeconds(3),
                         Duration.ofSeconds(4),
@@ -127,6 +129,7 @@ public class SessionObserverTest {
         FlinkOperatorConfiguration multipleNsConfig =
                 new FlinkOperatorConfiguration(
                         Duration.ofSeconds(1),
+                        -1,
                         Duration.ofSeconds(2),
                         Duration.ofSeconds(3),
                         Duration.ofSeconds(4),
