@@ -67,6 +67,11 @@ public class JobReconcilerTest {
         reconciler.reconcile(statelessUpgrade, context, config);
 
         runningJobs = flinkService.listJobs();
+        assertEquals(0, runningJobs.size());
+
+        reconciler.reconcile(statelessUpgrade, context, config);
+
+        runningJobs = flinkService.listJobs();
         assertEquals(1, runningJobs.size());
         assertNull(runningJobs.get(0).f0);
 
@@ -79,6 +84,11 @@ public class JobReconcilerTest {
         FlinkDeployment statefulUpgrade = ReconciliationUtils.clone(deployment);
         statefulUpgrade.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         statefulUpgrade.getSpec().getFlinkConfiguration().put("new", "conf2");
+
+        reconciler.reconcile(statefulUpgrade, context, new Configuration(config));
+
+        runningJobs = flinkService.listJobs();
+        assertEquals(0, runningJobs.size());
 
         reconciler.reconcile(statefulUpgrade, context, new Configuration(config));
 

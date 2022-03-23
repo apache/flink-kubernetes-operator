@@ -47,7 +47,6 @@ import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -112,7 +111,8 @@ public class FlinkDeploymentController
         if (validationError.isPresent()) {
             LOG.error("Validation failed: " + validationError.get());
             ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
-            return ReconciliationUtils.toUpdateControl(originalCopy, flinkApp);
+            return ReconciliationUtils.toUpdateControl(
+                    operatorConfiguration, originalCopy, flinkApp, false);
         }
 
         Configuration effectiveConfig =
@@ -127,12 +127,8 @@ public class FlinkDeploymentController
             throw new ReconciliationException(e);
         }
 
-        Duration rescheduleAfter =
-                flinkApp.getStatus()
-                        .getJobManagerDeploymentStatus()
-                        .rescheduleAfter(flinkApp, operatorConfiguration);
-        return ReconciliationUtils.toUpdateControl(originalCopy, flinkApp)
-                .rescheduleAfter(rescheduleAfter.toMillis());
+        return ReconciliationUtils.toUpdateControl(
+                operatorConfiguration, originalCopy, flinkApp, true);
     }
 
     private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
