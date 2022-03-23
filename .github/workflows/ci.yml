@@ -33,9 +33,13 @@ jobs:
           distribution: 'adopt'
       - name: Build with Maven
         run: |
-          set -o pipefail; mvn clean install | tee ./mvn.log; set +o pipefail
+          set -o pipefail; mvn clean install -Pgenerate-docs | tee ./mvn.log; set +o pipefail
           if [[ $(grep -c "overlapping classes" ./mvn.log) -gt 0 ]];then
             echo "Found overlapping classes, please fix"
+            exit 1
+          fi
+          if [[ $(git diff HEAD | wc -l) -gt 0 ]];then
+            echo "Please generate the java doc via 'mvn clean install -DskipTests -Pgenerate-docs' again"
             exit 1
           fi
       - name: Start minikube
