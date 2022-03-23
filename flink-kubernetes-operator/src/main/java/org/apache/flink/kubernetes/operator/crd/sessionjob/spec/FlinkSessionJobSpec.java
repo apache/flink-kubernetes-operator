@@ -33,7 +33,10 @@ import lombok.NoArgsConstructor;
 @Builder
 public class FlinkSessionJobSpec {
 
-    /** The cluster id associates with a session cluster. */
+    /**
+     * The cluster id of the target session cluster. When deployed using the operator the cluster id
+     * is the name of the deployment.
+     */
     private String clusterId;
 
     /** A specification of a job . */
