@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
@@ -73,7 +74,7 @@ public class FlinkConfigBuilderTest {
                 TestUtils.getTestPod("pod2 hostname", "pod2 api version", new ArrayList<>());
 
         flinkDeployment.getSpec().setPodTemplate(pod0);
-        flinkDeployment.getSpec().getIngress().setTemplate("test.com");
+        flinkDeployment.getSpec().setIngress(IngressSpec.builder().template("test.com").build());
         flinkDeployment.getSpec().getJobManager().setPodTemplate(pod1);
         flinkDeployment.getSpec().getJobManager().setReplicas(2);
         flinkDeployment.getSpec().getTaskManager().setPodTemplate(pod2);
