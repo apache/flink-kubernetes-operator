@@ -15,26 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.reconciler;
+package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 
 /** BaseReconciler with functionality that is common to job and session modes. */
-public abstract class BaseReconciler implements Reconciler {
+public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDeployment> {
 
     protected final FlinkOperatorConfiguration operatorConfiguration;
     protected final KubernetesClient kubernetesClient;
     protected final FlinkService flinkService;
 
-    public BaseReconciler(
+    public AbstractDeploymentReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkOperatorConfiguration operatorConfiguration) {
@@ -44,7 +46,8 @@ public abstract class BaseReconciler implements Reconciler {
     }
 
     @Override
-    public DeleteControl cleanup(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+    public DeleteControl cleanup(
+            FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
         return shutdownAndDelete(flinkApp, effectiveConfig);
     }
 

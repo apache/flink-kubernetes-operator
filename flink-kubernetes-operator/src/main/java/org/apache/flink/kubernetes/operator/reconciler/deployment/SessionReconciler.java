@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.reconciler;
+package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
@@ -34,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * Reconciler responsible for handling the session cluster lifecycle according to the desired and
  * current states.
  */
-public class SessionReconciler extends BaseReconciler {
+public class SessionReconciler extends AbstractDeploymentReconciler {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
 

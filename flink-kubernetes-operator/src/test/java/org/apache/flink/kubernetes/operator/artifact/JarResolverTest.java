@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.validation;
+package org.apache.flink.kubernetes.operator.artifact;
 
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
+import java.nio.file.Path;
 
-/** Validator for {@link FlinkDeployment} resources. */
-public interface FlinkDeploymentValidator {
+/** Test for {@link JarResolver}. */
+public class JarResolverTest {
 
-    /**
-     * Validate and return optional error.
-     *
-     * @param deployment
-     * @return Optional error string, should be present iff validation resulted in an error
-     */
-    Optional<String> validate(FlinkDeployment deployment);
+    @Test
+    public void testResolve() throws Exception {
+        String jarUri = "file:///opt/flink/test.jar";
+        JarResolver resolver = new JarResolver();
+        Path path = resolver.resolve(jarUri);
+        Assertions.assertEquals("/opt/flink/test.jar", path.toAbsolutePath().toString());
+    }
 }

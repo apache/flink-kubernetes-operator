@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.observer;
+package org.apache.flink.kubernetes.operator.validation;
 
-import io.javaoperatorsdk.operator.api.reconciler.Context;
+import java.util.Optional;
 
-/** The Observer of custom resource. */
-public interface Observer<CR> {
+/**
+ * Validator for custom resources.
+ *
+ * @param <CR> The custom resource to be validated.
+ */
+public interface FlinkResourceValidator<CR> {
 
     /**
-     * Observe the flinkApp status, It will reflect the changed status on the flinkApp resource.
+     * Validate and return optional error.
      *
-     * @param cr the target custom resource
-     * @param context the context with which the operation is executed
+     * @param deployment
+     * @return Optional error string, should be present iff validation resulted in an error
      */
-    void observe(CR cr, Context context);
+    Optional<String> validate(CR deployment);
 }

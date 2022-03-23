@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

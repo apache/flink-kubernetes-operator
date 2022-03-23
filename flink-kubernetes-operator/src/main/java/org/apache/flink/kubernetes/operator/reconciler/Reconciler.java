@@ -19,31 +19,34 @@
 package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 
-/** The interface of reconciler. */
-public interface Reconciler {
+/**
+ * The interface of reconciler.
+ *
+ * @param <CR> The custom resource to be reconciled.
+ */
+public interface Reconciler<CR> {
 
     /**
-     * This is called when receiving the create or update event of the FlinkDeployment resource.
+     * This is called when receiving the create or update event of the custom resource.
      *
-     * @param flinkApp the FlinkDeployment resource that has been created or updated
+     * @param cr the custom resource that has been created or updated
+     * @param context the context with which the operation is executed
+     * @param effectiveConfig the effective config of the target resource
+     */
+    void reconcile(CR cr, Context context, Configuration effectiveConfig) throws Exception;
+
+    /**
+     * This is called when receiving the delete event of custom resource. This method is meant to
+     * cleanup the associated components like the Flink job components.
+     *
+     * @param cr the custom resource that has been deleted
      * @param context the context with which the operation is executed
      * @param effectiveConfig the effective config of the flinkApp
+     * @return DeleteControl to manage the deletion behavior
      */
-    void reconcile(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig)
-            throws Exception;
-
-    /**
-     * This is called when receiving the delete event of FlinkDeployment resource. This method is
-     * meant to cleanup the associated components like the Flink job components.
-     *
-     * @param flinkApp the FlinkDeployment resource that has been deleted
-     * @param effectiveConfig the effective config of the flinkApp
-     * @return DeleteControl to manage the delete behavior
-     */
-    DeleteControl cleanup(FlinkDeployment flinkApp, Configuration effectiveConfig);
+    DeleteControl cleanup(CR cr, Context context, Configuration effectiveConfig);
 }

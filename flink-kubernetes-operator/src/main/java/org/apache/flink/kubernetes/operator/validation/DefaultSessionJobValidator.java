@@ -15,18 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.observer;
+package org.apache.flink.kubernetes.operator.validation;
 
-import io.javaoperatorsdk.operator.api.reconciler.Context;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 
-/** The Observer of custom resource. */
-public interface Observer<CR> {
+import java.util.Optional;
 
-    /**
-     * Observe the flinkApp status, It will reflect the changed status on the flinkApp resource.
-     *
-     * @param cr the target custom resource
-     * @param context the context with which the operation is executed
-     */
-    void observe(CR cr, Context context);
+/** Default validator implementation for {@link FlinkSessionJob}. */
+public class DefaultSessionJobValidator implements FlinkResourceValidator<FlinkSessionJob> {
+
+    @Override
+    public Optional<String> validate(FlinkSessionJob deployment) {
+        return Optional.empty();
+    }
 }

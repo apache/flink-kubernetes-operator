@@ -24,9 +24,9 @@ import lombok.Value;
 /** Result of a fetch savepoint operation. */
 @Value
 public class SavepointFetchResult {
-    private final Savepoint savepoint;
-    private final boolean isTriggered;
-    private final String error;
+    Savepoint savepoint;
+    boolean isTriggered;
+    String error;
 
     public static SavepointFetchResult notTriggered() {
         return new SavepointFetchResult(null, false, null);

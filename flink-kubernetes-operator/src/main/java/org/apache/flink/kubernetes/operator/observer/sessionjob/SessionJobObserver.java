@@ -15,18 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.observer;
+package org.apache.flink.kubernetes.operator.observer.sessionjob;
+
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.observer.Observer;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
-/** The Observer of custom resource. */
-public interface Observer<CR> {
-
-    /**
-     * Observe the flinkApp status, It will reflect the changed status on the flinkApp resource.
-     *
-     * @param cr the target custom resource
-     * @param context the context with which the operation is executed
-     */
-    void observe(CR cr, Context context);
+/** The observer of {@link FlinkSessionJob}. */
+public class SessionJobObserver implements Observer<FlinkSessionJob> {
+    @Override
+    public void observe(FlinkSessionJob flinkSessionJob, Context context) {}
 }

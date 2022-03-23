@@ -59,6 +59,8 @@ rules:
     resources:
       - flinkdeployments
       - flinkdeployments/status
+      - flinksessionjobs
+      - flinksessionjobs/status
     verbs:
       - "*"
   - apiGroups:

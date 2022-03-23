@@ -1,11 +1,10 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -16,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.observer;
+package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import java.util.Map;
@@ -33,7 +33,7 @@ public class ObserverFactory {
     private final FlinkService flinkService;
     private final FlinkOperatorConfiguration operatorConfig;
     private final Configuration flinkConfig;
-    private final Map<Mode, Observer> observerMap;
+    private final Map<Mode, Observer<FlinkDeployment>> observerMap;
 
     public ObserverFactory(
             FlinkService flinkService,
@@ -45,7 +45,7 @@ public class ObserverFactory {
         this.observerMap = new ConcurrentHashMap<>();
     }
 
-    public Observer getOrCreate(FlinkDeployment flinkApp) {
+    public Observer<FlinkDeployment> getOrCreate(FlinkDeployment flinkApp) {
         return observerMap.computeIfAbsent(
                 Mode.getMode(flinkApp),
                 mode -> {
@@ -53,7 +53,8 @@ public class ObserverFactory {
                         case SESSION:
                             return new SessionObserver(flinkService, operatorConfig, flinkConfig);
                         case APPLICATION:
-                            return new JobObserver(flinkService, operatorConfig, flinkConfig);
+                            return new ApplicationObserver(
+                                    flinkService, operatorConfig, flinkConfig);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

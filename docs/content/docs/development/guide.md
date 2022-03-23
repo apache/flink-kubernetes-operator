@@ -108,6 +108,14 @@ So if the CRD is changed, you have to delete the CRD resource manually, and re-i
 kubectl delete crd flinkdeployments.flink.apache.org
 ```
 
+### Mounts
+
+The operator supports to specify the volume mounts. The default mounts to hostPath can be activated by the following command. You can change the default mounts in the `helm/flink-operator/values.yaml`
+
+```bash
+helm install flink-operator helm/flink-operator --set operatorVolumeMounts.create=true --set operatorVolumes.create=true 
+```
+
 
 ## CI/CD
 We use [GitHub Actions](https://help.github.com/en/actions/getting-started-with-github-actions/about-github-actions) to help you automate your software development workflows in the same place you store code and collaborate on pull requests and issues.

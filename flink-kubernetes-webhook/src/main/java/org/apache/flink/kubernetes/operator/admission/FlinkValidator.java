@@ -21,7 +21,7 @@ import org.apache.flink.kubernetes.operator.admission.admissioncontroller.NotAll
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation;
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.validation.Validator;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
+import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
@@ -35,9 +35,9 @@ public class FlinkValidator implements Validator<GenericKubernetesResource> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkValidator.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private final FlinkDeploymentValidator deploymentValidator;
+    private final FlinkResourceValidator<FlinkDeployment> deploymentValidator;
 
-    public FlinkValidator(FlinkDeploymentValidator deploymentValidator) {
+    public FlinkValidator(FlinkResourceValidator<FlinkDeployment> deploymentValidator) {
         this.deploymentValidator = deploymentValidator;
     }
 

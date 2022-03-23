@@ -31,8 +31,8 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
@@ -43,8 +43,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-/** Default validator implementation. */
-public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
+/** Default validator implementation for {@link FlinkDeployment}. */
+public class DefaultDeploymentValidator implements FlinkResourceValidator<FlinkDeployment> {
 
     private static final String[] FORBIDDEN_CONF_KEYS =
             new String[] {

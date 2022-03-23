@@ -21,7 +21,9 @@ import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
@@ -30,6 +32,8 @@ import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 
 import io.fabric8.kubernetes.api.model.Container;
@@ -59,6 +63,7 @@ public class TestUtils {
 
     public static final String TEST_NAMESPACE = "flink-operator-test";
     public static final String TEST_DEPLOYMENT_NAME = "test-cluster";
+    public static final String TEST_SESSION_JOB_NAME = "test-session-job";
     public static final String SERVICE_ACCOUNT = "flink-operator";
     public static final String FLINK_VERSION = "latest";
     public static final String IMAGE = String.format("flink:%s", FLINK_VERSION);
@@ -89,6 +94,28 @@ public class TestUtils {
                                 .state(JobState.RUNNING)
                                 .build());
         return deployment;
+    }
+
+    public static FlinkSessionJob buildSessionJob() {
+        FlinkSessionJob sessionJob = new FlinkSessionJob();
+        sessionJob.setStatus(new FlinkSessionJobStatus());
+        sessionJob.setMetadata(
+                new ObjectMetaBuilder()
+                        .withName(TEST_SESSION_JOB_NAME)
+                        .withNamespace(TEST_NAMESPACE)
+                        .build());
+        sessionJob.setSpec(
+                FlinkSessionJobSpec.builder()
+                        .clusterId(TEST_DEPLOYMENT_NAME)
+                        .job(
+                                JobSpec.builder()
+                                        .jarURI(SAMPLE_JAR)
+                                        .parallelism(1)
+                                        .upgradeMode(UpgradeMode.STATELESS)
+                                        .state(JobState.RUNNING)
+                                        .build())
+                        .build());
+        return sessionJob;
     }
 
     public static FlinkDeploymentSpec getTestFlinkDeploymentSpec() {
@@ -191,6 +218,41 @@ public class TestUtils {
             public <T> Optional<T> getSecondaryResource(
                     Class<T> expectedType, String eventSourceName) {
                 return Optional.of((T) createDeployment(false));
+            }
+        };
+    }
+
+    public static Context createContextWithReadyFlinkDeployment() {
+        return new Context() {
+            @Override
+            public Optional<RetryInfo> getRetryInfo() {
+                return Optional.empty();
+            }
+
+            @Override
+            public <T> Optional<T> getSecondaryResource(
+                    Class<T> expectedType, String eventSourceName) {
+                var session = buildSessionCluster();
+                session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+                return Optional.of((T) session);
+            }
+        };
+    }
+
+    public static Context createContextWithNotReadyFlinkDeployment() {
+        return new Context() {
+            @Override
+            public Optional<RetryInfo> getRetryInfo() {
+                return Optional.empty();
+            }
+
+            @Override
+            public <T> Optional<T> getSecondaryResource(
+                    Class<T> expectedType, String eventSourceName) {
+                var session = buildSessionCluster();
+                session.getStatus()
+                        .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+                return Optional.of((T) session);
             }
         };
     }
