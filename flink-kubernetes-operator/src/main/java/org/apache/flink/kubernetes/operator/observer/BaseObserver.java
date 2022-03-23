@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
@@ -143,5 +144,14 @@ public abstract class BaseObserver implements Observer {
 
     protected boolean isClusterReady(FlinkDeployment dep) {
         return dep.getStatus().getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.READY;
+    }
+
+    protected void clearErrorsIfJobManagerDeploymentNotInErrorStatus(FlinkDeployment dep) {
+        if (dep.getStatus().getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.ERROR) {
+            final ReconciliationStatus reconciliationStatus =
+                    dep.getStatus().getReconciliationStatus();
+            reconciliationStatus.setSuccess(true);
+            reconciliationStatus.setError(null);
+        }
     }
 }

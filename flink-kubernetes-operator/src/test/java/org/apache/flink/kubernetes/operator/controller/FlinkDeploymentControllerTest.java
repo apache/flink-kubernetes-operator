@@ -39,6 +39,7 @@ import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.ContainerStatusBuilder;
 import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.PodListBuilder;
 import io.fabric8.kubernetes.api.model.PodStatusBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -215,22 +216,7 @@ public class FlinkDeploymentControllerTest {
                 .once();
 
         String crashLoopMessage = "container fails";
-        ContainerStatus cs =
-                new ContainerStatusBuilder()
-                        .withNewState()
-                        .withNewWaiting()
-                        .withReason(DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF)
-                        .withMessage(crashLoopMessage)
-                        .endWaiting()
-                        .endState()
-                        .build();
-
-        Pod pod = TestUtils.getTestPod("host", "apiVersion", Collections.emptyList());
-        pod.setStatus(
-                new PodStatusBuilder()
-                        .withContainerStatuses(Collections.singletonList(cs))
-                        .build());
-        flinkService.setJmPodList(new PodListBuilder().withItems(pod).build());
+        flinkService.setJmPodList(createFailedPodList(crashLoopMessage));
 
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         UpdateControl<FlinkDeployment> updateControl;
@@ -477,6 +463,55 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 namespaces,
                 eventSources.stream().map(EventSource::name).collect(Collectors.toSet()));
+    }
+
+    @Test
+    public void testSuccessfulObservationShouldClearErrors() {
+        final String crashLoopMessage = "deploy errors";
+        flinkService.setJmPodList(createFailedPodList(crashLoopMessage));
+
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+
+        testController.reconcile(appCluster, TestUtils.createEmptyContext());
+        testController.reconcile(appCluster, TestUtils.createContextWithInProgressDeployment());
+
+        // Failed JobManager deployment should set errors to the status
+        assertEquals(
+                JobManagerDeploymentStatus.ERROR,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        ReconciliationStatus reconciliationStatus =
+                appCluster.getStatus().getReconciliationStatus();
+        assertFalse(reconciliationStatus.isSuccess());
+        assertEquals(crashLoopMessage, reconciliationStatus.getError());
+
+        // JobManager deployment becomes ready and successful observation should clear the errors
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        reconciliationStatus = appCluster.getStatus().getReconciliationStatus();
+        assertTrue(reconciliationStatus.isSuccess());
+        assertNull(reconciliationStatus.getError());
+    }
+
+    private PodList createFailedPodList(String crashLoopMessage) {
+        ContainerStatus cs =
+                new ContainerStatusBuilder()
+                        .withNewState()
+                        .withNewWaiting()
+                        .withReason(DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF)
+                        .withMessage(crashLoopMessage)
+                        .endWaiting()
+                        .endState()
+                        .build();
+
+        Pod pod = TestUtils.getTestPod("host", "apiVersion", Collections.emptyList());
+        pod.setStatus(
+                new PodStatusBuilder()
+                        .withContainerStatuses(Collections.singletonList(cs))
+                        .build());
+        return new PodListBuilder().withItems(pod).build();
     }
 
     private FlinkDeploymentController createTestController(

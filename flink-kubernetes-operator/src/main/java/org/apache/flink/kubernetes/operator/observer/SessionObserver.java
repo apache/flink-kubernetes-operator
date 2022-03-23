@@ -52,5 +52,6 @@ public class SessionObserver extends BaseObserver {
                 }
             }
         }
+        clearErrorsIfJobManagerDeploymentNotInErrorStatus(flinkApp);
     }
 }
