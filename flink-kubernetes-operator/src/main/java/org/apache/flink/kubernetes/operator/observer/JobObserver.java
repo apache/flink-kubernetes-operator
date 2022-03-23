@@ -56,6 +56,7 @@ public class JobObserver extends BaseObserver {
                 observeSavepointStatus(flinkApp, effectiveConfig);
             }
         }
+        clearErrorsIfJobManagerDeploymentNotInErrorStatus(flinkApp);
     }
 
     private boolean observeFlinkJobStatus(
