@@ -15,30 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.sessionjob.spec;
+package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Spec that describes a Flink session job. */
+/** Last observed status of the Flink Session job. */
 @Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class FlinkSessionJobSpec {
+public class FlinkSessionJobStatus {
 
-    /**
-     * The cluster id of the target session cluster. When deployed using the operator the cluster id
-     * is the name of the deployment.
-     */
-    private String clusterId;
+    /** Last observed status of the job. */
+    private JobStatus jobStatus = new JobStatus();
 
-    /** A specification of a job . */
-    private JobSpec job;
+    /** Status of the last reconcile operation. */
+    private FlinkSessionJobReconciliationStatus reconciliationStatus =
+            new FlinkSessionJobReconciliationStatus();
 }

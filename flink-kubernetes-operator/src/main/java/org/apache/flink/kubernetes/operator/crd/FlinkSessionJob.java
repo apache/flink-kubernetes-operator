@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.sessionjob;
+package org.apache.flink.kubernetes.operator.crd;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.crd.sessionjob.spec.FlinkSessionJobSpec;
-import org.apache.flink.kubernetes.operator.crd.sessionjob.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;

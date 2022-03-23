@@ -15,31 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.sessionjob.status;
+package org.apache.flink.kubernetes.operator.crd.spec;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.crd.sessionjob.spec.FlinkSessionJobSpec;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Status of the last reconcile step for the session job. */
+/** Spec that describes a Flink session job. */
 @Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ReconciliationStatus {
-    /** True if last reconciliation step was successful. */
-    private boolean success;
-
-    /** If success == false, error information about the reconciliation failure. */
-    private String error;
+public class FlinkSessionJobSpec {
 
     /**
-     * Last reconciled job spec. Used to decide whether further reconciliation steps are necessary.
+     * The cluster id of the target session cluster. When deployed using the operator the cluster id
+     * is the name of the deployment.
      */
-    private FlinkSessionJobSpec flinkSessionJobSpec;
+    private String clusterId;
+
+    /** A specification of a job . */
+    private JobSpec job;
 }

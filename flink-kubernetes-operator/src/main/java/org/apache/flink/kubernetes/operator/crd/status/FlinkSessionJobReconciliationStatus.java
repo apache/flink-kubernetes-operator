@@ -15,30 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.sessionjob.status;
+package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
-import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Last observed status of the Flink Session job. */
+/** Status of the last reconcile step for the session job. */
 @Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class FlinkSessionJobStatus {
+@Builder
+public class FlinkSessionJobReconciliationStatus {
+    /** True if last reconciliation step was successful. */
+    private boolean success;
 
-    /** Last observed status of the job. */
-    private JobStatus jobStatus = new JobStatus();
+    /** If success == false, error information about the reconciliation failure. */
+    private String error;
 
-    /** Last observed status of the JobManager deployment. */
-    private JobManagerDeploymentStatus jobManagerDeploymentStatus =
-            JobManagerDeploymentStatus.MISSING;
-
-    /** Status of the last reconcile operation. */
-    private ReconciliationStatus reconciliationStatus = new ReconciliationStatus();
+    /**
+     * Last reconciled job spec. Used to decide whether further reconciliation steps are necessary.
+     */
+    private FlinkSessionJobSpec flinkSessionJobSpec;
 }
