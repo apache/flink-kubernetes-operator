@@ -49,7 +49,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | imagePullPolicy | java.lang.String | Image pull policy of the Flink docker image. |
 | serviceAccount | java.lang.String | Kubernetes service used by the Flink deployment. |
 | flinkVersion | org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion | Flink image version. |
-| ingressDomain | java.lang.String | Ingress domain for the Flink deployment. |
+| ingress | org.apache.flink.kubernetes.operator.crd.spec.IngressSpec | Ingress specs. |
 | flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment. |
 | podTemplate | io.fabric8.kubernetes.api.model.Pod | Base pod template for job and task manager pods. Can be overridden by the jobManager and  taskManager pod templates. |
 | jobManager | org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec | JobManager specs. |
@@ -67,6 +67,17 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | v1_14 |  |
 | v1_15 |  |
 | v1_16 |  |
+
+### IngressSpec
+**Class**: org.apache.flink.kubernetes.operator.crd.spec.IngressSpec
+
+**Description**: Ingress spec.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| template | java.lang.String | Ingress template for the JobManager service. |
+| className | java.lang.String | Ingress className for the Flink deployment. |
+| annotations | java.util.Map<java.lang.String,java.lang.String> | Ingress annotations. |
 
 ### JobManagerSpec
 **Class**: org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec
