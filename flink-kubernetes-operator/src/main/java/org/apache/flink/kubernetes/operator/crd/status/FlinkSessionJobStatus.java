@@ -15,12 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd;
+package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
 
-import io.fabric8.kubernetes.client.CustomResourceList;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-/** Multiple Flink deployments. */
+/** Last observed status of the Flink Session job. */
 @Experimental
-public class FlinkDeploymentList extends CustomResourceList<FlinkDeployment> {}
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class FlinkSessionJobStatus {
+
+    /** Last observed status of the job. */
+    private JobStatus jobStatus = new JobStatus();
+
+    /** Status of the last reconcile operation. */
+    private FlinkSessionJobReconciliationStatus reconciliationStatus =
+            new FlinkSessionJobReconciliationStatus();
+}
