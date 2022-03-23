@@ -54,3 +54,42 @@ The webhook can be disabled during helm install by passing the `--set webhook.cr
 
 The operator supports watching a specific list of namespaces for FlinkDeployment resources. You can enable it by setting the `--set watchNamespaces={flink-test}` parameter.
 When this is enabled role-based access control is only created specifically for these namespaces for the operator and the jobmanagers, otherwise it defaults to cluster scope.
+
+## Working with Argo CD
+
+If you are using [Argo CD](https://argoproj.github.io) to manage the operator, you will encounter the issue which complains the CRDs too long. Same with [this issue](https://github.com/prometheus-operator/prometheus-operator/issues/4439).
+The recommended solution is to split the operator into two Argo apps, such as:
+
+* The first app just for installing the CRDs with `Replace=true` directly, snippet:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: flink-operator-crds
+spec:
+  source:
+    repoURL: https://github.com/apache/flink-kubernetes-operator
+    targetRevision: main
+    path: helm/flink-operator/crds
+    syncOptions:
+    - Replace=true
+...
+```
+
+* The second app that installs the Helm chart with `skipCrds=true` (new feature in Argo CD 2.3.0), snippet:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: flink-operator-skip-crds
+spec:
+  source:
+    repoURL: https://github.com/apache/flink-kubernetes-operator
+    targetRevision: main
+    path: helm/flink-operator
+    helm:
+      skipCrds: true
+...
+```
