@@ -64,7 +64,7 @@ public class SessionReconciler extends BaseReconciler {
             upgradeSessionCluster(flinkApp, effectiveConfig);
             IngressUtils.updateIngressRules(flinkApp, effectiveConfig, kubernetesClient);
         }
-        ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
+        ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null);
     }
 
     private void upgradeSessionCluster(FlinkDeployment flinkApp, Configuration effectiveConfig)

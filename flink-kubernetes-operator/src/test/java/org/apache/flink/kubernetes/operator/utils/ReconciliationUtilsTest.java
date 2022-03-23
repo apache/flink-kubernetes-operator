@@ -17,15 +17,16 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.junit.jupiter.api.Test;
-
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,26 +36,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Test for {@link org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils}. */
 public class ReconciliationUtilsTest {
 
+    FlinkOperatorConfiguration operatorConfiguration =
+            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
+
     @Test
     public void testSpecChangedException() {
         FlinkDeployment previous = TestUtils.buildApplicationCluster();
-        FlinkDeployment current =
-                org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils.clone(previous);
+        FlinkDeployment current = ReconciliationUtils.clone(previous);
 
         current.getSpec().setImage("changed-image");
         assertThrows(
                 UnsupportedOperationException.class,
-                () -> ReconciliationUtils.toUpdateControl(previous, current));
+                () ->
+                        ReconciliationUtils.toUpdateControl(
+                                operatorConfiguration, previous, current, true));
     }
 
     @Test
     public void testStatusChanged() {
         FlinkDeployment previous = TestUtils.buildApplicationCluster();
-        FlinkDeployment current =
-                org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils.clone(previous);
+        FlinkDeployment current = ReconciliationUtils.clone(previous);
 
         UpdateControl<FlinkDeployment> updateControl =
-                ReconciliationUtils.toUpdateControl(previous, current);
+                ReconciliationUtils.toUpdateControl(
+                        operatorConfiguration, previous, current, false);
 
         assertFalse(updateControl.isUpdateResource());
         assertFalse(updateControl.isUpdateStatus());
@@ -63,10 +68,29 @@ public class ReconciliationUtilsTest {
         // status changed
         current.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         updateControl =
-                ReconciliationUtils.toUpdateControl(previous, current)
-                        .rescheduleAfter(10, TimeUnit.MILLISECONDS);
+                ReconciliationUtils.toUpdateControl(operatorConfiguration, previous, current, true);
         assertFalse(updateControl.isUpdateResource());
         assertTrue(updateControl.isUpdateStatus());
-        assertEquals(10, updateControl.getScheduleDelay().get());
+        assertEquals(
+                operatorConfiguration.getProgressCheckInterval().toMillis(),
+                updateControl.getScheduleDelay().get());
+    }
+
+    @Test
+    public void testRescheduleUpgradeImmediately() {
+        FlinkDeployment app = TestUtils.buildApplicationCluster();
+        app.getSpec().getJob().setState(JobState.RUNNING);
+        FlinkDeployment current = ReconciliationUtils.clone(app);
+        current.getStatus()
+                .getReconciliationStatus()
+                .setLastReconciledSpec(ReconciliationUtils.clone(current.getSpec()));
+        ReconciliationUtils.updateForSpecReconciliationSuccess(current, JobState.SUSPENDED);
+
+        UpdateControl<FlinkDeployment> updateControl =
+                ReconciliationUtils.toUpdateControl(operatorConfiguration, app, current, true);
+
+        assertFalse(updateControl.isUpdateResource());
+        assertTrue(updateControl.isUpdateStatus());
+        assertEquals(0, updateControl.getScheduleDelay().get());
     }
 }

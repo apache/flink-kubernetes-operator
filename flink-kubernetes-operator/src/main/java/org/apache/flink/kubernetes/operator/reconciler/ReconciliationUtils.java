@@ -17,14 +17,17 @@
 
 package org.apache.flink.kubernetes.operator.reconciler;
 
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 
+import java.time.Duration;
 import java.util.Objects;
 
 /** Reconciliation utilities. */
@@ -32,7 +35,8 @@ public class ReconciliationUtils {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    public static void updateForSpecReconciliationSuccess(FlinkDeployment flinkApp) {
+    public static void updateForSpecReconciliationSuccess(
+            FlinkDeployment flinkApp, JobState stateAfterReconcile) {
         ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
         reconciliationStatus.setSuccess(true);
         reconciliationStatus.setError(null);
@@ -45,6 +49,7 @@ public class ReconciliationUtils {
                             .getJob()
                             .getSavepointTriggerNonce();
             clonedSpec.getJob().setSavepointTriggerNonce(oldSavepointTriggerNonce);
+            clonedSpec.getJob().setState(stateAfterReconcile);
         }
         reconciliationStatus.setLastReconciledSpec(clonedSpec);
     }
@@ -79,7 +84,10 @@ public class ReconciliationUtils {
     }
 
     public static UpdateControl<FlinkDeployment> toUpdateControl(
-            FlinkDeployment originalCopy, FlinkDeployment current) {
+            FlinkOperatorConfiguration operatorConfiguration,
+            FlinkDeployment originalCopy,
+            FlinkDeployment current,
+            boolean reschedule) {
         UpdateControl<FlinkDeployment> updateControl;
         if (!Objects.equals(originalCopy.getSpec(), current.getSpec())) {
             throw new UnsupportedOperationException(
@@ -93,6 +101,33 @@ public class ReconciliationUtils {
         } else {
             updateControl = UpdateControl.noUpdate();
         }
-        return updateControl;
+
+        if (!reschedule) {
+            return updateControl;
+        }
+
+        if (isJobUpgradeInProgress(current)) {
+            return updateControl.rescheduleAfter(0);
+        }
+
+        Duration rescheduleAfter =
+                current.getStatus()
+                        .getJobManagerDeploymentStatus()
+                        .rescheduleAfter(current, operatorConfiguration);
+
+        return updateControl.rescheduleAfter(rescheduleAfter.toMillis());
+    }
+
+    private static boolean isJobUpgradeInProgress(FlinkDeployment current) {
+        ReconciliationStatus reconciliationStatus = current.getStatus().getReconciliationStatus();
+
+        if (reconciliationStatus == null || current.getSpec().getJob() == null) {
+            return false;
+        }
+
+        return current.getSpec().getJob().getState() == JobState.RUNNING
+                && reconciliationStatus.isSuccess()
+                && reconciliationStatus.getLastReconciledSpec().getJob().getState()
+                        == JobState.SUSPENDED;
     }
 }

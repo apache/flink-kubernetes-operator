@@ -72,7 +72,7 @@ public class JobReconciler extends BaseReconciler {
                     effectiveConfig,
                     Optional.ofNullable(jobSpec.getInitialSavepointPath()));
             IngressUtils.updateIngressRules(flinkApp, effectiveConfig, kubernetesClient);
-            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, JobState.RUNNING);
             return;
         }
 
@@ -87,14 +87,14 @@ public class JobReconciler extends BaseReconciler {
             JobState desiredJobState = jobSpec.getState();
 
             UpgradeMode upgradeMode = jobSpec.getUpgradeMode();
+            JobState stateAfterReconcile = currentJobState;
             if (currentJobState == JobState.RUNNING) {
                 if (desiredJobState == JobState.RUNNING) {
-                    upgradeFlinkJob(flinkApp, effectiveConfig);
+                    LOG.info("Upgrading running job, suspending first...");
                 }
-                if (desiredJobState.equals(JobState.SUSPENDED)) {
-                    printCancelLogs(upgradeMode, flinkApp.getMetadata().getName());
-                    suspendJob(flinkApp, upgradeMode, effectiveConfig);
-                }
+                printCancelLogs(upgradeMode, flinkApp.getMetadata().getName());
+                suspendJob(flinkApp, upgradeMode, effectiveConfig);
+                stateAfterReconcile = JobState.SUSPENDED;
             }
             if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
                 if (upgradeMode == UpgradeMode.STATELESS) {
@@ -103,9 +103,10 @@ public class JobReconciler extends BaseReconciler {
                         || upgradeMode == UpgradeMode.SAVEPOINT) {
                     restoreFromLastSavepoint(flinkApp, effectiveConfig);
                 }
+                stateAfterReconcile = JobState.RUNNING;
             }
             IngressUtils.updateIngressRules(flinkApp, effectiveConfig, kubernetesClient);
-            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, stateAfterReconcile);
         } else if (SavepointUtils.shouldTriggerSavepoint(flinkApp) && isJobRunning(flinkApp)) {
             triggerSavepoint(flinkApp, effectiveConfig);
             ReconciliationUtils.updateSavepointReconciliationSuccess(flinkApp);
@@ -144,21 +145,14 @@ public class JobReconciler extends BaseReconciler {
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
     }
 
-    private void upgradeFlinkJob(FlinkDeployment flinkApp, Configuration effectiveConfig)
-            throws Exception {
-        LOG.info("Upgrading running job");
-        final Optional<String> savepoint =
-                suspendJob(flinkApp, flinkApp.getSpec().getJob().getUpgradeMode(), effectiveConfig);
-        deployFlinkJob(flinkApp, effectiveConfig, savepoint);
-    }
-
     private void restoreFromLastSavepoint(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
-        deployFlinkJob(
-                flinkApp,
-                effectiveConfig,
-                Optional.of(jobStatus.getSavepointInfo().getLastSavepoint().getLocation()));
+        Optional<String> savepointOpt =
+                Optional.ofNullable(jobStatus.getSavepointInfo().getLastSavepoint())
+                        .flatMap(s -> Optional.ofNullable(s.getLocation()));
+
+        deployFlinkJob(flinkApp, effectiveConfig, savepointOpt);
     }
 
     private void printCancelLogs(UpgradeMode upgradeMode, String name) {

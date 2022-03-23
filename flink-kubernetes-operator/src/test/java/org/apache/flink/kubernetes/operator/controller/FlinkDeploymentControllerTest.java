@@ -283,7 +283,17 @@ public class FlinkDeploymentControllerTest {
         appCluster = ReconciliationUtils.clone(appCluster);
         appCluster.getSpec().getJob().setParallelism(100);
 
-        testController.reconcile(appCluster, context);
+        assertEquals(0, testController.reconcile(appCluster, context).getScheduleDelay().get());
+        assertEquals(
+                JobState.SUSPENDED,
+                appCluster
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .getLastReconciledSpec()
+                        .getJob()
+                        .getState());
+
+        testController.reconcile(appCluster, TestUtils.createEmptyContext());
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("savepoint_0", jobs.get(0).f0);
@@ -331,11 +341,23 @@ public class FlinkDeploymentControllerTest {
 
         UpdateControl<FlinkDeployment> updateControl =
                 testController.reconcile(appCluster, context);
+        assertEquals(0, updateControl.getScheduleDelay().get());
+        assertEquals(
+                JobState.SUSPENDED,
+                appCluster
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .getLastReconciledSpec()
+                        .getJob()
+                        .getState());
+
+        updateControl = testController.reconcile(appCluster, context);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING
                         .rescheduleAfter(appCluster, operatorConfiguration)
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
+
         testController.reconcile(appCluster, context);
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
@@ -404,7 +426,6 @@ public class FlinkDeploymentControllerTest {
             flinkService.setPortReady(true);
             testController.reconcile(appCluster, context);
             testController.reconcile(appCluster, context);
-
             if (appCluster.getSpec().getJob() != null) {
                 assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
             } else {
@@ -424,6 +445,7 @@ public class FlinkDeploymentControllerTest {
             flinkService.setPortReady(true);
             testController.reconcile(appCluster, context);
             testController.reconcile(appCluster, context);
+            testController.reconcile(appCluster, TestUtils.createEmptyContext());
 
             assertEquals(
                     JobManagerDeploymentStatus.DEPLOYING,
