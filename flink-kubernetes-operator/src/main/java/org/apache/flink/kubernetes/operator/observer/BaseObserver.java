@@ -63,7 +63,8 @@ public abstract class BaseObserver implements Observer {
         JobManagerDeploymentStatus previousJmStatus =
                 deploymentStatus.getJobManagerDeploymentStatus();
 
-        logger.info("Observing JobManager deployment status");
+        logger.info(
+                "Observing JobManager deployment. Previous status: {}", previousJmStatus.name());
 
         if (JobManagerDeploymentStatus.DEPLOYED_NOT_READY == previousJmStatus) {
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
