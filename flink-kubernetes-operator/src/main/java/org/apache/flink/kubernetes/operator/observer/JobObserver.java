@@ -63,7 +63,7 @@ public class JobObserver extends BaseObserver {
             FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
         logger.info("Observing job status");
         FlinkDeploymentStatus flinkAppStatus = flinkApp.getStatus();
-
+        String previousJobStatus = flinkAppStatus.getJobStatus().getState();
         Collection<JobStatusMessage> clusterJobStatuses;
         try {
             clusterJobStatuses = flinkService.listJobs(effectiveConfig);
@@ -81,14 +81,24 @@ public class JobObserver extends BaseObserver {
             flinkAppStatus.getJobStatus().setState(JOB_STATE_UNKNOWN);
             return false;
         }
-
-        updateJobStatus(flinkAppStatus.getJobStatus(), new ArrayList<>(clusterJobStatuses));
-        logger.info("Job status successfully updated");
+        String targetJobStatus =
+                updateJobStatus(flinkAppStatus.getJobStatus(), new ArrayList<>(clusterJobStatuses));
+        if (targetJobStatus.equals(previousJobStatus)) {
+            logger.info("Job status ({}) unchanged", previousJobStatus);
+        } else {
+            logger.info(
+                    "Job status successfully updated from {} to {}",
+                    previousJobStatus,
+                    targetJobStatus);
+        }
         return true;
     }
 
-    /** Update previous job status based on the job list from the cluster. */
-    private void updateJobStatus(JobStatus status, List<JobStatusMessage> clusterJobStatuses) {
+    /**
+     * Update previous job status based on the job list from the cluster and return the target
+     * status.
+     */
+    private String updateJobStatus(JobStatus status, List<JobStatusMessage> clusterJobStatuses) {
         Collections.sort(
                 clusterJobStatuses, (j1, j2) -> Long.compare(j2.getStartTime(), j1.getStartTime()));
         JobStatusMessage newJob = clusterJobStatuses.get(0);
@@ -98,6 +108,7 @@ public class JobObserver extends BaseObserver {
         status.setJobId(newJob.getJobId().toHexString());
         status.setStartTime(String.valueOf(newJob.getStartTime()));
         status.setUpdateTime(String.valueOf(System.currentTimeMillis()));
+        return status.getState();
     }
 
     private void observeSavepointStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
