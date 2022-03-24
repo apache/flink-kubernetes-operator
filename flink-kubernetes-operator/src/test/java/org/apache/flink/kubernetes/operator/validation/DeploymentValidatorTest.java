@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -38,6 +39,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
 import static org.junit.Assert.assertTrue;
@@ -70,6 +72,26 @@ public class DeploymentValidatorTest {
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
                 },
                 "Job could not be upgraded with last-state while HA disabled");
+
+        testError(
+                dep -> {
+                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
+                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+                },
+                String.format(
+                        "Job could not be upgraded with savepoint while config key[%s] is not set",
+                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
+
+        testError(
+                dep -> {
+                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
+                    dep.getSpec()
+                            .getJob()
+                            .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
+                },
+                String.format(
+                        "Savepoint could not be manually triggered for the running job while config key[%s] is not set",
+                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
 
         // Test conf validation
         testSuccess(
@@ -164,6 +186,11 @@ public class DeploymentValidatorTest {
                             .getJob()
                             .setState(JobState.SUSPENDED);
 
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .put(
+                                    CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
+                                    "file:///flink-data/savepoints");
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
                 });
 
@@ -182,6 +209,11 @@ public class DeploymentValidatorTest {
                             .getJob()
                             .setState(JobState.SUSPENDED);
 
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .put(
+                                    CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
+                                    "file:///flink-data/savepoints");
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
                 },
                 "Cannot perform savepoint restore without a valid savepoint");
