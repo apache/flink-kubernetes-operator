@@ -127,6 +127,7 @@ public class FlinkDeploymentController
             throw new ReconciliationException(e);
         }
 
+        LOG.info("Reconciliation successfully completed");
         return ReconciliationUtils.toUpdateControl(
                 operatorConfiguration, originalCopy, flinkApp, true);
     }

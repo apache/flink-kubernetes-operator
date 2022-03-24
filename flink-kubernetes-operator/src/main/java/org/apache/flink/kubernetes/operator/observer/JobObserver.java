@@ -77,7 +77,7 @@ public class JobObserver extends BaseObserver {
             return false;
         }
         if (clusterJobStatuses.isEmpty()) {
-            logger.info("No job found on yet");
+            logger.info("No job found on cluster yet");
             flinkAppStatus.getJobStatus().setState(JOB_STATE_UNKNOWN);
             return false;
         }
