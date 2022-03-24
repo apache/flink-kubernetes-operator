@@ -142,15 +142,14 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
             return Optional.of("Jar URI must be defined");
         }
 
+        Configuration configuration = Configuration.fromMap(confMap);
         if (job.getUpgradeMode() == UpgradeMode.LAST_STATE
-                && !HighAvailabilityMode.isHighAvailabilityModeActivated(
-                        Configuration.fromMap(confMap))) {
+                && !HighAvailabilityMode.isHighAvailabilityModeActivated(configuration)) {
             return Optional.of("Job could not be upgraded with last-state while HA disabled");
         }
 
         if (StringUtils.isNullOrWhitespaceOnly(
-                Configuration.fromMap(confMap)
-                        .getString(CheckpointingOptions.SAVEPOINT_DIRECTORY))) {
+                configuration.getString(CheckpointingOptions.SAVEPOINT_DIRECTORY))) {
             if (job.getUpgradeMode() == UpgradeMode.SAVEPOINT) {
                 return Optional.of(
                         String.format(
