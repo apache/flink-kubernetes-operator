@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -266,6 +267,12 @@ public class FlinkDeploymentControllerTest {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
+        appCluster
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
+                        "file:///flink-data/savepoints");
 
         testController.reconcile(appCluster, TestUtils.createEmptyContext());
         List<Tuple2<String, JobStatusMessage>> jobs = flinkService.listJobs();
@@ -395,6 +402,12 @@ public class FlinkDeploymentControllerTest {
 
         appCluster = TestUtils.buildApplicationCluster();
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        appCluster
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
+                        "file:///flink-data/savepoints");
         testUpgradeNotReadyCluster(appCluster, false);
     }
 

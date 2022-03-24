@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -34,6 +35,7 @@ import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.util.StringUtils;
 
 import java.util.Map;
 import java.util.Optional;
@@ -140,10 +142,25 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
             return Optional.of("Jar URI must be defined");
         }
 
+        Configuration configuration = Configuration.fromMap(confMap);
         if (job.getUpgradeMode() == UpgradeMode.LAST_STATE
-                && !HighAvailabilityMode.isHighAvailabilityModeActivated(
-                        Configuration.fromMap(confMap))) {
+                && !HighAvailabilityMode.isHighAvailabilityModeActivated(configuration)) {
             return Optional.of("Job could not be upgraded with last-state while HA disabled");
+        }
+
+        if (StringUtils.isNullOrWhitespaceOnly(
+                configuration.getString(CheckpointingOptions.SAVEPOINT_DIRECTORY))) {
+            if (job.getUpgradeMode() == UpgradeMode.SAVEPOINT) {
+                return Optional.of(
+                        String.format(
+                                "Job could not be upgraded with savepoint while config key[%s] is not set",
+                                CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
+            } else if (job.getSavepointTriggerNonce() != null) {
+                return Optional.of(
+                        String.format(
+                                "Savepoint could not be manually triggered for the running job while config key[%s] is not set",
+                                CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
+            }
         }
 
         return Optional.empty();
