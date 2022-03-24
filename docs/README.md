@@ -8,19 +8,21 @@ that you always have docs corresponding to your checked-out version.
 
 ### Build the site locally
 
-Make sure you have installed
-[Hugo](https://gohugo.io/getting-started/installing/) on your system.
+#### Using Hugo Docker image:
 
-From this directory:
+```sh
+$ git submodule update --init --recursive
+$ docker run -v $(pwd):/src -p 1313:1313 jakejarvis/hugo-extended:latest server --buildDrafts --buildFuture --bind 0.0.0.0
+```
 
-  * Fetch the theme submodule
-	```sh
-	git submodule update --init --recursive
-	```
-  * Start local server
-	```sh
-	hugo -b "" serve
-	```
+#### Local Hugo installation:
+
+Make sure you have installed [Hugo](https://gohugo.io/getting-started/installing/) on your system.
+
+```sh
+$ git submodule update --init --recursive
+$ hugo -b "" serve
+```
 
 The site can be viewed at http://localhost:1313/
 
