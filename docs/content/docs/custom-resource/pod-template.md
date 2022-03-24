@@ -25,3 +25,83 @@ under the License.
 -->
 
 # Pod template
+
+The operator CRD is designed to have a minimal set of direct, short-hand CRD settings to express the most
+basic attributes of a deployment. For all other settings the CRD provides the `flinkConfiguration` and
+`podTemplate` fields.
+
+Pod templates permit customization of the Flink job and task manager pods, for example to specify
+volume mounts, ephemeral storage, sidecar containers etc.
+
+Pod templates can be layered, as shown in the example below.
+A common pod template may hold the settings that apply to both job and task manager,
+like `volumeMounts`. Another template under job or task manager can define additional settings that supplement or override those
+in the common template, such as a task manager sidecar.
+
+The operator is going to merge the common and specific templates for job and task manager respectively.
+
+Here the full example:
+
+```yaml
+apiVersion: flink.apache.org/v1alpha1
+kind: FlinkDeployment
+metadata:
+  namespace: default
+  name: pod-template-example
+spec:
+  image: flink:1.14.3
+  flinkVersion: v1_14
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+  podTemplate:
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: pod-template
+    spec:
+      serviceAccount: flink
+      containers:
+        # Do not change the main container name
+        - name: flink-main-container
+          volumeMounts:
+            - mountPath: /opt/flink/log
+              name: flink-logs
+        # Sample sidecar container
+        - name: fluentbit
+          image: fluent/fluent-bit:1.8.12-debug
+          command: [ 'sh','-c','/fluent-bit/bin/fluent-bit -i tail -p path=/flink-logs/*.log -p multiline.parser=java -o stdout' ]
+          volumeMounts:
+            - mountPath: /flink-logs
+              name: flink-logs
+      volumes:
+        - name: flink-logs
+          emptyDir: { }
+  jobManager:
+    replicas: 1
+    resource:
+      memory: "2048m"
+      cpu: 1
+  taskManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+    podTemplate:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: task-manager-pod-template
+      spec:
+        initContainers:
+          # Sample sidecar container
+          - name: busybox
+            image: busybox:latest
+            command: [ 'sh','-c','echo hello from task manager' ]
+  job:
+    jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
+    parallelism: 2
+```
+
+{{< hint info >}}
+When using the operator with Flink native Kubernetes integration, please refer to [pod template field precedence](
+https://nightlies.apache.org/flink/flink-docs-release-1.14/docs/deployment/resource-providers/native_kubernetes/#fields-overwritten-by-flink).
+{{< /hint >}}
