@@ -21,6 +21,9 @@ package org.apache.flink.kubernetes.operator.observer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -63,10 +66,16 @@ public abstract class BaseObserver implements Observer {
         JobManagerDeploymentStatus previousJmStatus =
                 deploymentStatus.getJobManagerDeploymentStatus();
 
+        if (isSuspendedJob(flinkApp)) {
+            logger.debug("Skipping observe step for suspended application deployments.");
+            return;
+        }
+
         logger.info(
                 "Observing JobManager deployment. Previous status: {}", previousJmStatus.name());
 
         if (JobManagerDeploymentStatus.DEPLOYED_NOT_READY == previousJmStatus) {
+            logger.info("JobManager deployment is ready");
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
             return;
         }
@@ -88,7 +97,6 @@ public abstract class BaseObserver implements Observer {
                         JobManagerDeploymentStatus.DEPLOYED_NOT_READY);
                 return;
             }
-            logger.info("JobManager deployment exists but not ready, status {}", status);
 
             try {
                 checkFailedCreate(status);
@@ -103,10 +111,12 @@ public abstract class BaseObserver implements Observer {
                 return;
             }
 
+            logger.info("JobManager is being deployed");
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
             return;
         }
 
+        logger.info("JobManager deployment does not exist");
         deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
     }
 
@@ -154,5 +164,22 @@ public abstract class BaseObserver implements Observer {
             reconciliationStatus.setSuccess(true);
             reconciliationStatus.setError(null);
         }
+    }
+
+    protected boolean isSuspendedJob(FlinkDeployment deployment) {
+        JobSpec jobSpec = deployment.getSpec().getJob();
+        if (jobSpec == null) {
+            return false;
+        }
+
+        FlinkDeploymentStatus deploymentStatus = deployment.getStatus();
+        FlinkDeploymentSpec lastReconciledSpec =
+                deploymentStatus.getReconciliationStatus().getLastReconciledSpec();
+
+        return deploymentStatus.getJobManagerDeploymentStatus()
+                        == JobManagerDeploymentStatus.MISSING
+                && jobSpec.getState() == JobState.SUSPENDED
+                && lastReconciledSpec != null
+                && lastReconciledSpec.getJob().getState() == JobState.SUSPENDED;
     }
 }
