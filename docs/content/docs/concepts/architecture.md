@@ -45,6 +45,25 @@ The CR can be (re)applied on the cluster any time. The Operator makes continuous
 
 The Operator is built with the [Java Operator SDK](https://github.com/java-operator-sdk/java-operator-sdk) and uses the [Native Kubernetes Integration](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/) for launching Flink deployments and submitting jobs under the hood. The Java Operator SDK is a higher level framework and related tooling to support writing Kubernetes Operators in Java. Both the Java Operator SDK and Flink's native kubernetes integration itself is using the [Fabric8 Kubernetes Client](https://github.com/fabric8io/kubernetes-client) to interact with the Kubernetes API Server.
 
+## State Machine of JobManager Deployment
+The Operator manages the lifecycle of the JobManager Deployment. Its state machine is as follows:
+
+{{< img src="/img/concepts/JM_deployment_state_machine.svg" alt="State Machine of JobManager Deployment" >}}
+
+The possible transitions usually indicate that there are some underlying changes:
+
+1. `MISSING` -> `DEPLOYING`: A new JM deployment exists and is being created
+2. `DEPLOYING` -> `DEPLOYED_NOT_READY`: The JM deployment exists and passes checks of the availability of replicas and JM port connectivity. Now, it is waiting the REST service to be ready.
+3. `DEPLOYED_NOT_READY` -> `READY`: JM can serve requests.
+4. `READY` -> `READY`: JM works fine.
+5. `READY` -> `DEPLOYED_NOT_READY`: JM REST service becomes unavailable.
+6. `READY` -> `ERROR`: REST service is unavailable and JM deployment failed(e.g. in CrashLoopBackoff state).
+7. `READY` -> `MISSING`: JM deployment does not exist(e.g. deleted by kubectl or by `SUSPEND` action).
+8. `ERROR` -> `ERROR`: JM deployment failed.
+9. `DEPLOYING` -> `DEPLOYING`: The JM deployment exists and is still being created.
+10. `DEPLOYING` -> `ERROR`: JM deployment failed.
+11. `MISSING` -> `MISSING`: JM deployment does not exist.
+
 
 
 
