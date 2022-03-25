@@ -32,6 +32,8 @@ import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
@@ -250,6 +252,19 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
                     && (deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint()
                             == null)) {
                 return Optional.of("Cannot perform savepoint restore without a valid savepoint");
+            }
+
+            if (StringUtils.isNullOrWhitespaceOnly(
+                            newSpec.getFlinkConfiguration()
+                                    .get(CheckpointingOptions.SAVEPOINT_DIRECTORY.key()))
+                    && deployment.getStatus().getJobManagerDeploymentStatus()
+                            != JobManagerDeploymentStatus.MISSING
+                    && ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
+                            deployment)) {
+                return Optional.of(
+                        String.format(
+                                "Job could not be upgraded to last-state while config key[%s] is not set",
+                                CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
             }
         }
 

@@ -17,11 +17,15 @@
 
 package org.apache.flink.kubernetes.operator.reconciler;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -116,6 +120,22 @@ public class ReconciliationUtils {
                         .rescheduleAfter(current, operatorConfiguration);
 
         return updateControl.rescheduleAfter(rescheduleAfter.toMillis());
+    }
+
+    public static boolean isUpgradeModeChangedToLastStateAndHADisabledPreviously(
+            FlinkDeployment flinkApp) {
+        final FlinkDeploymentSpec lastReconciledSpec =
+                Preconditions.checkNotNull(
+                        flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec());
+        final UpgradeMode previousUpgradeMode = lastReconciledSpec.getJob().getUpgradeMode();
+        final UpgradeMode currentUpgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
+
+        final Configuration lastReconciledFlinkConfig =
+                Configuration.fromMap(lastReconciledSpec.getFlinkConfiguration());
+
+        return previousUpgradeMode != UpgradeMode.LAST_STATE
+                && currentUpgradeMode == UpgradeMode.LAST_STATE
+                && !HighAvailabilityMode.isHighAvailabilityModeActivated(lastReconciledFlinkConfig);
     }
 
     private static boolean isJobUpgradeInProgress(FlinkDeployment current) {

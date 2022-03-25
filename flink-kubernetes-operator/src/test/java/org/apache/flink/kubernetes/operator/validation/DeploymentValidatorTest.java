@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -29,6 +30,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
@@ -244,6 +246,33 @@ public class DeploymentValidatorTest {
                     dep.getStatus().getReconciliationStatus().getLastReconciledSpec().setJob(null);
                 },
                 "Cannot switch from session to job cluster");
+
+        // Test upgrade mode change validation
+        testError(
+                dep -> {
+                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+                    dep.setStatus(new FlinkDeploymentStatus());
+                    dep.getStatus().setJobStatus(new JobStatus());
+
+                    dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .setLastReconciledSpec(ReconciliationUtils.clone(dep.getSpec()));
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .getLastReconciledSpec()
+                            .getJob()
+                            .setUpgradeMode(UpgradeMode.STATELESS);
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .getLastReconciledSpec()
+                            .getFlinkConfiguration()
+                            .remove(HighAvailabilityOptions.HA_MODE.key());
+                    dep.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+                },
+                String.format(
+                        "Job could not be upgraded to last-state while config key[%s] is not set",
+                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
 
         testError(dep -> dep.getSpec().setFlinkVersion(null), "Flink Version must be defined.");
 
