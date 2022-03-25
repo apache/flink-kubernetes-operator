@@ -24,7 +24,7 @@ under the License.
 
 # Flink Kubernetes Operator
 
-The Flink Kubernetes Operator extends the [Kubernetes](https://kubernetes.io/) API with the ability to manage and operate 
+The [Flink Kubernetes Operator](https://github.com/apache/flink-kubernetes-operator) extends the [Kubernetes](https://kubernetes.io/) API with the ability to manage and operate
 Flink Deployments. The operator features the following amongst others:
 - Deploy and monitor Flink Application and Session deployments
 - Upgrade, suspend and delete deployments
