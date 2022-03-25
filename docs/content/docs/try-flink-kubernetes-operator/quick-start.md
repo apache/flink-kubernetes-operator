@@ -36,8 +36,9 @@ We assume that you have a local installations of the following:
 1. [docker](https://docs.docker.com/)
 2. [kubernetes](https://kubernetes.io/)
 3. [helm](https://helm.sh/docs/intro/quickstart/)
+4. [git](https://github.com/git-guides/install-git/)
 
-So that the `docker`, `kubectl` and `helm` commands are available on your local system.
+So that the `docker`, `kubectl`, `helm` and `git` commands are available on your local system.
 
 For docker we recommend that you have [Docker Desktop](https://www.docker.com/products/docker-desktop) installed 
 and configured with at least 8GB of RAM.
@@ -62,7 +63,12 @@ minikube start --kubernetes-version=v1.21.5
 
 We also recommend [k9s](https://k9scli.io/) as GUI for kubernetes, but it is optional for this quickstart guide.
 
-## Building the operator image
+## Building the operator image from source
+
+```shell
+git clone https://github.com/apache/flink-kubernetes-operator.git
+cd flink-kubernetes-operator
+```
 
 You can build the docker image of the operator via the following command from the project root folder:
 ```bash
