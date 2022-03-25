@@ -243,19 +243,6 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
             return Optional.of("Cannot switch from job to session cluster");
         }
 
-        if (StringUtils.isNullOrWhitespaceOnly(
-                        newSpec.getFlinkConfiguration()
-                                .get(CheckpointingOptions.SAVEPOINT_DIRECTORY.key()))
-                && deployment.getStatus().getJobManagerDeploymentStatus()
-                        != JobManagerDeploymentStatus.MISSING
-                && ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-                        deployment)) {
-            return Optional.of(
-                    String.format(
-                            "Job could not be upgraded to last-state while config key[%s] is not set",
-                            CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
-        }
-
         JobSpec oldJob = oldSpec.getJob();
         JobSpec newJob = newSpec.getJob();
         if (oldJob != null && newJob != null) {
@@ -265,6 +252,19 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
                     && (deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint()
                             == null)) {
                 return Optional.of("Cannot perform savepoint restore without a valid savepoint");
+            }
+
+            if (StringUtils.isNullOrWhitespaceOnly(
+                            newSpec.getFlinkConfiguration()
+                                    .get(CheckpointingOptions.SAVEPOINT_DIRECTORY.key()))
+                    && deployment.getStatus().getJobManagerDeploymentStatus()
+                            != JobManagerDeploymentStatus.MISSING
+                    && ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
+                            deployment)) {
+                return Optional.of(
+                        String.format(
+                                "Job could not be upgraded to last-state while config key[%s] is not set",
+                                CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
             }
         }
 

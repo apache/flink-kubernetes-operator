@@ -127,13 +127,6 @@ public class ReconciliationUtils {
         final FlinkDeploymentSpec lastReconciledSpec =
                 Preconditions.checkNotNull(
                         flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec());
-        if (lastReconciledSpec.getJob() == null || flinkApp.getSpec().getJob() == null) {
-            return false;
-        }
-        if (lastReconciledSpec.getFlinkConfiguration() == null
-                || lastReconciledSpec.getFlinkConfiguration().isEmpty()) {
-            return false;
-        }
         final UpgradeMode previousUpgradeMode = lastReconciledSpec.getJob().getUpgradeMode();
         final UpgradeMode currentUpgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
 
