@@ -312,6 +312,54 @@ public class JobReconcilerTest {
         assertNull(flinkService.listJobs().get(0).f0);
     }
 
+    @Test
+    public void triggerRestart() throws Exception {
+        Context context = TestUtils.createContextWithReadyJobManagerDeployment();
+        TestingFlinkService flinkService = new TestingFlinkService();
+
+        JobReconciler reconciler = new JobReconciler(null, flinkService, operatorConfiguration);
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        Configuration config = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
+
+        reconciler.reconcile(deployment, context, config);
+        List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs);
+
+        // Test restart job
+        FlinkDeployment restartJob = ReconciliationUtils.clone(deployment);
+        restartJob.getSpec().setRestartNonce(1L);
+        reconciler.reconcile(restartJob, context, config);
+        assertEquals(
+                JobState.SUSPENDED,
+                restartJob
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .getLastReconciledSpec()
+                        .getJob()
+                        .getState());
+        runningJobs = flinkService.listJobs();
+        assertEquals(0, runningJobs.size());
+
+        reconciler.reconcile(restartJob, context, config);
+        assertEquals(
+                JobState.RUNNING,
+                restartJob
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .getLastReconciledSpec()
+                        .getJob()
+                        .getState());
+        runningJobs = flinkService.listJobs();
+        assertEquals(1, runningJobs.size());
+        assertEquals(
+                1L,
+                restartJob
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .getLastReconciledSpec()
+                        .getRestartNonce());
+    }
+
     private void verifyAndSetRunningJobsToStatus(
             FlinkDeployment deployment, List<Tuple2<String, JobStatusMessage>> runningJobs) {
         assertEquals(1, runningJobs.size());

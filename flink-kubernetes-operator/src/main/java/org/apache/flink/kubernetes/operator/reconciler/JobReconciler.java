@@ -90,16 +90,14 @@ public class JobReconciler extends BaseReconciler {
             }
             JobState currentJobState = lastReconciledSpec.getJob().getState();
             JobState desiredJobState = jobSpec.getState();
-
             UpgradeMode upgradeMode = jobSpec.getUpgradeMode();
             JobState stateAfterReconcile = currentJobState;
             if (currentJobState == JobState.RUNNING) {
                 if (desiredJobState == JobState.RUNNING) {
-                    LOG.info("Upgrading running job, suspending first...");
+                    LOG.info("Upgrading/Restarting running job, suspending first...");
                 }
                 printCancelLogs(upgradeMode);
-                suspendJob(flinkApp, upgradeMode, effectiveConfig);
-                stateAfterReconcile = JobState.SUSPENDED;
+                stateAfterReconcile = suspendJob(flinkApp, upgradeMode, effectiveConfig);
             }
             if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
                 if (upgradeMode == UpgradeMode.STATELESS) {
@@ -202,17 +200,19 @@ public class JobReconciler extends BaseReconciler {
                 effectiveConfig);
     }
 
-    private void suspendJob(
+    private JobState suspendJob(
             FlinkDeployment flinkApp, UpgradeMode upgradeMode, Configuration effectiveConfig)
             throws Exception {
         final Optional<String> savepointOpt =
                 internalSuspendJob(flinkApp, upgradeMode, effectiveConfig);
 
         JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
-        jobStatus.setState(JobState.SUSPENDED.name());
+        JobState stateAfterReconcile = JobState.SUSPENDED;
+        jobStatus.setState(stateAfterReconcile.name());
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
         savepointOpt.ifPresent(
                 location -> jobStatus.getSavepointInfo().setLastSavepoint(Savepoint.of(location)));
+        return stateAfterReconcile;
     }
 
     @Override
