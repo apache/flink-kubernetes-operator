@@ -9072,6 +9072,8 @@ spec:
                     - stateless
                     type: string
                 type: object
+              restartNonce:
+                type: integer
               logConfiguration:
                 additionalProperties:
                   type: string
@@ -18175,6 +18177,8 @@ spec:
                             - stateless
                             type: string
                         type: object
+                      restartNonce:
+                        type: integer
                       logConfiguration:
                         additionalProperties:
                           type: string

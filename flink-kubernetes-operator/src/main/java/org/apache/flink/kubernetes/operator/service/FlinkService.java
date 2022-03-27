@@ -58,6 +58,8 @@ import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -161,8 +163,8 @@ public class FlinkService {
                 config, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
-    public Optional<String> cancelJob(JobID jobID, UpgradeMode upgradeMode, Configuration conf)
-            throws Exception {
+    public Optional<String> cancelJob(
+            @Nullable JobID jobID, UpgradeMode upgradeMode, Configuration conf) throws Exception {
         Optional<String> savepointOpt = Optional.empty();
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
             switch (upgradeMode) {
