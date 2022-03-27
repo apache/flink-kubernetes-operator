@@ -22,7 +22,7 @@ under the License.
     <parent>
       <groupId>org.apache</groupId>
       <artifactId>apache</artifactId>
-      <version>20</version>
+      <version>23</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -44,10 +44,16 @@ under the License.
       </license>
     </licenses>
 
+    <scm>
+        <url>https://github.com/apache/flink-kubernetes-operator</url>
+        <connection>git@github.com:apache/flink-kubernetes-operator.git</connection>
+        <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/flink-kubernetes-operator.git</developerConnection>
+    </scm>
+
     <modules>
-      <module>flink-kubernetes-shaded</module>
-      <module>flink-kubernetes-operator</module>
-      <module>flink-kubernetes-webhook</module>
+        <module>flink-kubernetes-shaded</module>
+        <module>flink-kubernetes-operator</module>
+        <module>flink-kubernetes-webhook</module>
     </modules>
 
     <properties>
@@ -72,6 +78,41 @@ under the License.
         <spotless.version>2.4.2</spotless.version>
         <it.skip>true</it.skip>
     </properties>
+
+    <profiles>
+        <!--
+          We're reusing the apache-release build profile defined in the Apache Parent POM,
+          with one exclusion: do not run the source-release-assembly execution goal.
+          We have our own scripts to create the source release, which correctly excludes
+          binaries from distribution tarball.
+          The script can be found under tools/releasing/create_source_release.sh.
+        -->
+        <profile>
+            <id>apache-release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.apache.apache.resources</groupId>
+                                <artifactId>apache-source-release-assembly-descriptor</artifactId>
+                                <version>1.0.6</version>
+                            </dependency>
+                        </dependencies>
+                        <executions>
+                            <execution>
+                                <id>source-release-assembly</id>
+                                <!-- disable the execution -->
+                                <phase>none</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
     <build>
         <plugins>
