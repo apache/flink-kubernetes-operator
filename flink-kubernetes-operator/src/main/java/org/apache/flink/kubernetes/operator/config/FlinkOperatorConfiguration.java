@@ -41,6 +41,12 @@ public class FlinkOperatorConfiguration {
     Set<String> watchedNamespaces;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
+        Set<String> watchedNamespaces = OperatorUtils.getWatchedNamespaces();
+        return fromConfiguration(operatorConfig, watchedNamespaces);
+    }
+
+    public static FlinkOperatorConfiguration fromConfiguration(
+            Configuration operatorConfig, Set<String> watchedNamespaces) {
         Duration reconcileInterval =
                 operatorConfig.get(OperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL);
 
@@ -66,8 +72,6 @@ public class FlinkOperatorConfiguration {
             // not running in k8s, simplify local development
             flinkServiceHostOverride = "localhost";
         }
-
-        Set<String> watchedNamespaces = OperatorUtils.getWatchedNamespaces();
 
         return new FlinkOperatorConfiguration(
                 reconcileInterval,

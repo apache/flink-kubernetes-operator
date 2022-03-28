@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -48,7 +49,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.HttpURLConnection;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -69,15 +69,7 @@ public class FlinkDeploymentControllerTest {
 
     private final Context context = TestUtils.createContextWithReadyJobManagerDeployment();
     private final FlinkOperatorConfiguration operatorConfiguration =
-            new FlinkOperatorConfiguration(
-                    Duration.ofSeconds(1),
-                    -1,
-                    Duration.ofSeconds(2),
-                    Duration.ofSeconds(3),
-                    Duration.ofSeconds(4),
-                    Duration.ofSeconds(5),
-                    null,
-                    Collections.emptySet());
+            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
 
     private TestingFlinkService flinkService;
     private FlinkDeploymentController testController;
