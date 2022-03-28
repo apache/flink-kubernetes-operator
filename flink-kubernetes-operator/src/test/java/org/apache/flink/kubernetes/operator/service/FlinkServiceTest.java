@@ -20,18 +20,26 @@ package org.apache.flink.kubernetes.operator.service;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.client.program.ClusterClient;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
+import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingClusterClient;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
+import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -62,7 +70,7 @@ public class FlinkServiceTest {
     @Test
     public void testCancelJobWithStatelessUpgradeMode() throws Exception {
         final TestingClusterClient<String> testingClusterClient =
-                new TestingClusterClient<>(CLUSTER_ID);
+                new TestingClusterClient<>(configuration, CLUSTER_ID);
         final CompletableFuture<JobID> cancelFuture = new CompletableFuture<>();
         testingClusterClient.setCancelFunction(
                 jobID -> {
@@ -83,10 +91,11 @@ public class FlinkServiceTest {
     @Test
     public void testCancelJobWithSavepointUpgradeMode() throws Exception {
         final TestingClusterClient<String> testingClusterClient =
-                new TestingClusterClient<>(CLUSTER_ID);
+                new TestingClusterClient<>(configuration, CLUSTER_ID);
         final CompletableFuture<Tuple3<JobID, Boolean, String>> stopWithSavepointFuture =
                 new CompletableFuture<>();
         final String savepointPath = "file:///path/of/svp-1";
+        configuration.set(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointPath);
         testingClusterClient.setStopWithSavepointFunction(
                 (jobID, advanceToEndOfEventTime, savepointDir) -> {
                     stopWithSavepointFuture.complete(
@@ -102,7 +111,7 @@ public class FlinkServiceTest {
         assertTrue(stopWithSavepointFuture.isDone());
         assertEquals(jobID, stopWithSavepointFuture.get().f0);
         assertFalse(stopWithSavepointFuture.get().f1);
-        assertNull(stopWithSavepointFuture.get().f2);
+        assertEquals(savepointPath, stopWithSavepointFuture.get().f2);
         assertTrue(result.isPresent());
         assertEquals(savepointPath, result.get());
     }
@@ -112,8 +121,9 @@ public class FlinkServiceTest {
         configuration.set(
                 HighAvailabilityOptions.HA_MODE,
                 KubernetesHaServicesFactory.class.getCanonicalName());
+        configuration.set(HighAvailabilityOptions.HA_STORAGE_PATH, "file:///path/of/ha");
         final TestingClusterClient<String> testingClusterClient =
-                new TestingClusterClient<>(CLUSTER_ID);
+                new TestingClusterClient<>(configuration, CLUSTER_ID);
         final FlinkService flinkService = createFlinkService(testingClusterClient);
 
         client.apps()
@@ -138,8 +148,43 @@ public class FlinkServiceTest {
                         .get());
     }
 
+    @Test
+    public void testTriggerSavepoint() throws Exception {
+        final TestingClusterClient<String> testingClusterClient =
+                new TestingClusterClient<>(configuration, CLUSTER_ID);
+        final CompletableFuture<Tuple3<JobID, String, Boolean>> triggerSavepointFuture =
+                new CompletableFuture<>();
+        final String savepointPath = "file:///path/of/svp";
+        configuration.set(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointPath);
+        testingClusterClient.setTriggerSavepointFunction(
+                (headers, parameters, requestBody) -> {
+                    triggerSavepointFuture.complete(
+                            new Tuple3<>(
+                                    ((SavepointTriggerMessageParameters) parameters)
+                                            .jobID.getValue(),
+                                    ((SavepointTriggerRequestBody) requestBody)
+                                            .getTargetDirectory(),
+                                    ((SavepointTriggerRequestBody) requestBody).isCancelJob()));
+                    return CompletableFuture.completedFuture(new TriggerResponse(new TriggerId()));
+                });
+
+        final FlinkService flinkService = createFlinkService(testingClusterClient);
+
+        final JobID jobID = JobID.generate();
+        final FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        JobStatus jobStatus = new JobStatus();
+        jobStatus.setJobId(jobID.toString());
+        flinkDeployment.getStatus().setJobStatus(jobStatus);
+        flinkService.triggerSavepoint(flinkDeployment, configuration);
+        assertTrue(triggerSavepointFuture.isDone());
+        assertEquals(jobID, triggerSavepointFuture.get().f0);
+        assertEquals(savepointPath, triggerSavepointFuture.get().f1);
+        assertFalse(triggerSavepointFuture.get().f2);
+    }
+
     private FlinkService createFlinkService(ClusterClient<String> clusterClient) {
-        return new FlinkService((NamespacedKubernetesClient) client, null) {
+        return new FlinkService(
+                client, FlinkOperatorConfiguration.fromConfiguration(configuration)) {
             @Override
             protected ClusterClient<String> getClusterClient(Configuration config) {
                 return clusterClient;
