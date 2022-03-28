@@ -20,15 +20,21 @@ package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.client.program.ClusterClient;
+import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.OperatorID;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.operators.coordination.CoordinationRequest;
 import org.apache.flink.runtime.operators.coordination.CoordinationResponse;
+import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
+import org.apache.flink.runtime.rest.messages.MessageHeaders;
+import org.apache.flink.runtime.rest.messages.MessageParameters;
+import org.apache.flink.runtime.rest.messages.RequestBody;
+import org.apache.flink.runtime.rest.messages.ResponseBody;
 import org.apache.flink.util.function.TriFunction;
 
 import javax.annotation.Nonnull;
@@ -40,7 +46,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
 /** Testing ClusterClient used implementation. */
-public class TestingClusterClient<T> implements ClusterClient<T> {
+public class TestingClusterClient<T> extends RestClusterClient<T> {
 
     private Function<JobID, CompletableFuture<Acknowledge>> cancelFunction =
             ignore -> CompletableFuture.completedFuture(Acknowledge.get());
@@ -48,10 +54,19 @@ public class TestingClusterClient<T> implements ClusterClient<T> {
             stopWithSavepointFunction =
                     (ignore1, ignore2, savepointPath) ->
                             CompletableFuture.completedFuture(savepointPath);
+    private TriFunction<
+                    MessageHeaders<?, ?, ?>,
+                    MessageParameters,
+                    RequestBody,
+                    CompletableFuture<ResponseBody>>
+            triggerSavepointFunction =
+                    (ignore1, ignore2, ignore) ->
+                            CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
 
     private final T clusterId;
 
-    public TestingClusterClient(T clusterId) {
+    public TestingClusterClient(Configuration configuration, T clusterId) throws Exception {
+        super(configuration, clusterId, (c, e) -> new StandaloneClientHAServices("localhost"));
         this.clusterId = clusterId;
     }
 
@@ -63,6 +78,16 @@ public class TestingClusterClient<T> implements ClusterClient<T> {
             TriFunction<JobID, Boolean, String, CompletableFuture<String>>
                     stopWithSavepointFunction) {
         this.stopWithSavepointFunction = stopWithSavepointFunction;
+    }
+
+    public void setTriggerSavepointFunction(
+            TriFunction<
+                            MessageHeaders<?, ?, ?>,
+                            MessageParameters,
+                            RequestBody,
+                            CompletableFuture<ResponseBody>>
+                    triggerSavepointFunction) {
+        this.triggerSavepointFunction = triggerSavepointFunction;
     }
 
     @Override
@@ -146,4 +171,15 @@ public class TestingClusterClient<T> implements ClusterClient<T> {
 
     @Override
     public void close() {}
+
+    @Override
+    public <
+                    M extends MessageHeaders<R, P, U>,
+                    U extends MessageParameters,
+                    R extends RequestBody,
+                    P extends ResponseBody>
+            CompletableFuture<P> sendRequest(M messageHeaders, U messageParameters, R request) {
+        return (CompletableFuture<P>)
+                triggerSavepointFunction.apply(messageHeaders, messageParameters, request);
+    }
 }
