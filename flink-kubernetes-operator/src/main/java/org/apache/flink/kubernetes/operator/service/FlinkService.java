@@ -52,6 +52,8 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMess
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
+import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
+import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.PodList;
@@ -72,6 +74,7 @@ import java.util.Collection;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /** Service for submitting and interacting with Flink clusters and jobs. */
 public class FlinkService {
@@ -169,6 +172,7 @@ public class FlinkService {
             @Nullable JobID jobID, UpgradeMode upgradeMode, Configuration conf) throws Exception {
         Optional<String> savepointOpt = Optional.empty();
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
+            final String clusterId = clusterClient.getClusterId();
             switch (upgradeMode) {
                 case STATELESS:
                     clusterClient.cancel(jobID).get(1, TimeUnit.MINUTES);
@@ -177,16 +181,28 @@ public class FlinkService {
                     final String savepointDirectory =
                             Preconditions.checkNotNull(
                                     conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
-                    final long timeout = operatorConfiguration.getFlinkClientTimeout().getSeconds();
-                    String savepoint =
-                            clusterClient
-                                    .stopWithSavepoint(jobID, false, savepointDirectory)
-                                    .get(timeout, TimeUnit.SECONDS);
-                    savepointOpt = Optional.of(savepoint);
+                    final long timeout =
+                            conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT)
+                                    .getSeconds();
+                    try {
+                        String savepoint =
+                                clusterClient
+                                        .stopWithSavepoint(jobID, false, savepointDirectory)
+                                        .get(timeout, TimeUnit.SECONDS);
+                        savepointOpt = Optional.of(savepoint);
+                    } catch (TimeoutException exception) {
+                        throw new FlinkException(
+                                String.format(
+                                        "Timed out stopping the job %s in Flink cluster %s with savepoint, "
+                                                + "please configure a larger timeout via '%s'",
+                                        jobID,
+                                        clusterId,
+                                        ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT.key()),
+                                exception);
+                    }
                     break;
                 case LAST_STATE:
                     final String namespace = conf.getString(KubernetesConfigOptions.NAMESPACE);
-                    final String clusterId = clusterClient.getClusterId();
                     FlinkUtils.deleteCluster(namespace, clusterId, kubernetesClient, false);
                     break;
                 default:
