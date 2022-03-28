@@ -28,6 +28,7 @@ import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.rest.RestClusterClient;
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -51,6 +52,7 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMess
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
+import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -172,10 +174,14 @@ public class FlinkService {
                     clusterClient.cancel(jobID).get(1, TimeUnit.MINUTES);
                     break;
                 case SAVEPOINT:
+                    final String savepointDirectory =
+                            Preconditions.checkNotNull(
+                                    conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
+                    final long timeout = operatorConfiguration.getFlinkClientTimeout().getSeconds();
                     String savepoint =
                             clusterClient
-                                    .stopWithSavepoint(jobID, false, null)
-                                    .get(1, TimeUnit.MINUTES);
+                                    .stopWithSavepoint(jobID, false, savepointDirectory)
+                                    .get(timeout, TimeUnit.SECONDS);
                     savepointOpt = Optional.of(savepoint);
                     break;
                 case LAST_STATE:
@@ -207,13 +213,16 @@ public class FlinkService {
             savepointTriggerMessageParameters.jobID.resolve(
                     JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId()));
 
+            final String savepointDirectory =
+                    Preconditions.checkNotNull(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
+            final long timeout = operatorConfiguration.getFlinkClientTimeout().getSeconds();
             TriggerResponse response =
                     clusterClient
                             .sendRequest(
                                     savepointTriggerHeaders,
                                     savepointTriggerMessageParameters,
-                                    new SavepointTriggerRequestBody(null, false))
-                            .get();
+                                    new SavepointTriggerRequestBody(savepointDirectory, false))
+                            .get(timeout, TimeUnit.SECONDS);
             LOG.info("Savepoint successfully triggered: " + response.getTriggerId().toHexString());
 
             org.apache.flink.kubernetes.operator.crd.status.SavepointInfo savepointInfo =
