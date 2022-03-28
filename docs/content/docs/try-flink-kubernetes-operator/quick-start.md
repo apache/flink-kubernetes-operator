@@ -63,20 +63,13 @@ minikube start --kubernetes-version=v1.21.5
 
 We also recommend [k9s](https://k9scli.io/) as GUI for kubernetes, but it is optional for this quickstart guide.
 
-## Building the operator image from source
+## Get the source code
+
+You can get the operator source code from GitHub:
 
 ```shell
 git clone https://github.com/apache/flink-kubernetes-operator.git
 cd flink-kubernetes-operator
-```
-
-You can build the docker image of the operator via the following command from the project root folder:
-```bash
-docker build . -t flink-operator
-```
-When using minikube you need to make this image available within the running minikube container:
-```bash
-minikube image load flink-operator
 ```
 
 ## Deploying the operator

@@ -23,9 +23,9 @@
 # watchNamespaces: ["flink"]
 
 image:
-  repository: flink-operator
+  repository: ghcr.io/apache/flink-operator
   pullPolicy: IfNotPresent
-  tag: latest
+  tag: main
 
 rbac:
   create: true
