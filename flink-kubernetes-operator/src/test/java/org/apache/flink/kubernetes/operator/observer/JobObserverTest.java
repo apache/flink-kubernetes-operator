@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link JobObserver} unit tests. */
@@ -193,5 +195,35 @@ public class JobObserverTest {
         jobStatus.setState(JobState.RUNNING.name());
         deployment.getStatus().setJobStatus(jobStatus);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+    }
+
+    @Test
+    public void observeListJobsError() {
+        TestingFlinkService flinkService = new TestingFlinkService();
+        JobObserver observer =
+                new JobObserver(
+                        flinkService,
+                        FlinkOperatorConfiguration.fromConfiguration(new Configuration()));
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        Configuration conf = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
+        bringToReadyStatus(deployment);
+        observer.observe(deployment, readyContext, conf);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+        // simulate deployment failure
+        String podFailedMessage = "list jobs error";
+        flinkService.setJmPodList(TestUtils.createFailedPodList(podFailedMessage));
+        flinkService.setPortReady(false);
+        Exception exception =
+                assertThrows(
+                        DeploymentFailedException.class,
+                        () -> {
+                            observer.observe(
+                                    deployment,
+                                    TestUtils.createContextWithInProgressDeployment(),
+                                    conf);
+                        });
+        assertEquals(podFailedMessage, exception.getMessage());
     }
 }
