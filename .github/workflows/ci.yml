@@ -56,7 +56,7 @@ jobs:
           export SHELL=/bin/bash
           export DOCKER_BUILDKIT=1
           eval $(minikube -p minikube docker-env)
-          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest .
+          docker build --progress=plain  --build-arg SKIP_TESTS=false --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest .
           docker images
       - name: Start the operator
         run: |
@@ -101,7 +101,7 @@ jobs:
           distribution: 'adopt'
       - name: Build with Maven
         run: |
-          set -o pipefail; mvn clean install | tee ./mvn.log; set +o pipefail
+          set -o pipefail; mvn clean install -DskipTests | tee ./mvn.log; set +o pipefail
           if [[ $(grep -c "overlapping classes" ./mvn.log) -gt 0 ]];then
             echo "Found overlapping classes, please fix"
             exit 1

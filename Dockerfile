@@ -17,6 +17,7 @@
 ################################################################################
 # Build
 FROM maven:3.8.4-openjdk-11 AS build
+ARG SKIP_TESTS=true
 
 WORKDIR /app
 ENV SHADED_DIR=flink-kubernetes-shaded
@@ -35,7 +36,7 @@ COPY $WEBHOOK_DIR/src ./$WEBHOOK_DIR/src
 
 COPY tools ./tools
 
-RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install
+RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -DskipTests=$SKIP_TESTS
 
 # stage
 FROM openjdk:11-jre
