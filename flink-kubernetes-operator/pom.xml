@@ -61,6 +61,12 @@ under the License.
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-clients_${scala.version}</artifactId>
             <version>${flink.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.flink</groupId>
+                    <artifactId>flink-scala_${scala.version}</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
