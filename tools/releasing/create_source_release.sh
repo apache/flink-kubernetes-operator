@@ -77,10 +77,29 @@ rsync -a \
   --exclude ".travis.yml" \
   . flink-kubernetes-operator-${RELEASE_VERSION}
 
+# Package helm chart
+commit_hash=$(git log -1 --pretty=format:%h)
+
+# TODO: We might want to be more specific here later on what to replace
+perl -pi -e "s#^  repository: .*#  repository: ghcr.io/apache/flink-operator#" flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-operator/values.yaml
+perl -pi -e "s#^  tag: .*#  tag: ${commit_hash}#" flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-operator/values.yaml
+
+helm package --app-version ${RELEASE_VERSION} --version ${RELEASE_VERSION} --destination ${RELEASE_DIR} flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-operator
+mv ${RELEASE_DIR}/flink-operator-${RELEASE_VERSION}.tgz ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz
+helm repo index ${RELEASE_DIR}
+
+gpg --armor --detach-sig ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz
+gpg --armor --detach-sig ${RELEASE_DIR}/index.yaml
+
+# Package sources
 tar czf ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-src.tgz flink-kubernetes-operator-${RELEASE_VERSION}
 gpg --armor --detach-sig ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-src.tgz
+
+
 cd ${RELEASE_DIR}
 ${SHASUM} flink-kubernetes-operator-${RELEASE_VERSION}-src.tgz > flink-kubernetes-operator-${RELEASE_VERSION}-src.tgz.sha512
+${SHASUM} flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz > flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz.sha512
+${SHASUM} index.yaml > index.yaml.sha512
 
 rm -rf ${CLONE_DIR}
 
