@@ -90,11 +90,16 @@ perl -pi -e "s#^  tag: .*#  tag: ${commit_hash}#" helm/flink-operator/values.yam
 
 helm package --app-version ${RELEASE_VERSION} --version ${RELEASE_VERSION} --destination ${RELEASE_DIR} helm/flink-operator
 mv ${RELEASE_DIR}/flink-operator-${RELEASE_VERSION}.tgz ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz
+helm repo index ${RELEASE_DIR}
+
 gpg --armor --detach-sig ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz
+gpg --armor --detach-sig ${RELEASE_DIR}/index.yaml
+
 
 cd ${RELEASE_DIR}
 ${SHASUM} flink-kubernetes-operator-${RELEASE_VERSION}-src.tgz > flink-kubernetes-operator-${RELEASE_VERSION}-src.tgz.sha512
 ${SHASUM} flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz > flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz.sha512
+${SHASUM} index.yaml > index.yaml.sha512
 
 rm -rf ${CLONE_DIR}
 
