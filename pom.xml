@@ -274,6 +274,10 @@ under the License.
                             <!-- Generated CRD -->
                             <exclude>helm/flink-operator/crds/flinkdeployments.flink.apache.org-v1.yml</exclude>
                             <exclude>rio.yml</exclude>
+                            <!-- the licenses that are re-bundled -->
+                            <exclude>**/packaged_licenses/LICENSE.*.txt</exclude>
+                            <exclude>**/licenses/LICENSE*</exclude>
+                            <exclude>**/licenses-binary/LICENSE*</exclude>
                         </excludes>
                     </configuration>
                 </plugin>
