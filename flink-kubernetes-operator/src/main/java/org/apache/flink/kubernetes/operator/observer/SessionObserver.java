@@ -21,7 +21,9 @@ package org.apache.flink.kubernetes.operator.observer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
@@ -36,19 +38,29 @@ public class SessionObserver extends BaseObserver {
     }
 
     @Override
-    public void observe(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
+    public void observe(FlinkDeployment flinkApp, Context context, Configuration defaultConfig) {
+        FlinkDeploymentSpec lastReconciledSpec =
+                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
+        // Nothing has been launched so skip observing
+        if (lastReconciledSpec == null) {
+            return;
+        }
+
+        Configuration lastValidatedConfig =
+                FlinkUtils.getEffectiveConfig(
+                        flinkApp.getMetadata(), lastReconciledSpec, defaultConfig);
         if (!isClusterReady(flinkApp)) {
-            observeJmDeployment(flinkApp, context, effectiveConfig);
+            observeJmDeployment(flinkApp, context, lastValidatedConfig);
         }
         if (isClusterReady(flinkApp)) {
             // Check if session cluster can serve rest calls following our practice in JobObserver
             try {
-                flinkService.listJobs(effectiveConfig);
+                flinkService.listJobs(lastValidatedConfig);
             } catch (Exception e) {
                 logger.error("REST service in session cluster is bad now", e);
                 if (e instanceof TimeoutException) {
                     // check for problems with the underlying deployment
-                    observeJmDeployment(flinkApp, context, effectiveConfig);
+                    observeJmDeployment(flinkApp, context, lastValidatedConfig);
                 }
             }
         }

@@ -104,22 +104,23 @@ public class FlinkDeploymentController
 
     @Override
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context) {
-        FlinkDeployment originalCopy = ReconciliationUtils.clone(flinkApp);
         LOG.info("Starting reconciliation");
-
-        Optional<String> validationError = validator.validate(flinkApp);
-        if (validationError.isPresent()) {
-            LOG.error("Validation failed: " + validationError.get());
-            ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
-            return ReconciliationUtils.toUpdateControl(
-                    operatorConfiguration, originalCopy, flinkApp, false);
-        }
-
-        Configuration effectiveConfig =
-                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
-
+        FlinkDeployment originalCopy = ReconciliationUtils.clone(flinkApp);
         try {
-            observerFactory.getOrCreate(flinkApp).observe(flinkApp, context, effectiveConfig);
+            observerFactory
+                    .getOrCreate(flinkApp)
+                    .observe(flinkApp, context, defaultConfig.getFlinkConfig());
+
+            Configuration effectiveConfig =
+                    FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
+            Optional<String> validationError = validator.validate(flinkApp);
+            if (validationError.isPresent()) {
+                LOG.error("Validation failed: " + validationError.get());
+                ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
+                return ReconciliationUtils.toUpdateControl(
+                        operatorConfiguration, originalCopy, flinkApp, false);
+            }
+
             reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context, effectiveConfig);
         } catch (DeploymentFailedException dfe) {
             handleDeploymentFailed(flinkApp, dfe);

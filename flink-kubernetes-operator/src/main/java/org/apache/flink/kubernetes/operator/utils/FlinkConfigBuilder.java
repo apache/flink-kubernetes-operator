@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.util.StringUtils;
 
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.internal.SerializationUtils;
 
@@ -50,13 +51,18 @@ import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOGBACK_NA
 
 /** Builder to get effective flink config from {@link FlinkDeployment}. */
 public class FlinkConfigBuilder {
-    private final FlinkDeployment deploy;
+    private final ObjectMeta meta;
     private final FlinkDeploymentSpec spec;
     private final Configuration effectiveConfig;
 
     public FlinkConfigBuilder(FlinkDeployment deploy, Configuration flinkConfig) {
-        this.deploy = deploy;
-        this.spec = this.deploy.getSpec();
+        this(deploy.getMetadata(), deploy.getSpec(), flinkConfig);
+    }
+
+    public FlinkConfigBuilder(
+            ObjectMeta metadata, FlinkDeploymentSpec spec, Configuration flinkConfig) {
+        this.meta = metadata;
+        this.spec = spec;
         this.effectiveConfig = new Configuration(flinkConfig);
     }
 
@@ -179,8 +185,8 @@ public class FlinkConfigBuilder {
     public Configuration build() {
 
         // Set cluster config
-        final String namespace = deploy.getMetadata().getNamespace();
-        final String clusterId = deploy.getMetadata().getName();
+        final String namespace = meta.getNamespace();
+        final String clusterId = meta.getName();
         effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
         effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
         return effectiveConfig;
@@ -188,7 +194,13 @@ public class FlinkConfigBuilder {
 
     public static Configuration buildFrom(FlinkDeployment dep, Configuration flinkConfig)
             throws IOException, URISyntaxException {
-        return new FlinkConfigBuilder(dep, flinkConfig)
+        return buildFrom(dep.getMetadata(), dep.getSpec(), flinkConfig);
+    }
+
+    public static Configuration buildFrom(
+            ObjectMeta meta, FlinkDeploymentSpec spec, Configuration flinkConfig)
+            throws IOException, URISyntaxException {
+        return new FlinkConfigBuilder(meta, spec, flinkConfig)
                 .applyFlinkConfiguration()
                 .applyLogConfiguration()
                 .applyImage()

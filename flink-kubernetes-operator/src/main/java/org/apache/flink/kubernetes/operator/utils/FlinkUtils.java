@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
@@ -33,6 +34,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.api.model.ConfigMapList;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.Service;
@@ -61,9 +63,14 @@ public class FlinkUtils {
 
     public static Configuration getEffectiveConfig(
             FlinkDeployment flinkApp, Configuration flinkConfig) {
+        return getEffectiveConfig(flinkApp.getMetadata(), flinkApp.getSpec(), flinkConfig);
+    }
+
+    public static Configuration getEffectiveConfig(
+            ObjectMeta meta, FlinkDeploymentSpec spec, Configuration flinkConfig) {
         try {
             final Configuration effectiveConfig =
-                    FlinkConfigBuilder.buildFrom(flinkApp, flinkConfig);
+                    FlinkConfigBuilder.buildFrom(meta, spec, flinkConfig);
             LOG.debug("Effective config: {}", effectiveConfig);
             return effectiveConfig;
         } catch (Exception e) {

@@ -21,11 +21,13 @@ package org.apache.flink.kubernetes.operator.observer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
@@ -46,14 +48,24 @@ public class JobObserver extends BaseObserver {
     }
 
     @Override
-    public void observe(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
+    public void observe(FlinkDeployment flinkApp, Context context, Configuration defaultConfig) {
+        FlinkDeploymentSpec lastReconciledSpec =
+                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
+        // Nothing has been launched so skip observing
+        if (lastReconciledSpec == null) {
+            return;
+        }
+
+        Configuration lastValidatedConfig =
+                FlinkUtils.getEffectiveConfig(
+                        flinkApp.getMetadata(), lastReconciledSpec, defaultConfig);
         if (!isClusterReady(flinkApp)) {
-            observeJmDeployment(flinkApp, context, effectiveConfig);
+            observeJmDeployment(flinkApp, context, lastValidatedConfig);
         }
         if (isClusterReady(flinkApp)) {
-            boolean jobFound = observeFlinkJobStatus(flinkApp, context, effectiveConfig);
+            boolean jobFound = observeFlinkJobStatus(flinkApp, context, lastValidatedConfig);
             if (jobFound) {
-                observeSavepointStatus(flinkApp, effectiveConfig);
+                observeSavepointStatus(flinkApp, lastValidatedConfig);
             }
         }
         clearErrorsIfJobManagerDeploymentNotInErrorStatus(flinkApp);

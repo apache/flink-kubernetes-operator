@@ -397,7 +397,45 @@ public class FlinkDeploymentControllerTest {
         testUpgradeNotReadyCluster(appCluster, false);
     }
 
-    public void testUpgradeNotReadyCluster(FlinkDeployment appCluster, boolean allowUpgrade) {
+    @Test
+    public void verifyReconcileWithBadConfig() throws Exception {
+
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        UpdateControl<FlinkDeployment> updateControl;
+
+        updateControl = testController.reconcile(appCluster, context);
+        assertTrue(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        // Set bad config
+        appCluster.getSpec().getJobManager().setReplicas(-1);
+        // Next reconcile will set error msg and observe with previous validated config
+        updateControl = testController.reconcile(appCluster, context);
+        assertEquals(
+                "JobManager replicas should not be configured less than one.",
+                appCluster.getStatus().getReconciliationStatus().getError());
+        assertTrue(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        // Set bad config
+        appCluster.getSpec().getJob().setParallelism(0);
+        // Next reconcile should output new error msg and previous validated config should not be
+        // changed
+        updateControl = testController.reconcile(appCluster, context);
+        assertEquals(
+                "Job parallelism must be larger than 0",
+                appCluster.getStatus().getReconciliationStatus().getError());
+        assertTrue(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+    }
+
+    private void testUpgradeNotReadyCluster(FlinkDeployment appCluster, boolean allowUpgrade) {
         testController.reconcile(appCluster, TestUtils.createEmptyContext());
         assertEquals(
                 appCluster.getSpec(),
