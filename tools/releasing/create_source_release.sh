@@ -86,7 +86,12 @@ perl -pi -e "s#^  tag: .*#  tag: ${commit_hash}#" flink-kubernetes-operator-${RE
 
 helm package --app-version ${RELEASE_VERSION} --version ${RELEASE_VERSION} --destination ${RELEASE_DIR} flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-operator
 mv ${RELEASE_DIR}/flink-operator-${RELEASE_VERSION}.tgz ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz
+
 helm repo index ${RELEASE_DIR}
+# Attach apache header
+mv ${RELEASE_DIR}/index.yaml ${RELEASE_DIR}/index_tmp.yaml
+cp flink-kubernetes-operator-${RELEASE_VERSION}/tools/releasing/apache_header.yaml ${RELEASE_DIR}/index.yaml
+cat ${RELEASE_DIR}/index_tmp.yaml >> ${RELEASE_DIR}/index.yaml && rm ${RELEASE_DIR}/index_tmp.yaml
 
 gpg --armor --detach-sig ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz
 gpg --armor --detach-sig ${RELEASE_DIR}/index.yaml
