@@ -42,6 +42,7 @@ import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
@@ -92,6 +93,15 @@ public class FlinkService {
 
     public void submitApplicationCluster(FlinkDeployment deployment, Configuration conf)
             throws Exception {
+        if (HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
+            final String clusterId =
+                    Preconditions.checkNotNull(conf.get(KubernetesConfigOptions.CLUSTER_ID));
+            final String namespace =
+                    Preconditions.checkNotNull(conf.get(KubernetesConfigOptions.NAMESPACE));
+            // Delete the job graph in the HA ConfigMaps so that the newly changed job config(e.g.
+            // parallelism) could take effect
+            FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
+        }
         LOG.info("Deploying application cluster");
         final ClusterClientServiceLoader clusterClientServiceLoader =
                 new DefaultClusterClientServiceLoader();
