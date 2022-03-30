@@ -32,6 +32,8 @@ import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.kubeclient.FlinkKubeClient;
+import org.apache.flink.kubernetes.kubeclient.FlinkKubeClientFactory;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -71,10 +73,13 @@ import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import static org.apache.flink.kubernetes.utils.Constants.NAME_SEPARATOR;
 
 /** Service for submitting and interacting with Flink clusters and jobs. */
 public class FlinkService {
@@ -104,8 +109,29 @@ public class FlinkService {
                         jobSpec.getArgs() != null ? jobSpec.getArgs() : new String[0],
                         jobSpec.getEntryClass());
 
+        deleteJobGraphsFromHaData(deployment, conf);
         deployer.run(conf, applicationConfiguration);
         LOG.info("Application cluster successfully deployed");
+    }
+
+    protected void deleteJobGraphsFromHaData(FlinkDeployment deployment, Configuration conf) {
+        String configmapName =
+                String.join(
+                        NAME_SEPARATOR, deployment.getMetadata().getName(), "dispatcher", "leader");
+        FlinkKubeClient flinkKubeClient =
+                new FlinkKubeClientFactory().fromConfiguration(conf, "flink-operator");
+        flinkKubeClient.checkAndUpdateConfigMap(
+                configmapName,
+                cm -> {
+                    Map<String, String> data = cm.getData();
+                    if (data.keySet().removeIf(k -> k.startsWith("jobGraph-"))) {
+                        LOG.info("Removed jobgraph data from {}", configmapName);
+                        return Optional.of(cm);
+                    } else {
+                        LOG.info("No jobgraph data found in {}", configmapName);
+                        return Optional.empty();
+                    }
+                });
     }
 
     public void submitSessionCluster(FlinkDeployment deployment, Configuration conf)
