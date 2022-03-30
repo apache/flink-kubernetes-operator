@@ -23,12 +23,14 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.fabric8.kubernetes.api.model.ConfigMapList;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.Service;
@@ -37,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Iterator;
+import java.util.Map;
 
 import static org.apache.flink.kubernetes.utils.Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY;
 
@@ -221,5 +224,41 @@ public class FlinkUtils {
                 .inNamespace(namespace)
                 .withLabels(KubernetesUtils.getJobManagerSelectors(clusterId))
                 .list();
+    }
+
+    public static void deleteJobGraphInKubernetesHA(
+            String clusterId, String namespace, KubernetesClient kubernetesClient) {
+        // The HA ConfigMap names have been changed from 1.15, so we use the labels to filter out
+        // them and delete job graph key
+        final Map<String, String> haConfigMapLabels =
+                KubernetesUtils.getConfigMapLabels(
+                        clusterId, Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY);
+        final ConfigMapList configMaps =
+                kubernetesClient
+                        .configMaps()
+                        .inNamespace(namespace)
+                        .withLabels(haConfigMapLabels)
+                        .list();
+
+        configMaps
+                .getItems()
+                .forEach(
+                        configMap -> {
+                            final boolean isDeleted =
+                                    configMap
+                                            .getData()
+                                            .entrySet()
+                                            .removeIf(FlinkUtils::isJobGraphKey);
+                            if (isDeleted) {
+                                LOG.info(
+                                        "Job graph in ConfigMap {} is deleted",
+                                        configMap.getMetadata().getName());
+                            }
+                        });
+        kubernetesClient.resourceList(configMaps).inNamespace(namespace).createOrReplace();
+    }
+
+    private static boolean isJobGraphKey(Map.Entry<String, String> entry) {
+        return entry.getKey().startsWith(Constants.JOB_GRAPH_STORE_KEY_PREFIX);
     }
 }
