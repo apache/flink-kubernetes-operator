@@ -72,11 +72,11 @@ cd flink-kubernetes-operator
 
 You can build the docker image of the operator via the following command from the project root folder:
 ```bash
-docker build . -t flink-operator
+docker build . -t flink-kubernetes-operator
 ```
 When using minikube you need to make this image available within the running minikube container:
 ```bash
-minikube image load flink-operator
+minikube image load flink-kubernetes-operator
 ```
 
 ## Deploying the operator
@@ -87,17 +87,17 @@ kubectl create -f https://github.com/jetstack/cert-manager/releases/download/v1.
 ```
 You can deploy the operator via the included helm chart:
 ```bash
-helm install flink-operator helm/flink-operator
+helm install flink-kubernetes-operator helm/flink-kubernetes-operator
 ```
 You may verify your installation via `kubectl` and `helm`:
 ```bash
 kubectl get pods
 NAME READY STATUS RESTARTS AGE
-flink-operator-fb5d46f94-ghd8b 2/2 Running 0 4m21s
+flink-kubernetes-operator-fb5d46f94-ghd8b 2/2 Running 0 4m21s
 
 helm list
 NAME NAMESPACE REVISION UPDATED STATUS CHART APP VERSION
-flink-operator default 1 2022-03-09 17 (tel:12022030917):39:55.461359 +0100 CET deployed flink-operator-0.1.0 1.0.13
+flink-kubernetes-operator default 1 2022-03-09 17 (tel:12022030917):39:55.461359 +0100 CET deployed flink-kubernetes-operator-0.1.0 0.1.0
 ```
 
 ## Submitting a Flink job
