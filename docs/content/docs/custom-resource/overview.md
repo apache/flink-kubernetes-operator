@@ -112,6 +112,7 @@ metadata:
   name: basic-example
 spec:
   image: flink:1.14.3
+  flinkVersion: v1_14
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
   serviceAccount: flink
