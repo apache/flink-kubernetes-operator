@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
-import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -135,7 +135,7 @@ public class ReconciliationUtils {
 
         return previousUpgradeMode != UpgradeMode.LAST_STATE
                 && currentUpgradeMode == UpgradeMode.LAST_STATE
-                && !HighAvailabilityMode.isHighAvailabilityModeActivated(lastReconciledFlinkConfig);
+                && !FlinkUtils.isKubernetesHAActivated(lastReconciledFlinkConfig);
     }
 
     private static boolean isJobUpgradeInProgress(FlinkDeployment current) {
