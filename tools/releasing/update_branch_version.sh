@@ -62,8 +62,8 @@ mvn versions:set -DgenerateBackupPoms=false -DnewVersion=${NEW_VERSION}
 # change version in Dockerbuild file
 perl -pi -e "s#^ENV OPERATOR_VERSION=.*#ENV OPERATOR_VERSION=${NEW_VERSION}#" Dockerfile
 # change Helm chart version info
-perl -pi -e "s#^version: .*#version: ${NEW_VERSION}#" helm/flink-operator/Chart.yaml
-perl -pi -e "s#^appVersion: .*#appVersion: ${NEW_VERSION}#" helm/flink-operator/Chart.yaml
+perl -pi -e "s#^version: .*#version: ${NEW_VERSION}#" helm/flink-kubernetes-operator/Chart.yaml
+perl -pi -e "s#^appVersion: .*#appVersion: ${NEW_VERSION}#" helm/flink-kubernetes-operator/Chart.yaml
 
 
 git commit -am "[release] Update version to ${NEW_VERSION}"

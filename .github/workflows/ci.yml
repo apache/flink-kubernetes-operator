@@ -60,8 +60,8 @@ jobs:
           docker images
       - name: Start the operator
         run: |
-          helm install flink-operator helm/flink-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest
-          kubectl wait --for=condition=Available --timeout=120s deploy/flink-operator
+          helm install flink-kubernetes-operator helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest
+          kubectl wait --for=condition=Available --timeout=120s deploy/flink-kubernetes-operator
           kubectl get pods
       - name: Tests in flink-kubernetes-operator
         run: |
@@ -75,7 +75,7 @@ jobs:
           cd ..
       - name: Stop the operator
         run: |
-          helm uninstall flink-operator
+          helm uninstall flink-kubernetes-operator
       - name: Stop minikube
         run: |
           source e2e-tests/utils.sh
@@ -124,8 +124,8 @@ jobs:
           docker images
       - name: Start the operator
         run: |
-          helm install flink-operator -n ${{ matrix.config.namespace }} helm/flink-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.config.extraArgs }}
-          kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.config.namespace }} deploy/flink-operator
+          helm install flink-kubernetes-operator -n ${{ matrix.config.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.config.extraArgs }}
+          kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.config.namespace }} deploy/flink-kubernetes-operator
           kubectl get pods
       - name: Run Flink e2e tests
         run: |
@@ -135,7 +135,7 @@ jobs:
           done
       - name: Stop the operator
         run: |
-          helm uninstall -n ${{ matrix.config.namespace }} flink-operator
+          helm uninstall -n ${{ matrix.config.namespace }} flink-kubernetes-operator
       - name: Stop minikube
         run: |
           source e2e-tests/utils.sh

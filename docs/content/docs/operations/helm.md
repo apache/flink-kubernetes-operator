@@ -29,13 +29,13 @@ under the License.
 The operator installation is managed by a helm chart. To install run:
 
 ```
-helm install flink-operator helm/flink-operator
+helm install flink-kubernetes-operator helm/flink-kubernetes-operator
 ```
 
 Alternatively to install the operator (and also the helm chart) to a specific namespace:
 
 ```
-helm install flink-operator helm/flink-operator --namespace flink-operator --create-namespace
+helm install flink-kubernetes-operator helm/flink-kubernetes-operator --namespace flink --create-namespace
 ```
 
 Note that in this case you will need to update the namespace in the examples accordingly or the `default`
@@ -66,12 +66,12 @@ The recommended solution is to split the operator into two Argo apps, such as:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: flink-operator-crds
+  name: flink-kubernetes-operator-crds
 spec:
   source:
     repoURL: https://github.com/apache/flink-kubernetes-operator
     targetRevision: main
-    path: helm/flink-operator/crds
+    path: helm/flink-kubernetes-operator/crds
     syncOptions:
     - Replace=true
 ...
@@ -83,12 +83,12 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: flink-operator-skip-crds
+  name: flink-kubernetes-operator-skip-crds
 spec:
   source:
     repoURL: https://github.com/apache/flink-kubernetes-operator
     targetRevision: main
-    path: helm/flink-operator
+    path: helm/flink-kubernetes-operator
     helm:
       skipCrds: true
 ...

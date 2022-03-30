@@ -38,12 +38,16 @@ public class KubernetesOperatorMetricGroupTest {
         MetricRegistryImpl registry = new MetricRegistryImpl(fromConfiguration(configuration));
         KubernetesOperatorMetricGroup group =
                 KubernetesOperatorMetricGroup.create(
-                        registry, configuration, "default", "flink-operator", "localhost");
+                        registry,
+                        configuration,
+                        "default",
+                        "flink-kubernetes-operator",
+                        "localhost");
         assertArrayEquals(
-                new String[] {"localhost", "k8soperator", "default", "flink-operator"},
+                new String[] {"localhost", "k8soperator", "default", "flink-kubernetes-operator"},
                 group.getScopeComponents());
         assertEquals(
-                "localhost.k8soperator.default.flink-operator.test",
+                "localhost.k8soperator.default.flink-kubernetes-operator.test",
                 group.getMetricIdentifier("test"));
 
         assertEquals(
@@ -53,7 +57,7 @@ public class KubernetesOperatorMetricGroupTest {
                         "<namespace>",
                         "default",
                         "<name>",
-                        "flink-operator"),
+                        "flink-kubernetes-operator"),
                 group.getAllVariables());
 
         registry.shutdown().get();
@@ -67,12 +71,17 @@ public class KubernetesOperatorMetricGroupTest {
 
         KubernetesOperatorMetricGroup group =
                 KubernetesOperatorMetricGroup.create(
-                        registry, configuration, "default", "flink-operator", "localhost");
+                        registry,
+                        configuration,
+                        "default",
+                        "flink-kubernetes-operator",
+                        "localhost");
         assertArrayEquals(
-                new String[] {"foo", "localhost", "flink-operator", "default"},
+                new String[] {"foo", "localhost", "flink-kubernetes-operator", "default"},
                 group.getScopeComponents());
         assertEquals(
-                "foo.localhost.flink-operator.default.test", group.getMetricIdentifier("test"));
+                "foo.localhost.flink-kubernetes-operator.default.test",
+                group.getMetricIdentifier("test"));
 
         assertEquals(
                 ImmutableMap.of(
@@ -81,7 +90,7 @@ public class KubernetesOperatorMetricGroupTest {
                         "<namespace>",
                         "default",
                         "<name>",
-                        "flink-operator"),
+                        "flink-kubernetes-operator"),
                 group.getAllVariables());
 
         registry.shutdown().get();
