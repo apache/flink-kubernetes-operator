@@ -31,7 +31,9 @@ Flink Deployments. The operator features the following amongst others:
 - Full logging and metrics integration
 - Flexible deployments and native integration with Kubernetes tooling
 
-{{< img src="/img/overview.svg" alt="Flink Operator Overview" >}}
+{{< img src="/img/overview.svg" alt="Flink Kubernetes Operator Overview" >}}
+
+For an overview and brief demo of the Flink Kubernetes Operator you can check out our initial meetup talk [recording](https://www.youtube.com/watch?v=bedzs9jBUfc&t=2121s).
 
 {{< columns >}}
 ## Try the Flink Kubernetes Operator
