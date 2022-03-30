@@ -17,6 +17,18 @@
 # limitations under the License.
 #
 
+attach_header () {
+	FILE=$1
+	TMP_FILE=$FILE.tmp
+	HEADER=$2
+	mv $FILE $TMP_FILE
+	cp $HEADER $FILE
+	cat $TMP_FILE >> $FILE
+	rm $TMP_FILE
+	echo "Added apache header to $FILE"
+}
+
+
 ##
 ## Variables with defaults (if not overwritten by environment)
 ##
@@ -77,8 +89,14 @@ rsync -a \
   --exclude ".travis.yml" \
   . flink-kubernetes-operator-${RELEASE_VERSION}
 
+apache_header=${CLONE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}/tools/releasing/apache_header.yaml
 # Package helm chart
 commit_hash=$(git log -1 --pretty=format:%h)
+
+# Attach apache header to generated crd
+cd flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-operator/crds
+for FILE in *.yml; do attach_header $FILE $apache_header; done
+cd ${CLONE_DIR}
 
 # TODO: We might want to be more specific here later on what to replace
 perl -pi -e "s#^  repository: .*#  repository: ghcr.io/apache/flink-operator#" flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-operator/values.yaml
@@ -88,15 +106,13 @@ helm package --app-version ${RELEASE_VERSION} --version ${RELEASE_VERSION} --des
 mv ${RELEASE_DIR}/flink-operator-${RELEASE_VERSION}.tgz ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz
 
 helm repo index ${RELEASE_DIR}
-# Attach apache header
-mv ${RELEASE_DIR}/index.yaml ${RELEASE_DIR}/index_tmp.yaml
-cp flink-kubernetes-operator-${RELEASE_VERSION}/tools/releasing/apache_header.yaml ${RELEASE_DIR}/index.yaml
-cat ${RELEASE_DIR}/index_tmp.yaml >> ${RELEASE_DIR}/index.yaml && rm ${RELEASE_DIR}/index_tmp.yaml
+attach_header ${RELEASE_DIR}/index.yaml $apache_header
 
 gpg --armor --detach-sig ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz
 gpg --armor --detach-sig ${RELEASE_DIR}/index.yaml
 
 # Package sources
+
 tar czf ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-src.tgz flink-kubernetes-operator-${RELEASE_VERSION}
 gpg --armor --detach-sig ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-src.tgz
 
