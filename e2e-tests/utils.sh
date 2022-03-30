@@ -102,7 +102,8 @@ function start_minikube {
     if ! retry_times 5 30 start_minikube_if_not_running; then
         echo "Could not start minikube. Aborting..."
         exit 1
-   fi
+    fi
+    minikube addons enable ingress
 }
 
 function start_minikube_if_not_running {
