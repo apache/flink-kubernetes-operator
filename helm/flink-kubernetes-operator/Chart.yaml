@@ -18,8 +18,8 @@
 
 ---
 apiVersion: v2
-name: flink-operator
-description: A Helm chart for flink-operator
+name: flink-kubernetes-operator
+description: A Helm chart for the Apache Flink Kubernetes Operator
 type: application
 version: 0.1-SNAPSHOT
 appVersion: 0.1-SNAPSHOT

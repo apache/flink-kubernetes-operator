@@ -76,13 +76,13 @@ To enable the operator metrics in Prometheus create a `pod-monitor.yaml` file wi
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
-  name: flink-operator
+  name: flink-kubernetes-operator
   labels:
     release: prometheus
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: flink-operator
+      app.kubernetes.io/name: flink-kubernetes-operator
   podMetricsEndpoints:
       - port: metrics
 ```
@@ -93,7 +93,7 @@ kubectl create -f pod-monitor.yaml
 Once the custom resource is created in the Kubernetes environment the operator metrics are ready to explore [http://localhost:3000/explore](http://localhost:3000/explore).
 
 # Logging
-The Operator controls the logging behaviour for Flink applications and the Operator itself using configuration files mounted externally via ConfigMaps. [Configuration files](https://github.com/apache/flink-kubernetes-operator/tree/main/helm/flink-operator/conf) with default values are shipped in the Helm chart. It is recommended to review and adjust them if needed in the `values.yaml` file before deploying the Operator in production environments.
+The Operator controls the logging behaviour for Flink applications and the Operator itself using configuration files mounted externally via ConfigMaps. [Configuration files](https://github.com/apache/flink-kubernetes-operator/tree/main/helm/flink-kubernetes-operator/conf) with default values are shipped in the Helm chart. It is recommended to review and adjust them if needed in the `values.yaml` file before deploying the Operator in production environments.
 
 To append/override the default log configuration properties for the Operator use:
 ```yaml
