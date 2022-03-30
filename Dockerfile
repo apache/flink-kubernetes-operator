@@ -41,7 +41,7 @@ RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -DskipTests=$SKIP
 # stage
 FROM openjdk:11-jre
 ENV FLINK_HOME=/opt/flink
-ENV OPERATOR_VERSION=0.1-SNAPSHOT
+ENV OPERATOR_VERSION=0.1.0
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
 ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION.jar
 ENV FLINK_KUBERNETES_SHADED_JAR=flink-kubernetes-shaded-$OPERATOR_VERSION.jar
