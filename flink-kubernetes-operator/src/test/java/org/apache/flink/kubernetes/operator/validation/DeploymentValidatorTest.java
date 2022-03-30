@@ -73,7 +73,7 @@ public class DeploymentValidatorTest {
                     dep.getSpec().setFlinkConfiguration(new HashMap<>());
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
                 },
-                "Job could not be upgraded with last-state while HA disabled");
+                "Job could not be upgraded with last-state while Kubernetes HA disabled");
 
         testError(
                 dep -> {
@@ -145,7 +145,7 @@ public class DeploymentValidatorTest {
                     dep.getSpec().setFlinkConfiguration(new HashMap<>());
                     dep.getSpec().getJobManager().setReplicas(2);
                 },
-                "High availability should be enabled when starting standby JobManagers.");
+                "Kubernetes High availability should be enabled when starting standby JobManagers.");
         testError(
                 dep -> dep.getSpec().getJobManager().setReplicas(0),
                 "JobManager replicas should not be configured less than one.");

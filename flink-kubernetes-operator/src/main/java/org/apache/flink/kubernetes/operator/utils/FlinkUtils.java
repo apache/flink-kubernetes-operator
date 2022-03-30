@@ -19,7 +19,9 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -260,5 +262,11 @@ public class FlinkUtils {
 
     private static boolean isJobGraphKey(Map.Entry<String, String> entry) {
         return entry.getKey().startsWith(Constants.JOB_GRAPH_STORE_KEY_PREFIX);
+    }
+
+    public static boolean isKubernetesHAActivated(Configuration configuration) {
+        return configuration
+                .get(HighAvailabilityOptions.HA_MODE)
+                .equalsIgnoreCase(KubernetesHaServicesFactory.class.getCanonicalName());
     }
 }
