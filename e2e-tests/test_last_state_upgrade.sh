@@ -44,6 +44,17 @@ function wait_for_jobmanager_running() {
     wait_for_logs $jm_pod_name "Rest endpoint listening at" ${TIMEOUT} || exit 1
 }
 
+function assert_available_slots() {
+  expected=$1
+  ip=$(minikube ip)
+  actual=$(curl http://$ip/default/${CLUSTER_ID}/overview 2>/dev/null | grep -E -o '"slots-available":[0-9]+' | awk -F':' '{print $2}')
+  if [[ expected -ne actual ]]; then
+    echo "Expected available slots: $expected, actual: $actual"
+    exit 1
+  fi
+  echo "Successfully assert available slots"
+}
+
 on_exit cleanup_and_exit
 
 retry_times 5 30 "kubectl apply -f e2e-tests/data/cr.yaml" || exit 1
@@ -53,11 +64,12 @@ wait_for_jobmanager_running
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
 wait_for_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
 wait_for_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
+assert_available_slots 0
 
 job_id=$(kubectl logs $jm_pod_name | grep -E -o 'Job [a-z0-9]+ is submitted' | awk '{print $2}')
 
 # Update the FlinkDeployment and trigger the last state upgrade
-kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"jobManager": {"resource": {"cpu": 0.51, "memory": "1024m"} } } }'
+kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"job": {"parallelism": 1 } } }'
 
 kubectl wait --for=delete pod --timeout=${TIMEOUT}s --selector="app=${CLUSTER_ID}"
 wait_for_jobmanager_running
@@ -67,6 +79,7 @@ wait_for_logs $jm_pod_name "Restoring job $job_id from Checkpoint" ${TIMEOUT} ||
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
 wait_for_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
 wait_for_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
+assert_available_slots 1
 
 echo "Successfully run the last-state upgrade test"
 
