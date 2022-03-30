@@ -34,9 +34,9 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
-import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.util.StringUtils;
 
 import java.util.Map;
@@ -146,8 +146,9 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
 
         Configuration configuration = Configuration.fromMap(confMap);
         if (job.getUpgradeMode() == UpgradeMode.LAST_STATE
-                && !HighAvailabilityMode.isHighAvailabilityModeActivated(configuration)) {
-            return Optional.of("Job could not be upgraded with last-state while HA disabled");
+                && !FlinkUtils.isKubernetesHAActivated(configuration)) {
+            return Optional.of(
+                    "Job could not be upgraded with last-state while Kubernetes HA disabled");
         }
 
         if (StringUtils.isNullOrWhitespaceOnly(
@@ -182,10 +183,9 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
         if (replicas < 1) {
             return Optional.of("JobManager replicas should not be configured less than one.");
         } else if (replicas > 1
-                && !HighAvailabilityMode.isHighAvailabilityModeActivated(
-                        Configuration.fromMap(confMap))) {
+                && !FlinkUtils.isKubernetesHAActivated(Configuration.fromMap(confMap))) {
             return Optional.of(
-                    "High availability should be enabled when starting standby JobManagers.");
+                    "Kubernetes High availability should be enabled when starting standby JobManagers.");
         }
         return Optional.empty();
     }
