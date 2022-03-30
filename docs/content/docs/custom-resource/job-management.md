@@ -103,6 +103,7 @@ metadata:
   name: basic-checkpoint-ha-example
 spec:
   image: flink:1.14.3
+  flinkVersion: v1_14
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
     state.savepoints.dir: file:///flink-data/savepoints
