@@ -41,6 +41,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 import static org.apache.flink.configuration.DeploymentOptionsInternal.CONF_DIR;
 import static org.apache.flink.kubernetes.configuration.KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE;
@@ -176,6 +178,20 @@ public class FlinkConfigBuilder {
         return this;
     }
 
+    public FlinkConfigBuilder applyOwnerReference() {
+        Map<String, String> ownerReference =
+                Map.of(
+                        "apiVersion", deploy.getApiVersion(),
+                        "kind", deploy.getKind(),
+                        "name", deploy.getMetadata().getName(),
+                        "uid", deploy.getMetadata().getUid(),
+                        "blockOwnerDeletion", "false",
+                        "controller", "false");
+        effectiveConfig.set(
+                KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE, List.of(ownerReference));
+        return this;
+    }
+
     public Configuration build() {
 
         // Set cluster config
@@ -197,6 +213,7 @@ public class FlinkConfigBuilder {
                 .applyCommonPodTemplate()
                 .applyIngressDomain()
                 .applyJobManagerSpec()
+                .applyOwnerReference()
                 .applyTaskManagerSpec()
                 .applyJobOrSessionSpec()
                 .build();
