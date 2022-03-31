@@ -76,7 +76,9 @@ public class FlinkOperator {
         FlinkDeploymentValidator validator = new DefaultDeploymentValidator();
         ReconcilerFactory reconcilerFactory =
                 new ReconcilerFactory(client, flinkService, operatorConfiguration);
-        ObserverFactory observerFactory = new ObserverFactory(flinkService, operatorConfiguration);
+        ObserverFactory observerFactory =
+                new ObserverFactory(
+                        flinkService, operatorConfiguration, defaultConfig.getFlinkConfig());
 
         controller =
                 new FlinkDeploymentController(

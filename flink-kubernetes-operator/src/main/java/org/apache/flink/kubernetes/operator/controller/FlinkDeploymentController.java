@@ -92,13 +92,13 @@ public class FlinkDeploymentController
     @Override
     public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
         LOG.info("Deleting FlinkDeployment");
-        Configuration effectiveConfig =
-                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
         try {
-            observerFactory.getOrCreate(flinkApp).observe(flinkApp, context, effectiveConfig);
+            observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);
         } catch (DeploymentFailedException dfe) {
             // ignore during cleanup
         }
+        Configuration effectiveConfig =
+                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
         return reconcilerFactory.getOrCreate(flinkApp).cleanup(flinkApp, effectiveConfig);
     }
 
@@ -107,12 +107,7 @@ public class FlinkDeploymentController
         LOG.info("Starting reconciliation");
         FlinkDeployment originalCopy = ReconciliationUtils.clone(flinkApp);
         try {
-            observerFactory
-                    .getOrCreate(flinkApp)
-                    .observe(flinkApp, context, defaultConfig.getFlinkConfig());
-
-            Configuration effectiveConfig =
-                    FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
+            observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);
             Optional<String> validationError = validator.validate(flinkApp);
             if (validationError.isPresent()) {
                 LOG.error("Validation failed: " + validationError.get());
@@ -120,7 +115,8 @@ public class FlinkDeploymentController
                 return ReconciliationUtils.toUpdateControl(
                         operatorConfiguration, originalCopy, flinkApp, false);
             }
-
+            Configuration effectiveConfig =
+                    FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
             reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context, effectiveConfig);
         } catch (DeploymentFailedException dfe) {
             handleDeploymentFailed(flinkApp, dfe);

@@ -19,13 +19,33 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 
 /** The mode of {@link FlinkDeployment}. */
 public enum Mode {
     APPLICATION,
     SESSION;
 
+    /**
+     * Return the mode of the given FlinkDeployment for Observer and Reconciler. Note, switching
+     * mode for an existing deployment is not allowed.
+     *
+     * @param flinkApp given FlinkDeployment
+     * @return Mode
+     */
     public static Mode getMode(FlinkDeployment flinkApp) {
-        return flinkApp.getSpec().getJob() != null ? APPLICATION : SESSION;
+        // Try to use lastReconciledSpec if it exists.
+        // The mode derived from last-reconciled spec or current spec should be same.
+        // If they are different, observation phase will use last-reconciled spec and validation
+        // phase will fail.
+        FlinkDeploymentSpec lastReconciledSpec =
+                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
+        return lastReconciledSpec == null
+                ? getMode(flinkApp.getSpec())
+                : getMode(lastReconciledSpec);
+    }
+
+    private static Mode getMode(FlinkDeploymentSpec spec) {
+        return spec.getJob() != null ? APPLICATION : SESSION;
     }
 }

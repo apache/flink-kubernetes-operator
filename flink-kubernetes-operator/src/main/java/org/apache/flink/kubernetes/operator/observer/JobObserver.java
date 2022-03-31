@@ -21,13 +21,11 @@ package org.apache.flink.kubernetes.operator.observer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
@@ -43,48 +41,35 @@ import java.util.concurrent.TimeoutException;
 public class JobObserver extends BaseObserver {
 
     public JobObserver(
-            FlinkService flinkService, FlinkOperatorConfiguration operatorConfiguration) {
-        super(flinkService, operatorConfiguration);
+            FlinkService flinkService,
+            FlinkOperatorConfiguration operatorConfiguration,
+            Configuration flinkConfig) {
+        super(flinkService, operatorConfiguration, flinkConfig);
     }
 
     @Override
-    public void observe(FlinkDeployment flinkApp, Context context, Configuration defaultConfig) {
-        FlinkDeploymentSpec lastReconciledSpec =
-                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
-        // Nothing has been launched so skip observing
-        if (lastReconciledSpec == null) {
-            return;
+    public void observeIfClusterReady(
+            FlinkDeployment flinkApp, Context context, Configuration lastValidatedConfig) {
+        boolean jobFound = observeFlinkJobStatus(flinkApp, context, lastValidatedConfig);
+        if (jobFound) {
+            observeSavepointStatus(flinkApp, lastValidatedConfig);
         }
-
-        Configuration lastValidatedConfig =
-                FlinkUtils.getEffectiveConfig(
-                        flinkApp.getMetadata(), lastReconciledSpec, defaultConfig);
-        if (!isClusterReady(flinkApp)) {
-            observeJmDeployment(flinkApp, context, lastValidatedConfig);
-        }
-        if (isClusterReady(flinkApp)) {
-            boolean jobFound = observeFlinkJobStatus(flinkApp, context, lastValidatedConfig);
-            if (jobFound) {
-                observeSavepointStatus(flinkApp, lastValidatedConfig);
-            }
-        }
-        clearErrorsIfJobManagerDeploymentNotInErrorStatus(flinkApp);
     }
 
     private boolean observeFlinkJobStatus(
-            FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
+            FlinkDeployment flinkApp, Context context, Configuration lastValidatedConfig) {
         logger.info("Observing job status");
         FlinkDeploymentStatus flinkAppStatus = flinkApp.getStatus();
         String previousJobStatus = flinkAppStatus.getJobStatus().getState();
         Collection<JobStatusMessage> clusterJobStatuses;
         try {
-            clusterJobStatuses = flinkService.listJobs(effectiveConfig);
+            clusterJobStatuses = flinkService.listJobs(lastValidatedConfig);
         } catch (Exception e) {
             logger.error("Exception while listing jobs", e);
             flinkAppStatus.getJobStatus().setState(JOB_STATE_UNKNOWN);
             if (e instanceof TimeoutException) {
                 // check for problems with the underlying deployment
-                observeJmDeployment(flinkApp, context, effectiveConfig);
+                observeJmDeployment(flinkApp, context, lastValidatedConfig);
             }
             return false;
         }
@@ -123,7 +108,8 @@ public class JobObserver extends BaseObserver {
         return status.getState();
     }
 
-    private void observeSavepointStatus(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+    private void observeSavepointStatus(
+            FlinkDeployment flinkApp, Configuration lastValidatedConfig) {
         SavepointInfo savepointInfo = flinkApp.getStatus().getJobStatus().getSavepointInfo();
         if (!SavepointUtils.savepointInProgress(flinkApp)) {
             logger.debug("Savepoint not in progress");
@@ -133,7 +119,7 @@ public class JobObserver extends BaseObserver {
 
         SavepointFetchResult savepointFetchResult;
         try {
-            savepointFetchResult = flinkService.fetchSavepointInfo(flinkApp, effectiveConfig);
+            savepointFetchResult = flinkService.fetchSavepointInfo(flinkApp, lastValidatedConfig);
         } catch (Exception e) {
             logger.error("Exception while fetching savepoint info", e);
             return;

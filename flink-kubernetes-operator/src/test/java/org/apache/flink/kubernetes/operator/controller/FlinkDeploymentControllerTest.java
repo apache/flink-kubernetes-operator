@@ -20,8 +20,10 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
+import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
@@ -29,6 +31,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.observer.BaseObserver;
 import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
@@ -72,6 +75,7 @@ public class FlinkDeploymentControllerTest {
             FlinkOperatorConfiguration.fromConfiguration(new Configuration());
 
     private TestingFlinkService flinkService;
+    private DefaultConfig defaultConfig;
     private FlinkDeploymentController testController;
 
     private KubernetesMockServer mockServer;
@@ -80,6 +84,7 @@ public class FlinkDeploymentControllerTest {
     @BeforeEach
     public void setup() {
         flinkService = new TestingFlinkService();
+        defaultConfig = FlinkUtils.loadDefaultConfig();
         testController = createTestController(kubernetesClient, flinkService);
     }
 
@@ -398,18 +403,20 @@ public class FlinkDeploymentControllerTest {
     }
 
     @Test
-    public void verifyReconcileWithBadConfig() throws Exception {
+    public void verifyReconcileWithBadConfig() {
 
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         UpdateControl<FlinkDeployment> updateControl;
-
+        // Override rest port, and it should be saved in lastReconciledSpec once a successful
+        // reconcile() finishes.
+        appCluster.getSpec().getFlinkConfiguration().put(RestOptions.PORT.key(), "8088");
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
 
-        // Set bad config
+        // Check when the bad config is applied, observe() will change the cluster state correctly
         appCluster.getSpec().getJobManager().setReplicas(-1);
         // Next reconcile will set error msg and observe with previous validated config
         updateControl = testController.reconcile(appCluster, context);
@@ -421,18 +428,55 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
 
-        // Set bad config
-        appCluster.getSpec().getJob().setParallelism(0);
-        // Next reconcile should output new error msg and previous validated config should not be
-        // changed
-        updateControl = testController.reconcile(appCluster, context);
+        // Make sure we do validation before getting effective config in reconcile().
+        appCluster.getSpec().getJobManager().setReplicas(1);
+        appCluster.getSpec().getJob().setJarURI(null);
+        // Verify the saved rest port in lastReconciledSpec is actually used in observe() by
+        // utilizing listJobConsumer
+        appCluster.getSpec().getFlinkConfiguration().put(RestOptions.PORT.key(), "12345");
+        flinkService.setListJobConsumer(
+                (configuration) -> assertEquals(8088, configuration.get(RestOptions.PORT)));
+        testController.reconcile(appCluster, context);
         assertEquals(
-                "Job parallelism must be larger than 0",
-                appCluster.getStatus().getReconciliationStatus().getError());
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+    }
+
+    @Test
+    public void verifyReconcileWithAChangedOperatorMode() {
+
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        UpdateControl<FlinkDeployment> updateControl;
+
+        updateControl = testController.reconcile(appCluster, context);
+        assertTrue(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        updateControl = testController.reconcile(appCluster, context);
+        JobStatus jobStatus = appCluster.getStatus().getJobStatus();
+        assertTrue(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        // jobStatus has not been set at this time
+        assertEquals(BaseObserver.JOB_STATE_UNKNOWN, jobStatus.getState());
+
+        // Switches operator mode to SESSION
+        appCluster.getSpec().setJob(null);
+        // Validation fails and JobObserver should still be used
+        updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+        // Verify jobStatus is running
+        jobStatus = appCluster.getStatus().getJobStatus();
+        JobStatusMessage expectedJobStatus = flinkService.listJobs().get(0).f1;
+        assertEquals(expectedJobStatus.getJobId().toHexString(), jobStatus.getJobId());
+        assertEquals(expectedJobStatus.getJobName(), jobStatus.getJobName());
+        assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
     }
 
     private void testUpgradeNotReadyCluster(FlinkDeployment appCluster, boolean allowUpgrade) {
@@ -560,14 +604,17 @@ public class FlinkDeploymentControllerTest {
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(
-                        FlinkUtils.loadDefaultConfig(),
+                        defaultConfig,
                         operatorConfiguration,
                         kubernetesClient,
                         "test",
                         new DefaultDeploymentValidator(),
                         new ReconcilerFactory(
                                 kubernetesClient, flinkService, operatorConfiguration),
-                        new ObserverFactory(flinkService, operatorConfiguration));
+                        new ObserverFactory(
+                                flinkService,
+                                operatorConfiguration,
+                                defaultConfig.getFlinkConfig()));
         controller.setControllerConfig(
                 new FlinkControllerConfig(controller, Collections.emptySet()));
         return controller;

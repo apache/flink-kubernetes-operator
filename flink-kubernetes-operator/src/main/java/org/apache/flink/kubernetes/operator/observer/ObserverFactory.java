@@ -18,6 +18,7 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -30,13 +31,17 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ObserverFactory {
 
     private final FlinkService flinkService;
-    private final FlinkOperatorConfiguration operatorConfiguration;
+    private final FlinkOperatorConfiguration operatorConfig;
+    private final Configuration flinkConfig;
     private final Map<Mode, Observer> observerMap;
 
     public ObserverFactory(
-            FlinkService flinkService, FlinkOperatorConfiguration operatorConfiguration) {
+            FlinkService flinkService,
+            FlinkOperatorConfiguration operatorConfiguration,
+            Configuration flinkConfig) {
         this.flinkService = flinkService;
-        this.operatorConfiguration = operatorConfiguration;
+        this.operatorConfig = operatorConfiguration;
+        this.flinkConfig = flinkConfig;
         this.observerMap = new ConcurrentHashMap<>();
     }
 
@@ -46,9 +51,9 @@ public class ObserverFactory {
                 mode -> {
                     switch (mode) {
                         case SESSION:
-                            return new SessionObserver(flinkService, operatorConfiguration);
+                            return new SessionObserver(flinkService, operatorConfig, flinkConfig);
                         case APPLICATION:
-                            return new JobObserver(flinkService, operatorConfiguration);
+                            return new JobObserver(flinkService, operatorConfig, flinkConfig);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

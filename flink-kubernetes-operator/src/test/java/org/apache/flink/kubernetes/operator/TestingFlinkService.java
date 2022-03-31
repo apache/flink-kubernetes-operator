@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /** Flink service mock for tests. */
@@ -50,6 +51,7 @@ public class TestingFlinkService extends FlinkService {
     private Set<String> sessions = new HashSet<>();
     private boolean isPortReady = true;
     private PodList podList = new PodList();
+    private Consumer<Configuration> listJobConsumer = conf -> {};
 
     public TestingFlinkService() {
         super(null, null);
@@ -80,6 +82,7 @@ public class TestingFlinkService extends FlinkService {
 
     @Override
     public List<JobStatusMessage> listJobs(Configuration conf) throws Exception {
+        listJobConsumer.accept(conf);
         if (jobs.isEmpty() && !sessions.isEmpty()) {
             throw new Exception("Trying to list a job without submitting it");
         }
@@ -87,6 +90,10 @@ public class TestingFlinkService extends FlinkService {
             throw new TimeoutException("JM port is unavailable");
         }
         return jobs.stream().map(t -> t.f1).collect(Collectors.toList());
+    }
+
+    public void setListJobConsumer(Consumer<Configuration> listJobConsumer) {
+        this.listJobConsumer = listJobConsumer;
     }
 
     public List<Tuple2<String, JobStatusMessage>> listJobs() {
