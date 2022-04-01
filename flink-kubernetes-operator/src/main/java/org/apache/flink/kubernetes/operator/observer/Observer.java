@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -30,7 +29,6 @@ public interface Observer {
      *
      * @param flinkApp the target flinkDeployment resource
      * @param context the context with which the operation is executed
-     * @param effectiveConfig the effective config of the flinkApp
      */
-    void observe(FlinkDeployment flinkApp, Context context, Configuration effectiveConfig);
+    void observe(FlinkDeployment flinkApp, Context context);
 }

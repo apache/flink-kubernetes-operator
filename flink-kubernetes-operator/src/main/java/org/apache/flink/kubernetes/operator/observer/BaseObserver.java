@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -53,11 +54,15 @@ public abstract class BaseObserver implements Observer {
 
     protected final FlinkService flinkService;
     protected final FlinkOperatorConfiguration operatorConfiguration;
+    protected final Configuration flinkConfig;
 
     public BaseObserver(
-            FlinkService flinkService, FlinkOperatorConfiguration operatorConfiguration) {
+            FlinkService flinkService,
+            FlinkOperatorConfiguration operatorConfiguration,
+            Configuration flinkConfig) {
         this.flinkService = flinkService;
         this.operatorConfiguration = operatorConfiguration;
+        this.flinkConfig = flinkConfig;
     }
 
     protected void observeJmDeployment(
@@ -182,4 +187,35 @@ public abstract class BaseObserver implements Observer {
                 && lastReconciledSpec != null
                 && lastReconciledSpec.getJob().getState() == JobState.SUSPENDED;
     }
+
+    public void observe(FlinkDeployment flinkApp, Context context) {
+        FlinkDeploymentSpec lastReconciledSpec =
+                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
+        // Nothing has been launched so skip observing
+        if (lastReconciledSpec == null) {
+            return;
+        }
+
+        Configuration lastValidatedConfig =
+                FlinkUtils.getEffectiveConfig(
+                        flinkApp.getMetadata(), lastReconciledSpec, this.flinkConfig);
+        if (!isClusterReady(flinkApp)) {
+            observeJmDeployment(flinkApp, context, lastValidatedConfig);
+        }
+        if (isClusterReady(flinkApp)) {
+            observeIfClusterReady(flinkApp, context, lastValidatedConfig);
+        }
+        clearErrorsIfJobManagerDeploymentNotInErrorStatus(flinkApp);
+    }
+
+    /**
+     * Observe the flinkApp status when the cluster is ready. It will be implemented by child class
+     * to reflect the changed status on the flinkApp resource.
+     *
+     * @param flinkApp the target flinkDeployment resource
+     * @param context the context with which the operation is executed
+     * @param lastValidatedConfig the last validated config
+     */
+    public abstract void observeIfClusterReady(
+            FlinkDeployment flinkApp, Context context, Configuration lastValidatedConfig);
 }
