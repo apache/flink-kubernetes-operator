@@ -57,13 +57,14 @@ public class SessionReconciler extends BaseReconciler {
             flinkApp.getStatus()
                     .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
             IngressUtils.updateIngressRules(flinkApp, effectiveConfig, kubernetesClient);
+        } else {
+            boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
+            if (specChanged) {
+                upgradeSessionCluster(flinkApp, effectiveConfig);
+                IngressUtils.updateIngressRules(flinkApp, effectiveConfig, kubernetesClient);
+            }
         }
 
-        boolean specChanged = !flinkApp.getSpec().equals(lastReconciledSpec);
-        if (specChanged) {
-            upgradeSessionCluster(flinkApp, effectiveConfig);
-            IngressUtils.updateIngressRules(flinkApp, effectiveConfig, kubernetesClient);
-        }
         ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null);
     }
 
