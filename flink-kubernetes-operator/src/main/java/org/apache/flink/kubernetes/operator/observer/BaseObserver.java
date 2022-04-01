@@ -123,7 +123,7 @@ public abstract class BaseObserver implements Observer {
     private Optional<Deployment> getSecondaryResource(FlinkDeployment flinkApp, Context context) {
         return context.getSecondaryResource(
                 Deployment.class,
-                operatorConfiguration.getWatchedNamespaces().size() > 1
+                operatorConfiguration.getWatchedNamespaces().size() >= 1
                         ? flinkApp.getMetadata().getNamespace()
                         : null);
     }

@@ -149,7 +149,7 @@ public class SessionObserverTest {
 
                     @Override
                     public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
-                        assertNull(s);
+                        assertEquals(deployment.getMetadata().getNamespace(), s);
                         secondaryResourceAccessed.addAndGet(1);
                         return Optional.of((T) k8sDeployment);
                     }
