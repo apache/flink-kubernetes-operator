@@ -98,8 +98,9 @@ public class FlinkSessionJobController
     @Override
     public UpdateControl<FlinkSessionJob> reconcile(
             FlinkSessionJob flinkSessionJob, Context context) {
-        FlinkSessionJob originalCopy = ReconciliationUtils.clone(flinkSessionJob);
         LOG.info("Starting reconciliation");
+        FlinkSessionJob originalCopy = ReconciliationUtils.clone(flinkSessionJob);
+        observer.observe(flinkSessionJob, context);
         Optional<String> validationError = validator.validate(flinkSessionJob);
         if (validationError.isPresent()) {
             LOG.error("Validation failed: " + validationError.get());
@@ -110,7 +111,6 @@ public class FlinkSessionJobController
 
         try {
             // TODO refactor the reconciler interface to return UpdateControl directly
-            observer.observe(flinkSessionJob, context);
             reconciler.reconcile(flinkSessionJob, context, defaultConfig.getFlinkConfig());
         } catch (Exception e) {
             throw new ReconciliationException(e);

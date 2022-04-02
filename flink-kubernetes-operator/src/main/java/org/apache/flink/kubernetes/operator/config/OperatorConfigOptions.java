@@ -71,7 +71,7 @@ public class OperatorConfigOptions {
                             "The timeout for the observer to wait the flink rest client to return.");
 
     public static final ConfigOption<Duration> OPERATOR_CANCEL_JOB_TIMEOUT =
-            ConfigOptions.key("operator.cancel.job.timeout")
+            ConfigOptions.key("operator.reconciler.flink.cancel.job.timeout")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(1))
                     .withDescription("The timeout for the operator to cancel job.");

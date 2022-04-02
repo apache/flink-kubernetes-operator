@@ -190,7 +190,9 @@ public class FlinkService {
             LOG.info("Submitting job: {} to session cluster.", jobID.toHexString());
             return clusterClient
                     .sendRequest(headers, parameters, runRequestBody)
-                    .get(1, TimeUnit.MINUTES);
+                    .get(
+                            operatorConfiguration.getFlinkClientTimeout().toSeconds(),
+                            TimeUnit.SECONDS);
         } catch (Exception e) {
             LOG.error("Failed to submit job to session cluster.", e);
             throw new FlinkRuntimeException(e);
@@ -221,7 +223,9 @@ public class FlinkService {
                             EmptyRequestBody.getInstance(),
                             Collections.singletonList(
                                     new FileUpload(path, RestConstants.CONTENT_TYPE_JAR)))
-                    .get(1, TimeUnit.MINUTES);
+                    .get(
+                            operatorConfiguration.getFlinkClientTimeout().toSeconds(),
+                            TimeUnit.SECONDS);
         }
     }
 
@@ -323,9 +327,7 @@ public class FlinkService {
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
             clusterClient
                     .cancel(jobID)
-                    .get(
-                            operatorConfiguration.getFlinkClientTimeout().getSeconds(),
-                            TimeUnit.SECONDS);
+                    .get(operatorConfiguration.getCancelJobTimeout().toSeconds(), TimeUnit.SECONDS);
         }
     }
 
