@@ -62,7 +62,7 @@ public class FlinkDeploymentController
 
     private final KubernetesClient kubernetesClient;
 
-    private final FlinkResourceValidator<FlinkDeployment> validator;
+    private final FlinkResourceValidator validator;
     private final ReconcilerFactory reconcilerFactory;
     private final ObserverFactory observerFactory;
     private final DefaultConfig defaultConfig;
@@ -74,7 +74,7 @@ public class FlinkDeploymentController
             DefaultConfig defaultConfig,
             FlinkOperatorConfiguration operatorConfiguration,
             KubernetesClient kubernetesClient,
-            FlinkResourceValidator<FlinkDeployment> validator,
+            FlinkResourceValidator validator,
             ReconcilerFactory reconcilerFactory,
             ObserverFactory observerFactory) {
         this.defaultConfig = defaultConfig;

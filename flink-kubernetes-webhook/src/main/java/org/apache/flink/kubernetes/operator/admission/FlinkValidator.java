@@ -35,9 +35,9 @@ public class FlinkValidator implements Validator<GenericKubernetesResource> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkValidator.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private final FlinkResourceValidator<FlinkDeployment> deploymentValidator;
+    private final FlinkResourceValidator deploymentValidator;
 
-    public FlinkValidator(FlinkResourceValidator<FlinkDeployment> deploymentValidator) {
+    public FlinkValidator(FlinkResourceValidator deploymentValidator) {
         this.deploymentValidator = deploymentValidator;
     }
 

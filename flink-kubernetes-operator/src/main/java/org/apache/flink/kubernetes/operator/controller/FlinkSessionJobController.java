@@ -67,7 +67,7 @@ public class FlinkSessionJobController
 
     private final KubernetesClient kubernetesClient;
 
-    private final FlinkResourceValidator<FlinkSessionJob> validator;
+    private final FlinkResourceValidator validator;
     private final Reconciler<FlinkSessionJob> reconciler;
     private final Observer<FlinkSessionJob> observer;
     private final DefaultConfig defaultConfig;
@@ -79,7 +79,7 @@ public class FlinkSessionJobController
             DefaultConfig defaultConfig,
             FlinkOperatorConfiguration operatorConfiguration,
             KubernetesClient kubernetesClient,
-            FlinkResourceValidator<FlinkSessionJob> validator,
+            FlinkResourceValidator validator,
             Reconciler<FlinkSessionJob> reconciler,
             Observer<FlinkSessionJob> observer) {
         this.defaultConfig = defaultConfig;

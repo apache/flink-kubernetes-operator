@@ -17,14 +17,13 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+
 import java.util.Optional;
 
-/**
- * Validator for custom resources.
- *
- * @param <CR> The custom resource to be validated.
- */
-public interface FlinkResourceValidator<CR> {
+/** Validator for different resources. */
+public interface FlinkResourceValidator {
 
     /**
      * Validate and return optional error.
@@ -32,5 +31,13 @@ public interface FlinkResourceValidator<CR> {
      * @param deployment
      * @return Optional error string, should be present iff validation resulted in an error
      */
-    Optional<String> validate(CR deployment);
+    Optional<String> validate(FlinkDeployment deployment);
+
+    /**
+     * Validate and return optional error.
+     *
+     * @param sessionJob
+     * @return Optional error string, should be present iff validation resulted in an error
+     */
+    Optional<String> validate(FlinkSessionJob sessionJob);
 }

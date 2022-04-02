@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.reconciler;
+package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -30,7 +30,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Tests for {@link SessionReconciler}. */
+/**
+ * Tests for {@link org.apache.flink.kubernetes.operator.reconciler.deployment.SessionReconciler}.
+ */
 public class SessionReconcilerTest {
 
     private final FlinkOperatorConfiguration operatorConfiguration =

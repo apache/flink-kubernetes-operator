@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
@@ -44,7 +45,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Default validator implementation for {@link FlinkDeployment}. */
-public class DefaultDeploymentValidator implements FlinkResourceValidator<FlinkDeployment> {
+public class DefaultDeploymentValidator implements FlinkResourceValidator {
 
     private static final String[] FORBIDDEN_CONF_KEYS =
             new String[] {
@@ -69,6 +70,11 @@ public class DefaultDeploymentValidator implements FlinkResourceValidator<FlinkD
                 validateJmSpec(spec.getJobManager(), spec.getFlinkConfiguration()),
                 validateTmSpec(spec.getTaskManager()),
                 validateSpecChange(deployment));
+    }
+
+    @Override
+    public Optional<String> validate(FlinkSessionJob sessionJob) {
+        return Optional.empty();
     }
 
     private static Optional<String> firstPresent(Optional<String>... errOpts) {

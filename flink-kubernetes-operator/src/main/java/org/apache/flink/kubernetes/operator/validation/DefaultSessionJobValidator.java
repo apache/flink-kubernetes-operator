@@ -17,12 +17,18 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 
 import java.util.Optional;
 
 /** Default validator implementation for {@link FlinkSessionJob}. */
-public class DefaultSessionJobValidator implements FlinkResourceValidator<FlinkSessionJob> {
+public class DefaultSessionJobValidator implements FlinkResourceValidator {
+
+    @Override
+    public Optional<String> validate(FlinkDeployment deployment) {
+        return Optional.empty();
+    }
 
     @Override
     public Optional<String> validate(FlinkSessionJob deployment) {

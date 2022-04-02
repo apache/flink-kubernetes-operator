@@ -79,7 +79,7 @@ public class FlinkOperator {
     }
 
     private void registerDeploymentController() {
-        FlinkResourceValidator<FlinkDeployment> validator = new DefaultDeploymentValidator();
+        FlinkResourceValidator validator = new DefaultDeploymentValidator();
         ReconcilerFactory reconcilerFactory =
                 new ReconcilerFactory(client, flinkService, operatorConfiguration);
         ObserverFactory observerFactory =
@@ -104,7 +104,7 @@ public class FlinkOperator {
     }
 
     private void registerSessionJobController() {
-        FlinkResourceValidator<FlinkSessionJob> validator = new DefaultSessionJobValidator();
+        FlinkResourceValidator validator = new DefaultSessionJobValidator();
         Reconciler<FlinkSessionJob> reconciler =
                 new FlinkSessionJobReconciler(client, flinkService, operatorConfiguration);
         Observer<FlinkSessionJob> observer = new SessionJobObserver();
