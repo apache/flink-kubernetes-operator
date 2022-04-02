@@ -41,6 +41,22 @@ helm install flink-kubernetes-operator helm/flink-kubernetes-operator --namespac
 Note that in this case you will need to update the namespace in the examples accordingly or the `default`
 namespace to the [watched namespaces](#watching-only-specific-namespaces).
 
+## Overriding configuration parameters during Helm install
+
+Helm provides different ways to override the default installation parameters (contained in `values.yaml`) for the Helm chart.
+
+To override single parameters you can use `--set`, for example:
+```
+helm install --set image.repository=apache/flink-kubernetes-operator --set image.tag=1.0.1 flink-kubernetes-operator helm/flink-kubernetes-operator
+```
+
+You can also provide your custom values file by using the `-f` flag:
+```
+helm install -f myvalues.yaml flink-kubernetes-operator helm/flink-kubernetes-operator
+```
+
+For more information check the [Helm documentation](https://helm.sh/docs/helm/helm_install/).
+
 ## Validating webhook
 
 In order to use the webhook for FlinkDeployment validation, you must install the cert-manager on the Kubernetes cluster:
