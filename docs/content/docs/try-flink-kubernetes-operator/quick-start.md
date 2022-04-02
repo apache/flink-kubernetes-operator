@@ -75,7 +75,7 @@ In case the cert manager installation failed for any reason you can disable the 
 
 Now you can deploy the latest stable Flink Kubernetes Operator version using the included Helm chart:
 ```bash
-helm repo add flink-operator-repo https://dist.apache.org/repos/dist/release/flink/flink-kubernetes-operator-0.1.0
+helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-0.1.0/
 helm install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator
 ```
 
@@ -112,10 +112,10 @@ kubectl logs -f deploy/basic-example
 2022-03-11 21:46:06,483 INFO  org.apache.flink.runtime.checkpoint.CheckpointCoordinator    [] - Completed checkpoint 207 for job a12c04ac7f5d8418d8ab27931bf517b7 (28725 bytes, checkpointDuration=25 ms, finalizationTime=0 ms).
 ```
 
-To expose the Flink Dashboard you may add a port-forward rule or start a tunnel:
+To expose the Flink Dashboard you may add a port-forward rule or look the [ingress configuration options]({{< ref "docs/operations/ingress" >}}):
 
 ```bash
-minikube tunnel
+kubectl port-forward svc/basic-example-rest 8081
 ```
 
 Now the Flink Dashboard is accessible at [localhost:8081](http://localhost:8081/).
