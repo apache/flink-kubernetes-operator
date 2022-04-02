@@ -39,7 +39,7 @@ public class SessionReconcilerTest {
     @Test
     public void testStartSession() throws Exception {
         Context context = TestUtils.createEmptyContext();
-        var count = new AtomicInteger();
+        var count = new AtomicInteger(0);
         TestingFlinkService flinkService =
                 new TestingFlinkService() {
                     @Override
@@ -54,6 +54,6 @@ public class SessionReconcilerTest {
                 new SessionReconciler(null, flinkService, operatorConfiguration);
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         reconciler.reconcile(deployment, context, new Configuration());
-        assertEquals(count.get(), 1);
+        assertEquals(1, count.get());
     }
 }
