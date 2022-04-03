@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.util.Preconditions;
 
@@ -101,7 +102,11 @@ public class FlinkSessionJobController
         LOG.info("Starting reconciliation");
         FlinkSessionJob originalCopy = ReconciliationUtils.clone(flinkSessionJob);
         observer.observe(flinkSessionJob, context);
-        Optional<String> validationError = validator.validate(flinkSessionJob);
+        Optional<String> validationError =
+                validator.validate(
+                        flinkSessionJob,
+                        OperatorUtils.getSecondaryResource(
+                                flinkSessionJob, context, operatorConfiguration));
         if (validationError.isPresent()) {
             LOG.error("Validation failed: " + validationError.get());
             ReconciliationUtils.updateForReconciliationError(

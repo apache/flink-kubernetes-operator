@@ -37,7 +37,7 @@ import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
+import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.api.model.EventBuilder;
@@ -607,7 +607,7 @@ public class FlinkDeploymentControllerTest {
                         defaultConfig,
                         operatorConfiguration,
                         kubernetesClient,
-                        new DefaultDeploymentValidator(),
+                        new DefaultValidator(),
                         new ReconcilerFactory(
                                 kubernetesClient, flinkService, operatorConfiguration),
                         new ObserverFactory(

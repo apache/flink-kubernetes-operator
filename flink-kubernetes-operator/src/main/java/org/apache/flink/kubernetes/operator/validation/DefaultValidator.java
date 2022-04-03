@@ -45,7 +45,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Default validator implementation for {@link FlinkDeployment}. */
-public class DefaultDeploymentValidator implements FlinkResourceValidator {
+public class DefaultValidator implements FlinkResourceValidator {
 
     private static final String[] FORBIDDEN_CONF_KEYS =
             new String[] {
@@ -70,11 +70,6 @@ public class DefaultDeploymentValidator implements FlinkResourceValidator {
                 validateJmSpec(spec.getJobManager(), spec.getFlinkConfiguration()),
                 validateTmSpec(spec.getTaskManager()),
                 validateSpecChange(deployment));
-    }
-
-    @Override
-    public Optional<String> validate(FlinkSessionJob sessionJob) {
-        return Optional.empty();
     }
 
     private static Optional<String> firstPresent(Optional<String>... errOpts) {
@@ -275,5 +270,38 @@ public class DefaultDeploymentValidator implements FlinkResourceValidator {
         }
 
         return Optional.empty();
+    }
+
+    // validate session job
+
+    @Override
+    public Optional<String> validate(
+            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
+
+        return firstPresent(
+                validateNotApplicationCluster(session),
+                validateSessionClusterId(sessionJob, session));
+    }
+
+    private Optional<String> validateSessionClusterId(
+            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
+        return session.map(
+                s -> {
+                    if (!s.getMetadata().getName().equals(sessionJob.getSpec().getClusterId())) {
+                        return "The session job's cluster id is not match with the session cluster";
+                    }
+                    return null;
+                });
+    }
+
+    private Optional<String> validateNotApplicationCluster(Optional<FlinkDeployment> session) {
+        return session.map(
+                s -> {
+                    if (s.getSpec().getJob() != null) {
+                        return "Can not submit to application cluster";
+                    } else {
+                        return null;
+                    }
+                });
     }
 }

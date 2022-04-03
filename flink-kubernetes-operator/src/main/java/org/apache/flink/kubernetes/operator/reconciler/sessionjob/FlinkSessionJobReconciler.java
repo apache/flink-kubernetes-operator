@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -80,7 +81,8 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
     @Override
     public DeleteControl cleanup(
             FlinkSessionJob sessionJob, Context context, Configuration defaultConfig) {
-        Optional<FlinkDeployment> flinkDepOptional = getSecondaryResource(sessionJob, context);
+        Optional<FlinkDeployment> flinkDepOptional =
+                OperatorUtils.getSecondaryResource(sessionJob, context, operatorConfiguration);
 
         if (flinkDepOptional.isPresent()) {
             Configuration effectiveConfig =
@@ -102,16 +104,12 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
     private void submitFlinkJob(
             FlinkSessionJob sessionJob, Context context, Configuration defaultConfig)
             throws Exception {
-        Optional<FlinkDeployment> flinkDepOptional = getSecondaryResource(sessionJob, context);
+        Optional<FlinkDeployment> flinkDepOptional =
+                OperatorUtils.getSecondaryResource(sessionJob, context, operatorConfiguration);
         if (flinkDepOptional.isPresent()) {
             var flinkdep = flinkDepOptional.get();
             var jobDeploymentStatus = flinkdep.getStatus().getJobManagerDeploymentStatus();
             if (jobDeploymentStatus == JobManagerDeploymentStatus.READY) {
-                // move this to validator
-                if (flinkdep.getSpec().getJob() != null) {
-                    throw new RuntimeException("Can not submit to application cluster");
-                }
-
                 Configuration effectiveConfig =
                         FlinkUtils.getEffectiveConfig(flinkdep, defaultConfig);
                 flinkService.submitJobToSessionCluster(sessionJob, effectiveConfig);
@@ -124,14 +122,5 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
         } else {
             LOG.info("Session cluster deployment is not found");
         }
-    }
-
-    private Optional<FlinkDeployment> getSecondaryResource(
-            FlinkSessionJob sessionJob, Context context) {
-        var identifier =
-                operatorConfiguration.getWatchedNamespaces().size() >= 1
-                        ? sessionJob.getMetadata().getNamespace()
-                        : null;
-        return context.getSecondaryResource(FlinkDeployment.class, identifier);
     }
 }

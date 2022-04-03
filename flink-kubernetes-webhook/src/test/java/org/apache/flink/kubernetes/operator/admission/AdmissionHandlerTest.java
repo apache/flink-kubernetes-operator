@@ -19,7 +19,7 @@ package org.apache.flink.kubernetes.operator.admission;
 
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
+import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
 import org.apache.flink.shaded.netty4.io.netty.channel.embedded.EmbeddedChannel;
@@ -48,7 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class AdmissionHandlerTest {
 
     private final AdmissionHandler admissionHandler =
-            new AdmissionHandler(new FlinkValidator(new DefaultDeploymentValidator()));
+            new AdmissionHandler(new FlinkValidator(new DefaultValidator()));
 
     @Test
     public void testHandleIllegalRequest() {

@@ -34,8 +34,7 @@ import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFact
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
-import org.apache.flink.kubernetes.operator.validation.DefaultSessionJobValidator;
+import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
@@ -79,7 +78,7 @@ public class FlinkOperator {
     }
 
     private void registerDeploymentController() {
-        FlinkResourceValidator validator = new DefaultDeploymentValidator();
+        FlinkResourceValidator validator = new DefaultValidator();
         ReconcilerFactory reconcilerFactory =
                 new ReconcilerFactory(client, flinkService, operatorConfiguration);
         ObserverFactory observerFactory =
@@ -104,7 +103,7 @@ public class FlinkOperator {
     }
 
     private void registerSessionJobController() {
-        FlinkResourceValidator validator = new DefaultSessionJobValidator();
+        FlinkResourceValidator validator = new DefaultValidator();
         Reconciler<FlinkSessionJob> reconciler =
                 new FlinkSessionJobReconciler(client, flinkService, operatorConfiguration);
         Observer<FlinkSessionJob> observer = new SessionJobObserver();
