@@ -30,6 +30,8 @@ import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
+import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.StringUtils;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -41,6 +43,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.Collections;
 
 import static org.apache.flink.configuration.DeploymentOptionsInternal.CONF_DIR;
@@ -54,6 +57,8 @@ public class FlinkConfigBuilder {
     private final ObjectMeta meta;
     private final FlinkDeploymentSpec spec;
     private final Configuration effectiveConfig;
+
+    public static final Duration DEFAULT_CHECKPOINTING_INTERVAL = Duration.ofMinutes(5);
 
     public FlinkConfigBuilder(FlinkDeployment deploy, Configuration flinkConfig) {
         this(deploy.getMetadata(), deploy.getSpec(), flinkConfig);
@@ -93,6 +98,17 @@ public class FlinkConfigBuilder {
             effectiveConfig.set(
                     REST_SERVICE_EXPOSED_TYPE,
                     KubernetesConfigOptions.ServiceExposedType.ClusterIP);
+        }
+
+        // With last-state upgrade mode, set the default value of 'execution.checkpointing.interval'
+        // to 5 minutes when HA is enabled.
+        if (spec.getJob() != null
+                && spec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE
+                && !effectiveConfig.contains(
+                        ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL)) {
+            effectiveConfig.set(
+                    ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL,
+                    DEFAULT_CHECKPOINTING_INTERVAL);
         }
         return this;
     }

@@ -21,17 +21,21 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
+import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
+import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -52,6 +56,7 @@ import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE;
 import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE_POLICY;
 import static org.apache.flink.kubernetes.operator.TestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.TestUtils.SERVICE_ACCOUNT;
+import static org.apache.flink.kubernetes.operator.utils.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 
 /** FlinkConfigBuilderTest. */
@@ -128,6 +133,21 @@ public class FlinkConfigBuilderTest {
         Assert.assertEquals(
                 KubernetesConfigOptions.ServiceExposedType.LoadBalancer,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
+
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        configuration =
+                new FlinkConfigBuilder(
+                                deployment,
+                                new Configuration()
+                                        .set(
+                                                HighAvailabilityOptions.HA_MODE,
+                                                KubernetesHaServicesFactory.class
+                                                        .getCanonicalName()))
+                        .applyFlinkConfiguration()
+                        .build();
+        Assert.assertEquals(
+                DEFAULT_CHECKPOINTING_INTERVAL,
+                configuration.get(ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL));
     }
 
     @Test
