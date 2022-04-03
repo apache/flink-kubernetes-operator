@@ -102,7 +102,6 @@ public class FlinkConfigBuilder {
         // to 5 minutes when HA is enabled.
         if (spec.getJob() != null
                 && spec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE
-                && FlinkUtils.isKubernetesHAActivated(effectiveConfig)
                 && !effectiveConfig.contains(
                         ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL)) {
             effectiveConfig.set(
