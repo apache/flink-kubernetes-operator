@@ -21,7 +21,7 @@ import org.apache.flink.kubernetes.operator.admission.admissioncontroller.NotAll
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation;
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.validation.Validator;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
+import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
@@ -35,9 +35,9 @@ public class FlinkValidator implements Validator<GenericKubernetesResource> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkValidator.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private final FlinkDeploymentValidator deploymentValidator;
+    private final FlinkResourceValidator deploymentValidator;
 
-    public FlinkValidator(FlinkDeploymentValidator deploymentValidator) {
+    public FlinkValidator(FlinkResourceValidator deploymentValidator) {
         this.deploymentValidator = deploymentValidator;
     }
 
@@ -49,7 +49,7 @@ public class FlinkValidator implements Validator<GenericKubernetesResource> {
         FlinkDeployment flinkDeployment =
                 objectMapper.convertValue(resource, FlinkDeployment.class);
 
-        Optional<String> validationError = deploymentValidator.validate(flinkDeployment);
+        Optional<String> validationError = deploymentValidator.validateDeployment(flinkDeployment);
         if (validationError.isPresent()) {
             throw new NotAllowedException(validationError.get());
         }

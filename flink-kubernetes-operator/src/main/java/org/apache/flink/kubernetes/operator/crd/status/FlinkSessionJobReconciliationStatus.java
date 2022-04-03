@@ -41,5 +41,5 @@ public class FlinkSessionJobReconciliationStatus {
     /**
      * Last reconciled job spec. Used to decide whether further reconciliation steps are necessary.
      */
-    private FlinkSessionJobSpec flinkSessionJobSpec;
+    private FlinkSessionJobSpec lastReconciledSpec;
 }

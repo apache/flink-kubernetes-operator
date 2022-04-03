@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
@@ -31,8 +32,8 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
@@ -43,8 +44,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-/** Default validator implementation. */
-public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
+/** Default validator implementation for {@link FlinkDeployment}. */
+public class DefaultValidator implements FlinkResourceValidator {
 
     private static final String[] FORBIDDEN_CONF_KEYS =
             new String[] {
@@ -55,7 +56,7 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
             Set.of(Constants.CONFIG_FILE_LOG4J_NAME, Constants.CONFIG_FILE_LOGBACK_NAME);
 
     @Override
-    public Optional<String> validate(FlinkDeployment deployment) {
+    public Optional<String> validateDeployment(FlinkDeployment deployment) {
         FlinkDeploymentSpec spec = deployment.getSpec();
         return firstPresent(
                 validateFlinkVersion(spec.getFlinkVersion()),
@@ -269,5 +270,43 @@ public class DefaultDeploymentValidator implements FlinkDeploymentValidator {
         }
 
         return Optional.empty();
+    }
+
+    // validate session job
+
+    @Override
+    public Optional<String> validateSessionJob(
+            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
+
+        return firstPresent(
+                validateNotApplicationCluster(session),
+                validateSessionClusterId(sessionJob, session));
+    }
+
+    private Optional<String> validateSessionClusterId(
+            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
+        return session.flatMap(
+                deployment -> {
+                    if (!deployment
+                            .getMetadata()
+                            .getName()
+                            .equals(sessionJob.getSpec().getClusterId())) {
+                        return Optional.of(
+                                "The session job's cluster id is not match with the session cluster");
+                    } else {
+                        return Optional.empty();
+                    }
+                });
+    }
+
+    private Optional<String> validateNotApplicationCluster(Optional<FlinkDeployment> session) {
+        return session.flatMap(
+                deployment -> {
+                    if (deployment.getSpec().getJob() != null) {
+                        return Optional.of("Can not submit to application cluster");
+                    } else {
+                        return Optional.empty();
+                    }
+                });
     }
 }

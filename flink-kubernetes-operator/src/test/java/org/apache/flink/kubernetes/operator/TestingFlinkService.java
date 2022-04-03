@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
@@ -81,6 +82,18 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
+    public void submitJobToSessionCluster(FlinkSessionJob sessionJob, Configuration conf) {
+        JobID jobID = new JobID();
+        JobStatusMessage jobStatusMessage =
+                new JobStatusMessage(
+                        jobID,
+                        sessionJob.getMetadata().getName(),
+                        JobStatus.RUNNING,
+                        System.currentTimeMillis());
+        jobs.add(Tuple2.of(conf.get(SavepointConfigOptions.SAVEPOINT_PATH), jobStatusMessage));
+    }
+
+    @Override
     public List<JobStatusMessage> listJobs(Configuration conf) throws Exception {
         listJobConsumer.accept(conf);
         if (jobs.isEmpty() && !sessions.isEmpty()) {
@@ -117,6 +130,13 @@ public class TestingFlinkService extends FlinkService {
             return Optional.of("savepoint_" + savepointCounter++);
         } else {
             return Optional.empty();
+        }
+    }
+
+    @Override
+    public void cancelSessionJob(JobID jobID, Configuration conf) throws Exception {
+        if (!jobs.removeIf(js -> js.f1.getJobId().equals(jobID))) {
+            throw new Exception("Job not found");
         }
     }
 

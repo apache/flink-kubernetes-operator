@@ -15,18 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.observer;
+package org.apache.flink.kubernetes.operator.artifact;
 
-import io.javaoperatorsdk.operator.api.reconciler.Context;
+import org.apache.flink.util.FlinkRuntimeException;
 
-/** The Observer of custom resource. */
-public interface Observer<CR> {
+import java.net.URI;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
-    /**
-     * Observe the flinkApp status, It will reflect the changed status on the flinkApp resource.
-     *
-     * @param cr the target custom resource
-     * @param context the context with which the operation is executed
-     */
-    void observe(CR cr, Context context);
+/** Resolve the jar uri. */
+public class JarResolver {
+
+    public Path resolve(String jarURI) throws Exception {
+        URI uri = new URI(jarURI);
+        if (!"file".equals(uri.getScheme())) {
+            throw new FlinkRuntimeException("Only support local jar now.");
+        }
+        return Paths.get(uri.getPath());
+    }
 }

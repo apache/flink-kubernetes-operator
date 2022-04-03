@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.admission;
 
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
-import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
+import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 
 import org.apache.flink.shaded.netty4.io.netty.bootstrap.ServerBootstrap;
 import org.apache.flink.shaded.netty4.io.netty.channel.Channel;
@@ -56,7 +56,7 @@ public class FlinkOperatorWebhook {
     public static void main(String[] args) throws Exception {
         LOG.info("Starting Flink Kubernetes Webhook");
         AdmissionHandler endpoint =
-                new AdmissionHandler(new FlinkValidator(new DefaultDeploymentValidator()));
+                new AdmissionHandler(new FlinkValidator(new DefaultValidator()));
         ChannelInitializer<SocketChannel> initializer = createChannelInitializer(endpoint);
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();

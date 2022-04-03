@@ -85,7 +85,7 @@ spec:
                     type: boolean
                   error:
                     type: string
-                  flinkSessionJobSpec:
+                  lastReconciledSpec:
                     properties:
                       clusterId:
                         type: string

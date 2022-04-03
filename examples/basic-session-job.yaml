@@ -24,6 +24,6 @@ metadata:
 spec:
   clusterId: basic-session-example
   job:
-    jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
+    jarURI: file:///opt/flink/artifacts/TopSpeedWindowing.jar
     parallelism: 2
     upgradeMode: stateless

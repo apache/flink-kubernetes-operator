@@ -21,15 +21,15 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.observer.ObserverFactory;
-import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
-import org.apache.flink.kubernetes.operator.validation.FlinkDeploymentValidator;
+import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.Event;
@@ -62,28 +62,24 @@ public class FlinkDeploymentController
 
     private final KubernetesClient kubernetesClient;
 
-    private final String operatorNamespace;
-
-    private final FlinkDeploymentValidator validator;
+    private final FlinkResourceValidator validator;
     private final ReconcilerFactory reconcilerFactory;
     private final ObserverFactory observerFactory;
     private final DefaultConfig defaultConfig;
     private final FlinkOperatorConfiguration operatorConfiguration;
 
-    private FlinkControllerConfig controllerConfig;
+    private FlinkControllerConfig<FlinkDeployment> controllerConfig;
 
     public FlinkDeploymentController(
             DefaultConfig defaultConfig,
             FlinkOperatorConfiguration operatorConfiguration,
             KubernetesClient kubernetesClient,
-            String operatorNamespace,
-            FlinkDeploymentValidator validator,
+            FlinkResourceValidator validator,
             ReconcilerFactory reconcilerFactory,
             ObserverFactory observerFactory) {
         this.defaultConfig = defaultConfig;
         this.operatorConfiguration = operatorConfiguration;
         this.kubernetesClient = kubernetesClient;
-        this.operatorNamespace = operatorNamespace;
         this.validator = validator;
         this.reconcilerFactory = reconcilerFactory;
         this.observerFactory = observerFactory;
@@ -99,7 +95,7 @@ public class FlinkDeploymentController
         }
         Configuration effectiveConfig =
                 FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
-        return reconcilerFactory.getOrCreate(flinkApp).cleanup(flinkApp, effectiveConfig);
+        return reconcilerFactory.getOrCreate(flinkApp).cleanup(flinkApp, context, effectiveConfig);
     }
 
     @Override
@@ -108,7 +104,7 @@ public class FlinkDeploymentController
         FlinkDeployment originalCopy = ReconciliationUtils.clone(flinkApp);
         try {
             observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);
-            Optional<String> validationError = validator.validate(flinkApp);
+            Optional<String> validationError = validator.validateDeployment(flinkApp);
             if (validationError.isPresent()) {
                 LOG.error("Validation failed: " + validationError.get());
                 ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
@@ -170,7 +166,7 @@ public class FlinkDeploymentController
         return Optional.of(flinkApp);
     }
 
-    public void setControllerConfig(FlinkControllerConfig config) {
+    public void setControllerConfig(FlinkControllerConfig<FlinkDeployment> config) {
         this.controllerConfig = config;
     }
 }

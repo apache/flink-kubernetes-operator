@@ -41,6 +41,23 @@ jobServiceAccount:
     "helm.sh/resource-policy": keep
   name: "flink"
 
+operatorVolumeMounts:
+  create: false
+  data:
+    - name: flink-artifacts
+      mountPath: /opt/flink/artifacts
+
+operatorVolumes:
+  create: false
+  data:
+    - name: flink-artifacts
+      hostPath:
+        path: /tmp/flink/artifacts
+        type: DirectoryOrCreate
+#    - name: flink-artifacts
+#      persistentVolumeClaim:
+#        claimName: flink-artifacts
+
 webhook:
   create: true
   keystore:

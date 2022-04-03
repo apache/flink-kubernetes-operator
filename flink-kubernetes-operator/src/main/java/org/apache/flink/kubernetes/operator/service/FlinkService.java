@@ -33,17 +33,23 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
+import org.apache.flink.kubernetes.operator.artifact.JarResolver;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.runtime.rest.FileUpload;
+import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
+import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointInfo;
@@ -52,9 +58,18 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMess
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
+import org.apache.flink.runtime.rest.util.RestConstants;
+import org.apache.flink.runtime.webmonitor.handlers.JarRunHeaders;
+import org.apache.flink.runtime.webmonitor.handlers.JarRunMessageParameters;
+import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
+import org.apache.flink.runtime.webmonitor.handlers.JarRunResponseBody;
+import org.apache.flink.runtime.webmonitor.handlers.JarUploadHeaders;
+import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.FlinkException;
+import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -70,9 +85,14 @@ import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -83,11 +103,17 @@ public class FlinkService {
 
     private final KubernetesClient kubernetesClient;
     private final FlinkOperatorConfiguration operatorConfiguration;
+    private final JarResolver jarResolver;
+    private final ExecutorService executorService;
 
     public FlinkService(
             KubernetesClient kubernetesClient, FlinkOperatorConfiguration operatorConfiguration) {
         this.kubernetesClient = kubernetesClient;
         this.operatorConfiguration = operatorConfiguration;
+        this.jarResolver = new JarResolver();
+        this.executorService =
+                Executors.newFixedThreadPool(
+                        4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
     }
 
     public void submitApplicationCluster(FlinkDeployment deployment, Configuration conf)
@@ -130,6 +156,77 @@ public class FlinkService {
                     kubernetesClusterClientFactory.getClusterSpecification(conf));
         }
         LOG.info("Session cluster successfully deployed");
+    }
+
+    public void submitJobToSessionCluster(FlinkSessionJob sessionJob, Configuration conf)
+            throws Exception {
+        var jarRunResponseBody = jarRun(sessionJob, jarUpload(sessionJob, conf), conf);
+        String jobID = jarRunResponseBody.getJobId().toHexString();
+        LOG.info("Submitted job: {} to session cluster.", jobID);
+        sessionJob.getStatus().setJobStatus(JobStatus.builder().jobId(jobID).build());
+    }
+
+    private JarRunResponseBody jarRun(
+            FlinkSessionJob sessionJob, JarUploadResponseBody response, Configuration conf) {
+        String jarId =
+                response.getFilename().substring(response.getFilename().lastIndexOf("/") + 1);
+        // we generate jobID in advance to help deduplicate job submission.
+        JobID jobID = new JobID();
+        try (RestClusterClient<String> clusterClient =
+                (RestClusterClient<String>) getClusterClient(conf)) {
+            JarRunHeaders headers = JarRunHeaders.getInstance();
+            JarRunMessageParameters parameters = headers.getUnresolvedMessageParameters();
+            parameters.jarIdPathParameter.resolve(jarId);
+            JobSpec job = sessionJob.getSpec().getJob();
+            JarRunRequestBody runRequestBody =
+                    new JarRunRequestBody(
+                            job.getEntryClass(),
+                            null,
+                            job.getArgs() == null ? null : Arrays.asList(job.getArgs()),
+                            job.getParallelism() > 0 ? job.getParallelism() : null,
+                            jobID,
+                            null,
+                            sessionJob.getSpec().getJob().getInitialSavepointPath());
+            LOG.info("Submitting job: {} to session cluster.", jobID.toHexString());
+            return clusterClient
+                    .sendRequest(headers, parameters, runRequestBody)
+                    .get(
+                            operatorConfiguration.getFlinkClientTimeout().toSeconds(),
+                            TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOG.error("Failed to submit job to session cluster.", e);
+            throw new FlinkRuntimeException(e);
+        }
+    }
+
+    private JarUploadResponseBody jarUpload(FlinkSessionJob sessionJob, Configuration conf)
+            throws Exception {
+        Path path = jarResolver.resolve(sessionJob.getSpec().getJob().getJarURI());
+        JarUploadHeaders headers = JarUploadHeaders.getInstance();
+        String clusterId = sessionJob.getSpec().getClusterId();
+        String namespace = sessionJob.getMetadata().getNamespace();
+        int port = conf.getInteger(RestOptions.PORT);
+        String host =
+                ObjectUtils.firstNonNull(
+                        operatorConfiguration.getFlinkServiceHostOverride(),
+                        ExternalServiceDecorator.getNamespacedExternalServiceName(
+                                clusterId, namespace));
+
+        try (RestClient restClient = new RestClient(conf, executorService)) {
+            // TODO add method in flink#RestClusterClient to support upload jar.
+            return restClient
+                    .sendRequest(
+                            host,
+                            port,
+                            headers,
+                            EmptyMessageParameters.getInstance(),
+                            EmptyRequestBody.getInstance(),
+                            Collections.singletonList(
+                                    new FileUpload(path, RestConstants.CONTENT_TYPE_JAR)))
+                    .get(
+                            operatorConfiguration.getFlinkClientTimeout().toSeconds(),
+                            TimeUnit.SECONDS);
+        }
     }
 
     public boolean isJobManagerPortReady(Configuration config) {
@@ -184,7 +281,11 @@ public class FlinkService {
             final String clusterId = clusterClient.getClusterId();
             switch (upgradeMode) {
                 case STATELESS:
-                    clusterClient.cancel(jobID).get(1, TimeUnit.MINUTES);
+                    clusterClient
+                            .cancel(jobID)
+                            .get(
+                                    operatorConfiguration.getCancelJobTimeout().toSeconds(),
+                                    TimeUnit.SECONDS);
                     break;
                 case SAVEPOINT:
                     final String savepointDirectory =
@@ -220,6 +321,14 @@ public class FlinkService {
         }
         FlinkUtils.waitForClusterShutdown(kubernetesClient, conf);
         return savepointOpt;
+    }
+
+    public void cancelSessionJob(JobID jobID, Configuration conf) throws Exception {
+        try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
+            clusterClient
+                    .cancel(jobID)
+                    .get(operatorConfiguration.getCancelJobTimeout().toSeconds(), TimeUnit.SECONDS);
+        }
     }
 
     public void stopSessionCluster(

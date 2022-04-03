@@ -17,19 +17,18 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-
+import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.config.runtime.AnnotationConfiguration;
 
 import java.util.Set;
 
 /** Custom config for {@link FlinkDeploymentController}. */
-public class FlinkControllerConfig extends AnnotationConfiguration<FlinkDeployment> {
+public class FlinkControllerConfig<CR extends HasMetadata> extends AnnotationConfiguration<CR> {
 
     private final Set<String> watchedNamespaces;
 
-    public FlinkControllerConfig(
-            FlinkDeploymentController reconciler, Set<String> watchedNamespaces) {
+    public FlinkControllerConfig(Reconciler<CR> reconciler, Set<String> watchedNamespaces) {
         super(reconciler);
         this.watchedNamespaces = watchedNamespaces;
     }

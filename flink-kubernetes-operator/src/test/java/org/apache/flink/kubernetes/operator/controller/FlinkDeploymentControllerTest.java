@@ -28,16 +28,16 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
-import org.apache.flink.kubernetes.operator.observer.BaseObserver;
-import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.observer.ObserverFactory;
-import org.apache.flink.kubernetes.operator.reconciler.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.observer.deployment.AbstractDeploymentObserver;
+import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.validation.DefaultDeploymentValidator;
+import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.api.model.EventBuilder;
@@ -461,7 +461,7 @@ public class FlinkDeploymentControllerTest {
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         // jobStatus has not been set at this time
-        assertEquals(BaseObserver.JOB_STATE_UNKNOWN, jobStatus.getState());
+        assertEquals(AbstractDeploymentObserver.JOB_STATE_UNKNOWN, jobStatus.getState());
 
         // Switches operator mode to SESSION
         appCluster.getSpec().setJob(null);
@@ -607,8 +607,7 @@ public class FlinkDeploymentControllerTest {
                         defaultConfig,
                         operatorConfiguration,
                         kubernetesClient,
-                        "test",
-                        new DefaultDeploymentValidator(),
+                        new DefaultValidator(),
                         new ReconcilerFactory(
                                 kubernetesClient, flinkService, operatorConfiguration),
                         new ObserverFactory(

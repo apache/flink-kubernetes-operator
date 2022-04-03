@@ -168,7 +168,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | jobStatus | org.apache.flink.kubernetes.operator.crd.status.JobStatus | Last observed status of the Flink job on Application deployments. |
-| jobManagerDeploymentStatus | org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus | Last observed status of the JobManager deployment. |
+| jobManagerDeploymentStatus | org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus | Last observed status of the JobManager deployment. |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus | Status of the last reconcile operation. |
 
 ### FlinkSessionJobReconciliationStatus
@@ -180,7 +180,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | success | boolean | True if last reconciliation step was successful. |
 | error | java.lang.String | If success == false, error information about the reconciliation failure. |
-| flinkSessionJobSpec | org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec | Last reconciled job spec. Used to decide whether further reconciliation steps are necessary. |
+| lastReconciledSpec | org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec | Last reconciled job spec. Used to decide whether further reconciliation steps are necessary. |
 
 ### FlinkSessionJobStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus
@@ -191,6 +191,19 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | jobStatus | org.apache.flink.kubernetes.operator.crd.status.JobStatus | Last observed status of the job. |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobReconciliationStatus | Status of the last reconcile operation. |
+
+### JobManagerDeploymentStatus
+**Class**: org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus
+
+**Description**: Status of the Flink JobManager Kubernetes deployment.
+
+| Value | Docs |
+| ----- | ---- |
+| READY | JobManager is running and ready to receive REST API calls. |
+| DEPLOYED_NOT_READY | JobManager is running but not ready yet to receive REST API calls. |
+| DEPLOYING | JobManager process is starting up. |
+| MISSING | JobManager deployment not found, probably not started or killed by user. |
+| ERROR | Deployment in terminal error, requires spec change for reconciliation to continue. |
 
 ### JobStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.JobStatus

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.reconciler;
+package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
@@ -26,9 +26,10 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
-import org.apache.flink.kubernetes.operator.observer.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
@@ -43,17 +44,17 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 
-import static org.apache.flink.kubernetes.operator.observer.BaseObserver.JOB_STATE_UNKNOWN;
+import static org.apache.flink.kubernetes.operator.observer.deployment.AbstractDeploymentObserver.JOB_STATE_UNKNOWN;
 
 /**
  * Reconciler responsible for handling the job lifecycle according to the desired and current
  * states.
  */
-public class JobReconciler extends BaseReconciler {
+public class ApplicationReconciler extends AbstractDeploymentReconciler {
 
-    private static final Logger LOG = LoggerFactory.getLogger(JobReconciler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ApplicationReconciler.class);
 
-    public JobReconciler(
+    public ApplicationReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkOperatorConfiguration operatorConfiguration) {

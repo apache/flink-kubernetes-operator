@@ -1,11 +1,10 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -16,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.observer;
+package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -25,8 +24,10 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
@@ -46,7 +47,7 @@ import java.util.List;
 import java.util.Optional;
 
 /** The base observer. */
-public abstract class BaseObserver implements Observer {
+public abstract class AbstractDeploymentObserver implements Observer<FlinkDeployment> {
 
     protected final Logger logger = LoggerFactory.getLogger(this.getClass());
 
@@ -56,7 +57,7 @@ public abstract class BaseObserver implements Observer {
     protected final FlinkOperatorConfiguration operatorConfiguration;
     protected final Configuration flinkConfig;
 
-    public BaseObserver(
+    public AbstractDeploymentObserver(
             FlinkService flinkService,
             FlinkOperatorConfiguration operatorConfiguration,
             Configuration flinkConfig) {

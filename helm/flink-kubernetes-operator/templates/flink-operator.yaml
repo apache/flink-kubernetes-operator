@@ -74,6 +74,9 @@ spec:
               mountPath: /opt/flink-operator/conf
             - name: flink-default-config-volume
               mountPath: /opt/flink/conf
+            {{- if .Values.operatorVolumeMounts.create }}
+                {{- toYaml .Values.operatorVolumeMounts.data | nindent 12 }}
+            {{- end }}
         {{- if .Values.webhook.create }}
         - name: flink-webhook
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -123,6 +126,9 @@ spec:
                 path: flink-conf.yaml
               - key: log4j-console.properties
                 path: log4j-console.properties
+        {{- if .Values.operatorVolumes.create }}
+              {{- toYaml .Values.operatorVolumes.data | nindent 8 }}
+        {{- end }}
         {{- if .Values.webhook.create }}
         - name: keystore
           secret:
