@@ -31,7 +31,7 @@ public interface FlinkResourceValidator {
      * @param deployment
      * @return Optional error string, should be present iff validation resulted in an error
      */
-    Optional<String> validate(FlinkDeployment deployment);
+    Optional<String> validateDeployment(FlinkDeployment deployment);
 
     /**
      * Validate and return optional error.
@@ -40,5 +40,6 @@ public interface FlinkResourceValidator {
      * @param session the target session cluster of the session job to be validated.
      * @return Optional error string, should be present iff validation resulted in an error
      */
-    Optional<String> validate(FlinkSessionJob sessionJob, Optional<FlinkDeployment> session);
+    Optional<String> validateSessionJob(
+            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session);
 }

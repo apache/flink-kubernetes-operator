@@ -104,7 +104,7 @@ public class FlinkDeploymentController
         FlinkDeployment originalCopy = ReconciliationUtils.clone(flinkApp);
         try {
             observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);
-            Optional<String> validationError = validator.validate(flinkApp);
+            Optional<String> validationError = validator.validateDeployment(flinkApp);
             if (validationError.isPresent()) {
                 LOG.error("Validation failed: " + validationError.get());
                 ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());

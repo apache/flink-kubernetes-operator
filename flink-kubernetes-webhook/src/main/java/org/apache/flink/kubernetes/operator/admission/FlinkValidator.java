@@ -49,7 +49,7 @@ public class FlinkValidator implements Validator<GenericKubernetesResource> {
         FlinkDeployment flinkDeployment =
                 objectMapper.convertValue(resource, FlinkDeployment.class);
 
-        Optional<String> validationError = deploymentValidator.validate(flinkDeployment);
+        Optional<String> validationError = deploymentValidator.validateDeployment(flinkDeployment);
         if (validationError.isPresent()) {
             throw new NotAllowedException(validationError.get());
         }

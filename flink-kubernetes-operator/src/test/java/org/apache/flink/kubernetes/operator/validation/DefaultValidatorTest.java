@@ -51,7 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /** Test deployment validation logic. */
-public class DeploymentValidatorTest {
+public class DefaultValidatorTest {
 
     private final DefaultValidator validator = new DefaultValidator();
 
@@ -300,13 +300,13 @@ public class DeploymentValidatorTest {
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deploymentModifier.accept(deployment);
-        validator.validate(deployment).ifPresent(Assertions::fail);
+        validator.validateDeployment(deployment).ifPresent(Assertions::fail);
     }
 
     private void testError(Consumer<FlinkDeployment> deploymentModifier, String expectedErr) {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deploymentModifier.accept(deployment);
-        Optional<String> error = validator.validate(deployment);
+        Optional<String> error = validator.validateDeployment(deployment);
         if (error.isPresent()) {
             assertTrue(error.get().startsWith(expectedErr), error.get());
         } else {
@@ -322,7 +322,7 @@ public class DeploymentValidatorTest {
 
         sessionModifier.accept(session);
         sessionJobModifier.accept(sessionJob);
-        validator.validate(sessionJob, Optional.of(session)).ifPresent(Assertions::fail);
+        validator.validateSessionJob(sessionJob, Optional.of(session)).ifPresent(Assertions::fail);
     }
 
     private void testSessionJobValidateError(
@@ -349,7 +349,7 @@ public class DeploymentValidatorTest {
 
     private void testSessionJobValidateError(
             FlinkSessionJob sessionJob, Optional<FlinkDeployment> session, String expectedErr) {
-        Optional<String> error = validator.validate(sessionJob, session);
+        Optional<String> error = validator.validateSessionJob(sessionJob, session);
         if (error.isPresent()) {
             assertTrue(error.get().startsWith(expectedErr), error.get());
         } else {

@@ -103,7 +103,7 @@ public class FlinkSessionJobController
         FlinkSessionJob originalCopy = ReconciliationUtils.clone(flinkSessionJob);
         observer.observe(flinkSessionJob, context);
         Optional<String> validationError =
-                validator.validate(
+                validator.validateSessionJob(
                         flinkSessionJob,
                         OperatorUtils.getSecondaryResource(
                                 flinkSessionJob, context, operatorConfiguration));

@@ -56,7 +56,7 @@ public class DefaultValidator implements FlinkResourceValidator {
             Set.of(Constants.CONFIG_FILE_LOG4J_NAME, Constants.CONFIG_FILE_LOGBACK_NAME);
 
     @Override
-    public Optional<String> validate(FlinkDeployment deployment) {
+    public Optional<String> validateDeployment(FlinkDeployment deployment) {
         FlinkDeploymentSpec spec = deployment.getSpec();
         return firstPresent(
                 validateFlinkVersion(spec.getFlinkVersion()),
@@ -275,7 +275,7 @@ public class DefaultValidator implements FlinkResourceValidator {
     // validate session job
 
     @Override
-    public Optional<String> validate(
+    public Optional<String> validateSessionJob(
             FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
 
         return firstPresent(
@@ -285,22 +285,27 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     private Optional<String> validateSessionClusterId(
             FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
-        return session.map(
-                s -> {
-                    if (!s.getMetadata().getName().equals(sessionJob.getSpec().getClusterId())) {
-                        return "The session job's cluster id is not match with the session cluster";
+        return session.flatMap(
+                deployment -> {
+                    if (!deployment
+                            .getMetadata()
+                            .getName()
+                            .equals(sessionJob.getSpec().getClusterId())) {
+                        return Optional.of(
+                                "The session job's cluster id is not match with the session cluster");
+                    } else {
+                        return Optional.empty();
                     }
-                    return null;
                 });
     }
 
     private Optional<String> validateNotApplicationCluster(Optional<FlinkDeployment> session) {
-        return session.map(
-                s -> {
-                    if (s.getSpec().getJob() != null) {
-                        return "Can not submit to application cluster";
+        return session.flatMap(
+                deployment -> {
+                    if (deployment.getSpec().getJob() != null) {
+                        return Optional.of("Can not submit to application cluster");
                     } else {
-                        return null;
+                        return Optional.empty();
                     }
                 });
     }
