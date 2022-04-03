@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
+import org.apache.flink.runtime.util.EnvironmentInformation;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -65,7 +66,6 @@ public class FlinkOperator {
     }
 
     public FlinkOperator(DefaultConfig defaultConfig) {
-        LOG.info("Starting Flink Kubernetes Operator");
         OperatorMetricUtils.initOperatorMetrics(defaultConfig.getOperatorConfig());
 
         this.defaultConfig = defaultConfig;
@@ -156,6 +156,7 @@ public class FlinkOperator {
     }
 
     public static void main(String... args) {
+        EnvironmentInformation.logEnvironmentInfo(LOG, "Flink Kubernetes Operator", args);
         new FlinkOperator().run();
     }
 }

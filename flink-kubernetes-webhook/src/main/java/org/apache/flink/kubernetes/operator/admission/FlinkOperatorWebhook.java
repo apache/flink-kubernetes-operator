@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.admission;
 
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
+import org.apache.flink.runtime.util.EnvironmentInformation;
 
 import org.apache.flink.shaded.netty4.io.netty.bootstrap.ServerBootstrap;
 import org.apache.flink.shaded.netty4.io.netty.channel.Channel;
@@ -54,7 +55,7 @@ public class FlinkOperatorWebhook {
     private static final int MAX_CONTEXT_LENGTH = 104_857_600;
 
     public static void main(String[] args) throws Exception {
-        LOG.info("Starting Flink Kubernetes Webhook");
+        EnvironmentInformation.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
         AdmissionHandler endpoint =
                 new AdmissionHandler(new FlinkValidator(new DefaultValidator()));
         ChannelInitializer<SocketChannel> initializer = createChannelInitializer(endpoint);

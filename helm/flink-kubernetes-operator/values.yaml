@@ -95,3 +95,8 @@ metrics:
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
+
+# Set the jvm start up options for webhook and operator
+jvmArgs:
+  webhook: ""
+  operator: ""
