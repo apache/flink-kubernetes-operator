@@ -48,7 +48,6 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Map;
@@ -57,6 +56,7 @@ import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE;
 import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE_POLICY;
 import static org.apache.flink.kubernetes.operator.TestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.TestUtils.SERVICE_ACCOUNT;
+import static org.apache.flink.kubernetes.operator.utils.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 
 /** FlinkConfigBuilderTest. */
@@ -146,7 +146,7 @@ public class FlinkConfigBuilderTest {
                         .applyFlinkConfiguration()
                         .build();
         Assert.assertEquals(
-                Duration.ofMinutes(5),
+                DEFAULT_CHECKPOINTING_INTERVAL,
                 configuration.get(ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL));
     }
 

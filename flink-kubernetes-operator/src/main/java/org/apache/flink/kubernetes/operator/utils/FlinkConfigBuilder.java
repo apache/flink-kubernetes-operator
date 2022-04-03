@@ -58,6 +58,8 @@ public class FlinkConfigBuilder {
     private final FlinkDeploymentSpec spec;
     private final Configuration effectiveConfig;
 
+    public static final Duration DEFAULT_CHECKPOINTING_INTERVAL = Duration.ofMinutes(5);
+
     public FlinkConfigBuilder(FlinkDeployment deploy, Configuration flinkConfig) {
         this(deploy.getMetadata(), deploy.getSpec(), flinkConfig);
     }
@@ -105,7 +107,8 @@ public class FlinkConfigBuilder {
                 && !effectiveConfig.contains(
                         ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL)) {
             effectiveConfig.set(
-                    ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL, Duration.ofMinutes(5));
+                    ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL,
+                    DEFAULT_CHECKPOINTING_INTERVAL);
         }
         return this;
     }
