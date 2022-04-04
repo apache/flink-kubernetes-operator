@@ -62,7 +62,7 @@ public class FlinkDeploymentController
 
     private final KubernetesClient kubernetesClient;
 
-    private final FlinkResourceValidator validator;
+    private final Set<FlinkResourceValidator> validators;
     private final ReconcilerFactory reconcilerFactory;
     private final ObserverFactory observerFactory;
     private final DefaultConfig defaultConfig;
@@ -74,13 +74,13 @@ public class FlinkDeploymentController
             DefaultConfig defaultConfig,
             FlinkOperatorConfiguration operatorConfiguration,
             KubernetesClient kubernetesClient,
-            FlinkResourceValidator validator,
+            Set<FlinkResourceValidator> validators,
             ReconcilerFactory reconcilerFactory,
             ObserverFactory observerFactory) {
         this.defaultConfig = defaultConfig;
         this.operatorConfiguration = operatorConfiguration;
         this.kubernetesClient = kubernetesClient;
-        this.validator = validator;
+        this.validators = validators;
         this.reconcilerFactory = reconcilerFactory;
         this.observerFactory = observerFactory;
     }
@@ -104,7 +104,12 @@ public class FlinkDeploymentController
         FlinkDeployment originalCopy = ReconciliationUtils.clone(flinkApp);
         try {
             observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);
-            Optional<String> validationError = validator.validateDeployment(flinkApp);
+            Optional<String> validationError = Optional.empty();
+            for (FlinkResourceValidator validator : validators) {
+                if ((validationError = validator.validateDeployment(flinkApp)).isPresent()) {
+                    break;
+                }
+            }
             if (validationError.isPresent()) {
                 LOG.error("Validation failed: " + validationError.get());
                 ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
