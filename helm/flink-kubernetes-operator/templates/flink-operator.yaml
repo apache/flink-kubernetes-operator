@@ -67,6 +67,8 @@ spec:
               value: /opt/flink-operator/conf
             - name: LOG_CONFIG
               value: -Dlog4j.configurationFile=/opt/flink-operator/conf/log4j2.properties
+            - name: JVM_ARGS
+              value: {{ .Values.jvmArgs.operator }}
             - name: FLINK_OPERATOR_WATCH_NAMESPACES
               value: {{ join "," .Values.watchNamespaces  }}
           volumeMounts:
@@ -102,6 +104,8 @@ spec:
               value: "9443"
             - name: LOG_CONFIG
               value: -Dlog4j.configurationFile=/opt/flink-operator/conf/log4j2.properties
+            - name: JVM_ARGS
+              value: {{ .Values.jvmArgs.webhook }}
           volumeMounts:
           - name: keystore
             mountPath: "/certs"

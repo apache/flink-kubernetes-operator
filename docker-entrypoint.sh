@@ -27,12 +27,12 @@ if [ "$1" = "help" ]; then
 elif [ "$1" = "operator" ]; then
     echo "Starting Operator"
 
-    exec java -cp /$FLINK_KUBERNETES_SHADED_JAR:/$OPERATOR_JAR $LOG_CONFIG org.apache.flink.kubernetes.operator.FlinkOperator
+    exec java -cp /$FLINK_KUBERNETES_SHADED_JAR:/$OPERATOR_JAR $LOG_CONFIG $JVM_ARGS org.apache.flink.kubernetes.operator.FlinkOperator
 elif [ "$1" = "webhook" ]; then
     echo "Starting Webhook"
 
     # Adds the operator shaded jar on the classpath when the webhook starts
-    exec java -cp /$FLINK_KUBERNETES_SHADED_JAR:/$OPERATOR_JAR:/$WEBHOOK_JAR $LOG_CONFIG org.apache.flink.kubernetes.operator.admission.FlinkOperatorWebhook
+    exec java -cp /$FLINK_KUBERNETES_SHADED_JAR:/$OPERATOR_JAR:/$WEBHOOK_JAR $LOG_CONFIG $JVM_ARGS org.apache.flink.kubernetes.operator.admission.FlinkOperatorWebhook
 fi
 
 args=("${args[@]}")
