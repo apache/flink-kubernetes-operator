@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
@@ -55,13 +54,13 @@ public class SessionObserverTest {
                         flinkService,
                         FlinkOperatorConfiguration.fromConfiguration(new Configuration()),
                         flinkConf);
-        Configuration conf = FlinkUtils.getEffectiveConfig(deployment, flinkConf);
         deployment
                 .getStatus()
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(deployment.getSpec());
 
         observer.observe(deployment, readyContext);
+        assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
@@ -72,6 +71,10 @@ public class SessionObserverTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                deployment.getStatus().getReconciliationStatus().getLastReconciledSpec(),
+                deployment.getStatus().getReconciliationStatus().getLastStableSpec());
+
         // Observe again, the JM should be READY
         observer.observe(deployment, readyContext);
 

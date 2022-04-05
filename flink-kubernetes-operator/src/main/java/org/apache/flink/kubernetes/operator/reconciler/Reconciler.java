@@ -18,8 +18,6 @@
 
 package org.apache.flink.kubernetes.operator.reconciler;
 
-import org.apache.flink.configuration.Configuration;
-
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 
@@ -35,9 +33,8 @@ public interface Reconciler<CR> {
      *
      * @param cr the custom resource that has been created or updated
      * @param context the context with which the operation is executed
-     * @param effectiveConfig the effective config of the target resource
      */
-    void reconcile(CR cr, Context context, Configuration effectiveConfig) throws Exception;
+    void reconcile(CR cr, Context context) throws Exception;
 
     /**
      * This is called when receiving the delete event of custom resource. This method is meant to
@@ -45,8 +42,7 @@ public interface Reconciler<CR> {
      *
      * @param cr the custom resource that has been deleted
      * @param context the context with which the operation is executed
-     * @param effectiveConfig the effective config of the flinkApp
      * @return DeleteControl to manage the deletion behavior
      */
-    DeleteControl cleanup(CR cr, Context context, Configuration effectiveConfig);
+    DeleteControl cleanup(CR cr, Context context);
 }

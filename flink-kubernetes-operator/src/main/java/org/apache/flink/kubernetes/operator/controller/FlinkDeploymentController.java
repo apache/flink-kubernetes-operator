@@ -17,8 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
@@ -27,7 +25,6 @@ import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.util.Preconditions;
@@ -65,19 +62,16 @@ public class FlinkDeploymentController
     private final Set<FlinkResourceValidator> validators;
     private final ReconcilerFactory reconcilerFactory;
     private final ObserverFactory observerFactory;
-    private final DefaultConfig defaultConfig;
     private final FlinkOperatorConfiguration operatorConfiguration;
 
     private FlinkControllerConfig<FlinkDeployment> controllerConfig;
 
     public FlinkDeploymentController(
-            DefaultConfig defaultConfig,
             FlinkOperatorConfiguration operatorConfiguration,
             KubernetesClient kubernetesClient,
             Set<FlinkResourceValidator> validators,
             ReconcilerFactory reconcilerFactory,
             ObserverFactory observerFactory) {
-        this.defaultConfig = defaultConfig;
         this.operatorConfiguration = operatorConfiguration;
         this.kubernetesClient = kubernetesClient;
         this.validators = validators;
@@ -93,9 +87,7 @@ public class FlinkDeploymentController
         } catch (DeploymentFailedException dfe) {
             // ignore during cleanup
         }
-        Configuration effectiveConfig =
-                FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
-        return reconcilerFactory.getOrCreate(flinkApp).cleanup(flinkApp, context, effectiveConfig);
+        return reconcilerFactory.getOrCreate(flinkApp).cleanup(flinkApp, context);
     }
 
     @Override
@@ -111,16 +103,14 @@ public class FlinkDeploymentController
                 return ReconciliationUtils.toUpdateControl(
                         operatorConfiguration, originalCopy, flinkApp, false);
             }
-            Configuration effectiveConfig =
-                    FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig.getFlinkConfig());
-            reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context, effectiveConfig);
+            reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context);
         } catch (DeploymentFailedException dfe) {
             handleDeploymentFailed(flinkApp, dfe);
         } catch (Exception e) {
             throw new ReconciliationException(e);
         }
 
-        LOG.info("Reconciliation successfully completed");
+        LOG.info("End of reconciliation");
         return ReconciliationUtils.toUpdateControl(
                 operatorConfiguration, originalCopy, flinkApp, true);
     }

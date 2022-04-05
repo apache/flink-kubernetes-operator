@@ -36,4 +36,7 @@ public class FlinkSessionJobStatus {
     /** Status of the last reconcile operation. */
     private FlinkSessionJobReconciliationStatus reconciliationStatus =
             new FlinkSessionJobReconciliationStatus();
+
+    /** Error information about the session job. */
+    private String error;
 }

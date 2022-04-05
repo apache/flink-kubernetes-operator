@@ -81,13 +81,11 @@ spec:
                 type: object
               reconciliationStatus:
                 properties:
-                  success:
-                    type: boolean
-                  error:
-                    type: string
                   lastReconciledSpec:
                     type: string
                 type: object
+              error:
+                type: string
             type: object
         type: object
     served: true

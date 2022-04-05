@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -54,6 +55,9 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     private static final Set<String> ALLOWED_LOG_CONF_KEYS =
             Set.of(Constants.CONFIG_FILE_LOG4J_NAME, Constants.CONFIG_FILE_LOGBACK_NAME);
+
+    private static Configuration defaultFlinkConf =
+            FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR));
 
     @Override
     public Optional<String> validateDeployment(FlinkDeployment deployment) {
@@ -261,7 +265,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                     && deployment.getStatus().getJobManagerDeploymentStatus()
                             != JobManagerDeploymentStatus.MISSING
                     && ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-                            deployment)) {
+                            deployment, defaultFlinkConf)) {
                 return Optional.of(
                         String.format(
                                 "Job could not be upgraded to last-state while config key[%s] is not set",

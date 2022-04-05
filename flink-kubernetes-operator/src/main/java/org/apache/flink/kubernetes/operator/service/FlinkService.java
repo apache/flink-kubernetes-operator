@@ -115,8 +115,7 @@ public class FlinkService {
                         4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
     }
 
-    public void submitApplicationCluster(FlinkDeployment deployment, Configuration conf)
-            throws Exception {
+    public void submitApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
             final String clusterId =
                     Preconditions.checkNotNull(conf.get(KubernetesConfigOptions.CLUSTER_ID));
@@ -132,7 +131,6 @@ public class FlinkService {
         final ApplicationDeployer deployer =
                 new ApplicationClusterDeployer(clusterClientServiceLoader);
 
-        JobSpec jobSpec = deployment.getSpec().getJob();
         final ApplicationConfiguration applicationConfiguration =
                 new ApplicationConfiguration(
                         jobSpec.getArgs() != null ? jobSpec.getArgs() : new String[0],
@@ -388,7 +386,8 @@ public class FlinkService {
             Configuration conf,
             boolean deleteHaData,
             long shutdownTimeout) {
-        FlinkUtils.deleteCluster(deployment, kubernetesClient, deleteHaData, shutdownTimeout);
+        FlinkUtils.deleteCluster(
+                deployment.getMetadata(), kubernetesClient, deleteHaData, shutdownTimeout);
         FlinkUtils.waitForClusterShutdown(kubernetesClient, conf, shutdownTimeout);
     }
 

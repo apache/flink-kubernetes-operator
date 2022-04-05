@@ -27,12 +27,12 @@ public class ApplicationObserverContext {
 
     public final FlinkDeployment flinkApp;
     public final Context context;
-    public final Configuration lastValidatedConfig;
+    public final Configuration deployedConfig;
 
     public ApplicationObserverContext(
-            FlinkDeployment flinkApp, Context context, Configuration lastValidatedConfig) {
+            FlinkDeployment flinkApp, Context context, Configuration deployedConfig) {
         this.flinkApp = flinkApp;
         this.context = context;
-        this.lastValidatedConfig = lastValidatedConfig;
+        this.deployedConfig = deployedConfig;
     }
 }

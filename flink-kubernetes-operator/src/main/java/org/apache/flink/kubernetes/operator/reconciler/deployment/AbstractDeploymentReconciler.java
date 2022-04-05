@@ -35,19 +35,23 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
     protected final FlinkOperatorConfiguration operatorConfiguration;
     protected final KubernetesClient kubernetesClient;
     protected final FlinkService flinkService;
+    protected final Configuration defaultConfig;
 
     public AbstractDeploymentReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration) {
+            FlinkOperatorConfiguration operatorConfiguration,
+            Configuration defaultConfig) {
+
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.operatorConfiguration = operatorConfiguration;
+        this.defaultConfig = defaultConfig;
     }
 
     @Override
-    public DeleteControl cleanup(
-            FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
+    public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
+        Configuration effectiveConfig = FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig);
         return shutdownAndDelete(flinkApp, effectiveConfig);
     }
 
@@ -59,7 +63,7 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
             shutdown(flinkApp, effectiveConfig);
         } else {
             FlinkUtils.deleteCluster(
-                    flinkApp,
+                    flinkApp.getMetadata(),
                     kubernetesClient,
                     true,
                     operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());

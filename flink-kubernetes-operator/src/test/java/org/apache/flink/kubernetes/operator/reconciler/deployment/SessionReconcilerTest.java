@@ -53,9 +53,10 @@ public class SessionReconcilerTest {
                 };
 
         SessionReconciler reconciler =
-                new SessionReconciler(null, flinkService, operatorConfiguration);
+                new SessionReconciler(
+                        null, flinkService, operatorConfiguration, new Configuration());
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
-        reconciler.reconcile(deployment, context, new Configuration());
+        reconciler.reconcile(deployment, context);
         assertEquals(1, count.get());
     }
 }

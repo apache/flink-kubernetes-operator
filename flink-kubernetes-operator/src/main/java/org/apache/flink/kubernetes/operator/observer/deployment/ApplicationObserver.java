@@ -49,7 +49,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
                 new JobStatusObserver<>(flinkService) {
                     @Override
                     public void onTimeout(ApplicationObserverContext ctx) {
-                        observeJmDeployment(ctx.flinkApp, ctx.context, ctx.lastValidatedConfig);
+                        observeJmDeployment(ctx.flinkApp, ctx.context, ctx.deployedConfig);
                     }
 
                     @Override
@@ -70,23 +70,28 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     }
 
     @Override
-    public void observeIfClusterReady(
-            FlinkDeployment flinkApp, Context context, Configuration lastValidatedConfig) {
+    protected boolean observeFlinkCluster(
+            FlinkDeployment flinkApp, Context context, Configuration deployedConfig) {
+
+        JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
+
         boolean jobFound =
                 jobStatusObserver.observe(
-                        flinkApp.getStatus().getJobStatus(),
-                        lastValidatedConfig,
-                        new ApplicationObserverContext(flinkApp, context, lastValidatedConfig));
+                        jobStatus,
+                        deployedConfig,
+                        new ApplicationObserverContext(flinkApp, context, deployedConfig));
         if (jobFound) {
             savepointObserver
-                    .observe(
-                            flinkApp.getStatus().getJobStatus().getSavepointInfo(),
-                            flinkApp.getStatus().getJobStatus().getJobId(),
-                            lastValidatedConfig)
+                    .observe(jobStatus.getSavepointInfo(), jobStatus.getJobId(), deployedConfig)
                     .ifPresent(
                             error ->
                                     ReconciliationUtils.updateForReconciliationError(
                                             flinkApp, error));
         }
+        return isJobReady(jobStatus);
+    }
+
+    private boolean isJobReady(JobStatus jobStatus) {
+        return org.apache.flink.api.common.JobStatus.RUNNING.name().equals(jobStatus.getState());
     }
 }

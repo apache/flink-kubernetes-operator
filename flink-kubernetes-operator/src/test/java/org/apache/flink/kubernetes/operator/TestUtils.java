@@ -20,6 +20,9 @@ package org.apache.flink.kubernetes.operator;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -35,6 +38,10 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -49,6 +56,7 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 
@@ -241,6 +249,9 @@ public class TestUtils {
                 var session = buildSessionCluster();
                 session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
                 session.getSpec().getFlinkConfiguration().putAll(flinkDepConfig);
+                session.getStatus()
+                        .getReconciliationStatus()
+                        .serializeAndSetLastReconciledSpec(session.getSpec());
                 return Optional.of((T) session);
             }
         };
@@ -327,5 +338,30 @@ public class TestUtils {
         } catch (Exception e1) {
             throw new RuntimeException(e1);
         }
+    }
+
+    public static FlinkDeploymentController createTestController(
+            FlinkOperatorConfiguration operatorConfiguration,
+            KubernetesClient kubernetesClient,
+            TestingFlinkService flinkService) {
+        var defaultConfig = FlinkUtils.loadDefaultConfig();
+
+        var controller =
+                new FlinkDeploymentController(
+                        operatorConfiguration,
+                        kubernetesClient,
+                        ValidatorUtils.discoverValidators(defaultConfig.getFlinkConfig()),
+                        new ReconcilerFactory(
+                                kubernetesClient,
+                                flinkService,
+                                operatorConfiguration,
+                                defaultConfig.getFlinkConfig()),
+                        new ObserverFactory(
+                                flinkService,
+                                operatorConfiguration,
+                                defaultConfig.getFlinkConfig()));
+        controller.setControllerConfig(
+                new FlinkControllerConfig(controller, Collections.emptySet()));
+        return controller;
     }
 }

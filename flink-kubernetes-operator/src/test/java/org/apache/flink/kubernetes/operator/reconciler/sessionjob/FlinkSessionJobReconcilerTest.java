@@ -53,19 +53,18 @@ public class FlinkSessionJobReconcilerTest {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
 
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(null, flinkService, operatorConfiguration);
+                new FlinkSessionJobReconciler(
+                        null, flinkService, operatorConfiguration, defaultConfig);
         // session not found
-        reconciler.reconcile(sessionJob, TestUtils.createEmptyContext(), defaultConfig);
+        reconciler.reconcile(sessionJob, TestUtils.createEmptyContext());
         assertEquals(0, flinkService.listSessionJobs().size());
 
         // session not ready
-        reconciler.reconcile(
-                sessionJob, TestUtils.createContextWithNotReadyFlinkDeployment(), defaultConfig);
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithNotReadyFlinkDeployment());
         assertEquals(0, flinkService.listSessionJobs().size());
 
         // session ready
-        reconciler.reconcile(
-                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(), defaultConfig);
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
         assertEquals(1, flinkService.listSessionJobs().size());
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
@@ -74,8 +73,7 @@ public class FlinkSessionJobReconcilerTest {
                 null,
                 flinkService.listSessionJobs());
         // clean up
-        reconciler.cleanup(
-                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(), defaultConfig);
+        reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
         assertEquals(0, flinkService.listSessionJobs().size());
     }
 
@@ -87,9 +85,9 @@ public class FlinkSessionJobReconcilerTest {
         var initSavepointPath = "file:///init-sp";
         sessionJob.getSpec().getJob().setInitialSavepointPath(initSavepointPath);
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(null, flinkService, operatorConfiguration);
-        reconciler.reconcile(
-                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(), defaultConfig);
+                new FlinkSessionJobReconciler(
+                        null, flinkService, operatorConfiguration, defaultConfig);
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
                 JobState.RUNNING,
@@ -105,8 +103,9 @@ public class FlinkSessionJobReconcilerTest {
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(null, flinkService, operatorConfiguration);
-        reconciler.reconcile(sessionJob, readyContext, defaultConfig);
+                new FlinkSessionJobReconciler(
+                        null, flinkService, operatorConfiguration, defaultConfig);
+        reconciler.reconcile(sessionJob, readyContext);
         assertEquals(1, flinkService.listSessionJobs().size());
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
@@ -119,11 +118,11 @@ public class FlinkSessionJobReconcilerTest {
         statelessSessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         statelessSessionJob.getSpec().getJob().setParallelism(2);
         // job suspended first
-        reconciler.reconcile(statelessSessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(statelessSessionJob, readyContext);
         assertTrue(flinkService.listSessionJobs().isEmpty());
         verifyJobState(statelessSessionJob, JobState.SUSPENDED, JobState.SUSPENDED.name());
 
-        reconciler.reconcile(statelessSessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(statelessSessionJob, readyContext);
         assertEquals(1, flinkService.listSessionJobs().size());
         verifyAndSetRunningJobsToStatus(
                 statelessSessionJob,
@@ -138,10 +137,11 @@ public class FlinkSessionJobReconcilerTest {
         TestingFlinkService flinkService = new TestingFlinkService();
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(null, flinkService, operatorConfiguration);
+                new FlinkSessionJobReconciler(
+                        null, flinkService, operatorConfiguration, defaultConfig);
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
-        reconciler.reconcile(sessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sessionJob, readyContext);
         // start the job
         assertEquals(1, flinkService.listSessionJobs().size());
 
@@ -149,14 +149,14 @@ public class FlinkSessionJobReconcilerTest {
         var statefulSessionJob = ReconciliationUtils.clone(sessionJob);
         statefulSessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         statefulSessionJob.getSpec().getJob().setParallelism(3);
-        reconciler.reconcile(statefulSessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(statefulSessionJob, readyContext);
 
         // job suspended first
         assertTrue(flinkService.listSessionJobs().isEmpty());
         verifyJobState(statefulSessionJob, JobState.SUSPENDED, JobState.SUSPENDED.name());
 
         // upgraded
-        reconciler.reconcile(statefulSessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(statefulSessionJob, readyContext);
         assertEquals(1, flinkService.listSessionJobs().size());
         verifyAndSetRunningJobsToStatus(
                 statefulSessionJob,
@@ -173,11 +173,12 @@ public class FlinkSessionJobReconcilerTest {
 
         var readyContext =
                 TestUtils.createContextWithReadyFlinkDeployment(Map.of("key", "newValue"));
+
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(null, flinkService, operatorConfiguration);
-        var cfg = new Configuration(defaultConfig);
-        cfg.setString("key", "value");
-        reconciler.reconcile(sessionJob, readyContext, cfg);
+                new FlinkSessionJobReconciler(
+                        null, flinkService, operatorConfiguration, defaultConfig);
+
+        reconciler.reconcile(sessionJob, readyContext);
 
         assertEquals(1, flinkService.listSessionJobs().size());
         var submittedJob =
@@ -192,8 +193,9 @@ public class FlinkSessionJobReconcilerTest {
         assertNull(sessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(null, flinkService, operatorConfiguration);
-        reconciler.reconcile(sessionJob, readyContext, defaultConfig);
+                new FlinkSessionJobReconciler(
+                        null, flinkService, operatorConfiguration, defaultConfig);
+        reconciler.reconcile(sessionJob, readyContext);
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
                 JobState.RUNNING,
@@ -207,7 +209,7 @@ public class FlinkSessionJobReconcilerTest {
         var sp1SessionJob = ReconciliationUtils.clone(sessionJob);
 
         // do not trigger savepoint if nonce is null
-        reconciler.reconcile(sp1SessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sp1SessionJob, readyContext);
         assertNull(sessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
 
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(2L);
@@ -215,7 +217,7 @@ public class FlinkSessionJobReconcilerTest {
                 .getStatus()
                 .getJobStatus()
                 .setState(org.apache.flink.api.common.JobStatus.CREATED.name());
-        reconciler.reconcile(sp1SessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sp1SessionJob, readyContext);
         // do not trigger savepoint if job is not running
         assertNull(sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
 
@@ -224,7 +226,7 @@ public class FlinkSessionJobReconcilerTest {
                 .getJobStatus()
                 .setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
 
-        reconciler.reconcile(sp1SessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sp1SessionJob, readyContext);
         assertEquals(
                 "trigger_0",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
@@ -241,7 +243,7 @@ public class FlinkSessionJobReconcilerTest {
 
         // don't trigger new savepoint when savepoint is in progress
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(3L);
-        reconciler.reconcile(sp1SessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sp1SessionJob, readyContext);
         assertEquals(
                 "trigger_0",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
@@ -256,7 +258,7 @@ public class FlinkSessionJobReconcilerTest {
                         .getJob()
                         .getParallelism());
         sp1SessionJob.getSpec().getJob().setParallelism(100);
-        reconciler.reconcile(sp1SessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sp1SessionJob, readyContext);
         assertEquals(
                 "trigger_0",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
@@ -273,9 +275,9 @@ public class FlinkSessionJobReconcilerTest {
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
 
         // running -> suspended
-        reconciler.reconcile(sp1SessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sp1SessionJob, readyContext);
         // suspended -> running
-        reconciler.reconcile(sp1SessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sp1SessionJob, readyContext);
         // parallelism changed
         assertEquals(
                 100,
@@ -296,12 +298,12 @@ public class FlinkSessionJobReconcilerTest {
 
         // don't trigger when nonce is the same
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(2L);
-        reconciler.reconcile(sp1SessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sp1SessionJob, readyContext);
         assertNull(sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
 
         // trigger when new nonce is defined
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(3L);
-        reconciler.reconcile(sp1SessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sp1SessionJob, readyContext);
         assertEquals(
                 "trigger_1",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
@@ -309,7 +311,7 @@ public class FlinkSessionJobReconcilerTest {
 
         // don't trigger when nonce is cleared
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(null);
-        reconciler.reconcile(sp1SessionJob, readyContext, defaultConfig);
+        reconciler.reconcile(sp1SessionJob, readyContext);
         assertNull(sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
     }
 

@@ -46,15 +46,15 @@ public abstract class JobStatusObserver<CTX> {
      * Observe the status of the flink job.
      *
      * @param jobStatus The job status to be observed.
-     * @param lastValidatedConfig The last validated config.
+     * @param deployedConfig Deployed job config.
      * @return If job found return true, otherwise return false.
      */
-    public boolean observe(JobStatus jobStatus, Configuration lastValidatedConfig, CTX ctx) {
+    public boolean observe(JobStatus jobStatus, Configuration deployedConfig, CTX ctx) {
         LOG.info("Observing job status");
         var previousJobStatus = jobStatus.getState();
         List<JobStatusMessage> clusterJobStatuses;
         try {
-            clusterJobStatuses = new ArrayList<>(flinkService.listJobs(lastValidatedConfig));
+            clusterJobStatuses = new ArrayList<>(flinkService.listJobs(deployedConfig));
         } catch (Exception e) {
             LOG.error("Exception while listing jobs", e);
             jobStatus.setState(JOB_STATE_UNKNOWN);

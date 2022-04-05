@@ -170,6 +170,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | jobStatus | org.apache.flink.kubernetes.operator.crd.status.JobStatus | Last observed status of the Flink job on Application deployments. |
 | jobManagerDeploymentStatus | org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus | Last observed status of the JobManager deployment. |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus | Status of the last reconcile operation. |
+| error | java.lang.String | Error information about the Flink deployment. |
 
 ### FlinkSessionJobReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobReconciliationStatus
@@ -178,8 +179,6 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| success | boolean | True if last reconciliation step was successful. |
-| error | java.lang.String | If success == false, error information about the reconciliation failure. |
 | lastReconciledSpec | java.lang.String | Last reconciled job spec. Used to decide whether further reconciliation steps are necessary. |
 
 ### FlinkSessionJobStatus
@@ -191,6 +190,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | jobStatus | org.apache.flink.kubernetes.operator.crd.status.JobStatus | Last observed status of the job. |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobReconciliationStatus | Status of the last reconcile operation. |
+| error | java.lang.String | Error information about the session job. |
 
 ### JobManagerDeploymentStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus
@@ -219,6 +219,17 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | updateTime | java.lang.String | Update time of the job. |
 | savepointInfo | org.apache.flink.kubernetes.operator.crd.status.SavepointInfo | Information about pending and last savepoint for the job. |
 
+### ReconciliationState
+**Class**: org.apache.flink.kubernetes.operator.crd.status.ReconciliationState
+
+**Description**: Current state of the reconciliation.
+
+| Value | Docs |
+| ----- | ---- |
+| DEPLOYED | The last reconciledSpec is currently deployed. |
+| ROLLING_BACK | In the process of rolling back to the lastStableSpec. |
+| ROLLED_BACK | Rolled back to the lastStableSpec. |
+
 ### ReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus
 
@@ -226,9 +237,10 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| success | boolean | True if last reconciliation step was successful. |
-| error | java.lang.String | If success == false, error information about the reconciliation failure. |
+| reconciliationTimestamp | long | Epoch timestamp of the last successful reconcile operation. |
 | lastReconciledSpec | java.lang.String | Last reconciled deployment spec. Used to decide whether further reconciliation steps are  necessary. |
+| lastStableSpec | java.lang.String | Last stable deployment spec according to the specified stability condition. If a rollback  strategy is defined this will be the target to roll back to. |
+| state | org.apache.flink.kubernetes.operator.crd.status.ReconciliationState | Deployment state of the last reconciled spec. |
 
 ### Savepoint
 **Class**: org.apache.flink.kubernetes.operator.crd.status.Savepoint

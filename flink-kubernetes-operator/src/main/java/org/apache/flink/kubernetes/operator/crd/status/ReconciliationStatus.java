@@ -35,17 +35,23 @@ import lombok.NoArgsConstructor;
 @Builder
 public class ReconciliationStatus {
 
-    /** True if last reconciliation step was successful. */
-    private boolean success;
-
-    /** If success == false, error information about the reconciliation failure. */
-    private String error;
+    /** Epoch timestamp of the last successful reconcile operation. */
+    private long reconciliationTimestamp;
 
     /**
      * Last reconciled deployment spec. Used to decide whether further reconciliation steps are
      * necessary.
      */
     private String lastReconciledSpec;
+
+    /**
+     * Last stable deployment spec according to the specified stability condition. If a rollback
+     * strategy is defined this will be the target to roll back to.
+     */
+    private String lastStableSpec;
+
+    /** Deployment state of the last reconciled spec. */
+    private ReconciliationState state = ReconciliationState.DEPLOYED;
 
     @JsonIgnore
     public FlinkDeploymentSpec deserializeLastReconciledSpec() {
@@ -54,7 +60,25 @@ public class ReconciliationStatus {
     }
 
     @JsonIgnore
+    public FlinkDeploymentSpec deserializeLastStableSpec() {
+        return ReconciliationUtils.deserializedSpecWithVersion(
+                lastStableSpec, FlinkDeploymentSpec.class);
+    }
+
+    @JsonIgnore
     public void serializeAndSetLastReconciledSpec(FlinkDeploymentSpec spec) {
         setLastReconciledSpec(ReconciliationUtils.writeSpecWithCurrentVersion(spec));
+    }
+
+    public void markReconciledSpecAsStable() {
+        lastStableSpec = lastReconciledSpec;
+    }
+
+    @JsonIgnore
+    public boolean isLastReconciledSpecStable() {
+        if (lastReconciledSpec == null || lastStableSpec == null) {
+            return false;
+        }
+        return lastReconciledSpec.equals(lastStableSpec);
     }
 }

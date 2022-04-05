@@ -47,11 +47,11 @@ public class SavepointObserver {
      *
      * @param currentSavepointInfo the current savepoint info.
      * @param jobID the jobID of the observed job.
-     * @param lastValidatedConfig the last validated config.
+     * @param deployedConfig Deployed job config.
      * @return The observed error, if no error observed, {@code Optional.empty()} will be returned.
      */
     public Optional<String> observe(
-            SavepointInfo currentSavepointInfo, String jobID, Configuration lastValidatedConfig) {
+            SavepointInfo currentSavepointInfo, String jobID, Configuration deployedConfig) {
         if (currentSavepointInfo.getTriggerId() == null) {
             LOG.debug("Savepoint not in progress");
             return Optional.empty();
@@ -61,7 +61,7 @@ public class SavepointObserver {
         try {
             savepointFetchResult =
                     flinkService.fetchSavepointInfo(
-                            currentSavepointInfo.getTriggerId(), jobID, lastValidatedConfig);
+                            currentSavepointInfo.getTriggerId(), jobID, deployedConfig);
         } catch (Exception e) {
             LOG.error("Exception while fetching savepoint info", e);
             return Optional.empty();

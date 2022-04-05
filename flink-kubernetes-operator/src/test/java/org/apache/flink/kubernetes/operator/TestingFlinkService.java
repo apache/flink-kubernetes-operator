@@ -21,8 +21,10 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
@@ -69,12 +71,12 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public void submitApplicationCluster(FlinkDeployment deployment, Configuration conf) {
+    public void submitApplicationCluster(JobSpec jobSpec, Configuration conf) {
         JobID jobID = new JobID();
         JobStatusMessage jobStatusMessage =
                 new JobStatusMessage(
                         jobID,
-                        deployment.getMetadata().getName(),
+                        conf.getString(KubernetesConfigOptions.CLUSTER_ID),
                         JobStatus.RUNNING,
                         System.currentTimeMillis());
 

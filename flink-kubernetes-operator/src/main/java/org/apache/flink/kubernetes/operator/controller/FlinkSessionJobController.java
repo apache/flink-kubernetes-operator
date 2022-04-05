@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
@@ -73,19 +72,16 @@ public class FlinkSessionJobController
     private final Set<FlinkResourceValidator> validators;
     private final Reconciler<FlinkSessionJob> reconciler;
     private final Observer<FlinkSessionJob> observer;
-    private final DefaultConfig defaultConfig;
     private final FlinkOperatorConfiguration operatorConfiguration;
     private Map<String, SharedIndexInformer<FlinkSessionJob>> informers;
     private FlinkControllerConfig<FlinkSessionJob> controllerConfig;
 
     public FlinkSessionJobController(
-            DefaultConfig defaultConfig,
             FlinkOperatorConfiguration operatorConfiguration,
             KubernetesClient kubernetesClient,
             Set<FlinkResourceValidator> validators,
             Reconciler<FlinkSessionJob> reconciler,
             Observer<FlinkSessionJob> observer) {
-        this.defaultConfig = defaultConfig;
         this.operatorConfiguration = operatorConfiguration;
         this.kubernetesClient = kubernetesClient;
         this.validators = validators;
@@ -114,7 +110,7 @@ public class FlinkSessionJobController
 
         try {
             // TODO refactor the reconciler interface to return UpdateControl directly
-            reconciler.reconcile(flinkSessionJob, context, defaultConfig.getFlinkConfig());
+            reconciler.reconcile(flinkSessionJob, context);
         } catch (Exception e) {
             throw new ReconciliationException(e);
         }
@@ -127,7 +123,7 @@ public class FlinkSessionJobController
     public DeleteControl cleanup(FlinkSessionJob sessionJob, Context context) {
         LOG.info("Deleting FlinkSessionJob");
 
-        return reconciler.cleanup(sessionJob, context, defaultConfig.getFlinkConfig());
+        return reconciler.cleanup(sessionJob, context);
     }
 
     @Override
