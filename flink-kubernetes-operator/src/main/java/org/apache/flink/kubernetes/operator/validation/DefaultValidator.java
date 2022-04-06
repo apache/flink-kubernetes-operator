@@ -279,8 +279,16 @@ public class DefaultValidator implements FlinkResourceValidator {
             FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
 
         return firstPresent(
+                validateJobNotEmpty(sessionJob),
                 validateNotApplicationCluster(session),
                 validateSessionClusterId(sessionJob, session));
+    }
+
+    private Optional<String> validateJobNotEmpty(FlinkSessionJob sessionJob) {
+        if (sessionJob.getSpec().getJob() == null) {
+            return Optional.of("The job spec should not be empty");
+        }
+        return Optional.empty();
     }
 
     private Optional<String> validateSessionClusterId(

@@ -39,7 +39,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -158,16 +157,20 @@ public class FlinkService {
         LOG.info("Session cluster successfully deployed");
     }
 
-    public void submitJobToSessionCluster(FlinkSessionJob sessionJob, Configuration conf)
+    public JobID submitJobToSessionCluster(
+            FlinkSessionJob sessionJob, Configuration conf, @Nullable String savepoint)
             throws Exception {
-        var jarRunResponseBody = jarRun(sessionJob, jarUpload(sessionJob, conf), conf);
-        String jobID = jarRunResponseBody.getJobId().toHexString();
+        var jarRunResponseBody = jarRun(sessionJob, jarUpload(sessionJob, conf), conf, savepoint);
+        var jobID = jarRunResponseBody.getJobId();
         LOG.info("Submitted job: {} to session cluster.", jobID);
-        sessionJob.getStatus().setJobStatus(JobStatus.builder().jobId(jobID).build());
+        return jobID;
     }
 
     private JarRunResponseBody jarRun(
-            FlinkSessionJob sessionJob, JarUploadResponseBody response, Configuration conf) {
+            FlinkSessionJob sessionJob,
+            JarUploadResponseBody response,
+            Configuration conf,
+            String savepoint) {
         String jarId =
                 response.getFilename().substring(response.getFilename().lastIndexOf("/") + 1);
         // we generate jobID in advance to help deduplicate job submission.
@@ -186,7 +189,7 @@ public class FlinkService {
                             job.getParallelism() > 0 ? job.getParallelism() : null,
                             jobID,
                             null,
-                            sessionJob.getSpec().getJob().getInitialSavepointPath());
+                            savepoint);
             LOG.info("Submitting job: {} to session cluster.", jobID.toHexString());
             return clusterClient
                     .sendRequest(headers, parameters, runRequestBody)
@@ -202,6 +205,9 @@ public class FlinkService {
     private JarUploadResponseBody jarUpload(FlinkSessionJob sessionJob, Configuration conf)
             throws Exception {
         Path path = jarResolver.resolve(sessionJob.getSpec().getJob().getJarURI());
+        Preconditions.checkArgument(
+                path.toFile().exists(),
+                String.format("The jar file %s not exists", path.toAbsolutePath()));
         JarUploadHeaders headers = JarUploadHeaders.getInstance();
         String clusterId = sessionJob.getSpec().getClusterId();
         String namespace = sessionJob.getMetadata().getNamespace();
@@ -211,7 +217,6 @@ public class FlinkService {
                         operatorConfiguration.getFlinkServiceHostOverride(),
                         ExternalServiceDecorator.getNamespacedExternalServiceName(
                                 clusterId, namespace));
-
         try (RestClient restClient = new RestClient(conf, executorService)) {
             // TODO add method in flink#RestClusterClient to support upload jar.
             return restClient
@@ -331,14 +336,51 @@ public class FlinkService {
         return savepointOpt;
     }
 
-    public void cancelSessionJob(JobID jobID, Configuration conf) throws Exception {
+    public Optional<String> cancelSessionJob(
+            JobID jobID, UpgradeMode upgradeMode, Configuration conf) throws Exception {
+        Optional<String> savepointOpt = Optional.empty();
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
-            clusterClient
-                    .cancel(jobID)
-                    .get(
-                            operatorConfiguration.getFlinkCancelJobTimeout().toSeconds(),
-                            TimeUnit.SECONDS);
+            final String clusterId = clusterClient.getClusterId();
+            switch (upgradeMode) {
+                case STATELESS:
+                    LOG.info("Cancelling job.");
+                    clusterClient
+                            .cancel(jobID)
+                            .get(
+                                    operatorConfiguration.getFlinkCancelJobTimeout().toSeconds(),
+                                    TimeUnit.SECONDS);
+                    break;
+                case SAVEPOINT:
+                    LOG.info("Suspending job.");
+                    final String savepointDirectory =
+                            Preconditions.checkNotNull(
+                                    conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
+                    final long timeout =
+                            conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT)
+                                    .getSeconds();
+                    try {
+                        String savepoint =
+                                clusterClient
+                                        .stopWithSavepoint(jobID, false, savepointDirectory)
+                                        .get(timeout, TimeUnit.SECONDS);
+                        savepointOpt = Optional.of(savepoint);
+                    } catch (TimeoutException exception) {
+                        throw new FlinkException(
+                                String.format(
+                                        "Timed out stopping the job %s in Flink cluster %s with savepoint, "
+                                                + "please configure a larger timeout via '%s'",
+                                        jobID,
+                                        clusterId,
+                                        ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT.key()),
+                                exception);
+                    }
+                    break;
+                case LAST_STATE:
+                default:
+                    throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
+            }
         }
+        return savepointOpt;
     }
 
     public void stopSessionCluster(
@@ -350,15 +392,18 @@ public class FlinkService {
         FlinkUtils.waitForClusterShutdown(kubernetesClient, conf, shutdownTimeout);
     }
 
-    public void triggerSavepoint(FlinkDeployment deployment, Configuration conf) throws Exception {
+    public void triggerSavepoint(
+            String jobId,
+            org.apache.flink.kubernetes.operator.crd.status.SavepointInfo savepointInfo,
+            Configuration conf)
+            throws Exception {
         LOG.info("Triggering new savepoint");
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
             SavepointTriggerHeaders savepointTriggerHeaders = SavepointTriggerHeaders.getInstance();
             SavepointTriggerMessageParameters savepointTriggerMessageParameters =
                     savepointTriggerHeaders.getUnresolvedMessageParameters();
-            savepointTriggerMessageParameters.jobID.resolve(
-                    JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId()));
+            savepointTriggerMessageParameters.jobID.resolve(JobID.fromHexString(jobId));
 
             final String savepointDirectory =
                     Preconditions.checkNotNull(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
@@ -372,32 +417,22 @@ public class FlinkService {
                             .get(timeout, TimeUnit.SECONDS);
             LOG.info("Savepoint successfully triggered: " + response.getTriggerId().toHexString());
 
-            org.apache.flink.kubernetes.operator.crd.status.SavepointInfo savepointInfo =
-                    deployment.getStatus().getJobStatus().getSavepointInfo();
             savepointInfo.setTrigger(response.getTriggerId().toHexString());
             savepointInfo.setTriggerTimestamp(System.currentTimeMillis());
         }
     }
 
-    public SavepointFetchResult fetchSavepointInfo(FlinkDeployment deployment, Configuration conf)
-            throws Exception {
-        LOG.info(
-                "Fetching savepoint result with triggerId: "
-                        + deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+    public SavepointFetchResult fetchSavepointInfo(
+            String triggerId, String jobId, Configuration conf) throws Exception {
+        LOG.info("Fetching savepoint result with triggerId: " + triggerId);
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
             SavepointStatusHeaders savepointStatusHeaders = SavepointStatusHeaders.getInstance();
             SavepointStatusMessageParameters savepointStatusMessageParameters =
                     savepointStatusHeaders.getUnresolvedMessageParameters();
-            savepointStatusMessageParameters.jobIdPathParameter.resolve(
-                    JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId()));
+            savepointStatusMessageParameters.jobIdPathParameter.resolve(JobID.fromHexString(jobId));
             savepointStatusMessageParameters.triggerIdPathParameter.resolve(
-                    TriggerId.fromHexString(
-                            deployment
-                                    .getStatus()
-                                    .getJobStatus()
-                                    .getSavepointInfo()
-                                    .getTriggerId()));
+                    TriggerId.fromHexString(triggerId));
             CompletableFuture<AsynchronousOperationResult<SavepointInfo>> response =
                     clusterClient.sendRequest(
                             savepointStatusHeaders,

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.observer;
+package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -27,8 +27,6 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
-import org.apache.flink.kubernetes.operator.observer.deployment.AbstractDeploymentObserver;
-import org.apache.flink.kubernetes.operator.observer.deployment.ApplicationObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
@@ -159,7 +157,10 @@ public class ApplicationObserverTest {
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
 
-        flinkService.triggerSavepoint(deployment, conf);
+        flinkService.triggerSavepoint(
+                deployment.getStatus().getJobStatus().getJobId(),
+                deployment.getStatus().getJobStatus().getSavepointInfo(),
+                conf);
         assertEquals(
                 "trigger_0",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
@@ -175,7 +176,10 @@ public class ApplicationObserverTest {
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerTimestamp());
 
-        flinkService.triggerSavepoint(deployment, conf);
+        flinkService.triggerSavepoint(
+                deployment.getStatus().getJobStatus().getJobId(),
+                deployment.getStatus().getJobStatus().getSavepointInfo(),
+                conf);
         assertEquals(
                 "trigger_1",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());

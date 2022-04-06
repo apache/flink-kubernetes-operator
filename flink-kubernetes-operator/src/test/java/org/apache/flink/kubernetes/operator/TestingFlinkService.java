@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
-import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -33,9 +32,13 @@ import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.api.model.PodList;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
@@ -48,8 +51,9 @@ public class TestingFlinkService extends FlinkService {
     private int savepointCounter = 0;
     private int triggerCounter = 0;
 
-    private List<Tuple2<String, JobStatusMessage>> jobs = new ArrayList<>();
-    private Set<String> sessions = new HashSet<>();
+    private final List<Tuple2<String, JobStatusMessage>> jobs = new ArrayList<>();
+    private final Map<JobID, SubmittedJobInfo> sessionJobs = new HashMap<>();
+    private final Set<String> sessions = new HashSet<>();
     private boolean isPortReady = true;
     private PodList podList = new PodList();
     private Consumer<Configuration> listJobConsumer = conf -> {};
@@ -61,6 +65,7 @@ public class TestingFlinkService extends FlinkService {
     public void clear() {
         jobs.clear();
         sessions.clear();
+        sessionJobs.clear();
     }
 
     @Override
@@ -82,7 +87,8 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public void submitJobToSessionCluster(FlinkSessionJob sessionJob, Configuration conf) {
+    public JobID submitJobToSessionCluster(
+            FlinkSessionJob sessionJob, Configuration conf, @Nullable String savepoint) {
         JobID jobID = new JobID();
         JobStatusMessage jobStatusMessage =
                 new JobStatusMessage(
@@ -90,7 +96,9 @@ public class TestingFlinkService extends FlinkService {
                         sessionJob.getMetadata().getName(),
                         JobStatus.RUNNING,
                         System.currentTimeMillis());
-        jobs.add(Tuple2.of(conf.get(SavepointConfigOptions.SAVEPOINT_PATH), jobStatusMessage));
+        sessionJob.getStatus().getJobStatus().setJobId(jobID.toHexString());
+        sessionJobs.put(jobID, new SubmittedJobInfo(savepoint, jobStatusMessage, conf));
+        return jobID;
     }
 
     @Override
@@ -102,7 +110,12 @@ public class TestingFlinkService extends FlinkService {
         if (!isPortReady) {
             throw new TimeoutException("JM port is unavailable");
         }
-        return jobs.stream().map(t -> t.f1).collect(Collectors.toList());
+        var lists = jobs.stream().map(t -> t.f1).collect(Collectors.toList());
+        lists.addAll(
+                sessionJobs.values().stream()
+                        .map(t -> t.jobStatusMessage)
+                        .collect(Collectors.toList()));
+        return lists;
     }
 
     public void setListJobConsumer(Consumer<Configuration> listJobConsumer) {
@@ -111,6 +124,10 @@ public class TestingFlinkService extends FlinkService {
 
     public List<Tuple2<String, JobStatusMessage>> listJobs() {
         return new ArrayList<>(jobs);
+    }
+
+    public Map<JobID, SubmittedJobInfo> listSessionJobs() {
+        return new HashMap<>(sessionJobs);
     }
 
     @Override
@@ -134,9 +151,16 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public void cancelSessionJob(JobID jobID, Configuration conf) throws Exception {
-        if (!jobs.removeIf(js -> js.f1.getJobId().equals(jobID))) {
+    public Optional<String> cancelSessionJob(
+            JobID jobID, UpgradeMode upgradeMode, Configuration conf) throws Exception {
+        if (sessionJobs.remove(jobID) == null) {
             throw new Exception("Job not found");
+        }
+
+        if (upgradeMode == UpgradeMode.SAVEPOINT) {
+            return Optional.of("savepoint_" + savepointCounter++);
+        } else {
+            return Optional.empty();
         }
     }
 
@@ -150,14 +174,17 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public void triggerSavepoint(FlinkDeployment deployment, Configuration conf) throws Exception {
-        SavepointInfo savepointInfo = deployment.getStatus().getJobStatus().getSavepointInfo();
+    public void triggerSavepoint(
+            String jobId,
+            org.apache.flink.kubernetes.operator.crd.status.SavepointInfo savepointInfo,
+            Configuration conf)
+            throws Exception {
         savepointInfo.setTrigger("trigger_" + triggerCounter++);
     }
 
     @Override
-    public SavepointFetchResult fetchSavepointInfo(FlinkDeployment deployment, Configuration conf)
-            throws Exception {
+    public SavepointFetchResult fetchSavepointInfo(
+            String triggerId, String jobId, Configuration conf) throws Exception {
         return SavepointFetchResult.completed(Savepoint.of("savepoint_" + savepointCounter++));
     }
 
@@ -177,5 +204,21 @@ public class TestingFlinkService extends FlinkService {
 
     public void setJmPodList(PodList podList) {
         this.podList = podList;
+    }
+
+    /** The information collector of a submitted job. */
+    public static class SubmittedJobInfo {
+        public final String savepointPath;
+        public final JobStatusMessage jobStatusMessage;
+        public final Configuration effectiveConfig;
+
+        public SubmittedJobInfo(
+                String savepointPath,
+                JobStatusMessage jobStatusMessage,
+                Configuration effectiveConfig) {
+            this.savepointPath = savepointPath;
+            this.jobStatusMessage = jobStatusMessage;
+            this.effectiveConfig = effectiveConfig;
+        }
     }
 }

@@ -353,12 +353,15 @@ public class ApplicationReconcilerTest {
         assertEquals(1, runningJobs.size());
         assertNull(runningJobs.get(0).f0);
 
-        JobStatus jobStatus = new JobStatus();
-        jobStatus.setJobName(runningJobs.get(0).f1.getJobName());
-        jobStatus.setJobId(runningJobs.get(0).f1.getJobId().toHexString());
-        jobStatus.setState("RUNNING");
-
-        deployment.getStatus().setJobStatus(jobStatus);
+        deployment
+                .getStatus()
+                .setJobStatus(
+                        new JobStatus()
+                                .toBuilder()
+                                .jobId(runningJobs.get(0).f1.getJobId().toHexString())
+                                .jobName(runningJobs.get(0).f1.getJobName())
+                                .state("RUNNING")
+                                .build());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
     }
 }
