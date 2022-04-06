@@ -29,7 +29,9 @@ import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.util.Preconditions;
 
+import io.fabric8.kubernetes.api.model.KubernetesResourceList;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.FilterWatchListDeletable;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -148,18 +150,29 @@ public class FlinkSessionJobController
         Preconditions.checkNotNull(controllerConfig, "Controller config cannot be null");
         Set<String> effectiveNamespaces = controllerConfig.getEffectiveNamespaces();
         if (effectiveNamespaces.isEmpty()) {
-            return List.of(createFlinkDepInformerEventSource(ALL_NAMESPACE));
+            return List.of(
+                    createFlinkDepInformerEventSource(
+                            kubernetesClient.resources(FlinkDeployment.class).inAnyNamespace(),
+                            ALL_NAMESPACE));
         } else {
             return effectiveNamespaces.stream()
-                    .map(this::createFlinkDepInformerEventSource)
+                    .map(
+                            name ->
+                                    createFlinkDepInformerEventSource(
+                                            kubernetesClient
+                                                    .resources(FlinkDeployment.class)
+                                                    .inNamespace(name),
+                                            name))
                     .collect(Collectors.toList());
         }
     }
 
     private InformerEventSource<FlinkDeployment, FlinkSessionJob> createFlinkDepInformerEventSource(
+            FilterWatchListDeletable<FlinkDeployment, KubernetesResourceList<FlinkDeployment>>
+                    filteredClient,
             String name) {
         return new InformerEventSource<>(
-                kubernetesClient.resources(FlinkDeployment.class).runnableInformer(0),
+                filteredClient.runnableInformer(0),
                 primaryResourceRetriever(),
                 sessionJob ->
                         new ResourceID(
