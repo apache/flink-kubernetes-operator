@@ -26,7 +26,6 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
@@ -42,7 +41,7 @@ import java.util.Optional;
 /** The reconciler for the {@link FlinkSessionJob}. */
 public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ApplicationReconciler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkSessionJobReconciler.class);
 
     private final FlinkOperatorConfiguration operatorConfiguration;
     private final KubernetesClient kubernetesClient;
