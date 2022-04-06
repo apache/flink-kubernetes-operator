@@ -234,7 +234,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         }
 
         FlinkDeploymentSpec oldSpec =
-                deployment.getStatus().getReconciliationStatus().getLastReconciledSpec();
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
 
         if (newSpec.getJob() != null && oldSpec.getJob() == null) {
             return Optional.of("Cannot switch from session to job cluster");

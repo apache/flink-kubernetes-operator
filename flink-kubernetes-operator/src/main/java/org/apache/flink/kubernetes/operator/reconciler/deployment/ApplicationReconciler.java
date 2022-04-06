@@ -66,7 +66,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             throws Exception {
 
         FlinkDeploymentSpec lastReconciledSpec =
-                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
+                flinkApp.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         JobSpec jobSpec = flinkApp.getSpec().getJob();
         if (lastReconciledSpec == null) {
             deployFlinkJob(

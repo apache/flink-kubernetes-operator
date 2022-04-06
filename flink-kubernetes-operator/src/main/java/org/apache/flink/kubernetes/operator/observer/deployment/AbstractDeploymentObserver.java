@@ -180,7 +180,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
 
         FlinkDeploymentStatus deploymentStatus = deployment.getStatus();
         FlinkDeploymentSpec lastReconciledSpec =
-                deploymentStatus.getReconciliationStatus().getLastReconciledSpec();
+                deploymentStatus.getReconciliationStatus().deserializeLastReconciledSpec();
 
         return deploymentStatus.getJobManagerDeploymentStatus()
                         == JobManagerDeploymentStatus.MISSING
@@ -191,7 +191,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
 
     public void observe(FlinkDeployment flinkApp, Context context) {
         FlinkDeploymentSpec lastReconciledSpec =
-                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
+                flinkApp.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         // Nothing has been launched so skip observing
         if (lastReconciledSpec == null) {
             return;

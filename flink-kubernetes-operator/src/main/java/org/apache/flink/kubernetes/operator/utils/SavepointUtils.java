@@ -43,7 +43,7 @@ public class SavepointUtils {
                                 flinkDeployment
                                         .getStatus()
                                         .getReconciliationStatus()
-                                        .getLastReconciledSpec()
+                                        .deserializeLastReconciledSpec()
                                         .getJob()
                                         .getSavepointTriggerNonce());
     }

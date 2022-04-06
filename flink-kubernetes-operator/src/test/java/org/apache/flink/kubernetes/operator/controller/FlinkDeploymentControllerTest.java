@@ -105,7 +105,7 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getReconciliationStatus();
         assertTrue(reconciliationStatus.isSuccess());
         assertNull(reconciliationStatus.getError());
-        assertEquals(appCluster.getSpec(), reconciliationStatus.getLastReconciledSpec());
+        assertEquals(appCluster.getSpec(), reconciliationStatus.deserializeLastReconciledSpec());
 
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
@@ -136,7 +136,7 @@ public class FlinkDeploymentControllerTest {
         reconciliationStatus = appCluster.getStatus().getReconciliationStatus();
         assertFalse(reconciliationStatus.isSuccess());
         assertEquals("Cannot switch from job to session cluster", reconciliationStatus.getError());
-        assertNotNull(reconciliationStatus.getLastReconciledSpec().getJob());
+        assertNotNull(reconciliationStatus.deserializeLastReconciledSpec().getJob());
 
         // Validate job status correct even with error
         jobStatus = appCluster.getStatus().getJobStatus();
@@ -288,7 +288,7 @@ public class FlinkDeploymentControllerTest {
                 appCluster
                         .getStatus()
                         .getReconciliationStatus()
-                        .getLastReconciledSpec()
+                        .deserializeLastReconciledSpec()
                         .getJob()
                         .getState());
 
@@ -346,7 +346,7 @@ public class FlinkDeploymentControllerTest {
                 appCluster
                         .getStatus()
                         .getReconciliationStatus()
-                        .getLastReconciledSpec()
+                        .deserializeLastReconciledSpec()
                         .getJob()
                         .getState());
 
@@ -483,7 +483,7 @@ public class FlinkDeploymentControllerTest {
         testController.reconcile(appCluster, TestUtils.createEmptyContext());
         assertEquals(
                 appCluster.getSpec(),
-                appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec());
+                appCluster.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
 
         flinkService.setPortReady(false);
         testController.reconcile(appCluster, context);
@@ -503,7 +503,10 @@ public class FlinkDeploymentControllerTest {
                     appCluster.getStatus().getJobManagerDeploymentStatus());
             assertEquals(
                     appCluster.getSpec(),
-                    appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec());
+                    appCluster
+                            .getStatus()
+                            .getReconciliationStatus()
+                            .deserializeLastReconciledSpec());
 
             flinkService.setPortReady(true);
             testController.reconcile(appCluster, context);
@@ -522,7 +525,10 @@ public class FlinkDeploymentControllerTest {
                     appCluster.getStatus().getJobManagerDeploymentStatus());
             assertNotEquals(
                     appCluster.getSpec(),
-                    appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec());
+                    appCluster
+                            .getStatus()
+                            .getReconciliationStatus()
+                            .deserializeLastReconciledSpec());
 
             flinkService.setPortReady(true);
             testController.reconcile(appCluster, context);
@@ -534,7 +540,10 @@ public class FlinkDeploymentControllerTest {
                     appCluster.getStatus().getJobManagerDeploymentStatus());
             assertEquals(
                     appCluster.getSpec(),
-                    appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec());
+                    appCluster
+                            .getStatus()
+                            .getReconciliationStatus()
+                            .deserializeLastReconciledSpec());
 
             testController.reconcile(appCluster, context);
             assertEquals(

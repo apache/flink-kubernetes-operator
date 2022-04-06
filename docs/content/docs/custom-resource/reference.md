@@ -180,7 +180,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | success | boolean | True if last reconciliation step was successful. |
 | error | java.lang.String | If success == false, error information about the reconciliation failure. |
-| lastReconciledSpec | org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec | Last reconciled job spec. Used to decide whether further reconciliation steps are necessary. |
+| lastReconciledSpec | java.lang.String | Last reconciled job spec. Used to decide whether further reconciliation steps are necessary. |
 
 ### FlinkSessionJobStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus
@@ -228,7 +228,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | success | boolean | True if last reconciliation step was successful. |
 | error | java.lang.String | If success == false, error information about the reconciliation failure. |
-| lastReconciledSpec | org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec | Last reconciled deployment spec. Used to decide whether further reconciliation steps are  necessary. |
+| lastReconciledSpec | java.lang.String | Last reconciled deployment spec. Used to decide whether further reconciliation steps are  necessary. |
 
 ### Savepoint
 **Class**: org.apache.flink.kubernetes.operator.crd.status.Savepoint

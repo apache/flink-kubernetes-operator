@@ -60,7 +60,7 @@ public class SessionObserverTest {
         deployment
                 .getStatus()
                 .getReconciliationStatus()
-                .setLastReconciledSpec(deployment.getSpec());
+                .serializeAndSetLastReconciledSpec(deployment.getSpec());
 
         observer.observe(deployment, readyContext);
 
@@ -107,7 +107,7 @@ public class SessionObserverTest {
         deployment
                 .getStatus()
                 .getReconciliationStatus()
-                .setLastReconciledSpec(deployment.getSpec());
+                .serializeAndSetLastReconciledSpec(deployment.getSpec());
 
         FlinkOperatorConfiguration allNsConfig =
                 FlinkOperatorConfiguration.fromConfiguration(new Configuration());
