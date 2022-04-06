@@ -34,7 +34,7 @@ import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFact
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
+import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.runtime.util.EnvironmentInformation;
 
@@ -47,6 +47,7 @@ import io.javaoperatorsdk.operator.config.runtime.DefaultConfigurationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Set;
 import java.util.concurrent.Executors;
 
 /** Main Class for Flink native k8s operator. */
@@ -60,6 +61,7 @@ public class FlinkOperator {
     private final FlinkService flinkService;
     private final ConfigurationService configurationService;
     private final DefaultConfig defaultConfig;
+    private final Set<FlinkResourceValidator> validators;
 
     public FlinkOperator() {
         this(FlinkUtils.loadDefaultConfig());
@@ -75,10 +77,10 @@ public class FlinkOperator {
         this.configurationService = getConfigurationService(operatorConfiguration);
         this.operator = new Operator(client, configurationService);
         this.flinkService = new FlinkService(client, operatorConfiguration);
+        this.validators = ValidatorUtils.discoverValidators(defaultConfig.getFlinkConfig());
     }
 
     private void registerDeploymentController() {
-        FlinkResourceValidator validator = new DefaultValidator();
         ReconcilerFactory reconcilerFactory =
                 new ReconcilerFactory(client, flinkService, operatorConfiguration);
         ObserverFactory observerFactory =
@@ -90,7 +92,7 @@ public class FlinkOperator {
                         defaultConfig,
                         operatorConfiguration,
                         client,
-                        validator,
+                        validators,
                         reconcilerFactory,
                         observerFactory);
 
@@ -103,7 +105,6 @@ public class FlinkOperator {
     }
 
     private void registerSessionJobController() {
-        FlinkResourceValidator validator = new DefaultValidator();
         Reconciler<FlinkSessionJob> reconciler =
                 new FlinkSessionJobReconciler(client, flinkService, operatorConfiguration);
         Observer<FlinkSessionJob> observer = new SessionJobObserver();
@@ -112,7 +113,7 @@ public class FlinkOperator {
                         defaultConfig,
                         operatorConfiguration,
                         client,
-                        validator,
+                        validators,
                         reconciler,
                         observer);
 

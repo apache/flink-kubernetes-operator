@@ -17,30 +17,22 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
-import org.apache.flink.core.plugin.Plugin;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 
 import java.util.Optional;
 
-/** Validator for different resources. */
-public interface FlinkResourceValidator extends Plugin {
+/** Test validator implementation of {@link FlinkResourceValidator}. */
+public class TestValidator implements FlinkResourceValidator {
 
-    /**
-     * Validate and return optional error.
-     *
-     * @param deployment A Flink application or session cluster deployment.
-     * @return Optional error string, should be present iff validation resulted in an error
-     */
-    Optional<String> validateDeployment(FlinkDeployment deployment);
+    @Override
+    public Optional<String> validateDeployment(FlinkDeployment deployment) {
+        return Optional.empty();
+    }
 
-    /**
-     * Validate and return optional error.
-     *
-     * @param sessionJob the session job to be validated.
-     * @param session the target session cluster of the session job to be validated.
-     * @return Optional error string, should be present iff validation resulted in an error
-     */
-    Optional<String> validateSessionJob(
-            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session);
+    @Override
+    public Optional<String> validateSessionJob(
+            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
+        return Optional.empty();
+    }
 }

@@ -33,7 +33,7 @@ public class OperatorConfigOptions {
                     .durationType()
                     .defaultValue(Duration.ofSeconds(60))
                     .withDescription(
-                            "The interval for the controller to reschedule the reconcile process");
+                            "The interval for the controller to reschedule the reconcile process.");
 
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_REST_READY_DELAY =
             ConfigOptions.key("operator.observer.rest-ready.delay")
@@ -61,7 +61,7 @@ public class OperatorConfigOptions {
                     .durationType()
                     .defaultValue(Duration.ofSeconds(10))
                     .withDescription(
-                            "The interval before a savepoint trigger attempt is marked as unsuccessful");
+                            "The interval before a savepoint trigger attempt is marked as unsuccessful.");
 
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_FLINK_CLIENT_TIMEOUT =
             ConfigOptions.key("operator.observer.flink.client.timeout")

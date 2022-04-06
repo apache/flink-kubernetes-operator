@@ -52,6 +52,7 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 
+import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -290,5 +291,35 @@ public class TestUtils {
                 return Optional.of((T) deployment);
             }
         };
+    }
+
+    // This code is taken slightly modified from: http://stackoverflow.com/a/7201825/568695
+    // it changes the environment variables of this JVM. Use only for testing purposes!
+    @SuppressWarnings("unchecked")
+    public static void setEnv(Map<String, String> newEnv) {
+        try {
+            Map<String, String> env = System.getenv();
+            Class<?> clazz = env.getClass();
+            Field field = clazz.getDeclaredField("m");
+            field.setAccessible(true);
+            Map<String, String> map = (Map<String, String>) field.get(env);
+            map.clear();
+            map.putAll(newEnv);
+            // only for Windows
+            Class<?> processEnvironmentClass = Class.forName("java.lang.ProcessEnvironment");
+            try {
+                Field theCaseInsensitiveEnvironmentField =
+                        processEnvironmentClass.getDeclaredField("theCaseInsensitiveEnvironment");
+                theCaseInsensitiveEnvironmentField.setAccessible(true);
+                Map<String, String> ciEnv =
+                        (Map<String, String>) theCaseInsensitiveEnvironmentField.get(null);
+                ciEnv.clear();
+                ciEnv.putAll(newEnv);
+            } catch (NoSuchFieldException ignored) {
+            }
+
+        } catch (Exception e1) {
+            throw new RuntimeException(e1);
+        }
     }
 }
