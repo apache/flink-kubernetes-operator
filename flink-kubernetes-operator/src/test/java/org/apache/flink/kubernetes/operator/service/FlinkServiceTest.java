@@ -175,7 +175,10 @@ public class FlinkServiceTest {
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobId(jobID.toString());
         flinkDeployment.getStatus().setJobStatus(jobStatus);
-        flinkService.triggerSavepoint(flinkDeployment, configuration);
+        flinkService.triggerSavepoint(
+                flinkDeployment.getStatus().getJobStatus().getJobId(),
+                flinkDeployment.getStatus().getJobStatus().getSavepointInfo(),
+                configuration);
         assertTrue(triggerSavepointFuture.isDone());
         assertEquals(jobID, triggerSavepointFuture.get().f0);
         assertEquals(savepointPath, triggerSavepointFuture.get().f1);

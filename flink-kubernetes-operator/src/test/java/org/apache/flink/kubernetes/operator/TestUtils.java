@@ -224,6 +224,11 @@ public class TestUtils {
     }
 
     public static Context createContextWithReadyFlinkDeployment() {
+        return createContextWithReadyFlinkDeployment(new HashMap<>());
+    }
+
+    public static Context createContextWithReadyFlinkDeployment(
+            Map<String, String> flinkDepConfig) {
         return new Context() {
             @Override
             public Optional<RetryInfo> getRetryInfo() {
@@ -235,6 +240,7 @@ public class TestUtils {
                     Class<T> expectedType, String eventSourceName) {
                 var session = buildSessionCluster();
                 session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+                session.getSpec().getFlinkConfiguration().putAll(flinkDepConfig);
                 return Optional.of((T) session);
             }
         };

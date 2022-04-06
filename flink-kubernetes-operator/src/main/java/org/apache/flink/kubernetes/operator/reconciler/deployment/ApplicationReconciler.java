@@ -240,6 +240,9 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
 
     private void triggerSavepoint(FlinkDeployment deployment, Configuration effectiveConfig)
             throws Exception {
-        flinkService.triggerSavepoint(deployment, effectiveConfig);
+        flinkService.triggerSavepoint(
+                deployment.getStatus().getJobStatus().getJobId(),
+                deployment.getStatus().getJobStatus().getSavepointInfo(),
+                effectiveConfig);
     }
 }

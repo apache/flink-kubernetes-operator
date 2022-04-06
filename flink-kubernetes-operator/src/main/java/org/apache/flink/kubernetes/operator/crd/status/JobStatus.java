@@ -29,7 +29,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@Builder(toBuilder = true)
 public class JobStatus {
     /** Name of the job. */
     private String jobName;

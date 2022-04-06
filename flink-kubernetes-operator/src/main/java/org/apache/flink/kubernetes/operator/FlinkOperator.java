@@ -107,7 +107,9 @@ public class FlinkOperator {
     private void registerSessionJobController() {
         Reconciler<FlinkSessionJob> reconciler =
                 new FlinkSessionJobReconciler(client, flinkService, operatorConfiguration);
-        Observer<FlinkSessionJob> observer = new SessionJobObserver();
+        Observer<FlinkSessionJob> observer =
+                new SessionJobObserver(
+                        operatorConfiguration, flinkService, defaultConfig.getFlinkConfig());
         FlinkSessionJobController controller =
                 new FlinkSessionJobController(
                         defaultConfig,

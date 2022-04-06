@@ -82,13 +82,33 @@ public class ReconciliationUtils {
         reconciliationStatus.setError(err);
     }
 
-    public static void updateForSpecReconciliationSuccess(FlinkSessionJob sessionJob) {
+    public static void updateForSpecReconciliationSuccess(
+            FlinkSessionJob sessionJob, JobState stateAfterReconcile) {
         FlinkSessionJobReconciliationStatus reconciliationStatus =
                 sessionJob.getStatus().getReconciliationStatus();
         reconciliationStatus.setSuccess(true);
         reconciliationStatus.setError(null);
         FlinkSessionJobSpec clonedSpec = clone(sessionJob.getSpec());
+        if (reconciliationStatus.getLastReconciledSpec() != null) {
+            var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+            Long oldSavepointTriggerNonce = lastReconciledSpec.getJob().getSavepointTriggerNonce();
+            clonedSpec.getJob().setSavepointTriggerNonce(oldSavepointTriggerNonce);
+            clonedSpec.getJob().setState(stateAfterReconcile);
+        }
         reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec);
+    }
+
+    public static void updateSavepointReconciliationSuccess(FlinkSessionJob flinkSessionJob) {
+        FlinkSessionJobReconciliationStatus reconciliationStatus =
+                flinkSessionJob.getStatus().getReconciliationStatus();
+        var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        reconciliationStatus.setSuccess(true);
+        reconciliationStatus.setError(null);
+        lastReconciledSpec
+                .getJob()
+                .setSavepointTriggerNonce(
+                        flinkSessionJob.getSpec().getJob().getSavepointTriggerNonce());
+        reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec);
     }
 
     public static void updateForReconciliationError(FlinkSessionJob flinkSessionJob, String err) {
