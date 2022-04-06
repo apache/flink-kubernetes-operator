@@ -104,12 +104,7 @@ public class FlinkDeploymentController
         FlinkDeployment originalCopy = ReconciliationUtils.clone(flinkApp);
         try {
             observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);
-            Optional<String> validationError = Optional.empty();
-            for (FlinkResourceValidator validator : validators) {
-                if ((validationError = validator.validateDeployment(flinkApp)).isPresent()) {
-                    break;
-                }
-            }
+            Optional<String> validationError = validateDeployment(flinkApp);
             if (validationError.isPresent()) {
                 LOG.error("Validation failed: " + validationError.get());
                 ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
@@ -173,5 +168,15 @@ public class FlinkDeploymentController
 
     public void setControllerConfig(FlinkControllerConfig<FlinkDeployment> config) {
         this.controllerConfig = config;
+    }
+
+    private Optional<String> validateDeployment(FlinkDeployment deployment) {
+        Optional<String> validationError = Optional.empty();
+        for (FlinkResourceValidator validator : validators) {
+            if ((validationError = validator.validateDeployment(deployment)).isPresent()) {
+                break;
+            }
+        }
+        return validationError;
     }
 }

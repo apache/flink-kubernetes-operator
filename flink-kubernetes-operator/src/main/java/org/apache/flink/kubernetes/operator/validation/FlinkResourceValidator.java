@@ -30,7 +30,7 @@ public interface FlinkResourceValidator extends Plugin {
      * Validate and return optional error.
      *
      * @param deployment A Flink application or session cluster deployment.
-     * @return Optional error string, should be present if validation resulted in an error
+     * @return Optional error string, should be present iff validation resulted in an error
      */
     Optional<String> validateDeployment(FlinkDeployment deployment);
 

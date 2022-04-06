@@ -102,17 +102,7 @@ public class FlinkSessionJobController
         LOG.info("Starting reconciliation");
         FlinkSessionJob originalCopy = ReconciliationUtils.clone(flinkSessionJob);
         observer.observe(flinkSessionJob, context);
-        Optional<String> validationError = Optional.empty();
-        for (FlinkResourceValidator validator : validators) {
-            if ((validationError =
-                            validator.validateSessionJob(
-                                    flinkSessionJob,
-                                    OperatorUtils.getSecondaryResource(
-                                            flinkSessionJob, context, operatorConfiguration)))
-                    .isPresent()) {
-                break;
-            }
-        }
+        Optional<String> validationError = validateSessionJob(flinkSessionJob, context);
         if (validationError.isPresent()) {
             LOG.error("Validation failed: " + validationError.get());
             ReconciliationUtils.updateForReconciliationError(
@@ -247,5 +237,20 @@ public class FlinkSessionJobController
 
     private Map<String, Function<FlinkSessionJob, List<String>>> clusterToSessionJobIndexer() {
         return Map.of(CLUSTER_ID_INDEX, sessionJob -> List.of(sessionJob.getSpec().getClusterId()));
+    }
+
+    private Optional<String> validateSessionJob(FlinkSessionJob sessionJob, Context context) {
+        Optional<String> validationError = Optional.empty();
+        for (FlinkResourceValidator validator : validators) {
+            if ((validationError =
+                            validator.validateSessionJob(
+                                    sessionJob,
+                                    OperatorUtils.getSecondaryResource(
+                                            sessionJob, context, operatorConfiguration)))
+                    .isPresent()) {
+                break;
+            }
+        }
+        return validationError;
     }
 }

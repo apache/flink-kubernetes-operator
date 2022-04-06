@@ -22,7 +22,6 @@ import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
-import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.kubernetes.operator.validation.TestValidator;
 
 import org.junit.Rule;
@@ -33,9 +32,11 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -63,16 +64,14 @@ public class ValidatorUtilsTest {
             Map<String, String> systemEnv = new HashMap<>(originalEnv);
             systemEnv.put(ConfigConstants.ENV_FLINK_PLUGINS_DIR, validatorRootFolder.getPath());
             TestUtils.setEnv(systemEnv);
-            Set<FlinkResourceValidator> validators =
-                    ValidatorUtils.discoverValidators(new Configuration());
-            assertEquals(2, validators.size());
-            validators.forEach(
-                    v ->
-                            assertTrue(
-                                    v.getClass().getName().equals(DefaultValidator.class.getName())
-                                            || v.getClass()
-                                                    .getName()
-                                                    .equals(TestValidator.class.getName())));
+            assertEquals(
+                    new HashSet<>(
+                            Arrays.asList(
+                                    DefaultValidator.class.getName(),
+                                    TestValidator.class.getName())),
+                    ValidatorUtils.discoverValidators(new Configuration()).stream()
+                            .map(v -> v.getClass().getName())
+                            .collect(Collectors.toSet()));
         } finally {
             TestUtils.setEnv(originalEnv);
         }
