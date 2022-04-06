@@ -34,7 +34,7 @@ import io.fabric8.kubernetes.model.annotation.Version;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonDeserialize()
 @Group("flink.apache.org")
-@Version("v1alpha1")
+@Version("v1beta1")
 @ShortNames({"flinkdep"})
 public class FlinkDeployment extends CustomResource<FlinkDeploymentSpec, FlinkDeploymentStatus>
         implements Namespaced {

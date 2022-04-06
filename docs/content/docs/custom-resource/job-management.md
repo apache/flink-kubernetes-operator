@@ -96,7 +96,7 @@ The three different upgrade modes are intended to support different use-cases:
 Full example using the `last-state` strategy:
 
 ```yaml
-apiVersion: flink.apache.org/v1alpha1
+apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
   namespace: default

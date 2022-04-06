@@ -35,7 +35,7 @@ Once the Flink Kubernetes Operator is installed and running in your Kubernetes e
 FlinkDeployment objects are defined in YAML format by the user and must contain the following required fields:
 
 ```
-apiVersion: flink.apache.org/v1alpha1
+apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
   namespace: namespace-of-my-deployment
@@ -53,7 +53,7 @@ kubectl get flinkdeployment my-deployment -o yaml
 ```
 
 ```yaml
-apiVersion: flink.apache.org/v1alpha1
+apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
   ...
@@ -105,7 +105,7 @@ Required fields:
 Minimal example:
 
 ```yaml
-apiVersion: flink.apache.org/v1alpha1
+apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
   namespace: default

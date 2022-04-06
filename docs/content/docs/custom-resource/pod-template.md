@@ -43,7 +43,7 @@ The operator is going to merge the common and specific templates for job and tas
 Here the full example:
 
 ```yaml
-apiVersion: flink.apache.org/v1alpha1
+apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
   namespace: default
