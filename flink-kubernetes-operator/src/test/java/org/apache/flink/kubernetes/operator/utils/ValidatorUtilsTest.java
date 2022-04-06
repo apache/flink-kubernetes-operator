@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.kubernetes.operator.validation.TestValidator;
-import org.apache.flink.util.Preconditions;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -53,26 +52,29 @@ public class ValidatorUtilsTest {
     public void testDiscoverValidators() throws IOException {
         File validatorRootFolder = temporaryFolder.newFolder();
         File testValidatorFolder = new File(validatorRootFolder, VALIDATOR_NAME);
-        Preconditions.checkState(testValidatorFolder.mkdirs());
+        assertTrue(testValidatorFolder.mkdirs());
         File testValidatorJar = new File("target", VALIDATOR_JAR);
-        Preconditions.checkState(
-                testValidatorJar.exists(),
-                "Unable to locate jar file for test: " + testValidatorJar);
+        assertTrue(testValidatorJar.exists());
         Files.copy(
                 testValidatorJar.toPath(),
                 Paths.get(testValidatorFolder.toString(), VALIDATOR_JAR));
-        Map<String, String> systemEnv = new HashMap<>(System.getenv());
-        systemEnv.put(ConfigConstants.ENV_FLINK_PLUGINS_DIR, validatorRootFolder.getPath());
-        TestUtils.setEnv(systemEnv);
-        Set<FlinkResourceValidator> validators =
-                ValidatorUtils.discoverValidators(new Configuration());
-        assertEquals(2, validators.size());
-        validators.forEach(
-                v ->
-                        assertTrue(
-                                v.getClass().getName().equals(DefaultValidator.class.getName())
-                                        || v.getClass()
-                                                .getName()
-                                                .equals(TestValidator.class.getName())));
+        Map<String, String> originalEnv = System.getenv();
+        try {
+            Map<String, String> systemEnv = new HashMap<>(originalEnv);
+            systemEnv.put(ConfigConstants.ENV_FLINK_PLUGINS_DIR, validatorRootFolder.getPath());
+            TestUtils.setEnv(systemEnv);
+            Set<FlinkResourceValidator> validators =
+                    ValidatorUtils.discoverValidators(new Configuration());
+            assertEquals(2, validators.size());
+            validators.forEach(
+                    v ->
+                            assertTrue(
+                                    v.getClass().getName().equals(DefaultValidator.class.getName())
+                                            || v.getClass()
+                                                    .getName()
+                                                    .equals(TestValidator.class.getName())));
+        } finally {
+            TestUtils.setEnv(originalEnv);
+        }
     }
 }

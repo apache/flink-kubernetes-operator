@@ -17,10 +17,14 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -28,12 +32,24 @@ import java.util.Set;
 /** Validator utilities. */
 public final class ValidatorUtils {
 
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
+
     public static Set<FlinkResourceValidator> discoverValidators(Configuration configuration) {
         Set<FlinkResourceValidator> resourceValidators = new HashSet<>();
         resourceValidators.add(new DefaultValidator());
         PluginUtils.createPluginManagerFromRootFolder(configuration)
                 .load(FlinkResourceValidator.class)
-                .forEachRemaining(resourceValidators::add);
+                .forEachRemaining(
+                        validator -> {
+                            LOG.info(
+                                    "Discovered resource validator from plugin directory[{}]: {}.",
+                                    System.getenv()
+                                            .getOrDefault(
+                                                    ConfigConstants.ENV_FLINK_PLUGINS_DIR,
+                                                    ConfigConstants.DEFAULT_FLINK_PLUGINS_DIRS),
+                                    validator.getClass().getName());
+                            resourceValidators.add(validator);
+                        });
         return resourceValidators;
     }
 }
