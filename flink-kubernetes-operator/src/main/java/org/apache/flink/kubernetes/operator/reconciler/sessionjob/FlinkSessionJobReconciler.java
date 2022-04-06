@@ -62,7 +62,10 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
             throws Exception {
 
         FlinkSessionJobSpec lastReconciledSpec =
-                flinkSessionJob.getStatus().getReconciliationStatus().getLastReconciledSpec();
+                flinkSessionJob
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec();
 
         if (lastReconciledSpec == null) {
             submitFlinkJob(flinkSessionJob, context, defaultConfig);

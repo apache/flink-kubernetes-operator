@@ -63,7 +63,7 @@ public class ApplicationObserverTest {
         deployment
                 .getStatus()
                 .getReconciliationStatus()
-                .setLastReconciledSpec(deployment.getSpec());
+                .serializeAndSetLastReconciledSpec(deployment.getSpec());
         deployment.getStatus().setJobStatus(new JobStatus());
         flinkService.submitApplicationCluster(deployment, conf);
 
@@ -196,7 +196,7 @@ public class ApplicationObserverTest {
         deployment
                 .getStatus()
                 .getReconciliationStatus()
-                .setLastReconciledSpec(ReconciliationUtils.clone(deployment.getSpec()));
+                .serializeAndSetLastReconciledSpec(ReconciliationUtils.clone(deployment.getSpec()));
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobName("jobname");
         jobStatus.setJobId("0000000000");

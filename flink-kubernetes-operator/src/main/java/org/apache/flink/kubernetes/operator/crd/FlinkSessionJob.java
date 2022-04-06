@@ -33,8 +33,8 @@ import io.fabric8.kubernetes.model.annotation.Version;
 @Experimental
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonDeserialize()
-@Group("flink.apache.org")
-@Version("v1beta1")
+@Group(CrdConstants.API_GROUP)
+@Version(CrdConstants.API_VERSION)
 @ShortNames({"sessionjob"})
 public class FlinkSessionJob extends CustomResource<FlinkSessionJobSpec, FlinkSessionJobStatus>
         implements Namespaced {

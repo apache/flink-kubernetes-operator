@@ -39,7 +39,7 @@ public enum Mode {
         // If they are different, observation phase will use last-reconciled spec and validation
         // phase will fail.
         FlinkDeploymentSpec lastReconciledSpec =
-                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
+                flinkApp.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         return lastReconciledSpec == null
                 ? getMode(flinkApp.getSpec())
                 : getMode(lastReconciledSpec);

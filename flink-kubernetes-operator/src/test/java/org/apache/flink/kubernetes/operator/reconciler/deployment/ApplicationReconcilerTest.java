@@ -136,13 +136,6 @@ public class ApplicationReconcilerTest {
                         .getLastSavepoint()
                         .getLocation());
 
-        // Resume FlinkDeployment with last-state upgrade mode
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .getLastReconciledSpec()
-                .getJob()
-                .setState(JobState.SUSPENDED);
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().getJob().setState(JobState.RUNNING);
         deployment.getSpec().setImage("new-image-2");
@@ -228,11 +221,6 @@ public class ApplicationReconcilerTest {
         config.removeConfig(HighAvailabilityOptions.HA_MODE);
 
         reconciler.reconcile(deployment, context, config);
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .setLastReconciledSpec(ReconciliationUtils.clone(deployment.getSpec()));
-
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
                 deployment.getStatus().getJobManagerDeploymentStatus());
@@ -250,7 +238,7 @@ public class ApplicationReconcilerTest {
                 deployment
                         .getStatus()
                         .getReconciliationStatus()
-                        .getLastReconciledSpec()
+                        .deserializeLastReconciledSpec()
                         .getImage());
 
         // Ready for spec changes, the reconciliation should be performed
@@ -262,7 +250,7 @@ public class ApplicationReconcilerTest {
                 deployment
                         .getStatus()
                         .getReconciliationStatus()
-                        .getLastReconciledSpec()
+                        .deserializeLastReconciledSpec()
                         .getImage());
         // Upgrade mode changes from stateless to last-state should trigger a savepoint
         final String expectedSavepointPath = "savepoint_0";
@@ -283,16 +271,12 @@ public class ApplicationReconcilerTest {
         final Configuration config = FlinkUtils.getEffectiveConfig(deployment, new Configuration());
 
         reconciler.reconcile(deployment, context, config);
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .setLastReconciledSpec(ReconciliationUtils.clone(deployment.getSpec()));
         assertNotEquals(
                 UpgradeMode.LAST_STATE,
                 deployment
                         .getStatus()
                         .getReconciliationStatus()
-                        .getLastReconciledSpec()
+                        .deserializeLastReconciledSpec()
                         .getJob()
                         .getUpgradeMode());
 
@@ -307,7 +291,7 @@ public class ApplicationReconcilerTest {
                 deployment
                         .getStatus()
                         .getReconciliationStatus()
-                        .getLastReconciledSpec()
+                        .deserializeLastReconciledSpec()
                         .getImage());
         // Upgrade mode changes from stateless to last-state while HA enabled previously should not
         // trigger a savepoint
@@ -338,7 +322,7 @@ public class ApplicationReconcilerTest {
                 restartJob
                         .getStatus()
                         .getReconciliationStatus()
-                        .getLastReconciledSpec()
+                        .deserializeLastReconciledSpec()
                         .getJob()
                         .getState());
         runningJobs = flinkService.listJobs();
@@ -350,7 +334,7 @@ public class ApplicationReconcilerTest {
                 restartJob
                         .getStatus()
                         .getReconciliationStatus()
-                        .getLastReconciledSpec()
+                        .deserializeLastReconciledSpec()
                         .getJob()
                         .getState());
         runningJobs = flinkService.listJobs();
@@ -360,7 +344,7 @@ public class ApplicationReconcilerTest {
                 restartJob
                         .getStatus()
                         .getReconciliationStatus()
-                        .getLastReconciledSpec()
+                        .deserializeLastReconciledSpec()
                         .getRestartNonce());
     }
 

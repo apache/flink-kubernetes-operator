@@ -19,7 +19,9 @@ package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -32,6 +34,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 public class ReconciliationStatus {
+
     /** True if last reconciliation step was successful. */
     private boolean success;
 
@@ -42,5 +45,16 @@ public class ReconciliationStatus {
      * Last reconciled deployment spec. Used to decide whether further reconciliation steps are
      * necessary.
      */
-    private FlinkDeploymentSpec lastReconciledSpec;
+    private String lastReconciledSpec;
+
+    @JsonIgnore
+    public FlinkDeploymentSpec deserializeLastReconciledSpec() {
+        return ReconciliationUtils.deserializedSpecWithVersion(
+                lastReconciledSpec, FlinkDeploymentSpec.class);
+    }
+
+    @JsonIgnore
+    public void serializeAndSetLastReconciledSpec(FlinkDeploymentSpec spec) {
+        setLastReconciledSpec(ReconciliationUtils.writeSpecWithCurrentVersion(spec));
+    }
 }

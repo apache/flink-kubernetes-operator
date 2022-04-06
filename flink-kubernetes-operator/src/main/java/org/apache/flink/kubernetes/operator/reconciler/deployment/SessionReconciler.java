@@ -51,7 +51,7 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
             throws Exception {
 
         FlinkDeploymentSpec lastReconciledSpec =
-                flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec();
+                flinkApp.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
 
         if (lastReconciledSpec == null) {
             flinkService.submitSessionCluster(flinkApp, effectiveConfig);

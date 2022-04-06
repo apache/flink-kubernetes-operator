@@ -20,11 +20,16 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.junit.jupiter.api.Test;
 
@@ -83,7 +88,7 @@ public class ReconciliationUtilsTest {
         FlinkDeployment current = ReconciliationUtils.clone(app);
         current.getStatus()
                 .getReconciliationStatus()
-                .setLastReconciledSpec(ReconciliationUtils.clone(current.getSpec()));
+                .serializeAndSetLastReconciledSpec(ReconciliationUtils.clone(current.getSpec()));
         ReconciliationUtils.updateForSpecReconciliationSuccess(current, JobState.SUSPENDED);
 
         UpdateControl<FlinkDeployment> updateControl =
@@ -92,5 +97,17 @@ public class ReconciliationUtilsTest {
         assertFalse(updateControl.isUpdateResource());
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(0, updateControl.getScheduleDelay().get());
+    }
+
+    @Test
+    public void testSpecSerializationWithVersion() throws JsonProcessingException {
+        FlinkDeployment app = TestUtils.buildApplicationCluster();
+        String serialized = ReconciliationUtils.writeSpecWithCurrentVersion(app.getSpec());
+        ObjectNode node = (ObjectNode) new ObjectMapper().readTree(serialized);
+        assertEquals(CrdConstants.API_VERSION, node.get("apiVersion").asText());
+        assertEquals(
+                app.getSpec(),
+                ReconciliationUtils.deserializedSpecWithVersion(
+                        serialized, FlinkDeploymentSpec.class));
     }
 }

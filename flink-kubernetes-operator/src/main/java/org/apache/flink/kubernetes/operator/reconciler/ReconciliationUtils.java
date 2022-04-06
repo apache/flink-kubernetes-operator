@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -32,8 +33,12 @@ import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+
+import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -49,27 +54,26 @@ public class ReconciliationUtils {
         reconciliationStatus.setSuccess(true);
         reconciliationStatus.setError(null);
         FlinkDeploymentSpec clonedSpec = clone(flinkApp.getSpec());
-        if (reconciliationStatus.getLastReconciledSpec() != null
-                && reconciliationStatus.getLastReconciledSpec().getJob() != null) {
-            Long oldSavepointTriggerNonce =
-                    reconciliationStatus
-                            .getLastReconciledSpec()
-                            .getJob()
-                            .getSavepointTriggerNonce();
+        FlinkDeploymentSpec lastReconciledSpec =
+                reconciliationStatus.deserializeLastReconciledSpec();
+        if (lastReconciledSpec != null && lastReconciledSpec.getJob() != null) {
+            Long oldSavepointTriggerNonce = lastReconciledSpec.getJob().getSavepointTriggerNonce();
             clonedSpec.getJob().setSavepointTriggerNonce(oldSavepointTriggerNonce);
             clonedSpec.getJob().setState(stateAfterReconcile);
         }
-        reconciliationStatus.setLastReconciledSpec(clonedSpec);
+        reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec);
     }
 
     public static void updateSavepointReconciliationSuccess(FlinkDeployment flinkApp) {
         ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
         reconciliationStatus.setSuccess(true);
         reconciliationStatus.setError(null);
-        reconciliationStatus
-                .getLastReconciledSpec()
+        FlinkDeploymentSpec lastReconciledSpec =
+                reconciliationStatus.deserializeLastReconciledSpec();
+        lastReconciledSpec
                 .getJob()
                 .setSavepointTriggerNonce(flinkApp.getSpec().getJob().getSavepointTriggerNonce());
+        reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec);
     }
 
     public static void updateForReconciliationError(FlinkDeployment flinkApp, String err) {
@@ -84,7 +88,7 @@ public class ReconciliationUtils {
         reconciliationStatus.setSuccess(true);
         reconciliationStatus.setError(null);
         FlinkSessionJobSpec clonedSpec = clone(sessionJob.getSpec());
-        reconciliationStatus.setLastReconciledSpec(clonedSpec);
+        reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec);
     }
 
     public static void updateForReconciliationError(FlinkSessionJob flinkSessionJob, String err) {
@@ -154,7 +158,9 @@ public class ReconciliationUtils {
             FlinkDeployment flinkApp) {
         final FlinkDeploymentSpec lastReconciledSpec =
                 Preconditions.checkNotNull(
-                        flinkApp.getStatus().getReconciliationStatus().getLastReconciledSpec());
+                        flinkApp.getStatus()
+                                .getReconciliationStatus()
+                                .deserializeLastReconciledSpec());
         final UpgradeMode previousUpgradeMode = lastReconciledSpec.getJob().getUpgradeMode();
         final UpgradeMode currentUpgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
 
@@ -175,7 +181,32 @@ public class ReconciliationUtils {
 
         return current.getSpec().getJob().getState() == JobState.RUNNING
                 && reconciliationStatus.isSuccess()
-                && reconciliationStatus.getLastReconciledSpec().getJob().getState()
+                && reconciliationStatus.deserializeLastReconciledSpec().getJob().getState()
                         == JobState.SUSPENDED;
+    }
+
+    public static <T> T deserializedSpecWithVersion(
+            @Nullable String specString, Class<T> specClass) {
+        if (specString == null) {
+            return null;
+        }
+
+        try {
+            ObjectNode objectNode = (ObjectNode) objectMapper.readTree(specString);
+            objectNode.remove("apiVersion");
+            return objectMapper.treeToValue(objectNode, specClass);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Could not deserialize spec, this indicates a bug...", e);
+        }
+    }
+
+    public static String writeSpecWithCurrentVersion(Object spec) {
+        ObjectNode objectNode = objectMapper.valueToTree(Preconditions.checkNotNull(spec));
+        objectNode.set("apiVersion", new TextNode(CrdConstants.API_VERSION));
+        try {
+            return objectMapper.writeValueAsString(objectNode);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Could not serialize spec, this indicates a bug...", e);
+        }
     }
 }
