@@ -18,10 +18,31 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.configuration.GlobalConfiguration;
+
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.Properties;
+
+import static org.apache.flink.runtime.util.EnvironmentInformation.UNKNOWN;
+import static org.apache.flink.runtime.util.EnvironmentInformation.UNKNOWN_COMMIT_ID_ABBREV;
+import static org.apache.flink.runtime.util.EnvironmentInformation.getJvmStartupOptionsArray;
+import static org.apache.flink.runtime.util.EnvironmentInformation.getJvmVersion;
+import static org.apache.flink.runtime.util.EnvironmentInformation.getMaxJvmHeapMemory;
+import static org.apache.flink.runtime.util.EnvironmentInformation.getVersion;
 
 /** Util to get value from environments. */
 public class EnvUtils {
+
+    private static final Logger LOG = LoggerFactory.getLogger(EnvUtils.class);
 
     public static final String ENV_FLINK_OPERATOR_CONF_DIR = "FLINK_OPERATOR_CONF_DIR";
     public static final String ENV_FLINK_CONF_DIR = "FLINK_CONF_DIR";
@@ -33,6 +54,13 @@ public class EnvUtils {
     public static final String ENV_HOSTNAME = "HOSTNAME";
     public static final String ENV_OPERATOR_NAME = "OPERATOR_NAME";
     public static final String ENV_OPERATOR_NAMESPACE = "OPERATOR_NAMESPACE";
+
+    private static final String PROP_FILE = ".flink-kubernetes-operator.version.properties";
+    private static final String FAIL_MESSAGE =
+            "The file "
+                    + PROP_FILE
+                    + " has not been generated correctly. You MUST run 'mvn generate-sources' in the flink-kubernetes-operator module.";
+    private static final String DEFAULT_TIME_STRING = "1970-01-01T00:00:00+0000";
 
     /**
      * Get the value provided by environments.
@@ -65,6 +93,113 @@ public class EnvUtils {
         String value = System.getenv().get(key);
         if (StringUtils.isEmpty(value)) {
             throw new RuntimeException("Environments: " + key + " cannot be empty");
+        }
+        return value;
+    }
+
+    /**
+     * Logs information about the environment, like code revision, current user, Java version, and
+     * JVM parameters.
+     *
+     * @param log The logger to log the information to.
+     * @param componentName The component name to mention in the log.
+     * @param commandLineArgs The arguments accompanying the starting the component.
+     */
+    public static void logEnvironmentInfo(
+            Logger log, String componentName, String[] commandLineArgs) {
+        if (log.isInfoEnabled()) {
+            Properties properties = new Properties();
+            try (InputStream propFile =
+                    EnvUtils.class.getClassLoader().getResourceAsStream(PROP_FILE)) {
+                if (propFile != null) {
+                    properties.load(propFile);
+                }
+            } catch (IOException e) {
+                LOG.info(
+                        "Cannot determine code revision: Unable to read version property file.: {}",
+                        e.getMessage());
+            }
+            String javaHome = System.getenv("JAVA_HOME");
+            String arch = System.getProperty("os.arch");
+            long maxHeapMegabytes = getMaxJvmHeapMemory() >>> 20;
+            log.info(
+                    "--------------------------------------------------------------------------------");
+            log.info(
+                    " Starting "
+                            + componentName
+                            + " (Version: "
+                            + getProperty(properties, "project.version", UNKNOWN)
+                            + ", Flink Version: "
+                            + getVersion()
+                            + ", "
+                            + "Rev:"
+                            + getProperty(
+                                    properties, "git.commit.id.abbrev", UNKNOWN_COMMIT_ID_ABBREV)
+                            + ", "
+                            + "Date:"
+                            + getGitCommitTimeString(properties)
+                            + ")");
+            log.info(" OS current user: " + System.getProperty("user.name"));
+            log.info(" JVM: " + getJvmVersion());
+            log.info(" Arch: " + arch);
+            log.info(" Maximum heap size: " + maxHeapMegabytes + " MiBytes");
+            log.info(" JAVA_HOME: " + (javaHome == null ? "(not set)" : javaHome));
+            String[] options = getJvmStartupOptionsArray();
+            if (options.length == 0) {
+                log.info(" JVM Options: (none)");
+            } else {
+                log.info(" JVM Options:");
+                for (String s : options) {
+                    log.info("    " + s);
+                }
+            }
+            if (commandLineArgs == null || commandLineArgs.length == 0) {
+                log.info(" Program Arguments: (none)");
+            } else {
+                log.info(" Program Arguments:");
+                for (String s : commandLineArgs) {
+                    if (GlobalConfiguration.isSensitive(s)) {
+                        log.info(
+                                "    "
+                                        + GlobalConfiguration.HIDDEN_CONTENT
+                                        + " (sensitive information)");
+                    } else {
+                        log.info("    " + s);
+                    }
+                }
+            }
+            log.info(" Classpath: " + System.getProperty("java.class.path"));
+            log.info(
+                    "--------------------------------------------------------------------------------");
+        }
+    }
+
+    /**
+     * @return The Instant of the last commit of this code as a String using the Europe/Berlin
+     *     timezone.
+     */
+    private static String getGitCommitTimeString(Properties properties) {
+        try {
+            return DateTimeFormatter.ISO_OFFSET_DATE_TIME
+                    .withZone(ZoneId.of("Europe/Berlin"))
+                    .format(
+                            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ")
+                                    .parse(
+                                            getProperty(
+                                                    properties,
+                                                    "git.commit.time",
+                                                    DEFAULT_TIME_STRING),
+                                            Instant::from));
+        } catch (DateTimeParseException e) {
+            LOG.error("{} : {}", FAIL_MESSAGE, e);
+            throw new IllegalStateException(FAIL_MESSAGE);
+        }
+    }
+
+    private static String getProperty(Properties properties, String key, String defaultValue) {
+        String value = properties.getProperty(key);
+        if (value == null || value.charAt(0) == '$') {
+            return defaultValue;
         }
         return value;
     }
