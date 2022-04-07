@@ -34,6 +34,7 @@ COPY $OPERATOR_DIR/pom.xml ./$OPERATOR_DIR/
 COPY $OPERATOR_DIR/src ./$OPERATOR_DIR/src
 COPY $WEBHOOK_DIR/src ./$WEBHOOK_DIR/src
 
+COPY .git ./.git
 COPY tools ./tools
 
 RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -DskipTests=$SKIP_TESTS

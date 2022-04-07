@@ -33,10 +33,10 @@ import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
-import org.apache.flink.runtime.util.EnvironmentInformation;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -159,7 +159,7 @@ public class FlinkOperator {
     }
 
     public static void main(String... args) {
-        EnvironmentInformation.logEnvironmentInfo(LOG, "Flink Kubernetes Operator", args);
+        EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Operator", args);
         new FlinkOperator().run();
     }
 }

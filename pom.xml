@@ -63,6 +63,7 @@ under the License.
         <maven-surefire-plugin.version>3.0.0-M5</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.0.0-M5</maven-failsafe-plugin.version>
         <maven-resources-plugin.version>3.2.0</maven-resources-plugin.version>
+        <git-commit-id-maven-plugin.version>5.0.0</git-commit-id-maven-plugin.version>
 
         <operator.sdk.version>2.1.2</operator.sdk.version>
         <fabric8.version>5.12.1</fabric8.version>
@@ -256,6 +257,7 @@ under the License.
                             <exclude>**/dependency-reduced-pom.xml</exclude>
                             <!-- Administrative files in the main trunk. -->
                             <exclude>**/README.md</exclude>
+                            <exclude>.git/**</exclude>
                             <exclude>.github/**</exclude>
                             <!-- Build files -->
                             <exclude>**/*.iml</exclude>
