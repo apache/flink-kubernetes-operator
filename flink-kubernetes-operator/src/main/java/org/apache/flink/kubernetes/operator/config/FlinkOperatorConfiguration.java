@@ -39,7 +39,8 @@ public class FlinkOperatorConfiguration {
     Duration flinkClientTimeout;
     String flinkServiceHostOverride;
     Set<String> watchedNamespaces;
-    Duration cancelJobTimeout;
+    Duration flinkCancelJobTimeout;
+    Duration flinkShutdownClusterTimeout;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Set<String> watchedNamespaces = OperatorUtils.getWatchedNamespaces();
@@ -68,8 +69,13 @@ public class FlinkOperatorConfiguration {
         Duration flinkClientTimeout =
                 operatorConfig.get(OperatorConfigOptions.OPERATOR_OBSERVER_FLINK_CLIENT_TIMEOUT);
 
-        Duration cancelJobTimeout =
-                operatorConfig.get(OperatorConfigOptions.OPERATOR_CANCEL_JOB_TIMEOUT);
+        Duration flinkCancelJobTimeout =
+                operatorConfig.get(
+                        OperatorConfigOptions.OPERATOR_RECONCILER_FLINK_CANCEL_JOB_TIMEOUT);
+
+        Duration flinkShutdownClusterTimeout =
+                operatorConfig.get(
+                        OperatorConfigOptions.OPERATOR_RECONCILER_FLINK_SHUTDOWN_CLUSTER_TIMEOUT);
 
         String flinkServiceHostOverride = null;
         if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {
@@ -86,6 +92,7 @@ public class FlinkOperatorConfiguration {
                 flinkClientTimeout,
                 flinkServiceHostOverride,
                 watchedNamespaces,
-                cancelJobTimeout);
+                flinkCancelJobTimeout,
+                flinkShutdownClusterTimeout);
     }
 }

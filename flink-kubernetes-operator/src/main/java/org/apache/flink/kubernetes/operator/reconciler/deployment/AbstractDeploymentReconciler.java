@@ -58,7 +58,11 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
                 == flinkApp.getStatus().getJobManagerDeploymentStatus()) {
             shutdown(flinkApp, effectiveConfig);
         } else {
-            FlinkUtils.deleteCluster(flinkApp, kubernetesClient, true);
+            FlinkUtils.deleteCluster(
+                    flinkApp,
+                    kubernetesClient,
+                    true,
+                    operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
         }
 
         return DeleteControl.defaultDelete();
