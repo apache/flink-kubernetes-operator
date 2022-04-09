@@ -47,6 +47,7 @@ import java.time.Duration;
 import java.util.Collections;
 
 import static org.apache.flink.configuration.DeploymentOptionsInternal.CONF_DIR;
+import static org.apache.flink.configuration.WebOptions.CANCEL_ENABLE;
 import static org.apache.flink.kubernetes.configuration.KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE;
 import static org.apache.flink.kubernetes.operator.utils.FlinkUtils.mergePodTemplates;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
@@ -100,16 +101,22 @@ public class FlinkConfigBuilder {
                     KubernetesConfigOptions.ServiceExposedType.ClusterIP);
         }
 
-        // With last-state upgrade mode, set the default value of 'execution.checkpointing.interval'
-        // to 5 minutes when HA is enabled.
-        if (spec.getJob() != null
-                && spec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE
-                && !effectiveConfig.contains(
-                        ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL)) {
-            effectiveConfig.set(
-                    ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL,
-                    DEFAULT_CHECKPOINTING_INTERVAL);
+        if (spec.getJob() != null) {
+            // Set 'web.cancel.enable' to false for application deployments to avoid users
+            // accidentally cancelling jobs.
+            effectiveConfig.set(CANCEL_ENABLE, false);
+            // With last-state upgrade mode, set the default value of
+            // 'execution.checkpointing.interval'
+            // to 5 minutes when HA is enabled.
+            if (spec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE
+                    && !effectiveConfig.contains(
+                            ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL)) {
+                effectiveConfig.set(
+                        ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL,
+                        DEFAULT_CHECKPOINTING_INTERVAL);
+            }
         }
+
         return this;
     }
 
