@@ -35,6 +35,8 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
 import org.junit.jupiter.api.Assertions;
@@ -48,6 +50,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import static org.apache.flink.kubernetes.operator.validation.DefaultValidator.defaultFlinkConf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -57,7 +60,7 @@ public class DefaultValidatorTest {
     private final DefaultValidator validator = new DefaultValidator();
 
     @Test
-    public void testValidation() {
+    public void testValidationWithoutDefaultConfig() {
         testSuccess(dep -> {});
 
         // Test job validation
@@ -272,6 +275,29 @@ public class DefaultValidatorTest {
         testError(dep -> dep.getSpec().setFlinkVersion(null), "Flink Version must be defined.");
 
         testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_15));
+    }
+
+    @Test
+    public void testValidationWithDefaultConfig() {
+        Map<String, String> originalEnv = System.getenv();
+        try {
+            Map<String, String> systemEnv = new HashMap<>(originalEnv);
+            systemEnv.put(
+                    EnvUtils.ENV_FLINK_CONF_DIR,
+                    this.getClass().getResource("/test-validation").getPath());
+            TestUtils.setEnv(systemEnv);
+            defaultFlinkConf =
+                    FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR));
+            testSuccess(
+                    dep -> {
+                        dep.getSpec().setFlinkConfiguration(new HashMap<>());
+                        dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+                    });
+        } finally {
+            TestUtils.setEnv(originalEnv);
+            defaultFlinkConf =
+                    FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR));
+        }
     }
 
     @Test

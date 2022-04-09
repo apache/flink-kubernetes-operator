@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
@@ -56,12 +57,17 @@ public class DefaultValidator implements FlinkResourceValidator {
     private static final Set<String> ALLOWED_LOG_CONF_KEYS =
             Set.of(Constants.CONFIG_FILE_LOG4J_NAME, Constants.CONFIG_FILE_LOGBACK_NAME);
 
-    private static Configuration defaultFlinkConf =
+    @VisibleForTesting
+    static Configuration defaultFlinkConf =
             FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR));
 
     @Override
     public Optional<String> validateDeployment(FlinkDeployment deployment) {
         FlinkDeploymentSpec spec = deployment.getSpec();
+        Map<String, String> effectiveConfig = defaultFlinkConf.toMap();
+        if (spec.getFlinkConfiguration() != null) {
+            effectiveConfig.putAll(spec.getFlinkConfiguration());
+        }
         return firstPresent(
                 validateFlinkVersion(spec.getFlinkVersion()),
                 validateFlinkConfig(spec.getFlinkConfiguration()),
@@ -70,8 +76,8 @@ public class DefaultValidator implements FlinkResourceValidator {
                         deployment.getMetadata().getName(),
                         deployment.getMetadata().getNamespace()),
                 validateLogConfig(spec.getLogConfiguration()),
-                validateJobSpec(spec.getJob(), spec.getFlinkConfiguration()),
-                validateJmSpec(spec.getJobManager(), spec.getFlinkConfiguration()),
+                validateJobSpec(spec.getJob(), effectiveConfig),
+                validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager()),
                 validateSpecChange(deployment));
     }
