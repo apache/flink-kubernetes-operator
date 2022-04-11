@@ -37,4 +37,4 @@ under the License.
 | operator.observer.savepoint.trigger.grace-period     |     10s    |   Duration   |   The interval before a savepoint trigger attempt is marked as unsuccessful.          |
 | operator.observer.flink.client.timeout     |     10s    |  Duration    | The timeout for the observer to wait the flink rest client to return.            |
 | operator.reconciler.flink.cancel.job.timeout     |     1min    |  Duration    | The timeout for the reconciler to wait for flink to cancel job.            |
-| ooperator.reconciler.flink.shutdown.cluster.timeout     |     60s    |  Duration    | The timeout for the reconciler to wait for flink to shutdown cluster.           |
+| ooperator.reconciler.flink.cluster.shutdown.timeout     |     60s    |  Duration    | The timeout for the reconciler to wait for flink to shutdown cluster.           |

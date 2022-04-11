@@ -77,8 +77,8 @@ public class OperatorConfigOptions {
                     .withDescription(
                             "The timeout for the reconciler to wait for flink to cancel job.");
 
-    public static final ConfigOption<Duration> OPERATOR_RECONCILER_FLINK_SHUTDOWN_CLUSTER_TIMEOUT =
-            ConfigOptions.key("operator.reconciler.flink.shutdown.cluster.timeout")
+    public static final ConfigOption<Duration> OPERATOR_RECONCILER_FLINK_CLUSTER_SHUTDOWN_TIMEOUT =
+            ConfigOptions.key("operator.reconciler.flink.cluster.shutdown.timeout")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(60))
                     .withDescription(

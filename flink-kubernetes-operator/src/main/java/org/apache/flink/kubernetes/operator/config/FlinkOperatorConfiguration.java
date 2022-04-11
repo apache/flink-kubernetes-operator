@@ -75,7 +75,7 @@ public class FlinkOperatorConfiguration {
 
         Duration flinkShutdownClusterTimeout =
                 operatorConfig.get(
-                        OperatorConfigOptions.OPERATOR_RECONCILER_FLINK_SHUTDOWN_CLUSTER_TIMEOUT);
+                        OperatorConfigOptions.OPERATOR_RECONCILER_FLINK_CLUSTER_SHUTDOWN_TIMEOUT);
 
         String flinkServiceHostOverride = null;
         if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {

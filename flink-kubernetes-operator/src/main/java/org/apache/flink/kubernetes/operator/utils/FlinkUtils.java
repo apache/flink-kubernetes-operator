@@ -214,7 +214,7 @@ public class FlinkUtils {
                 break;
             }
             // log a message waiting to shutdown Flink cluster every 5 seconds.
-            if (i % 4 == 0) {
+            if ((i + 1) % 5 == 0) {
                 LOG.info("Waiting for cluster shutdown... ({}s)", i + 1);
             }
             try {
