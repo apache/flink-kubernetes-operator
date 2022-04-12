@@ -26,6 +26,7 @@ import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.configuration.WebOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
@@ -117,6 +118,7 @@ public class FlinkConfigBuilderTest {
         Assert.assertEquals(
                 KubernetesConfigOptions.ServiceExposedType.ClusterIP,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
+        Assert.assertEquals(false, configuration.get(WebOptions.CANCEL_ENABLE));
 
         FlinkDeployment deployment = ReconciliationUtils.clone(flinkDeployment);
         deployment
