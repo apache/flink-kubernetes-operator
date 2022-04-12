@@ -102,9 +102,11 @@ public class FlinkConfigBuilder {
         }
 
         if (spec.getJob() != null) {
-            // Set 'web.cancel.enable' to false for application deployments to avoid users
-            // accidentally cancelling jobs.
-            effectiveConfig.set(CANCEL_ENABLE, false);
+            if (!effectiveConfig.contains(CANCEL_ENABLE)) {
+                // Set 'web.cancel.enable' to false for application deployments to avoid users
+                // accidentally cancelling jobs.
+                effectiveConfig.set(CANCEL_ENABLE, false);
+            }
             // With last-state upgrade mode, set the default value of
             // 'execution.checkpointing.interval'
             // to 5 minutes when HA is enabled.
