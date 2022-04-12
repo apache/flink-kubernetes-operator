@@ -44,6 +44,7 @@ rules:
       - apps
     resources:
       - deployments
+      - deployments/finalizers
       - replicasets
     verbs:
       - "*"
@@ -87,6 +88,7 @@ rules:
       - apps
     resources:
       - deployments
+      - deployments/finalizers
     verbs:
       - '*'
 {{- end }}
