@@ -70,9 +70,17 @@ public class OperatorConfigOptions {
                     .withDescription(
                             "The timeout for the observer to wait the flink rest client to return.");
 
-    public static final ConfigOption<Duration> OPERATOR_CANCEL_JOB_TIMEOUT =
+    public static final ConfigOption<Duration> OPERATOR_RECONCILER_FLINK_CANCEL_JOB_TIMEOUT =
             ConfigOptions.key("operator.reconciler.flink.cancel.job.timeout")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(1))
-                    .withDescription("The timeout for the operator to cancel job.");
+                    .withDescription(
+                            "The timeout for the reconciler to wait for flink to cancel job.");
+
+    public static final ConfigOption<Duration> OPERATOR_RECONCILER_FLINK_CLUSTER_SHUTDOWN_TIMEOUT =
+            ConfigOptions.key("operator.reconciler.flink.cluster.shutdown.timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofSeconds(60))
+                    .withDescription(
+                            "The timeout for the reconciler to wait for flink to shutdown cluster.");
 }

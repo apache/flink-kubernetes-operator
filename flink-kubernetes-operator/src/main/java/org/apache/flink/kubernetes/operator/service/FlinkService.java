@@ -284,7 +284,7 @@ public class FlinkService {
                     clusterClient
                             .cancel(jobID)
                             .get(
-                                    operatorConfiguration.getCancelJobTimeout().toSeconds(),
+                                    operatorConfiguration.getFlinkCancelJobTimeout().toSeconds(),
                                     TimeUnit.SECONDS);
                     break;
                 case SAVEPOINT:
@@ -313,13 +313,21 @@ public class FlinkService {
                     break;
                 case LAST_STATE:
                     final String namespace = conf.getString(KubernetesConfigOptions.NAMESPACE);
-                    FlinkUtils.deleteCluster(namespace, clusterId, kubernetesClient, false);
+                    FlinkUtils.deleteCluster(
+                            namespace,
+                            clusterId,
+                            kubernetesClient,
+                            false,
+                            operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
                     break;
                 default:
                     throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
             }
         }
-        FlinkUtils.waitForClusterShutdown(kubernetesClient, conf);
+        FlinkUtils.waitForClusterShutdown(
+                kubernetesClient,
+                conf,
+                operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
         return savepointOpt;
     }
 
@@ -327,14 +335,19 @@ public class FlinkService {
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
             clusterClient
                     .cancel(jobID)
-                    .get(operatorConfiguration.getCancelJobTimeout().toSeconds(), TimeUnit.SECONDS);
+                    .get(
+                            operatorConfiguration.getFlinkCancelJobTimeout().toSeconds(),
+                            TimeUnit.SECONDS);
         }
     }
 
     public void stopSessionCluster(
-            FlinkDeployment deployment, Configuration conf, boolean deleteHaData) {
-        FlinkUtils.deleteCluster(deployment, kubernetesClient, deleteHaData);
-        FlinkUtils.waitForClusterShutdown(kubernetesClient, conf);
+            FlinkDeployment deployment,
+            Configuration conf,
+            boolean deleteHaData,
+            long shutdownTimeout) {
+        FlinkUtils.deleteCluster(deployment, kubernetesClient, deleteHaData, shutdownTimeout);
+        FlinkUtils.waitForClusterShutdown(kubernetesClient, conf, shutdownTimeout);
     }
 
     public void triggerSavepoint(FlinkDeployment deployment, Configuration conf) throws Exception {

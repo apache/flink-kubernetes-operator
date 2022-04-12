@@ -74,7 +74,11 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
     private void upgradeSessionCluster(FlinkDeployment flinkApp, Configuration effectiveConfig)
             throws Exception {
         LOG.info("Upgrading session cluster");
-        flinkService.stopSessionCluster(flinkApp, effectiveConfig, false);
+        flinkService.stopSessionCluster(
+                flinkApp,
+                effectiveConfig,
+                false,
+                operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
         flinkService.submitSessionCluster(flinkApp, effectiveConfig);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
     }
@@ -82,6 +86,10 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
     @Override
     protected void shutdown(FlinkDeployment flinkApp, Configuration effectiveConfig) {
         LOG.info("Stopping session cluster");
-        flinkService.stopSessionCluster(flinkApp, effectiveConfig, true);
+        flinkService.stopSessionCluster(
+                flinkApp,
+                effectiveConfig,
+                true,
+                operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
     }
 }

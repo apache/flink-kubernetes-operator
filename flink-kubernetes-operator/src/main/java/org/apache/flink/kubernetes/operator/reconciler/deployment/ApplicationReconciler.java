@@ -231,7 +231,11 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             }
         }
 
-        FlinkUtils.deleteCluster(flinkApp, kubernetesClient, true);
+        FlinkUtils.deleteCluster(
+                flinkApp,
+                kubernetesClient,
+                true,
+                operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
     }
 
     private void triggerSavepoint(FlinkDeployment deployment, Configuration effectiveConfig)

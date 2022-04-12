@@ -18,9 +18,12 @@
 
 # operator.reconciler.reschedule.interval: 60 s
 # operator.reconciler.max.parallelism: 5
+# operator.reconciler.flink.cancel.job.timeout: 1min
+# operator.reconciler.flink.cluster.shutdown.timeout: 60s
 # operator.observer.rest-ready.delay: 10 s
 # operator.observer.progress-check.interval: 10 s
 # operator.observer.savepoint.trigger.grace-period: 10 s
+# operator.observer.flink.client.timeout: 10 s
 
 # metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
 # metrics.reporter.slf4j.interval: 5 MINUTE

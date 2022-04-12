@@ -130,12 +130,14 @@ public class FlinkUtils {
     public static void deleteCluster(
             FlinkDeployment flinkApp,
             KubernetesClient kubernetesClient,
-            boolean deleteHaConfigmaps) {
+            boolean deleteHaConfigmaps,
+            long shutdownTimeout) {
         deleteCluster(
                 flinkApp.getMetadata().getNamespace(),
                 flinkApp.getMetadata().getName(),
                 kubernetesClient,
-                deleteHaConfigmaps);
+                deleteHaConfigmaps,
+                shutdownTimeout);
     }
 
     /**
@@ -151,7 +153,8 @@ public class FlinkUtils {
             String namespace,
             String clusterId,
             KubernetesClient kubernetesClient,
-            boolean deleteHaConfigmaps) {
+            boolean deleteHaConfigmaps,
+            long shutdownTimeout) {
         LOG.info("Deleting Flink cluster resources");
         kubernetesClient
                 .apps()
@@ -163,7 +166,7 @@ public class FlinkUtils {
 
         if (deleteHaConfigmaps) {
             // We need to wait for cluster shutdown otherwise HA configmaps might be recreated
-            waitForClusterShutdown(kubernetesClient, namespace, clusterId);
+            waitForClusterShutdown(kubernetesClient, namespace, clusterId, shutdownTimeout);
             kubernetesClient
                     .configMaps()
                     .inNamespace(namespace)
@@ -176,12 +179,15 @@ public class FlinkUtils {
 
     /** Wait until the FLink cluster has completely shut down. */
     public static void waitForClusterShutdown(
-            KubernetesClient kubernetesClient, String namespace, String clusterId) {
+            KubernetesClient kubernetesClient,
+            String namespace,
+            String clusterId,
+            long shutdownTimeout) {
 
         boolean jobManagerRunning = true;
         boolean serviceRunning = true;
 
-        for (int i = 0; i < 60; i++) {
+        for (int i = 0; i < shutdownTimeout; i++) {
             if (jobManagerRunning) {
                 PodList jmPodList = getJmPodList(kubernetesClient, namespace, clusterId);
 
@@ -207,7 +213,10 @@ public class FlinkUtils {
             if (!jobManagerRunning && !serviceRunning) {
                 break;
             }
-            LOG.info("Waiting for cluster shutdown... ({})", i);
+            // log a message waiting to shutdown Flink cluster every 5 seconds.
+            if ((i + 1) % 5 == 0) {
+                LOG.info("Waiting for cluster shutdown... ({}s)", i + 1);
+            }
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e) {
@@ -219,11 +228,12 @@ public class FlinkUtils {
 
     /** Wait until the FLink cluster has completely shut down. */
     public static void waitForClusterShutdown(
-            KubernetesClient kubernetesClient, Configuration conf) {
+            KubernetesClient kubernetesClient, Configuration conf, long shutdownTimeout) {
         FlinkUtils.waitForClusterShutdown(
                 kubernetesClient,
                 conf.getString(KubernetesConfigOptions.NAMESPACE),
-                conf.getString(KubernetesConfigOptions.CLUSTER_ID));
+                conf.getString(KubernetesConfigOptions.CLUSTER_ID),
+                shutdownTimeout);
     }
 
     public static PodList getJmPodList(

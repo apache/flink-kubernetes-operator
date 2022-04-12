@@ -142,7 +142,10 @@ public class TestingFlinkService extends FlinkService {
 
     @Override
     public void stopSessionCluster(
-            FlinkDeployment deployment, Configuration conf, boolean deleteHa) {
+            FlinkDeployment deployment,
+            Configuration conf,
+            boolean deleteHa,
+            long shutdownTimeout) {
         sessions.remove(deployment.getMetadata().getName());
     }
 
