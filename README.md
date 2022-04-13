@@ -18,6 +18,21 @@ Check our [quick-start](https://nightlies.apache.org/flink/flink-kubernetes-oper
  - Full logging and metrics integration
  - Flexible deployments and native integration with Kubernetes tooling
 
+## Project Status
+
+### Project status: beta
+
+### Current API version: `v1beta1`
+
+If you are currently using the v1alpha1 version of the APIs in your manifests, please update them to use the v1beta1 version by changing apiVersion: "flink.apache.org/v1alpha1" to apiVersion: "flink.apache.org/v1beta1".
+
+## Version Matrix
+
+| Operator Version | API Version | Flink Release  | Operator Image Tag | Helm Chart Version |
+| ------------- | ------------- | ------------- | ------------- | ------------- |
+| `latest` (main HEAD) | `v1beta1` | 1.14 |  |  |
+| `release-0.1.0` | `v1alpha1` | 1.14 | `2c166e3` | 0.1.0 |
+
 ## Support
 
 Don’t hesitate to ask!
