@@ -25,7 +25,7 @@ under the License.
 -->
 
 # Architecture
-Flink Kubernetes Operator (Operator) acts as a control plane to manage the complete deployment lifecycle of Apache Flink applications. The Operator can be installed on a Kubernetes cluster using [Helm](https://helm.sh). In most production environments it is typically deployed in a designated namespace and controls Flink deployments in one or more managed namespaces. The custom resource descriptor (CRD) that describes the schema of a `FlinkDeployment` is a cluster wide resource. For a CRD, the declaration must be registered before any resources of that CRDs kind(s) can be used, and the registration process sometimes takes a few seconds.  
+Flink Kubernetes Operator (Operator) acts as a control plane to manage the complete deployment lifecycle of Apache Flink applications. The Operator can be installed on a Kubernetes cluster using [Helm](https://helm.sh). In most production environments it is typically deployed in a designated namespace and controls Flink deployments in one or more managed namespaces. The custom resource definition (CRD) that describes the schema of a `FlinkDeployment` is a cluster wide resource. For a CRD, the declaration must be registered before any resources of that CRDs kind(s) can be used, and the registration process sometimes takes a few seconds.
 
 {{< img src="/img/concepts/architecture.svg" alt="Flink Kubernetes Operator Architecture" >}}
 > Note: There is no support at this time for [upgrading or deleting CRDs using Helm](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/).
@@ -68,7 +68,7 @@ The possible transitions usually indicate that there are some underlying changes
 
 
 
- 
+
 
 
 

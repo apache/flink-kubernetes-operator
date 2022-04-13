@@ -1,0 +1,80 @@
+---
+title: "Upgrade"
+weight: 4
+type: docs
+aliases:
+- /operations/upgrade.html
+---
+<!--
+Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements.  See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership.  The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance
+with the License.  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing,
+software distributed under the License is distributed on an
+"AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+KIND, either express or implied.  See the License for the
+specific language governing permissions and limitations
+under the License.
+-->
+
+# Upgrade the CRD
+During development, we delete the old CRD and create it from scratch. In an environment with existing deployments that is not possible, as deleting the CRD would wipe out all existing CRs with the `kind: FlinkDeployment`.
+The following steps demonstrate the CRD upgrade process from `v1alpha1` to `v1beta1` in an environment with an existing [stateful](https://github.com/apache/flink-kubernetes-operator/blob/main/examples/basic-checkpoint-ha.yaml) job with an old `v1alpha1` apiVersion. After the CRD upgrade, the job will resumed from the savepoint.
+
+1. Suspend the job and create savepoint:
+    ```sh
+    kubectl patch flinkdeployment/basic-checkpoint-ha-example --type=merge -p '{"spec": {"job": {"state": "suspended", "upgradeMode": "savepoint"}}}'
+    ```
+    Verify `deploy/basic-checkpoint-ha-example` has terminated and `flinkdeployment/basic-checkpoint-ha-example` has the Last Savepoint Location similar to `file:/flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata`. This file will used to restore the job. See [stateful and stateless application upgrade](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-release-0.1/docs/custom-resource/job-management/#stateful-and-stateless-application-upgrades) for more detail.
+
+2. Delete the job:
+   ```sh
+   kubectl delete flinkdeployment/basic-checkpoint-ha-example
+   ```
+
+3. Uninstall flink-kubernetes-operator helm chart and the CRD with the old `v1alpha1` version:
+    ```sh
+    helm uninstall flink-kubernetes-operator
+    kubectl delete crd flinkdeployments.flink.apache.org
+    ```
+4. Reinstall the flink-kubernetes-operator helm chart with the `v1beta1` CRD
+    ```sh
+    helm repo update flink-operator-repo
+    helm install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator
+    ```
+    Verify the `deploy/flink-kubernetes-operator` log has:
+    ```
+    2022-04-13 06:09:40,761 i.j.o.Operator                 [INFO ] Registered reconciler: 'flinkdeploymentcontroller' for resource: 'class org.apache.flink.kubernetes.operator.crd.FlinkDeployment' for namespace(s): [all namespaces]
+    2022-04-13 06:09:40,943 i.f.k.c.i.VersionUsageUtils    [WARN ] The client is using resource type 'flinksessionjobs' with unstable version 'v1beta1'
+    2022-04-13 06:09:41,461 i.j.o.Operator                 [INFO ] Registered reconciler: 'flinksessionjobcontroller' for resource: 'class org.apache.flink.kubernetes.operator.crd.FlinkSessionJob' for namespace(s): [all namespaces]
+    2022-04-13 06:09:41,464 i.j.o.Operator                 [INFO ] Operator SDK 2.1.2 (commit: a3a81ef) built on 2022-03-15T09:59:42.000+0000 starting...
+    2022-04-13 06:09:41,464 i.j.o.Operator                 [INFO ] Client version: 5.12.1
+    2022-04-13 06:09:41,499 i.f.k.c.i.VersionUsageUtils    [WARN ] The client is using resource type 'flinkdeployments' with unstable version 'v1beta1'
+    ```
+5. Restore the job:
+
+   Deploy the previously deleted job using this [FlinkDeployemnt](https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml) with `v1beta1` and explicitly set the `job.initialSavepointPath` to the savepoint location obtained from the step 1.
+
+    ```
+    spec:
+      ...
+      job:
+        initialSavepointPath: /flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata
+      ...
+    ```
+    Alternatively, we may use this command to edit and deploy the manifest:
+    ```sh
+    wget -qO - https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml| yq w - "spec.job.initialSavepointPath" "/flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata"| kubectl apply -f -
+    ```
+   Finally, verify that `deploy/basic-checkpoint-ha-example` log has:
+    ```
+    Starting job 00000000000000000000000000000000 from savepoint /flink-data/savepoints/savepoint-000000-2f40a9c8e4b9/_metadat
+    ```
+
