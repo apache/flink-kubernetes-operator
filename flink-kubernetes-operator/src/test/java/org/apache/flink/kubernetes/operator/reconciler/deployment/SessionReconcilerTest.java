@@ -45,9 +45,8 @@ public class SessionReconcilerTest {
         TestingFlinkService flinkService =
                 new TestingFlinkService() {
                     @Override
-                    public void submitSessionCluster(
-                            FlinkDeployment deployment, Configuration conf) {
-                        super.submitSessionCluster(deployment, conf);
+                    public void submitSessionCluster(Configuration conf) {
+                        super.submitSessionCluster(conf);
                         count.addAndGet(1);
                     }
                 };

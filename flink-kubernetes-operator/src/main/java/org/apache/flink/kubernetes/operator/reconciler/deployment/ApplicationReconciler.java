@@ -135,19 +135,11 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
     private void rollbackApplication(FlinkDeployment flinkApp) throws Exception {
         ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
 
-        if (reconciliationStatus.getState() != ReconciliationState.ROLLING_BACK) {
-            LOG.warn("Preparing to roll back to last stable spec.");
-            if (flinkApp.getStatus().getError() == null) {
-                flinkApp.getStatus()
-                        .setError(
-                                "Deployment is not ready within the configured timeout, rolling back.");
-            }
-            reconciliationStatus.setState(ReconciliationState.ROLLING_BACK);
+        if (initiateRollBack(flinkApp.getStatus())) {
             return;
         }
 
         LOG.warn("Executing rollback operation");
-
         FlinkDeploymentSpec rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
         Configuration rollbackConfig =
                 FlinkUtils.getEffectiveConfig(flinkApp.getMetadata(), rollbackSpec, defaultConfig);

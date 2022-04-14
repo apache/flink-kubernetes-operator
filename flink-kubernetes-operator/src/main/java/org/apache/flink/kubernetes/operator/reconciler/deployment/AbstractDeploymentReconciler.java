@@ -20,7 +20,10 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -28,9 +31,13 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** BaseReconciler with functionality that is common to job and session modes. */
 public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDeployment> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractDeploymentReconciler.class);
 
     protected final FlinkOperatorConfiguration operatorConfiguration;
     protected final KubernetesClient kubernetesClient;
@@ -70,6 +77,20 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
         }
 
         return DeleteControl.defaultDelete();
+    }
+
+    protected boolean initiateRollBack(FlinkDeploymentStatus status) {
+        ReconciliationStatus reconciliationStatus = status.getReconciliationStatus();
+        if (reconciliationStatus.getState() != ReconciliationState.ROLLING_BACK) {
+            LOG.warn("Preparing to roll back to last stable spec.");
+            if (status.getError() == null) {
+                status.setError(
+                        "Deployment is not ready within the configured timeout, rolling back.");
+            }
+            reconciliationStatus.setState(ReconciliationState.ROLLING_BACK);
+            return true;
+        }
+        return false;
     }
 
     protected abstract void shutdown(FlinkDeployment flinkApp, Configuration effectiveConfig);

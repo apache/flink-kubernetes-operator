@@ -70,6 +70,7 @@ import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.commons.lang3.ObjectUtils;
@@ -140,8 +141,7 @@ public class FlinkService {
         LOG.info("Application cluster successfully deployed");
     }
 
-    public void submitSessionCluster(FlinkDeployment deployment, Configuration conf)
-            throws Exception {
+    public void submitSessionCluster(Configuration conf) throws Exception {
         LOG.info("Deploying session cluster");
         final ClusterClientServiceLoader clusterClientServiceLoader =
                 new DefaultClusterClientServiceLoader();
@@ -382,12 +382,8 @@ public class FlinkService {
     }
 
     public void stopSessionCluster(
-            FlinkDeployment deployment,
-            Configuration conf,
-            boolean deleteHaData,
-            long shutdownTimeout) {
-        FlinkUtils.deleteCluster(
-                deployment.getMetadata(), kubernetesClient, deleteHaData, shutdownTimeout);
+            ObjectMeta objectMeta, Configuration conf, boolean deleteHaData, long shutdownTimeout) {
+        FlinkUtils.deleteCluster(objectMeta, kubernetesClient, deleteHaData, shutdownTimeout);
         FlinkUtils.waitForClusterShutdown(kubernetesClient, conf, shutdownTimeout);
     }
 

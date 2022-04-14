@@ -26,15 +26,19 @@ import org.apache.flink.kubernetes.operator.config.OperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.util.function.ThrowingRunnable;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -43,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link RollBack logic tests */
+@EnableKubernetesMockClient(crud = true)
 public class RollbackTest {
 
     private final Context context = TestUtils.createContextWithReadyJobManagerDeployment();
@@ -88,6 +93,7 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
                 },
                 () -> {
+                    assertEquals("RUNNING", dep.getStatus().getJobStatus().getState());
                     assertEquals(1, flinkService.listJobs().size());
                     // Make sure we rolled back using the savepoint taken during upgrade
                     assertEquals(savepoints.get(0), flinkService.listJobs().get(0).f0);
@@ -117,6 +123,7 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
                 },
                 () -> {
+                    assertEquals("RUNNING", dep.getStatus().getJobStatus().getState());
                     assertEquals(1, flinkService.listJobs().size());
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
@@ -144,6 +151,7 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
                 },
                 () -> {
+                    assertEquals("RUNNING", dep.getStatus().getJobStatus().getState());
                     assertEquals(1, flinkService.listJobs().size());
 
                     // Remove job to simulate rollback failure
@@ -153,6 +161,60 @@ public class RollbackTest {
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
                     flinkService.setPortReady(true);
+                });
+    }
+
+    @Test
+    public void testRollbackStateless() throws Exception {
+        var dep = TestUtils.buildApplicationCluster();
+        dep.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
+        var reconStatus = dep.getStatus().getReconciliationStatus();
+
+        testRollback(
+                dep,
+                () -> {
+                    dep.getSpec().getJob().setParallelism(9999);
+                    testController.reconcile(dep, context);
+                    assertEquals(
+                            JobState.SUSPENDED,
+                            reconStatus.deserializeLastReconciledSpec().getJob().getState());
+                    testController.reconcile(dep, TestUtils.createEmptyContext());
+
+                    // Trigger rollback by delaying the recovery
+                    Thread.sleep(500);
+                    dep.getStatus()
+                            .getJobStatus()
+                            .getSavepointInfo()
+                            .updateLastSavepoint(Savepoint.of("test"));
+                    testController.reconcile(dep, context);
+                },
+                () -> {
+                    assertEquals("RUNNING", dep.getStatus().getJobStatus().getState());
+                    // Make sure we started from empty state even if savepoint was available
+                    assertNull(new LinkedList<>(flinkService.listJobs()).getLast().f0);
+
+                    dep.getSpec().setRestartNonce(10L);
+                    testController.reconcile(dep, context);
+                });
+    }
+
+    @Test
+    public void testRollbackSession() throws Exception {
+        var dep = TestUtils.buildSessionCluster();
+        testRollback(
+                dep,
+                () -> {
+                    dep.getSpec().getFlinkConfiguration().put("random", "config");
+                    testController.reconcile(dep, context);
+                    // Trigger rollback by delaying the recovery
+                    Thread.sleep(500);
+                    testController.reconcile(dep, context);
+                },
+                () -> {
+                    assertEquals(
+                            JobManagerDeploymentStatus.READY,
+                            dep.getStatus().getJobManagerDeploymentStatus());
+                    dep.getSpec().setRestartNonce(10L);
                 });
     }
 
@@ -175,7 +237,6 @@ public class RollbackTest {
         testController.reconcile(deployment, context);
 
         // Validate stable job
-        var jobStatus = deployment.getStatus().getJobStatus();
         assertTrue(reconciliationStatus.isLastReconciledSpecStable());
 
         triggerRollback.run();
@@ -192,10 +253,8 @@ public class RollbackTest {
         testController.reconcile(deployment, context);
         testController.reconcile(deployment, context);
 
-        assertEquals("RUNNING", jobStatus.getState());
         assertEquals(ReconciliationState.ROLLED_BACK, reconciliationStatus.getState());
         assertFalse(reconciliationStatus.isLastReconciledSpecStable());
-        assertEquals(1, flinkService.listJobs().size());
 
         validateAndRecover.run();
         // Test update
