@@ -62,3 +62,4 @@ To learn more about metrics and logging configuration please refer to the dedica
 | kubernetes.operator.observer.flink.client.timeout     |     10s    |  Duration    | The timeout for the observer to wait the flink rest client to return.            |
 | kubernetes.operator.reconciler.flink.cancel.job.timeout     |     1min    |  Duration    | The timeout for the reconciler to wait for flink to cancel job.            |
 | kubernetes.operator.reconciler.flink.cluster.shutdown.timeout     |     60s    |  Duration    | The timeout for the reconciler to wait for flink to shutdown cluster.           |
+| kubernetes.operator.user.artifacts.base.dir     |     /opt/flink/artifacts    |  String |     The base dir to put the session job artifacts.           |

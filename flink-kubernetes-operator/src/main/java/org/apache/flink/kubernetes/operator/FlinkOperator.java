@@ -20,6 +20,9 @@ package org.apache.flink.kubernetes.operator;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.core.fs.FileSystem;
+import org.apache.flink.core.plugin.PluginManager;
+import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
@@ -77,6 +80,8 @@ public class FlinkOperator {
         this.operator = new Operator(client, configurationService);
         this.flinkService = new FlinkService(client, operatorConfiguration);
         this.validators = ValidatorUtils.discoverValidators(defaultConfig);
+        PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(defaultConfig);
+        FileSystem.initialize(defaultConfig, pluginManager);
     }
 
     private void registerDeploymentController() {

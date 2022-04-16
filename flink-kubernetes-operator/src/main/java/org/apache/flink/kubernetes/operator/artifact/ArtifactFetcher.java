@@ -17,19 +17,18 @@
 
 package org.apache.flink.kubernetes.operator.artifact;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import java.io.File;
 
-import java.nio.file.Path;
+/** The artifact fetcher. */
+public interface ArtifactFetcher {
 
-/** Test for {@link JarResolver}. */
-public class JarResolverTest {
-
-    @Test
-    public void testResolve() throws Exception {
-        String jarUri = "file:///opt/flink/test.jar";
-        JarResolver resolver = new JarResolver();
-        Path path = resolver.resolve(jarUri);
-        Assertions.assertEquals("/opt/flink/test.jar", path.toAbsolutePath().toString());
-    }
+    /**
+     * Fetch the resource from the uri to the targetDir.
+     *
+     * @param uri The artifact to be fetched.
+     * @param targetDir The target dir to put the artifact.
+     * @return The path of the fetched artifact.
+     * @throws Exception
+     */
+    File fetch(String uri, File targetDir) throws Exception;
 }

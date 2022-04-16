@@ -97,4 +97,10 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The timeout for deployments to become ready/stable "
                                     + "before being rolled back if rollback is enabled.");
+
+    public static final ConfigOption<String> OPERATOR_USER_ARTIFACTS_BASE_DIR =
+            ConfigOptions.key("kubernetes.operator.user.artifacts.base.dir")
+                    .stringType()
+                    .defaultValue("/opt/flink/artifacts")
+                    .withDescription("The base dir to put the session job artifacts.");
 }
