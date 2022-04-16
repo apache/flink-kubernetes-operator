@@ -33,7 +33,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
-import org.apache.flink.kubernetes.operator.artifact.JarResolver;
+import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
@@ -67,6 +67,7 @@ import org.apache.flink.runtime.webmonitor.handlers.JarRunResponseBody;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
+import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
@@ -81,13 +82,13 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URI;
-import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -105,14 +106,14 @@ public class FlinkService {
 
     private final KubernetesClient kubernetesClient;
     private final FlinkOperatorConfiguration operatorConfiguration;
-    private final JarResolver jarResolver;
+    private final ArtifactManager artifactManager;
     private final ExecutorService executorService;
 
     public FlinkService(
             KubernetesClient kubernetesClient, FlinkOperatorConfiguration operatorConfiguration) {
         this.kubernetesClient = kubernetesClient;
         this.operatorConfiguration = operatorConfiguration;
-        this.jarResolver = new JarResolver();
+        this.artifactManager = new ArtifactManager(operatorConfiguration);
         this.executorService =
                 Executors.newFixedThreadPool(
                         4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
@@ -206,10 +207,11 @@ public class FlinkService {
 
     private JarUploadResponseBody uploadJar(FlinkSessionJob sessionJob, Configuration conf)
             throws Exception {
-        Path path = jarResolver.resolve(sessionJob.getSpec().getJob().getJarURI());
+        String targetDir = artifactManager.generateJarDir(sessionJob);
+        File jarFile = artifactManager.fetch(sessionJob.getSpec().getJob().getJarURI(), targetDir);
         Preconditions.checkArgument(
-                path.toFile().exists(),
-                String.format("The jar file %s not exists", path.toAbsolutePath()));
+                jarFile.exists(),
+                String.format("The jar file %s not exists", jarFile.getAbsolutePath()));
         JarUploadHeaders headers = JarUploadHeaders.getInstance();
         String clusterId = sessionJob.getSpec().getClusterId();
         String namespace = sessionJob.getMetadata().getNamespace();
@@ -229,10 +231,13 @@ public class FlinkService {
                             EmptyMessageParameters.getInstance(),
                             EmptyRequestBody.getInstance(),
                             Collections.singletonList(
-                                    new FileUpload(path, RestConstants.CONTENT_TYPE_JAR)))
+                                    new FileUpload(
+                                            jarFile.toPath(), RestConstants.CONTENT_TYPE_JAR)))
                     .get(
                             operatorConfiguration.getFlinkClientTimeout().toSeconds(),
                             TimeUnit.SECONDS);
+        } finally {
+            FileUtils.deleteFileOrDirectory(jarFile);
         }
     }
 

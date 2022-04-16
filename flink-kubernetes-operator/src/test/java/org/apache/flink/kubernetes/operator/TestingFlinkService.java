@@ -24,6 +24,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
@@ -64,7 +65,7 @@ public class TestingFlinkService extends FlinkService {
     private Consumer<Configuration> listJobConsumer = conf -> {};
 
     public TestingFlinkService() {
-        super(null, null);
+        super(null, FlinkOperatorConfiguration.fromConfiguration(new Configuration()));
     }
 
     public void clear() {

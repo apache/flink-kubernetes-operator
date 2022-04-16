@@ -41,6 +41,7 @@ public class FlinkOperatorConfiguration {
     Set<String> watchedNamespaces;
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
+    String artifactsBaseDir;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Set<String> watchedNamespaces = OperatorUtils.getWatchedNamespaces();
@@ -84,6 +85,10 @@ public class FlinkOperatorConfiguration {
                         KubernetesOperatorConfigOptions
                                 .OPERATOR_RECONCILER_FLINK_CLUSTER_SHUTDOWN_TIMEOUT);
 
+        String artifactsBaseDir =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR);
+
         String flinkServiceHostOverride = null;
         if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {
             // not running in k8s, simplify local development
@@ -100,6 +105,7 @@ public class FlinkOperatorConfiguration {
                 flinkServiceHostOverride,
                 watchedNamespaces,
                 flinkCancelJobTimeout,
-                flinkShutdownClusterTimeout);
+                flinkShutdownClusterTimeout,
+                artifactsBaseDir);
     }
 }
