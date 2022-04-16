@@ -58,6 +58,8 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHea
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 import org.apache.flink.runtime.rest.util.RestConstants;
+import org.apache.flink.runtime.webmonitor.handlers.JarDeleteHeaders;
+import org.apache.flink.runtime.webmonitor.handlers.JarDeleteMessageParameters;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunMessageParameters;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
@@ -158,13 +160,13 @@ public class FlinkService {
     public JobID submitJobToSessionCluster(
             FlinkSessionJob sessionJob, Configuration conf, @Nullable String savepoint)
             throws Exception {
-        var jarRunResponseBody = jarRun(sessionJob, jarUpload(sessionJob, conf), conf, savepoint);
+        var jarRunResponseBody = runJar(sessionJob, uploadJar(sessionJob, conf), conf, savepoint);
         var jobID = jarRunResponseBody.getJobId();
         LOG.info("Submitted job: {} to session cluster.", jobID);
         return jobID;
     }
 
-    private JarRunResponseBody jarRun(
+    private JarRunResponseBody runJar(
             FlinkSessionJob sessionJob,
             JarUploadResponseBody response,
             Configuration conf,
@@ -197,10 +199,12 @@ public class FlinkService {
         } catch (Exception e) {
             LOG.error("Failed to submit job to session cluster.", e);
             throw new FlinkRuntimeException(e);
+        } finally {
+            deleteJar(conf, jarId);
         }
     }
 
-    private JarUploadResponseBody jarUpload(FlinkSessionJob sessionJob, Configuration conf)
+    private JarUploadResponseBody uploadJar(FlinkSessionJob sessionJob, Configuration conf)
             throws Exception {
         Path path = jarResolver.resolve(sessionJob.getSpec().getJob().getJarURI());
         Preconditions.checkArgument(
@@ -229,6 +233,22 @@ public class FlinkService {
                     .get(
                             operatorConfiguration.getFlinkClientTimeout().toSeconds(),
                             TimeUnit.SECONDS);
+        }
+    }
+
+    private void deleteJar(Configuration conf, String jarId) {
+        try (RestClusterClient<String> clusterClient =
+                (RestClusterClient<String>) getClusterClient(conf)) {
+            JarDeleteHeaders headers = JarDeleteHeaders.getInstance();
+            JarDeleteMessageParameters parameters = headers.getUnresolvedMessageParameters();
+            parameters.jarIdPathParameter.resolve(jarId);
+            clusterClient
+                    .sendRequest(headers, parameters, EmptyRequestBody.getInstance())
+                    .get(
+                            operatorConfiguration.getFlinkClientTimeout().toSeconds(),
+                            TimeUnit.SECONDS);
+        } catch (Exception e) {
+            LOG.error("Failed to delete the jar: {}.", jarId, e);
         }
     }
 
