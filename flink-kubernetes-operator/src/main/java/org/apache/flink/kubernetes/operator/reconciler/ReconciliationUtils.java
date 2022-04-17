@@ -67,6 +67,12 @@ public class ReconciliationUtils {
         reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec);
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
         reconciliationStatus.setState(ReconciliationState.DEPLOYED);
+
+        if (flinkApp.getSpec().getJob() != null
+                && flinkApp.getSpec().getJob().getState() == JobState.SUSPENDED) {
+            // When a job is suspended by the user it is automatically marked stable
+            reconciliationStatus.markReconciledSpecAsStable();
+        }
     }
 
     public static void updateSavepointReconciliationSuccess(FlinkDeployment flinkApp) {
@@ -251,6 +257,7 @@ public class ReconciliationUtils {
 
     public static boolean shouldRollBack(
             ReconciliationStatus reconciliationStatus, Configuration configuration) {
+
         if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
             return true;
         }
@@ -258,6 +265,14 @@ public class ReconciliationUtils {
         if (!configuration.get(OperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED)
                 || reconciliationStatus.getState() == ReconciliationState.ROLLED_BACK
                 || reconciliationStatus.isLastReconciledSpecStable()) {
+            return false;
+        }
+
+        FlinkDeploymentSpec lastStableSpec = reconciliationStatus.deserializeLastStableSpec();
+        if (lastStableSpec != null
+                && lastStableSpec.getJob() != null
+                && lastStableSpec.getJob().getState() == JobState.SUSPENDED) {
+            // Should not roll back to suspended state
             return false;
         }
 

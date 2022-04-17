@@ -75,13 +75,13 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                 reconciliationStatus.deserializeLastReconciledSpec();
         FlinkDeploymentSpec currentDeploySpec = flinkApp.getSpec();
 
-        JobSpec currentJobSpec = currentDeploySpec.getJob();
+        JobSpec desiredJobSpec = currentDeploySpec.getJob();
         if (lastReconciledSpec == null) {
             deployFlinkJob(
-                    currentJobSpec,
+                    desiredJobSpec,
                     status,
                     effectiveConfig,
-                    Optional.ofNullable(currentJobSpec.getInitialSavepointPath()));
+                    Optional.ofNullable(desiredJobSpec.getInitialSavepointPath()));
             IngressUtils.updateIngressRules(
                     deployMeta, currentDeploySpec, effectiveConfig, kubernetesClient);
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, JobState.RUNNING);
@@ -100,8 +100,8 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                 return;
             }
             JobState currentJobState = lastReconciledSpec.getJob().getState();
-            JobState desiredJobState = currentJobSpec.getState();
-            UpgradeMode upgradeMode = currentJobSpec.getUpgradeMode();
+            JobState desiredJobState = desiredJobSpec.getState();
+            UpgradeMode upgradeMode = desiredJobSpec.getUpgradeMode();
             JobState stateAfterReconcile = currentJobState;
             if (currentJobState == JobState.RUNNING) {
                 if (desiredJobState == JobState.RUNNING) {
@@ -112,9 +112,9 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             }
             if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
                 if (upgradeMode == UpgradeMode.STATELESS) {
-                    deployFlinkJob(currentJobSpec, status, effectiveConfig, Optional.empty());
+                    deployFlinkJob(desiredJobSpec, status, effectiveConfig, Optional.empty());
                 } else {
-                    restoreFromLastSavepoint(currentJobSpec, status, effectiveConfig);
+                    restoreFromLastSavepoint(desiredJobSpec, status, effectiveConfig);
                 }
                 stateAfterReconcile = JobState.RUNNING;
             }
@@ -123,7 +123,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, stateAfterReconcile);
         } else if (ReconciliationUtils.shouldRollBack(reconciliationStatus, effectiveConfig)) {
             rollbackApplication(flinkApp);
-        } else if (SavepointUtils.shouldTriggerSavepoint(currentJobSpec, status)
+        } else if (SavepointUtils.shouldTriggerSavepoint(desiredJobSpec, status)
                 && isJobRunning(status)) {
             triggerSavepoint(flinkApp, effectiveConfig);
             ReconciliationUtils.updateSavepointReconciliationSuccess(flinkApp);
