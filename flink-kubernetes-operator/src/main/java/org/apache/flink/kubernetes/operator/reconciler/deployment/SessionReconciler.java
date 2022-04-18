@@ -94,6 +94,10 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
                 effectiveConfig,
                 false,
                 operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
+        FlinkUtils.waitForClusterShutdown(
+                kubernetesClient,
+                effectiveConfig,
+                operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
         flinkService.submitSessionCluster(effectiveConfig);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         IngressUtils.updateIngressRules(objectMeta, deploySpec, effectiveConfig, kubernetesClient);
