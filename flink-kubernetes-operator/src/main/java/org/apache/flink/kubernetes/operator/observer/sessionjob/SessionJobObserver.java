@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.operator.observer.context.VoidObserverContext
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobHelper;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.util.Preconditions;
@@ -113,19 +112,19 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
             return;
         }
 
-        Configuration lastValidatedConfig =
-                FlinkUtils.getEffectiveConfig(flinkDepOpt.get(), this.defaultConfig);
+        Configuration deployedConfig =
+                ReconciliationUtils.getDeployedConfig(flinkDepOpt.get(), defaultConfig);
         var jobFound =
                 jobStatusObserver.observe(
                         flinkSessionJob.getStatus().getJobStatus(),
-                        lastValidatedConfig,
+                        deployedConfig,
                         VoidObserverContext.INSTANCE);
         if (jobFound) {
             savepointObserver
                     .observe(
                             flinkSessionJob.getStatus().getJobStatus().getSavepointInfo(),
                             flinkSessionJob.getStatus().getJobStatus().getJobId(),
-                            lastValidatedConfig)
+                            deployedConfig)
                     .ifPresent(
                             error ->
                                     ReconciliationUtils.updateForReconciliationError(

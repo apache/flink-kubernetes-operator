@@ -52,7 +52,8 @@ public class IngressUtilsTest {
         Configuration config = FlinkUtils.getEffectiveConfig(appCluster, new Configuration());
 
         // no ingress when ingressDomain is empty
-        IngressUtils.updateIngressRules(appCluster, config, client);
+        IngressUtils.updateIngressRules(
+                appCluster.getMetadata(), appCluster.getSpec(), config, client);
         assertNull(
                 client.network()
                         .v1()
@@ -65,7 +66,8 @@ public class IngressUtilsTest {
         IngressSpec.IngressSpecBuilder builder = IngressSpec.builder();
         builder.template("{{name}}.{{namespace}}.example.com");
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(appCluster, config, client);
+        IngressUtils.updateIngressRules(
+                appCluster.getMetadata(), appCluster.getSpec(), config, client);
         Ingress ingress =
                 client.network()
                         .v1()
@@ -89,7 +91,8 @@ public class IngressUtilsTest {
         builder.className("nginx");
         builder.annotations(Map.of("nginx.ingress.kubernetes.io/rewrite-target", "/$2"));
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(appCluster, config, client);
+        IngressUtils.updateIngressRules(
+                appCluster.getMetadata(), appCluster.getSpec(), config, client);
         ingress =
                 client.network()
                         .v1()
@@ -117,7 +120,8 @@ public class IngressUtilsTest {
         builder.template("example.com/{{namespace}}/{{name}}(/|$)(.*)");
         builder.className("nginx");
         appCluster.getSpec().setIngress(builder.build());
-        IngressUtils.updateIngressRules(appCluster, config, client);
+        IngressUtils.updateIngressRules(
+                appCluster.getMetadata(), appCluster.getSpec(), config, client);
         ingress =
                 client.network()
                         .v1()

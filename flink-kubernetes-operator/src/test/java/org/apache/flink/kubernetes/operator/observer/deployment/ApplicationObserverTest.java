@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -53,17 +52,19 @@ public class ApplicationObserverTest {
                         FlinkOperatorConfiguration.fromConfiguration(new Configuration()),
                         flinkConf);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.setStatus(new FlinkDeploymentStatus());
+
         Configuration conf = FlinkUtils.getEffectiveConfig(deployment, flinkConf);
 
         observer.observe(deployment, TestUtils.createEmptyContext());
+        assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
-        deployment.setStatus(new FlinkDeploymentStatus());
         deployment
                 .getStatus()
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(deployment.getSpec());
         deployment.getStatus().setJobStatus(new JobStatus());
-        flinkService.submitApplicationCluster(deployment, conf);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf);
 
         // Validate port check logic
         flinkService.setPortReady(false);
@@ -73,11 +74,13 @@ public class ApplicationObserverTest {
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
                 deployment.getStatus().getJobManagerDeploymentStatus());
+        assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
         observer.observe(deployment, readyContext);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
                 deployment.getStatus().getJobManagerDeploymentStatus());
+        assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
         flinkService.setPortReady(true);
         // Port ready but we have to recheck once again
@@ -85,6 +88,7 @@ public class ApplicationObserverTest {
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
+        assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
         // Stable ready
         observer.observe(deployment, readyContext);
@@ -92,6 +96,9 @@ public class ApplicationObserverTest {
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
         assertEquals(JobState.RUNNING.name(), deployment.getStatus().getJobStatus().getState());
+        assertEquals(
+                deployment.getStatus().getReconciliationStatus().getLastReconciledSpec(),
+                deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
         observer.observe(deployment, readyContext);
         assertEquals(
@@ -111,6 +118,7 @@ public class ApplicationObserverTest {
                                                         .getJobStatus()
                                                         .getStartTime()))
                         >= 0);
+
         // Test job manager is unavailable suddenly
         flinkService.setPortReady(false);
         observer.observe(deployment, readyContext);
@@ -129,6 +137,7 @@ public class ApplicationObserverTest {
                 deployment.getStatus().getJobManagerDeploymentStatus());
 
         // Test listing failure
+        deployment.getStatus().getReconciliationStatus().setLastStableSpec(null);
         flinkService.clear();
         observer.observe(deployment, readyContext);
         assertEquals(
@@ -137,6 +146,7 @@ public class ApplicationObserverTest {
         assertEquals(
                 AbstractDeploymentObserver.JOB_STATE_UNKNOWN,
                 deployment.getStatus().getJobStatus().getState());
+        assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
     }
 
     @Test
@@ -150,7 +160,7 @@ public class ApplicationObserverTest {
                         flinkConf);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf = FlinkUtils.getEffectiveConfig(deployment, flinkConf);
-        flinkService.submitApplicationCluster(deployment, conf);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf);
         bringToReadyStatus(deployment);
         observer.observe(deployment, readyContext);
         assertEquals(
@@ -200,7 +210,7 @@ public class ApplicationObserverTest {
         deployment
                 .getStatus()
                 .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(ReconciliationUtils.clone(deployment.getSpec()));
+                .serializeAndSetLastReconciledSpec(deployment.getSpec());
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobName("jobname");
         jobStatus.setJobId("0000000000");

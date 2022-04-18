@@ -19,11 +19,12 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.OwnerReferenceBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -58,55 +59,52 @@ public class IngressUtils {
     private static final Logger LOG = LoggerFactory.getLogger(IngressUtils.class);
 
     public static void updateIngressRules(
-            FlinkDeployment flinkDeployment,
+            ObjectMeta objectMeta,
+            FlinkDeploymentSpec spec,
             Configuration effectiveConfig,
             KubernetesClient client) {
-        if (flinkDeployment.getSpec().getIngress() != null) {
 
+        if (spec.getIngress() != null) {
             Ingress ingress =
                     new IngressBuilder()
                             .withNewMetadata()
-                            .withAnnotations(
-                                    flinkDeployment.getSpec().getIngress().getAnnotations())
-                            .withName(flinkDeployment.getMetadata().getName())
-                            .withNamespace(flinkDeployment.getMetadata().getNamespace())
+                            .withAnnotations(spec.getIngress().getAnnotations())
+                            .withName(objectMeta.getName())
+                            .withNamespace(objectMeta.getNamespace())
                             .endMetadata()
                             .withNewSpec()
-                            .withIngressClassName(
-                                    flinkDeployment.getSpec().getIngress().getClassName())
-                            .withRules(getIngressRule(flinkDeployment, effectiveConfig))
+                            .withIngressClassName(spec.getIngress().getClassName())
+                            .withRules(getIngressRule(objectMeta, spec, effectiveConfig))
                             .endSpec()
                             .build();
 
             Deployment deployment =
                     client.apps()
                             .deployments()
-                            .inNamespace(flinkDeployment.getMetadata().getNamespace())
-                            .withName(flinkDeployment.getMetadata().getName())
+                            .inNamespace(objectMeta.getNamespace())
+                            .withName(objectMeta.getName())
                             .get();
             if (deployment == null) {
-                LOG.error("Could not find deployment {}", flinkDeployment.getMetadata().getName());
+                LOG.error("Could not find deployment {}", objectMeta.getName());
             } else {
                 setOwnerReference(deployment, Collections.singletonList(ingress));
             }
 
             LOG.info("Updating ingress rules {}", ingress);
-            client.resourceList(ingress)
-                    .inNamespace(flinkDeployment.getMetadata().getNamespace())
-                    .createOrReplace();
+            client.resourceList(ingress).inNamespace(objectMeta.getNamespace()).createOrReplace();
         }
     }
 
     private static IngressRule getIngressRule(
-            FlinkDeployment flinkDeployment, Configuration effectiveConfig) {
-        final String clusterId = flinkDeployment.getMetadata().getName();
+            ObjectMeta objectMeta, FlinkDeploymentSpec spec, Configuration effectiveConfig) {
+        final String clusterId = objectMeta.getName();
         final int restPort = effectiveConfig.getInteger(RestOptions.PORT);
 
         URL ingressUrl =
                 getIngressUrl(
-                        flinkDeployment.getSpec().getIngress().getTemplate(),
-                        flinkDeployment.getMetadata().getName(),
-                        flinkDeployment.getMetadata().getNamespace());
+                        spec.getIngress().getTemplate(),
+                        objectMeta.getName(),
+                        objectMeta.getNamespace());
 
         IngressRuleBuilder ingressRuleBuilder = new IngressRuleBuilder();
         ingressRuleBuilder.withHttp(

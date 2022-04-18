@@ -9118,13 +9118,21 @@ spec:
                 type: string
               reconciliationStatus:
                 properties:
-                  success:
-                    type: boolean
-                  error:
-                    type: string
+                  reconciliationTimestamp:
+                    type: integer
                   lastReconciledSpec:
                     type: string
+                  lastStableSpec:
+                    type: string
+                  state:
+                    enum:
+                    - DEPLOYED
+                    - ROLLING_BACK
+                    - ROLLED_BACK
+                    type: string
                 type: object
+              error:
+                type: string
             type: object
         type: object
     served: true

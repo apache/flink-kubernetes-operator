@@ -70,6 +70,7 @@ import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.commons.lang3.ObjectUtils;
@@ -115,8 +116,7 @@ public class FlinkService {
                         4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
     }
 
-    public void submitApplicationCluster(FlinkDeployment deployment, Configuration conf)
-            throws Exception {
+    public void submitApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
             final String clusterId =
                     Preconditions.checkNotNull(conf.get(KubernetesConfigOptions.CLUSTER_ID));
@@ -132,7 +132,6 @@ public class FlinkService {
         final ApplicationDeployer deployer =
                 new ApplicationClusterDeployer(clusterClientServiceLoader);
 
-        JobSpec jobSpec = deployment.getSpec().getJob();
         final ApplicationConfiguration applicationConfiguration =
                 new ApplicationConfiguration(
                         jobSpec.getArgs() != null ? jobSpec.getArgs() : new String[0],
@@ -142,8 +141,7 @@ public class FlinkService {
         LOG.info("Application cluster successfully deployed");
     }
 
-    public void submitSessionCluster(FlinkDeployment deployment, Configuration conf)
-            throws Exception {
+    public void submitSessionCluster(Configuration conf) throws Exception {
         LOG.info("Deploying session cluster");
         final ClusterClientServiceLoader clusterClientServiceLoader =
                 new DefaultClusterClientServiceLoader();
@@ -384,11 +382,8 @@ public class FlinkService {
     }
 
     public void stopSessionCluster(
-            FlinkDeployment deployment,
-            Configuration conf,
-            boolean deleteHaData,
-            long shutdownTimeout) {
-        FlinkUtils.deleteCluster(deployment, kubernetesClient, deleteHaData, shutdownTimeout);
+            ObjectMeta objectMeta, Configuration conf, boolean deleteHaData, long shutdownTimeout) {
+        FlinkUtils.deleteCluster(objectMeta, kubernetesClient, deleteHaData, shutdownTimeout);
         FlinkUtils.waitForClusterShutdown(kubernetesClient, conf, shutdownTimeout);
     }
 

@@ -51,7 +51,8 @@ public enum JobManagerDeploymentStatus {
                 break;
             case READY:
                 rescheduleAfter =
-                        SavepointUtils.savepointInProgress(flinkDeployment)
+                        SavepointUtils.savepointInProgress(
+                                        flinkDeployment.getStatus().getJobStatus())
                                 ? operatorConfiguration.getProgressCheckInterval()
                                 : operatorConfiguration.getReconcileInterval();
                 break;

@@ -45,17 +45,17 @@ public class SessionReconcilerTest {
         TestingFlinkService flinkService =
                 new TestingFlinkService() {
                     @Override
-                    public void submitSessionCluster(
-                            FlinkDeployment deployment, Configuration conf) {
-                        super.submitSessionCluster(deployment, conf);
+                    public void submitSessionCluster(Configuration conf) {
+                        super.submitSessionCluster(conf);
                         count.addAndGet(1);
                     }
                 };
 
         SessionReconciler reconciler =
-                new SessionReconciler(null, flinkService, operatorConfiguration);
+                new SessionReconciler(
+                        null, flinkService, operatorConfiguration, new Configuration());
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
-        reconciler.reconcile(deployment, context, new Configuration());
+        reconciler.reconcile(deployment, context);
         assertEquals(1, count.get());
     }
 }

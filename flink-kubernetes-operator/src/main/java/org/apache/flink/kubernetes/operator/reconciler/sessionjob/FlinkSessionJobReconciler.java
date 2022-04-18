@@ -52,22 +52,23 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSessionJobReconciler.class);
 
     private final FlinkOperatorConfiguration operatorConfiguration;
+    private final Configuration defaultConfig;
     private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
 
     public FlinkSessionJobReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration) {
+            FlinkOperatorConfiguration operatorConfiguration,
+            Configuration defaultConfig) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.operatorConfiguration = operatorConfiguration;
+        this.defaultConfig = defaultConfig;
     }
 
     @Override
-    public void reconcile(
-            FlinkSessionJob flinkSessionJob, Context context, Configuration defaultConfig)
-            throws Exception {
+    public void reconcile(FlinkSessionJob flinkSessionJob, Context context) throws Exception {
 
         SessionJobHelper helper = new SessionJobHelper(flinkSessionJob, LOG);
         FlinkSessionJobSpec lastReconciledSpec =
@@ -136,8 +137,7 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
     }
 
     @Override
-    public DeleteControl cleanup(
-            FlinkSessionJob sessionJob, Context context, Configuration defaultConfig) {
+    public DeleteControl cleanup(FlinkSessionJob sessionJob, Context context) {
         Optional<FlinkDeployment> flinkDepOptional =
                 OperatorUtils.getSecondaryResource(sessionJob, context, operatorConfiguration);
 

@@ -128,13 +128,13 @@ public class FlinkUtils {
     }
 
     public static void deleteCluster(
-            FlinkDeployment flinkApp,
+            ObjectMeta meta,
             KubernetesClient kubernetesClient,
             boolean deleteHaConfigmaps,
             long shutdownTimeout) {
         deleteCluster(
-                flinkApp.getMetadata().getNamespace(),
-                flinkApp.getMetadata().getName(),
+                meta.getNamespace(),
+                meta.getName(),
                 kubernetesClient,
                 deleteHaConfigmaps,
                 shutdownTimeout);

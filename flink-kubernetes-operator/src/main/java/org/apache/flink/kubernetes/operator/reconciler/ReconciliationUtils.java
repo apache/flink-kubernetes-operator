@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.OperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
@@ -27,6 +28,8 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobReconciliationStatus;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.util.Preconditions;
@@ -41,6 +44,7 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import javax.annotation.Nullable;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
 /** Reconciliation utilities. */
@@ -51,8 +55,7 @@ public class ReconciliationUtils {
     public static void updateForSpecReconciliationSuccess(
             FlinkDeployment flinkApp, JobState stateAfterReconcile) {
         ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
-        reconciliationStatus.setSuccess(true);
-        reconciliationStatus.setError(null);
+        flinkApp.getStatus().setError(null);
         FlinkDeploymentSpec clonedSpec = clone(flinkApp.getSpec());
         FlinkDeploymentSpec lastReconciledSpec =
                 reconciliationStatus.deserializeLastReconciledSpec();
@@ -62,32 +65,37 @@ public class ReconciliationUtils {
             clonedSpec.getJob().setState(stateAfterReconcile);
         }
         reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec);
+        reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
+        reconciliationStatus.setState(ReconciliationState.DEPLOYED);
+
+        if (flinkApp.getSpec().getJob() != null
+                && flinkApp.getSpec().getJob().getState() == JobState.SUSPENDED) {
+            // When a job is suspended by the user it is automatically marked stable
+            reconciliationStatus.markReconciledSpecAsStable();
+        }
     }
 
     public static void updateSavepointReconciliationSuccess(FlinkDeployment flinkApp) {
         ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
-        reconciliationStatus.setSuccess(true);
-        reconciliationStatus.setError(null);
+        flinkApp.getStatus().setError(null);
         FlinkDeploymentSpec lastReconciledSpec =
                 reconciliationStatus.deserializeLastReconciledSpec();
         lastReconciledSpec
                 .getJob()
                 .setSavepointTriggerNonce(flinkApp.getSpec().getJob().getSavepointTriggerNonce());
         reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec);
+        reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
     }
 
     public static void updateForReconciliationError(FlinkDeployment flinkApp, String err) {
-        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
-        reconciliationStatus.setSuccess(false);
-        reconciliationStatus.setError(err);
+        flinkApp.getStatus().setError(err);
     }
 
     public static void updateForSpecReconciliationSuccess(
             FlinkSessionJob sessionJob, JobState stateAfterReconcile) {
         FlinkSessionJobReconciliationStatus reconciliationStatus =
                 sessionJob.getStatus().getReconciliationStatus();
-        reconciliationStatus.setSuccess(true);
-        reconciliationStatus.setError(null);
+        sessionJob.getStatus().setError(null);
         FlinkSessionJobSpec clonedSpec = clone(sessionJob.getSpec());
         if (reconciliationStatus.getLastReconciledSpec() != null) {
             var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
@@ -99,11 +107,11 @@ public class ReconciliationUtils {
     }
 
     public static void updateSavepointReconciliationSuccess(FlinkSessionJob flinkSessionJob) {
-        FlinkSessionJobReconciliationStatus reconciliationStatus =
-                flinkSessionJob.getStatus().getReconciliationStatus();
+        FlinkSessionJobStatus status = flinkSessionJob.getStatus();
+        status.setError(null);
+
+        FlinkSessionJobReconciliationStatus reconciliationStatus = status.getReconciliationStatus();
         var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
-        reconciliationStatus.setSuccess(true);
-        reconciliationStatus.setError(null);
         lastReconciledSpec
                 .getJob()
                 .setSavepointTriggerNonce(
@@ -112,10 +120,7 @@ public class ReconciliationUtils {
     }
 
     public static void updateForReconciliationError(FlinkSessionJob flinkSessionJob, String err) {
-        FlinkSessionJobReconciliationStatus reconciliationStatus =
-                flinkSessionJob.getStatus().getReconciliationStatus();
-        reconciliationStatus.setSuccess(false);
-        reconciliationStatus.setError(err);
+        flinkSessionJob.getStatus().setError(err);
     }
 
     public static <T> T clone(T object) {
@@ -175,32 +180,52 @@ public class ReconciliationUtils {
     }
 
     public static boolean isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-            FlinkDeployment flinkApp) {
-        final FlinkDeploymentSpec lastReconciledSpec =
-                Preconditions.checkNotNull(
-                        flinkApp.getStatus()
-                                .getReconciliationStatus()
-                                .deserializeLastReconciledSpec());
-        final UpgradeMode previousUpgradeMode = lastReconciledSpec.getJob().getUpgradeMode();
-        final UpgradeMode currentUpgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
+            FlinkDeployment flinkApp, Configuration defaultConf) {
 
-        final Configuration lastReconciledFlinkConfig =
-                Configuration.fromMap(lastReconciledSpec.getFlinkConfiguration());
+        FlinkDeploymentSpec deployedSpec = getDeployedSpec(flinkApp);
+        UpgradeMode previousUpgradeMode = deployedSpec.getJob().getUpgradeMode();
+        UpgradeMode currentUpgradeMode = flinkApp.getSpec().getJob().getUpgradeMode();
 
         return previousUpgradeMode != UpgradeMode.LAST_STATE
                 && currentUpgradeMode == UpgradeMode.LAST_STATE
-                && !FlinkUtils.isKubernetesHAActivated(lastReconciledFlinkConfig);
+                && !FlinkUtils.isKubernetesHAActivated(getDeployedConfig(flinkApp, defaultConf));
+    }
+
+    public static FlinkDeploymentSpec getDeployedSpec(FlinkDeployment deployment) {
+        ReconciliationStatus reconciliationStatus =
+                deployment.getStatus().getReconciliationStatus();
+
+        if (reconciliationStatus.getState() == ReconciliationState.DEPLOYED) {
+            return reconciliationStatus.deserializeLastReconciledSpec();
+        } else {
+            return reconciliationStatus.deserializeLastStableSpec();
+        }
+    }
+
+    public static Configuration getDeployedConfig(
+            FlinkDeployment deployment, Configuration defaultConf) {
+        return FlinkUtils.getEffectiveConfig(
+                deployment.getMetadata(), getDeployedSpec(deployment), defaultConf);
     }
 
     private static boolean isJobUpgradeInProgress(FlinkDeployment current) {
         ReconciliationStatus reconciliationStatus = current.getStatus().getReconciliationStatus();
 
-        if (reconciliationStatus == null || current.getSpec().getJob() == null) {
+        if (reconciliationStatus == null) {
+            return false;
+        }
+
+        if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
+            return true;
+        }
+
+        if (current.getSpec().getJob() == null
+                || reconciliationStatus.getLastReconciledSpec() == null) {
             return false;
         }
 
         return current.getSpec().getJob().getState() == JobState.RUNNING
-                && reconciliationStatus.isSuccess()
+                && current.getStatus().getError() == null
                 && reconciliationStatus.deserializeLastReconciledSpec().getJob().getState()
                         == JobState.SUSPENDED;
     }
@@ -228,5 +253,33 @@ public class ReconciliationUtils {
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Could not serialize spec, this indicates a bug...", e);
         }
+    }
+
+    public static boolean shouldRollBack(
+            ReconciliationStatus reconciliationStatus, Configuration configuration) {
+
+        if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
+            return true;
+        }
+
+        if (!configuration.get(OperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED)
+                || reconciliationStatus.getState() == ReconciliationState.ROLLED_BACK
+                || reconciliationStatus.isLastReconciledSpecStable()) {
+            return false;
+        }
+
+        FlinkDeploymentSpec lastStableSpec = reconciliationStatus.deserializeLastStableSpec();
+        if (lastStableSpec != null
+                && lastStableSpec.getJob() != null
+                && lastStableSpec.getJob().getState() == JobState.SUSPENDED) {
+            // Should not roll back to suspended state
+            return false;
+        }
+
+        Duration readinessTimeout =
+                configuration.get(OperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT);
+        return Instant.now()
+                .minus(readinessTimeout)
+                .isAfter(Instant.ofEpochMilli(reconciliationStatus.getReconciliationTimestamp()));
     }
 }

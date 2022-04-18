@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -34,15 +35,18 @@ public class ReconcilerFactory {
     private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
     private final FlinkOperatorConfiguration operatorConfiguration;
+    private final Configuration defaultConfig;
     private final Map<Mode, Reconciler<FlinkDeployment>> reconcilerMap;
 
     public ReconcilerFactory(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration) {
+            FlinkOperatorConfiguration operatorConfiguration,
+            Configuration defaultConfig) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.operatorConfiguration = operatorConfiguration;
+        this.defaultConfig = defaultConfig;
         this.reconcilerMap = new ConcurrentHashMap<>();
     }
 
@@ -53,10 +57,16 @@ public class ReconcilerFactory {
                     switch (mode) {
                         case SESSION:
                             return new SessionReconciler(
-                                    kubernetesClient, flinkService, operatorConfiguration);
+                                    kubernetesClient,
+                                    flinkService,
+                                    operatorConfiguration,
+                                    defaultConfig);
                         case APPLICATION:
                             return new ApplicationReconciler(
-                                    kubernetesClient, flinkService, operatorConfiguration);
+                                    kubernetesClient,
+                                    flinkService,
+                                    operatorConfiguration,
+                                    defaultConfig);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

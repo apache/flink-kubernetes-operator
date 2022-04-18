@@ -37,17 +37,19 @@ public class SessionObserver extends AbstractDeploymentObserver {
     }
 
     @Override
-    public void observeIfClusterReady(
-            FlinkDeployment flinkApp, Context context, Configuration lastValidatedConfig) {
+    public boolean observeFlinkCluster(
+            FlinkDeployment flinkApp, Context context, Configuration deployedConfig) {
         // Check if session cluster can serve rest calls following our practice in JobObserver
         try {
-            flinkService.listJobs(lastValidatedConfig);
+            flinkService.listJobs(deployedConfig);
+            return true;
         } catch (Exception e) {
             logger.error("REST service in session cluster is bad now", e);
             if (e instanceof TimeoutException) {
                 // check for problems with the underlying deployment
-                observeJmDeployment(flinkApp, context, lastValidatedConfig);
+                observeJmDeployment(flinkApp, context, deployedConfig);
             }
+            return false;
         }
     }
 }

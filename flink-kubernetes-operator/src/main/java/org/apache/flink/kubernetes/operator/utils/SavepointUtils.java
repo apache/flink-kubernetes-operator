@@ -18,7 +18,9 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 
 import java.time.Duration;
@@ -26,23 +28,18 @@ import java.time.Duration;
 /** Savepoint utilities. */
 public class SavepointUtils {
 
-    public static boolean savepointInProgress(FlinkDeployment flinkDeployment) {
-        return flinkDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId() != null;
+    public static boolean savepointInProgress(JobStatus jobStatus) {
+        return jobStatus.getSavepointInfo().getTriggerId() != null;
     }
 
-    public static boolean shouldTriggerSavepoint(FlinkDeployment flinkDeployment) {
-        if (savepointInProgress(flinkDeployment)) {
+    public static boolean shouldTriggerSavepoint(JobSpec jobSpec, FlinkDeploymentStatus status) {
+        if (savepointInProgress(status.getJobStatus())) {
             return false;
         }
-        return flinkDeployment.getSpec().getJob().getSavepointTriggerNonce() != null
-                && !flinkDeployment
-                        .getSpec()
-                        .getJob()
-                        .getSavepointTriggerNonce()
+        return jobSpec.getSavepointTriggerNonce() != null
+                && !jobSpec.getSavepointTriggerNonce()
                         .equals(
-                                flinkDeployment
-                                        .getStatus()
-                                        .getReconciliationStatus()
+                                status.getReconciliationStatus()
                                         .deserializeLastReconciledSpec()
                                         .getJob()
                                         .getSavepointTriggerNonce());

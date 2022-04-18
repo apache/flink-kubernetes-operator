@@ -21,8 +21,12 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DeploymentOptions;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
@@ -30,6 +34,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 
 import javax.annotation.Nullable;
@@ -69,12 +74,12 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public void submitApplicationCluster(FlinkDeployment deployment, Configuration conf) {
+    public void submitApplicationCluster(JobSpec jobSpec, Configuration conf) {
         JobID jobID = new JobID();
         JobStatusMessage jobStatusMessage =
                 new JobStatusMessage(
                         jobID,
-                        deployment.getMetadata().getName(),
+                        conf.getString(KubernetesConfigOptions.CLUSTER_ID),
                         JobStatus.RUNNING,
                         System.currentTimeMillis());
 
@@ -82,8 +87,8 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public void submitSessionCluster(FlinkDeployment deployment, Configuration conf) {
-        sessions.add(deployment.getMetadata().getName());
+    public void submitSessionCluster(Configuration conf) {
+        sessions.add(conf.get(KubernetesConfigOptions.CLUSTER_ID));
     }
 
     @Override
@@ -104,7 +109,10 @@ public class TestingFlinkService extends FlinkService {
     @Override
     public List<JobStatusMessage> listJobs(Configuration conf) throws Exception {
         listJobConsumer.accept(conf);
-        if (jobs.isEmpty() && !sessions.isEmpty()) {
+        if (jobs.isEmpty()
+                && !sessions.isEmpty()
+                && conf.get(DeploymentOptions.TARGET)
+                        .equals(KubernetesDeploymentTarget.APPLICATION.getName())) {
             throw new Exception("Trying to list a job without submitting it");
         }
         if (!isPortReady) {
@@ -166,11 +174,8 @@ public class TestingFlinkService extends FlinkService {
 
     @Override
     public void stopSessionCluster(
-            FlinkDeployment deployment,
-            Configuration conf,
-            boolean deleteHa,
-            long shutdownTimeout) {
-        sessions.remove(deployment.getMetadata().getName());
+            ObjectMeta objectMeta, Configuration conf, boolean deleteHa, long shutdownTimeout) {
+        sessions.remove(objectMeta.getName());
     }
 
     @Override

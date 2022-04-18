@@ -35,12 +35,6 @@ import lombok.NoArgsConstructor;
 @Builder
 public class FlinkSessionJobReconciliationStatus {
 
-    /** True if last reconciliation step was successful. */
-    private boolean success;
-
-    /** If success == false, error information about the reconciliation failure. */
-    private String error;
-
     /**
      * Last reconciled job spec. Used to decide whether further reconciliation steps are necessary.
      */

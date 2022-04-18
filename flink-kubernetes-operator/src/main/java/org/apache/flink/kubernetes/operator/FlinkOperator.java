@@ -82,14 +82,17 @@ public class FlinkOperator {
 
     private void registerDeploymentController() {
         ReconcilerFactory reconcilerFactory =
-                new ReconcilerFactory(client, flinkService, operatorConfiguration);
+                new ReconcilerFactory(
+                        client,
+                        flinkService,
+                        operatorConfiguration,
+                        defaultConfig.getFlinkConfig());
         ObserverFactory observerFactory =
                 new ObserverFactory(
                         flinkService, operatorConfiguration, defaultConfig.getFlinkConfig());
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(
-                        defaultConfig,
                         operatorConfiguration,
                         client,
                         validators,
@@ -106,18 +109,17 @@ public class FlinkOperator {
 
     private void registerSessionJobController() {
         Reconciler<FlinkSessionJob> reconciler =
-                new FlinkSessionJobReconciler(client, flinkService, operatorConfiguration);
+                new FlinkSessionJobReconciler(
+                        client,
+                        flinkService,
+                        operatorConfiguration,
+                        defaultConfig.getFlinkConfig());
         Observer<FlinkSessionJob> observer =
                 new SessionJobObserver(
                         operatorConfiguration, flinkService, defaultConfig.getFlinkConfig());
         FlinkSessionJobController controller =
                 new FlinkSessionJobController(
-                        defaultConfig,
-                        operatorConfiguration,
-                        client,
-                        validators,
-                        reconciler,
-                        observer);
+                        operatorConfiguration, client, validators, reconciler, observer);
 
         FlinkControllerConfig<FlinkSessionJob> controllerConfig =
                 new FlinkControllerConfig<>(

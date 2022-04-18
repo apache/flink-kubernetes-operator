@@ -83,4 +83,18 @@ public class OperatorConfigOptions {
                     .defaultValue(Duration.ofSeconds(60))
                     .withDescription(
                             "The timeout for the reconciler to wait for flink to shutdown cluster.");
+
+    public static final ConfigOption<Boolean> DEPLOYMENT_ROLLBACK_ENABLED =
+            ConfigOptions.key("kubernetes.operator.deployment.rollback.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("Whether to enable rolling back failed deployment upgrades.");
+
+    public static final ConfigOption<Duration> DEPLOYMENT_READINESS_TIMEOUT =
+            ConfigOptions.key("kubernetes.operator.deployment.readiness.timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(1))
+                    .withDescription(
+                            "The timeout for deployments to become ready/stable "
+                                    + "before being rolled back if rollback is enabled.");
 }

@@ -17,28 +17,12 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
-import org.apache.flink.annotation.Experimental;
-
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-/** Last observed status of the Flink deployment. */
-@Experimental
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class FlinkDeploymentStatus {
-    /** Last observed status of the Flink job on Application deployments. */
-    private JobStatus jobStatus = new JobStatus();
-
-    /** Last observed status of the JobManager deployment. */
-    private JobManagerDeploymentStatus jobManagerDeploymentStatus =
-            JobManagerDeploymentStatus.MISSING;
-
-    /** Status of the last reconcile operation. */
-    private ReconciliationStatus reconciliationStatus = new ReconciliationStatus();
-
-    /** Error information about the Flink deployment. */
-    private String error;
+/** Current state of the reconciliation. */
+public enum ReconciliationState {
+    /** The last reconciledSpec is currently deployed. */
+    DEPLOYED,
+    /** In the process of rolling back to the lastStableSpec. */
+    ROLLING_BACK,
+    /** Rolled back to the lastStableSpec. */
+    ROLLED_BACK;
 }

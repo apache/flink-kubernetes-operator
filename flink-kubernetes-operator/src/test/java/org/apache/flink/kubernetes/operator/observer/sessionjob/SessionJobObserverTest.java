@@ -47,7 +47,8 @@ public class SessionJobObserverTest {
         final var sessionJob = TestUtils.buildSessionJob();
         final var flinkService = new TestingFlinkService();
         final var reconciler =
-                new FlinkSessionJobReconciler(null, flinkService, operatorConfiguration);
+                new FlinkSessionJobReconciler(
+                        null, flinkService, operatorConfiguration, new Configuration());
         final var observer =
                 new SessionJobObserver(
                         operatorConfiguration, flinkService, defaultConfig.getFlinkConfig());
@@ -57,7 +58,7 @@ public class SessionJobObserverTest {
         observer.observe(sessionJob, readyContext);
 
         // submit job
-        reconciler.reconcile(sessionJob, readyContext, defaultConfig.getFlinkConfig());
+        reconciler.reconcile(sessionJob, readyContext);
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertEquals(
@@ -91,7 +92,7 @@ public class SessionJobObserverTest {
 
         var sessionJob2 = TestUtils.buildSessionJob();
         // submit the second job
-        reconciler.reconcile(sessionJob2, readyContext, defaultConfig.getFlinkConfig());
+        reconciler.reconcile(sessionJob2, readyContext);
         var jobID2 = sessionJob2.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertNotEquals(jobID, jobID2);
@@ -110,7 +111,8 @@ public class SessionJobObserverTest {
         final var sessionJob = TestUtils.buildSessionJob();
         final var flinkService = new TestingFlinkService();
         final var reconciler =
-                new FlinkSessionJobReconciler(null, flinkService, operatorConfiguration);
+                new FlinkSessionJobReconciler(
+                        null, flinkService, operatorConfiguration, new Configuration());
         final var observer =
                 new SessionJobObserver(
                         operatorConfiguration, flinkService, defaultConfig.getFlinkConfig());
@@ -119,7 +121,7 @@ public class SessionJobObserverTest {
                         Map.of(RestOptions.PORT.key(), "8088"));
 
         // submit job
-        reconciler.reconcile(sessionJob, readyContext, defaultConfig.getFlinkConfig());
+        reconciler.reconcile(sessionJob, readyContext);
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertEquals(
@@ -138,14 +140,15 @@ public class SessionJobObserverTest {
         final var sessionJob = TestUtils.buildSessionJob();
         final var flinkService = new TestingFlinkService();
         final var reconciler =
-                new FlinkSessionJobReconciler(null, flinkService, operatorConfiguration);
+                new FlinkSessionJobReconciler(
+                        null, flinkService, operatorConfiguration, new Configuration());
         final var observer =
                 new SessionJobObserver(
                         operatorConfiguration, flinkService, defaultConfig.getFlinkConfig());
         final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
 
         // submit job
-        reconciler.reconcile(sessionJob, readyContext, defaultConfig.getFlinkConfig());
+        reconciler.reconcile(sessionJob, readyContext);
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertEquals(
