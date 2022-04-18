@@ -404,7 +404,6 @@ public class FlinkService {
     public void stopSessionCluster(
             ObjectMeta objectMeta, Configuration conf, boolean deleteHaData, long shutdownTimeout) {
         FlinkUtils.deleteCluster(objectMeta, kubernetesClient, deleteHaData, shutdownTimeout);
-        FlinkUtils.waitForClusterShutdown(kubernetesClient, conf, shutdownTimeout);
     }
 
     public void triggerSavepoint(
