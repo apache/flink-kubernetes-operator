@@ -268,21 +268,31 @@ public class RollbackTest {
 
         if (deployment.getSpec().getJob() != null) {
             deployment.getSpec().getJob().setState(JobState.SUSPENDED);
+            deployment.getSpec().getJob().setParallelism(1);
             testController.reconcile(deployment, context);
-            Thread.sleep(500);
             testController.reconcile(deployment, TestUtils.createEmptyContext());
+            assertTrue(reconciliationStatus.isLastReconciledSpecStable());
+            assertEquals(ReconciliationState.DEPLOYED, reconciliationStatus.getState());
+            assertNull(deployment.getStatus().getError());
+
+            deployment.getSpec().getJob().setState(JobState.RUNNING);
+            testController.reconcile(deployment, TestUtils.createEmptyContext());
+            // Make sure we do not roll back to suspended state
+            Thread.sleep(200);
             testController.reconcile(deployment, context);
             testController.reconcile(deployment, context);
             assertTrue(reconciliationStatus.isLastReconciledSpecStable());
             assertEquals(ReconciliationState.DEPLOYED, reconciliationStatus.getState());
             assertNull(deployment.getStatus().getError());
 
-            deployment.getSpec().getJob().setState(JobState.RUNNING);
+            // Verify suspending a rolled back job
+            triggerRollback.run();
             testController.reconcile(deployment, context);
-            // Make sure we do not roll back to suspended state
-            Thread.sleep(200);
-            testController.reconcile(deployment, TestUtils.createEmptyContext());
+            assertEquals(ReconciliationState.ROLLED_BACK, reconciliationStatus.getState());
             testController.reconcile(deployment, context);
+            testController.reconcile(deployment, context);
+
+            deployment.getSpec().getJob().setState(JobState.SUSPENDED);
             testController.reconcile(deployment, context);
             assertTrue(reconciliationStatus.isLastReconciledSpecStable());
             assertEquals(ReconciliationState.DEPLOYED, reconciliationStatus.getState());
