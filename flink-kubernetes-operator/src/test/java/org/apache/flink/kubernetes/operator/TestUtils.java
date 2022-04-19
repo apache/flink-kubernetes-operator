@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
@@ -40,7 +41,6 @@ import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
 import io.fabric8.kubernetes.api.model.Container;
@@ -344,22 +344,19 @@ public class TestUtils {
             FlinkOperatorConfiguration operatorConfiguration,
             KubernetesClient kubernetesClient,
             TestingFlinkService flinkService) {
-        var defaultConfig = FlinkUtils.loadDefaultConfig();
+        var defaultConfig = new Configuration();
 
         var controller =
                 new FlinkDeploymentController(
                         operatorConfiguration,
                         kubernetesClient,
-                        ValidatorUtils.discoverValidators(defaultConfig.getFlinkConfig()),
+                        ValidatorUtils.discoverValidators(defaultConfig),
                         new ReconcilerFactory(
                                 kubernetesClient,
                                 flinkService,
                                 operatorConfiguration,
-                                defaultConfig.getFlinkConfig()),
-                        new ObserverFactory(
-                                flinkService,
-                                operatorConfiguration,
-                                defaultConfig.getFlinkConfig()));
+                                defaultConfig),
+                        new ObserverFactory(flinkService, operatorConfiguration, defaultConfig));
         controller.setControllerConfig(
                 new FlinkControllerConfig(controller, Collections.emptySet()));
         return controller;

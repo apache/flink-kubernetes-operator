@@ -23,7 +23,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 
@@ -39,8 +38,7 @@ public class SessionJobObserverTest {
 
     private final FlinkOperatorConfiguration operatorConfiguration =
             FlinkOperatorConfiguration.fromConfiguration(new Configuration());
-    private final DefaultConfig defaultConfig =
-            new DefaultConfig(new Configuration(), new Configuration());
+    private final Configuration defaultConfig = new Configuration();
 
     @Test
     public void testBasicObserve() throws Exception {
@@ -50,8 +48,7 @@ public class SessionJobObserverTest {
                 new FlinkSessionJobReconciler(
                         null, flinkService, operatorConfiguration, new Configuration());
         final var observer =
-                new SessionJobObserver(
-                        operatorConfiguration, flinkService, defaultConfig.getFlinkConfig());
+                new SessionJobObserver(operatorConfiguration, flinkService, defaultConfig);
         final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
 
         // observe the brand new job, nothing to do.
@@ -114,8 +111,7 @@ public class SessionJobObserverTest {
                 new FlinkSessionJobReconciler(
                         null, flinkService, operatorConfiguration, new Configuration());
         final var observer =
-                new SessionJobObserver(
-                        operatorConfiguration, flinkService, defaultConfig.getFlinkConfig());
+                new SessionJobObserver(operatorConfiguration, flinkService, defaultConfig);
         final var readyContext =
                 TestUtils.createContextWithReadyFlinkDeployment(
                         Map.of(RestOptions.PORT.key(), "8088"));
@@ -143,8 +139,7 @@ public class SessionJobObserverTest {
                 new FlinkSessionJobReconciler(
                         null, flinkService, operatorConfiguration, new Configuration());
         final var observer =
-                new SessionJobObserver(
-                        operatorConfiguration, flinkService, defaultConfig.getFlinkConfig());
+                new SessionJobObserver(operatorConfiguration, flinkService, defaultConfig);
         final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
 
         // submit job
@@ -162,7 +157,7 @@ public class SessionJobObserverTest {
         Assertions.assertNull(savepointInfo.getTriggerId());
         Assertions.assertNull(savepointInfo.getTriggerTimestamp());
 
-        flinkService.triggerSavepoint(jobID, savepointInfo, defaultConfig.getFlinkConfig());
+        flinkService.triggerSavepoint(jobID, savepointInfo, defaultConfig);
 
         Assertions.assertEquals("trigger_0", savepointInfo.getTriggerId());
         observer.observe(sessionJob, readyContext);

@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.metrics;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.core.plugin.PluginUtils;
@@ -28,22 +29,53 @@ import org.apache.flink.runtime.metrics.MetricRegistryImpl;
 import org.apache.flink.runtime.metrics.ReporterSetup;
 import org.apache.flink.runtime.metrics.util.MetricUtils;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.HashMap;
+import java.util.Map;
+
 /** Utility class for flink based operator metrics. */
 public class OperatorMetricUtils {
 
-    public static void initOperatorMetrics(Configuration operatorConfig) {
-        PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(operatorConfig);
-        MetricRegistry metricRegistry = createMetricRegistry(operatorConfig, pluginManager);
+    private static final Logger LOG = LoggerFactory.getLogger(OperatorMetricUtils.class);
+
+    private static final String OPERATOR_METRICS_PREFIX = "kubernetes.operator.metrics.";
+    private static final String METRICS_PREFIX = "metrics.";
+
+    public static void initOperatorMetrics(Configuration defaultConfig) {
+        Configuration metricConfig = createMetricConfig(defaultConfig);
+        LOG.info("Initializing operator metrics using conf: {}", metricConfig);
+        PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(metricConfig);
+        MetricRegistry metricRegistry = createMetricRegistry(metricConfig, pluginManager);
         KubernetesOperatorMetricGroup operatorMetricGroup =
                 KubernetesOperatorMetricGroup.create(
                         metricRegistry,
-                        operatorConfig,
+                        metricConfig,
                         EnvUtils.getOrDefault(EnvUtils.ENV_OPERATOR_NAMESPACE, "default"),
                         EnvUtils.getOrDefault(
                                 EnvUtils.ENV_OPERATOR_NAME, "flink-kubernetes-operator"),
                         EnvUtils.getOrDefault(EnvUtils.ENV_HOSTNAME, "localhost"));
         MetricGroup statusGroup = operatorMetricGroup.addGroup("Status");
         MetricUtils.instantiateStatusMetrics(statusGroup);
+    }
+
+    @VisibleForTesting
+    protected static Configuration createMetricConfig(Configuration defaultConfig) {
+        Map<String, String> metricConf = new HashMap<>();
+        defaultConfig
+                .toMap()
+                .forEach(
+                        (key, value) -> {
+                            if (key.startsWith(OPERATOR_METRICS_PREFIX)) {
+                                metricConf.put(
+                                        key.replaceFirst(OPERATOR_METRICS_PREFIX, METRICS_PREFIX),
+                                        value);
+                            } else if (!key.startsWith(METRICS_PREFIX)) {
+                                metricConf.put(key, value);
+                            }
+                        });
+        return Configuration.fromMap(metricConf);
     }
 
     private static MetricRegistryImpl createMetricRegistry(

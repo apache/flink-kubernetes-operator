@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -35,7 +36,6 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -59,7 +59,7 @@ public class DefaultValidator implements FlinkResourceValidator {
     private final Configuration defaultFlinkConf;
 
     public DefaultValidator() {
-        this(FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR)));
+        this(GlobalConfiguration.loadConfiguration());
     }
 
     public DefaultValidator(Configuration defaultFlinkConf) {

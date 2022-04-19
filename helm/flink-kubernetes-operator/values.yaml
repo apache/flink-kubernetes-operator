@@ -66,27 +66,23 @@ webhook:
   #   name: jks-password-secret
   #   key: password-key
 
-operatorConfiguration:
+defaultConfiguration:
   create: true
   # Set append to false to replace configuration files
   append: true
   flink-conf.yaml: |+
-    metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
-    metrics.reporter.slf4j.interval: 5 MINUTE
+    # Flink Config Overrides
+    kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
+    kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE
 
-    operator.reconciler.reschedule.interval: 15 s
-    operator.observer.progress-check.interval: 5 s
-  # log4j2.properties: |+
-  #   rootLogger.level = DEBUG
-
-flinkDefaultConfiguration:
-   create: true
-   # Set append to false to replace configuration files
-   append: true
-   # flink-conf.yaml: |+
-   #   ...
-   # log4j-console.properties: |+
-   #   ...
+    kubernetes.operator.reconciler.reschedule.interval: 15 s
+    kubernetes.operator.observer.progress-check.interval: 5 s
+  log4j-operator.properties: |+
+    # Flink Operator Logging Overrides
+    # rootLogger.level = DEBUG
+  log4j-console.properties: |+
+    # Flink Deployment Logging Overrides
+    # rootLogger.level = DEBUG
 
 # (Optional) Exposes metrics port on the container if defined
 metrics:

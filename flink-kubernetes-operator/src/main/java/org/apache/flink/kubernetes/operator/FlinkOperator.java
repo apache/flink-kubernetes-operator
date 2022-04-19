@@ -18,7 +18,8 @@
 package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.kubernetes.operator.config.DefaultConfig;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
@@ -34,7 +35,6 @@ import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFact
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
@@ -60,36 +60,30 @@ public class FlinkOperator {
     private final KubernetesClient client;
     private final FlinkService flinkService;
     private final ConfigurationService configurationService;
-    private final DefaultConfig defaultConfig;
+    private final Configuration defaultConfig;
     private final Set<FlinkResourceValidator> validators;
 
     public FlinkOperator() {
-        this(FlinkUtils.loadDefaultConfig());
+        this(GlobalConfiguration.loadConfiguration());
     }
 
-    public FlinkOperator(DefaultConfig defaultConfig) {
-        OperatorMetricUtils.initOperatorMetrics(defaultConfig.getOperatorConfig());
+    public FlinkOperator(Configuration defaultConfig) {
+        OperatorMetricUtils.initOperatorMetrics(defaultConfig);
 
         this.defaultConfig = defaultConfig;
         this.client = new DefaultKubernetesClient();
-        this.operatorConfiguration =
-                FlinkOperatorConfiguration.fromConfiguration(defaultConfig.getOperatorConfig());
+        this.operatorConfiguration = FlinkOperatorConfiguration.fromConfiguration(defaultConfig);
         this.configurationService = getConfigurationService(operatorConfiguration);
         this.operator = new Operator(client, configurationService);
         this.flinkService = new FlinkService(client, operatorConfiguration);
-        this.validators = ValidatorUtils.discoverValidators(defaultConfig.getFlinkConfig());
+        this.validators = ValidatorUtils.discoverValidators(defaultConfig);
     }
 
     private void registerDeploymentController() {
         ReconcilerFactory reconcilerFactory =
-                new ReconcilerFactory(
-                        client,
-                        flinkService,
-                        operatorConfiguration,
-                        defaultConfig.getFlinkConfig());
+                new ReconcilerFactory(client, flinkService, operatorConfiguration, defaultConfig);
         ObserverFactory observerFactory =
-                new ObserverFactory(
-                        flinkService, operatorConfiguration, defaultConfig.getFlinkConfig());
+                new ObserverFactory(flinkService, operatorConfiguration, defaultConfig);
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(
@@ -110,13 +104,9 @@ public class FlinkOperator {
     private void registerSessionJobController() {
         Reconciler<FlinkSessionJob> reconciler =
                 new FlinkSessionJobReconciler(
-                        client,
-                        flinkService,
-                        operatorConfiguration,
-                        defaultConfig.getFlinkConfig());
+                        client, flinkService, operatorConfiguration, defaultConfig);
         Observer<FlinkSessionJob> observer =
-                new SessionJobObserver(
-                        operatorConfiguration, flinkService, defaultConfig.getFlinkConfig());
+                new SessionJobObserver(operatorConfiguration, flinkService, defaultConfig);
         FlinkSessionJobController controller =
                 new FlinkSessionJobController(
                         operatorConfiguration, client, validators, reconciler, observer);

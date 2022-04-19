@@ -50,32 +50,39 @@ public class FlinkOperatorConfiguration {
     public static FlinkOperatorConfiguration fromConfiguration(
             Configuration operatorConfig, Set<String> watchedNamespaces) {
         Duration reconcileInterval =
-                operatorConfig.get(OperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL);
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL);
 
         int reconcilerMaxParallelism =
                 operatorConfig.getInteger(
-                        OperatorConfigOptions.OPERATOR_RECONCILER_MAX_PARALLELISM);
+                        KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_MAX_PARALLELISM);
 
         Duration restApiReadyDelay =
-                operatorConfig.get(OperatorConfigOptions.OPERATOR_OBSERVER_REST_READY_DELAY);
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_OBSERVER_REST_READY_DELAY);
 
         Duration progressCheckInterval =
-                operatorConfig.get(OperatorConfigOptions.OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL);
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL);
 
         Duration savepointTriggerGracePeriod =
                 operatorConfig.get(
-                        OperatorConfigOptions.OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD);
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD);
 
         Duration flinkClientTimeout =
-                operatorConfig.get(OperatorConfigOptions.OPERATOR_OBSERVER_FLINK_CLIENT_TIMEOUT);
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_OBSERVER_FLINK_CLIENT_TIMEOUT);
 
         Duration flinkCancelJobTimeout =
                 operatorConfig.get(
-                        OperatorConfigOptions.OPERATOR_RECONCILER_FLINK_CANCEL_JOB_TIMEOUT);
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_RECONCILER_FLINK_CANCEL_JOB_TIMEOUT);
 
         Duration flinkShutdownClusterTimeout =
                 operatorConfig.get(
-                        OperatorConfigOptions.OPERATOR_RECONCILER_FLINK_CLUSTER_SHUTDOWN_TIMEOUT);
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_RECONCILER_FLINK_CLUSTER_SHUTDOWN_TIMEOUT);
 
         String flinkServiceHostOverride = null;
         if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {

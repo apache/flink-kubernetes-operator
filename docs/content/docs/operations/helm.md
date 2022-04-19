@@ -121,9 +121,9 @@ The example demonstrates that we can still use a `values.yaml` file to override 
 
 ```yaml
 
-operatorConfiguration:
+defaultConfiguration:
   ...
-  log4j2.properties: |+
+  log4j-operator.properties: |+
     rootLogger.appenderRef.file.ref = LogFile
     appender.file.name = LogFile
     appender.file.type = File
