@@ -73,12 +73,12 @@ jobs:
       - name: Tests in flink-kubernetes-operator
         run: |
           cd flink-kubernetes-operator
-          mvn integration-test -Dit.skip=false
+          mvn verify -Dit.skip=false
           cd ..
       - name: Tests in flink-kubernetes-webhook
         run: |
           cd flink-kubernetes-webhook
-          mvn integration-test -Dit.skip=false
+          mvn verify -Dit.skip=false
           cd ..
       - name: Stop the operator
         run: |
