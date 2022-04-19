@@ -16,6 +16,7 @@
 # limitations under the License.
 ################################################################################
 
+# Flink job/cluster related configs
 taskmanager.numberOfTaskSlots: 2
 blob.server.port: 6124
 jobmanager.rpc.port: 6123
@@ -24,3 +25,16 @@ queryable-state.proxy.ports: 6125
 jobmanager.memory.process.size: 1600m
 taskmanager.memory.process.size: 1728m
 parallelism.default: 2
+
+# Flink operator related configs
+# kubernetes.operator.reconciler.reschedule.interval: 60 s
+# kubernetes.operator.reconciler.max.parallelism: 5
+# kubernetes.operator.reconciler.flink.cancel.job.timeout: 1 min
+# kubernetes.operator.reconciler.flink.cluster.shutdown.timeout: 60 s
+# kubernetes.operator.observer.rest-ready.delay: 10 s
+# kubernetes.operator.observer.progress-check.interval: 10 s
+# kubernetes.operator.observer.savepoint.trigger.grace-period: 10 s
+# kubernetes.operator.observer.flink.client.timeout: 10 s
+
+# kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
+# kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE

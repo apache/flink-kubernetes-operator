@@ -28,27 +28,31 @@ under the License.
 
 The Flink Kubernetes Operator (Operator) extends the [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/) that allows gathering and exposing metrics to centralized monitoring solutions. The well known [Metric Reporters](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/metric_reporters) are shipped in the operator image and are ready to use.
 
+In order to specify metrics configuration for the operator, simply prefix them with `kubernetes.operator.`. This logic ensures that we can easily separate Flink job and operator metrics configuration.
+
+Let's look at a few examples.
+
 ## Slf4j
 The default metrics reporter in the operator is Slf4j. It does not require any external monitoring systems, and it is enabled in the `values.yaml` file by default, mainly for demonstrating purposes.
 ```yaml
-operatorConfiguration:
+defaultConfiguration:
   create: true
   append: true
   flink-conf.yaml: |+
-    metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
-    metrics.reporter.slf4j.interval: 5 MINUTE
+    kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
+    kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE
 ```
 To use a more robust production grade monitoring solution the configuration needs to be changed.
 
 ## How to Enable Prometheus (Example)
 The following example shows how to enable the Prometheus metric reporter:
 ```yaml
-operatorConfiguration:
+defaultConfiguration:
   create: true
   append: true
   flink-conf.yaml: |+
-    metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
-    metrics.reporter.prom.port: 9999
+    kubernetes.operator.metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
+    kubernetes.operator.metrics.reporter.prom.port: 9999
 ```
 Some metric reporters, including the Prometheus, needs a port to be exposed on the container. This can be achieved be defining a value for the otherwise empty `metrics.port` variable.
 Either in the `values.yaml` file:
@@ -95,13 +99,18 @@ Once the custom resource is created in the Kubernetes environment the operator m
 # Logging
 The Operator controls the logging behaviour for Flink applications and the Operator itself using configuration files mounted externally via ConfigMaps. [Configuration files](https://github.com/apache/flink-kubernetes-operator/tree/main/helm/flink-kubernetes-operator/conf) with default values are shipped in the Helm chart. It is recommended to review and adjust them if needed in the `values.yaml` file before deploying the Operator in production environments.
 
-To append/override the default log configuration properties for the Operator use:
+To append/override the default log configuration properties for the operator and Flink deployments define the `log4j-operator.properties` and `log4j-console.properties` keys respectively:
+
 ```yaml
-operatorConfiguration:
+defaultConfiguration:
   create: true
   append: true
-  log4j2.properties: |+
-    rootLogger.level = DEBUG
+  log4j-operator.properties: |+
+    # Flink Operator Logging Overrides
+    # rootLogger.level = DEBUG
+  log4j-console.properties: |+
+    # Flink Deployment Logging Overrides
+    # rootLogger.level = DEBUG
 ```
 
 {{< hint info >}}
@@ -111,12 +120,4 @@ We rely on the MDC provided by the operator-sdk to access this information and u
 See the [Java Operator SDK docs](https://javaoperatorsdk.io/docs/features#contextual-info-for-logging-with-mdc) for more detail.
 {{< /hint >}}
 
-To append/override the default log configuration properties for Flink applications use:
-```yaml
-flinkDefaultConfiguration:
-  create: true
-  append: true
-  log4j-console.properties: |+
-    rootLogger.level = DEBUG
-```
 To learn more about accessing the job logs or changing the log level dynamically check the corresponding [section](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#logging) of the core documentation.

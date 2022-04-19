@@ -16,8 +16,8 @@
 # limitations under the License.
 ################################################################################
 
-operatorConfiguration:
-  log4j2.properties: |+
+defaultConfiguration:
+  log4j-operator.properties: |+
     rootLogger.appenderRef.file.ref = LogFile
     appender.file.name = LogFile
     appender.file.type = File

@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.DefaultConfig;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
 import org.junit.jupiter.api.Assertions;
@@ -62,12 +62,12 @@ public class FlinkOperatorTest {
     private ExecutorService getExecutorForParallelismConfig(Optional<Integer> parallelism) {
         var operatorConfig = new Configuration();
         parallelism.ifPresent(
-                p -> operatorConfig.setInteger("operator.reconciler.max.parallelism", p));
+                p ->
+                        operatorConfig.setInteger(
+                                KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_MAX_PARALLELISM,
+                                p));
 
-        var flinkConfig = new Configuration();
-        var config = new DefaultConfig(operatorConfig, flinkConfig);
-
-        FlinkOperator flinkOperator = new FlinkOperator(config);
+        FlinkOperator flinkOperator = new FlinkOperator(operatorConfig);
         return flinkOperator.getOperator().getConfigurationService().getExecutorService();
     }
 }

@@ -26,59 +26,59 @@ import io.javaoperatorsdk.operator.api.config.ConfigurationService;
 import java.time.Duration;
 
 /** This class holds configuration constants used by flink operator. */
-public class OperatorConfigOptions {
+public class KubernetesOperatorConfigOptions {
 
     public static final ConfigOption<Duration> OPERATOR_RECONCILER_RESCHEDULE_INTERVAL =
-            ConfigOptions.key("operator.reconciler.reschedule.interval")
+            ConfigOptions.key("kubernetes.operator.reconciler.reschedule.interval")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(60))
                     .withDescription(
                             "The interval for the controller to reschedule the reconcile process.");
 
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_REST_READY_DELAY =
-            ConfigOptions.key("operator.observer.rest-ready.delay")
+            ConfigOptions.key("kubernetes.operator.observer.rest-ready.delay")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(10))
                     .withDescription(
                             "Final delay before deployment is marked ready after port becomes accessible.");
 
     public static final ConfigOption<Integer> OPERATOR_RECONCILER_MAX_PARALLELISM =
-            ConfigOptions.key("operator.reconciler.max.parallelism")
+            ConfigOptions.key("kubernetes.operator.reconciler.max.parallelism")
                     .intType()
                     .defaultValue(ConfigurationService.DEFAULT_RECONCILIATION_THREADS_NUMBER)
                     .withDescription(
                             "The maximum number of threads running the reconciliation loop. Use -1 for infinite.");
 
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL =
-            ConfigOptions.key("operator.observer.progress-check.interval")
+            ConfigOptions.key("kubernetes.operator.observer.progress-check.interval")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(10))
                     .withDescription(
                             "The interval for observing status for in-progress operations such as deployment and savepoints.");
 
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD =
-            ConfigOptions.key("operator.observer.savepoint.trigger.grace-period")
+            ConfigOptions.key("kubernetes.operator.observer.savepoint.trigger.grace-period")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(10))
                     .withDescription(
                             "The interval before a savepoint trigger attempt is marked as unsuccessful.");
 
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_FLINK_CLIENT_TIMEOUT =
-            ConfigOptions.key("operator.observer.flink.client.timeout")
+            ConfigOptions.key("kubernetes.operator.observer.flink.client.timeout")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(10))
                     .withDescription(
                             "The timeout for the observer to wait the flink rest client to return.");
 
     public static final ConfigOption<Duration> OPERATOR_RECONCILER_FLINK_CANCEL_JOB_TIMEOUT =
-            ConfigOptions.key("operator.reconciler.flink.cancel.job.timeout")
+            ConfigOptions.key("kubernetes.operator.reconciler.flink.cancel.job.timeout")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(1))
                     .withDescription(
                             "The timeout for the reconciler to wait for flink to cancel job.");
 
     public static final ConfigOption<Duration> OPERATOR_RECONCILER_FLINK_CLUSTER_SHUTDOWN_TIMEOUT =
-            ConfigOptions.key("operator.reconciler.flink.cluster.shutdown.timeout")
+            ConfigOptions.key("kubernetes.operator.reconciler.flink.cluster.shutdown.timeout")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(60))
                     .withDescription(

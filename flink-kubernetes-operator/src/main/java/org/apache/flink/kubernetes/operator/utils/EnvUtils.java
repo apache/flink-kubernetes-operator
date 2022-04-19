@@ -44,8 +44,6 @@ public class EnvUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(EnvUtils.class);
 
-    public static final String ENV_FLINK_OPERATOR_CONF_DIR = "FLINK_OPERATOR_CONF_DIR";
-    public static final String ENV_FLINK_CONF_DIR = "FLINK_CONF_DIR";
     public static final String ENV_WEBHOOK_KEYSTORE_FILE = "WEBHOOK_KEYSTORE_FILE";
     public static final String ENV_WEBHOOK_KEYSTORE_PASSWORD = "WEBHOOK_KEYSTORE_PASSWORD";
     public static final String ENV_WEBHOOK_KEYSTORE_TYPE = "WEBHOOK_KEYSTORE_TYPE";

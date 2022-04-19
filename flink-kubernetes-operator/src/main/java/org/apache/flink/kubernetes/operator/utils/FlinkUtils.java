@@ -18,12 +18,10 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
-import org.apache.flink.kubernetes.operator.config.DefaultConfig;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -53,14 +51,6 @@ public class FlinkUtils {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    public static DefaultConfig loadDefaultConfig() {
-        Configuration operatorConfig =
-                FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_OPERATOR_CONF_DIR));
-        Configuration flinkConfig =
-                FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR));
-        return new DefaultConfig(operatorConfig, flinkConfig);
-    }
-
     public static Configuration getEffectiveConfig(
             FlinkDeployment flinkApp, Configuration flinkConfig) {
         return getEffectiveConfig(flinkApp.getMetadata(), flinkApp.getSpec(), flinkConfig);
@@ -76,12 +66,6 @@ public class FlinkUtils {
         } catch (Exception e) {
             throw new RuntimeException("Failed to load configuration", e);
         }
-    }
-
-    public static Configuration loadConfiguration(String confDir) {
-        return confDir != null
-                ? GlobalConfiguration.loadConfiguration(confDir)
-                : new Configuration();
     }
 
     public static Pod mergePodTemplates(Pod toPod, Pod fromPod) {

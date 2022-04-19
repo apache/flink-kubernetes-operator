@@ -22,7 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
-import org.apache.flink.kubernetes.operator.config.OperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
@@ -225,8 +225,10 @@ public class RollbackTest {
             throws Exception {
 
         var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
-        flinkConfiguration.put(OperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(), "true");
-        flinkConfiguration.put(OperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "100");
+        flinkConfiguration.put(
+                KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(), "true");
+        flinkConfiguration.put(
+                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "100");
 
         testController.reconcile(deployment, TestUtils.createEmptyContext());
 

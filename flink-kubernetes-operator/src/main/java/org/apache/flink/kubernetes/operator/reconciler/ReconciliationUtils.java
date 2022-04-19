@@ -19,7 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
-import org.apache.flink.kubernetes.operator.config.OperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
@@ -262,7 +262,7 @@ public class ReconciliationUtils {
             return true;
         }
 
-        if (!configuration.get(OperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED)
+        if (!configuration.get(KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED)
                 || reconciliationStatus.getState() == ReconciliationState.ROLLED_BACK
                 || reconciliationStatus.isLastReconciledSpecStable()) {
             return false;
@@ -277,7 +277,7 @@ public class ReconciliationUtils {
         }
 
         Duration readinessTimeout =
-                configuration.get(OperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT);
+                configuration.get(KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT);
         return Instant.now()
                 .minus(readinessTimeout)
                 .isAfter(Instant.ofEpochMilli(reconciliationStatus.getReconciliationTimestamp()));

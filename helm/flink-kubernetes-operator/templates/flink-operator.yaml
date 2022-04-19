@@ -63,18 +63,14 @@ spec:
               value: /opt/flink/conf
             - name: FLINK_PLUGINS_DIR
               value: /opt/flink/plugins
-            - name: FLINK_OPERATOR_CONF_DIR
-              value: /opt/flink-operator/conf
             - name: LOG_CONFIG
-              value: -Dlog4j.configurationFile=/opt/flink-operator/conf/log4j2.properties
+              value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.operator }}
             - name: FLINK_OPERATOR_WATCH_NAMESPACES
               value: {{ join "," .Values.watchNamespaces  }}
           volumeMounts:
             - name: flink-operator-config-volume
-              mountPath: /opt/flink-operator/conf
-            - name: flink-default-config-volume
               mountPath: /opt/flink/conf
             {{- if .Values.operatorVolumeMounts.create }}
                 {{- toYaml .Values.operatorVolumeMounts.data | nindent 12 }}
@@ -103,7 +99,7 @@ spec:
             - name: WEBHOOK_SERVER_PORT
               value: "9443"
             - name: LOG_CONFIG
-              value: -Dlog4j.configurationFile=/opt/flink-operator/conf/log4j2.properties
+              value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.webhook }}
           volumeMounts:
@@ -111,7 +107,7 @@ spec:
             mountPath: "/certs"
             readOnly: true
           - name: flink-operator-config-volume
-            mountPath: /opt/flink-operator/conf
+            mountPath: /opt/flink/conf
         {{- end }}
       volumes:
         - name: flink-operator-config-volume
@@ -120,14 +116,8 @@ spec:
             items:
               - key: flink-conf.yaml
                 path: flink-conf.yaml
-              - key: log4j2.properties
-                path: log4j2.properties
-        - name: flink-default-config-volume
-          configMap:
-            name: flink-default-config
-            items:
-              - key: flink-conf.yaml
-                path: flink-conf.yaml
+              - key: log4j-operator.properties
+                path: log4j-operator.properties
               - key: log4j-console.properties
                 path: log4j-console.properties
         {{- if .Values.operatorVolumes.create }}
@@ -142,7 +132,7 @@ spec:
               path: keystore.p12
         {{- end }}
 ---
-{{- if .Values.operatorConfiguration.create }}
+{{- if .Values.defaultConfiguration.create }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -152,42 +142,24 @@ metadata:
     {{- include "flink-operator.labels" . | nindent 4 }}
 data:
   flink-conf.yaml: |+
-{{- if .Values.operatorConfiguration.append }}
-  {{- $.Files.Get "conf/flink-operator-config/flink-conf.yaml"  | nindent 4 -}}
+{{- if .Values.defaultConfiguration.append }}
+  {{- $.Files.Get "conf/flink-conf.yaml"  | nindent 4 -}}
 {{- end }}
-{{- if index (.Values.operatorConfiguration) "flink-conf.yaml" }}
-  {{- index (.Values.operatorConfiguration) "flink-conf.yaml" | nindent 4 -}}
+{{- if index (.Values.defaultConfiguration) "flink-conf.yaml" }}
+  {{- index (.Values.defaultConfiguration) "flink-conf.yaml" | nindent 4 -}}
 {{- end }}
-  log4j2.properties: |+
-{{- if .Values.operatorConfiguration.append }}
-  {{- $.Files.Get "conf/flink-operator-config/log4j2.properties"  | nindent 4 -}}
+  log4j-operator.properties: |+
+{{- if .Values.defaultConfiguration.append }}
+  {{- $.Files.Get "conf/log4j-operator.properties"  | nindent 4 -}}
 {{- end }}
-{{- if index (.Values.operatorConfiguration) "log4j2.properties" }}
-  {{- index (.Values.operatorConfiguration) "log4j2.properties" | nindent 4 -}}
-{{- end }}
-{{- end }}
----
-{{- if .Values.flinkDefaultConfiguration.create }}
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: flink-default-config
-  namespace: {{ .Release.Namespace }}
-  labels:
-    {{- include "flink-operator.labels" . | nindent 4 }}
-data:
-  flink-conf.yaml: |+
-{{- if .Values.flinkDefaultConfiguration.append }}
-  {{- $.Files.Get "conf/flink-default-config/flink-conf.yaml"  | nindent 4 -}}
-{{- end }}
-{{- if index (.Values.flinkDefaultConfiguration) "flink-conf.yaml" }}
-  {{- index (.Values.flinkDefaultConfiguration) "flink-conf.yaml" | nindent 4 -}}
+{{- if index (.Values.defaultConfiguration) "log4j-operator.properties" }}
+  {{- index (.Values.defaultConfiguration) "log4j-operator.properties" | nindent 4 -}}
 {{- end }}
   log4j-console.properties: |+
-{{- if .Values.flinkDefaultConfiguration.append }}
-  {{- $.Files.Get "conf/flink-default-config/log4j-console.properties"  | nindent 4 -}}
+{{- if .Values.defaultConfiguration.append }}
+  {{- $.Files.Get "conf/log4j-console.properties"  | nindent 4 -}}
 {{- end }}
-{{- if index (.Values.flinkDefaultConfiguration) "log4j-console.properties" }}
-  {{- index (.Values.flinkDefaultConfiguration) "log4j-console.properties" | nindent 4 -}}
+{{- if index (.Values.defaultConfiguration) "log4j-console.properties" }}
+  {{- index (.Values.defaultConfiguration) "log4j-console.properties" | nindent 4 -}}
 {{- end }}
 {{- end }}
