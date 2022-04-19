@@ -18,8 +18,10 @@
 package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
@@ -35,8 +37,6 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.utils.EnvUtils;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
 import org.junit.jupiter.api.Assertions;
@@ -50,7 +50,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import static org.apache.flink.kubernetes.operator.validation.DefaultValidator.defaultFlinkConf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -279,25 +278,17 @@ public class DefaultValidatorTest {
 
     @Test
     public void testValidationWithDefaultConfig() {
-        Map<String, String> originalEnv = System.getenv();
-        try {
-            Map<String, String> systemEnv = new HashMap<>(originalEnv);
-            systemEnv.put(
-                    EnvUtils.ENV_FLINK_CONF_DIR,
-                    this.getClass().getResource("/test-validation").getPath());
-            TestUtils.setEnv(systemEnv);
-            defaultFlinkConf =
-                    FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR));
-            testSuccess(
-                    dep -> {
-                        dep.getSpec().setFlinkConfiguration(new HashMap<>());
-                        dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-                    });
-        } finally {
-            TestUtils.setEnv(originalEnv);
-            defaultFlinkConf =
-                    FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR));
-        }
+        final Configuration defaultFlinkConf = new Configuration();
+        defaultFlinkConf.set(
+                HighAvailabilityOptions.HA_MODE,
+                KubernetesHaServicesFactory.class.getCanonicalName());
+        final DefaultValidator validatorWithDefaultConfig = new DefaultValidator(defaultFlinkConf);
+        testSuccess(
+                dep -> {
+                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
+                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+                },
+                validatorWithDefaultConfig);
     }
 
     @Test
@@ -316,6 +307,11 @@ public class DefaultValidatorTest {
     }
 
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {
+        testSuccess(deploymentModifier, validator);
+    }
+
+    private void testSuccess(
+            Consumer<FlinkDeployment> deploymentModifier, DefaultValidator validator) {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deploymentModifier.accept(deployment);
         validator.validateDeployment(deployment).ifPresent(Assertions::fail);

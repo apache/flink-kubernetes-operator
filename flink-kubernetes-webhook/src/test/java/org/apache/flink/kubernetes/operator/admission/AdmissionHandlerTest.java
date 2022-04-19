@@ -19,7 +19,6 @@ package org.apache.flink.kubernetes.operator.admission;
 
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
@@ -30,7 +29,6 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultHttpRes
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
-import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionRequest;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
 import org.junit.jupiter.api.Test;
@@ -86,11 +84,7 @@ public class AdmissionHandlerTest {
     public void testHandleValidateRequestWithAdmissionReview() throws IOException {
         final EmbeddedChannel embeddedChannel = new EmbeddedChannel(admissionHandler);
         final FlinkDeployment flinkDeployment = new FlinkDeployment();
-        flinkDeployment.setMetadata(
-                new ObjectMetaBuilder().withName("test").withNamespace("test-namespace").build());
-        final FlinkDeploymentSpec flinkDeploymentSpec = new FlinkDeploymentSpec();
-        flinkDeploymentSpec.setFlinkVersion(FlinkVersion.v1_16);
-        flinkDeployment.setSpec(flinkDeploymentSpec);
+        flinkDeployment.setSpec(new FlinkDeploymentSpec());
         final AdmissionRequest admissionRequest = new AdmissionRequest();
         admissionRequest.setOperation(CREATE.name());
         admissionRequest.setObject(flinkDeployment);
