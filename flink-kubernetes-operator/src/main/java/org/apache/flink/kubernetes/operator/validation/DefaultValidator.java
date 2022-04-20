@@ -56,24 +56,35 @@ public class DefaultValidator implements FlinkResourceValidator {
     private static final Set<String> ALLOWED_LOG_CONF_KEYS =
             Set.of(Constants.CONFIG_FILE_LOG4J_NAME, Constants.CONFIG_FILE_LOGBACK_NAME);
 
-    private static Configuration defaultFlinkConf =
-            FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR));
+    private final Configuration defaultFlinkConf;
+
+    public DefaultValidator() {
+        this(FlinkUtils.loadConfiguration(EnvUtils.get(EnvUtils.ENV_FLINK_CONF_DIR)));
+    }
+
+    public DefaultValidator(Configuration defaultFlinkConf) {
+        this.defaultFlinkConf = defaultFlinkConf;
+    }
 
     @Override
     public Optional<String> validateDeployment(FlinkDeployment deployment) {
         FlinkDeploymentSpec spec = deployment.getSpec();
+        Map<String, String> effectiveConfig = defaultFlinkConf.toMap();
+        if (spec.getFlinkConfiguration() != null) {
+            effectiveConfig.putAll(spec.getFlinkConfiguration());
+        }
         return firstPresent(
                 validateFlinkVersion(spec.getFlinkVersion()),
-                validateFlinkConfig(spec.getFlinkConfiguration()),
+                validateFlinkConfig(effectiveConfig),
                 validateIngress(
                         spec.getIngress(),
                         deployment.getMetadata().getName(),
                         deployment.getMetadata().getNamespace()),
                 validateLogConfig(spec.getLogConfiguration()),
-                validateJobSpec(spec.getJob(), spec.getFlinkConfiguration()),
-                validateJmSpec(spec.getJobManager(), spec.getFlinkConfiguration()),
+                validateJobSpec(spec.getJob(), effectiveConfig),
+                validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager()),
-                validateSpecChange(deployment));
+                validateSpecChange(deployment, effectiveConfig));
     }
 
     private static Optional<String> firstPresent(Optional<String>... errOpts) {
@@ -222,7 +233,8 @@ public class DefaultValidator implements FlinkResourceValidator {
         return Optional.empty();
     }
 
-    private Optional<String> validateSpecChange(FlinkDeployment deployment) {
+    private Optional<String> validateSpecChange(
+            FlinkDeployment deployment, Map<String, String> effectiveConfig) {
         FlinkDeploymentSpec newSpec = deployment.getSpec();
 
         if (deployment.getStatus() == null
@@ -260,8 +272,7 @@ public class DefaultValidator implements FlinkResourceValidator {
             }
 
             if (StringUtils.isNullOrWhitespaceOnly(
-                            newSpec.getFlinkConfiguration()
-                                    .get(CheckpointingOptions.SAVEPOINT_DIRECTORY.key()))
+                            effectiveConfig.get(CheckpointingOptions.SAVEPOINT_DIRECTORY.key()))
                     && deployment.getStatus().getJobManagerDeploymentStatus()
                             != JobManagerDeploymentStatus.MISSING
                     && ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(

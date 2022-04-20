@@ -18,8 +18,10 @@
 package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
@@ -57,7 +59,7 @@ public class DefaultValidatorTest {
     private final DefaultValidator validator = new DefaultValidator();
 
     @Test
-    public void testValidation() {
+    public void testValidationWithoutDefaultConfig() {
         testSuccess(dep -> {});
 
         // Test job validation
@@ -275,6 +277,21 @@ public class DefaultValidatorTest {
     }
 
     @Test
+    public void testValidationWithDefaultConfig() {
+        final Configuration defaultFlinkConf = new Configuration();
+        defaultFlinkConf.set(
+                HighAvailabilityOptions.HA_MODE,
+                KubernetesHaServicesFactory.class.getCanonicalName());
+        final DefaultValidator validatorWithDefaultConfig = new DefaultValidator(defaultFlinkConf);
+        testSuccess(
+                dep -> {
+                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
+                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+                },
+                validatorWithDefaultConfig);
+    }
+
+    @Test
     public void testSessionJobWithSession() {
         testSessionJobValidateSuccess(job -> {}, session -> {});
 
@@ -290,6 +307,11 @@ public class DefaultValidatorTest {
     }
 
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {
+        testSuccess(deploymentModifier, validator);
+    }
+
+    private void testSuccess(
+            Consumer<FlinkDeployment> deploymentModifier, DefaultValidator validator) {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deploymentModifier.accept(deployment);
         validator.validateDeployment(deployment).ifPresent(Assertions::fail);
