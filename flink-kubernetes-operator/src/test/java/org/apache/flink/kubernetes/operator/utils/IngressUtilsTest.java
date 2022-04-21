@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -49,7 +50,8 @@ public class IngressUtilsTest {
     @Test
     public void testIngress() {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
-        Configuration config = FlinkUtils.getEffectiveConfig(appCluster, new Configuration());
+        Configuration config =
+                new FlinkConfigManager(new Configuration()).getObserveConfig(appCluster);
 
         // no ingress when ingressDomain is empty
         IngressUtils.updateIngressRules(

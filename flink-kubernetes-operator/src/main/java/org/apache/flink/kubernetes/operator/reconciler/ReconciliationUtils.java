@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
@@ -152,7 +153,7 @@ public class ReconciliationUtils {
     }
 
     public static boolean isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-            FlinkDeployment flinkApp, Configuration defaultConf) {
+            FlinkDeployment flinkApp, FlinkConfigManager configManager) {
 
         FlinkDeploymentSpec deployedSpec = getDeployedSpec(flinkApp);
         UpgradeMode previousUpgradeMode = deployedSpec.getJob().getUpgradeMode();
@@ -160,24 +161,22 @@ public class ReconciliationUtils {
 
         return previousUpgradeMode != UpgradeMode.LAST_STATE
                 && currentUpgradeMode == UpgradeMode.LAST_STATE
-                && !FlinkUtils.isKubernetesHAActivated(getDeployedConfig(flinkApp, defaultConf));
+                && !FlinkUtils.isKubernetesHAActivated(configManager.getObserveConfig(flinkApp));
     }
 
     public static FlinkDeploymentSpec getDeployedSpec(FlinkDeployment deployment) {
-        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
-                deployment.getStatus().getReconciliationStatus();
-
+        var reconciliationStatus = deployment.getStatus().getReconciliationStatus();
         if (reconciliationStatus.getState() == ReconciliationState.DEPLOYED) {
-            return reconciliationStatus.deserializeLastReconciledSpec();
+            var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+            if (lastReconciledSpec == null) {
+                // No deployment submitted, use the provided one
+                return deployment.getSpec();
+            } else {
+                return lastReconciledSpec;
+            }
         } else {
             return reconciliationStatus.deserializeLastStableSpec();
         }
-    }
-
-    public static Configuration getDeployedConfig(
-            FlinkDeployment deployment, Configuration defaultConf) {
-        return FlinkUtils.getEffectiveConfig(
-                deployment.getMetadata(), getDeployedSpec(deployment), defaultConf);
     }
 
     private static boolean isJobUpgradeInProgress(FlinkDeployment current) {

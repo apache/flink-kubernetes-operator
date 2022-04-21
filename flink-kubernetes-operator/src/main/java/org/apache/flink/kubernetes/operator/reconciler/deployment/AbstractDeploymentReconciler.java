@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
@@ -39,27 +39,22 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractDeploymentReconciler.class);
 
-    protected final FlinkOperatorConfiguration operatorConfiguration;
+    protected final FlinkConfigManager configManager;
     protected final KubernetesClient kubernetesClient;
     protected final FlinkService flinkService;
-    protected final Configuration defaultConfig;
 
     public AbstractDeploymentReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration,
-            Configuration defaultConfig) {
-
+            FlinkConfigManager configManager) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
-        this.operatorConfiguration = operatorConfiguration;
-        this.defaultConfig = defaultConfig;
+        this.configManager = configManager;
     }
 
     @Override
     public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
-        Configuration effectiveConfig = FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig);
-        return shutdownAndDelete(flinkApp, effectiveConfig);
+        return shutdownAndDelete(flinkApp, configManager.getObserveConfig(flinkApp));
     }
 
     private DeleteControl shutdownAndDelete(
@@ -73,7 +68,10 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
                     flinkApp.getMetadata(),
                     kubernetesClient,
                     true,
-                    operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
+                    configManager
+                            .getOperatorConfiguration()
+                            .getFlinkShutdownClusterTimeout()
+                            .toSeconds());
         }
 
         return DeleteControl.defaultDelete();

@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
@@ -48,7 +50,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class AdmissionHandlerTest {
 
     private final AdmissionHandler admissionHandler =
-            new AdmissionHandler(new FlinkValidator(new DefaultValidator()));
+            new AdmissionHandler(
+                    new FlinkValidator(
+                            new DefaultValidator(new FlinkConfigManager(new Configuration()))));
 
     @Test
     public void testHandleIllegalRequest() {

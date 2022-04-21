@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.utils;
+package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
@@ -57,7 +57,7 @@ import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE;
 import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE_POLICY;
 import static org.apache.flink.kubernetes.operator.TestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.TestUtils.SERVICE_ACCOUNT;
-import static org.apache.flink.kubernetes.operator.utils.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
+import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 
 /** FlinkConfigBuilderTest. */
@@ -93,14 +93,16 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyImage() {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration()).applyImage().build();
+                new FlinkConfigBuilder(flinkDeployment, new Configuration(), true)
+                        .applyImage()
+                        .build();
         Assert.assertEquals(IMAGE, configuration.get(KubernetesConfigOptions.CONTAINER_IMAGE));
     }
 
     @Test
     public void testApplyImagePolicy() {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                new FlinkConfigBuilder(flinkDeployment, new Configuration(), true)
                         .applyImagePullPolicy()
                         .build();
         Assert.assertEquals(
@@ -111,7 +113,7 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyFlinkConfiguration() {
         Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                new FlinkConfigBuilder(flinkDeployment, new Configuration(), true)
                         .applyFlinkConfiguration()
                         .build();
         Assert.assertEquals(2, (int) configuration.get(TaskManagerOptions.NUM_TASK_SLOTS));
@@ -129,7 +131,7 @@ public class FlinkConfigBuilderTest {
                                 KubernetesConfigOptions.ServiceExposedType.LoadBalancer.name()));
 
         configuration =
-                new FlinkConfigBuilder(deployment, new Configuration())
+                new FlinkConfigBuilder(deployment, new Configuration(), true)
                         .applyFlinkConfiguration()
                         .build();
         Assert.assertEquals(
@@ -144,7 +146,8 @@ public class FlinkConfigBuilderTest {
                                         .set(
                                                 HighAvailabilityOptions.HA_MODE,
                                                 KubernetesHaServicesFactory.class
-                                                        .getCanonicalName()))
+                                                        .getCanonicalName()),
+                                true)
                         .applyFlinkConfiguration()
                         .build();
         Assert.assertEquals(
@@ -154,12 +157,12 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyLogConfiguration() throws IOException {
-        final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration(), true)
                         .applyLogConfiguration()
                         .build();
 
-        final File log4jFile =
+        File log4jFile =
                 new File(
                         configuration.get(DeploymentOptionsInternal.CONF_DIR),
                         CONFIG_FILE_LOG4J_NAME);
@@ -169,8 +172,8 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyCommonPodTemplate() throws Exception {
-        final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration(), true)
                         .applyCommonPodTemplate()
                         .build();
         final Pod jmPod =
@@ -192,7 +195,7 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyIngressDomain() {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                new FlinkConfigBuilder(flinkDeployment, new Configuration(), true)
                         .applyIngressDomain()
                         .build();
         Assert.assertEquals(
@@ -203,7 +206,7 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyServiceAccount() {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                new FlinkConfigBuilder(flinkDeployment, new Configuration(), true)
                         .applyServiceAccount()
                         .build();
         Assert.assertEquals(
@@ -214,7 +217,7 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyJobManagerSpec() throws Exception {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                new FlinkConfigBuilder(flinkDeployment, new Configuration(), true)
                         .applyJobManagerSpec()
                         .build();
         final Pod jmPod =
@@ -240,7 +243,7 @@ public class FlinkConfigBuilderTest {
         deploymentClone.getSpec().setPodTemplate(null);
 
         final Configuration configuration =
-                new FlinkConfigBuilder(deploymentClone, new Configuration())
+                new FlinkConfigBuilder(deploymentClone, new Configuration(), true)
                         .applyTaskManagerSpec()
                         .build();
         final Pod tmPod =
@@ -260,7 +263,7 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyJobOrSessionSpec() throws Exception {
         final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                new FlinkConfigBuilder(flinkDeployment, new Configuration(), true)
                         .applyJobOrSessionSpec()
                         .build();
         Assert.assertEquals(
@@ -273,12 +276,37 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testBuildFrom() throws Exception {
         final Configuration configuration =
-                FlinkConfigBuilder.buildFrom(flinkDeployment, new Configuration());
+                FlinkConfigBuilder.buildFrom(
+                        flinkDeployment.getMetadata().getNamespace(),
+                        flinkDeployment.getMetadata().getName(),
+                        flinkDeployment.getSpec(),
+                        new Configuration(),
+                        true);
         final String namespace = flinkDeployment.getMetadata().getNamespace();
         final String clusterId = flinkDeployment.getMetadata().getName();
         // Most configs have been tested by previous unit tests, thus we only verify the namespace
         // and clusterId here.
         Assert.assertEquals(namespace, configuration.get(KubernetesConfigOptions.NAMESPACE));
         Assert.assertEquals(clusterId, configuration.get(KubernetesConfigOptions.CLUSTER_ID));
+    }
+
+    @Test
+    public void verifyGenerateForNonDeployment() throws Exception {
+        Configuration configuration =
+                FlinkConfigBuilder.buildFrom(
+                        flinkDeployment.getMetadata().getNamespace(),
+                        flinkDeployment.getMetadata().getName(),
+                        flinkDeployment.getSpec(),
+                        new Configuration(),
+                        false);
+        File log4jFile =
+                new File(
+                        configuration.get(DeploymentOptionsInternal.CONF_DIR),
+                        CONFIG_FILE_LOG4J_NAME);
+        Assert.assertFalse(log4jFile.exists() && log4jFile.isFile() && log4jFile.canRead());
+        Assert.assertFalse(
+                configuration.contains(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE));
+        Assert.assertFalse(
+                configuration.contains(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE));
     }
 }

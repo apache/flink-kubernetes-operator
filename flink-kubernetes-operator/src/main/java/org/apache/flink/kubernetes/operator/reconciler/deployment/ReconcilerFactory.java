@@ -17,8 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
@@ -34,19 +33,16 @@ public class ReconcilerFactory {
 
     private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
-    private final FlinkOperatorConfiguration operatorConfiguration;
-    private final Configuration defaultConfig;
+    private final FlinkConfigManager configManager;
     private final Map<Mode, Reconciler<FlinkDeployment>> reconcilerMap;
 
     public ReconcilerFactory(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration,
-            Configuration defaultConfig) {
+            FlinkConfigManager configManager) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
-        this.operatorConfiguration = operatorConfiguration;
-        this.defaultConfig = defaultConfig;
+        this.configManager = configManager;
         this.reconcilerMap = new ConcurrentHashMap<>();
     }
 
@@ -57,16 +53,10 @@ public class ReconcilerFactory {
                     switch (mode) {
                         case SESSION:
                             return new SessionReconciler(
-                                    kubernetesClient,
-                                    flinkService,
-                                    operatorConfiguration,
-                                    defaultConfig);
+                                    kubernetesClient, flinkService, configManager);
                         case APPLICATION:
                             return new ApplicationReconciler(
-                                    kubernetesClient,
-                                    flinkService,
-                                    operatorConfiguration,
-                                    defaultConfig);
+                                    kubernetesClient, flinkService, configManager);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

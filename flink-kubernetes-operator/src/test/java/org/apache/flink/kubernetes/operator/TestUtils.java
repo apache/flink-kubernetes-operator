@@ -17,11 +17,10 @@
 
 package org.apache.flink.kubernetes.operator;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -341,22 +340,17 @@ public class TestUtils {
     }
 
     public static FlinkDeploymentController createTestController(
-            FlinkOperatorConfiguration operatorConfiguration,
+            FlinkConfigManager configManager,
             KubernetesClient kubernetesClient,
             TestingFlinkService flinkService) {
-        var defaultConfig = new Configuration();
 
         var controller =
                 new FlinkDeploymentController(
-                        operatorConfiguration,
+                        configManager,
                         kubernetesClient,
-                        ValidatorUtils.discoverValidators(defaultConfig),
-                        new ReconcilerFactory(
-                                kubernetesClient,
-                                flinkService,
-                                operatorConfiguration,
-                                defaultConfig),
-                        new ObserverFactory(flinkService, operatorConfiguration, defaultConfig));
+                        ValidatorUtils.discoverValidators(configManager),
+                        new ReconcilerFactory(kubernetesClient, flinkService, configManager),
+                        new ObserverFactory(flinkService, configManager));
         controller.setControllerConfig(
                 new FlinkControllerConfig(controller, Collections.emptySet()));
         return controller;

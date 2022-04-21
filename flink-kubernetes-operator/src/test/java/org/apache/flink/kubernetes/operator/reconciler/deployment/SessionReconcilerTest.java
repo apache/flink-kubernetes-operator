@@ -20,7 +20,7 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -35,8 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 public class SessionReconcilerTest {
 
-    private final FlinkOperatorConfiguration operatorConfiguration =
-            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
+    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     @Test
     public void testStartSession() throws Exception {
@@ -51,9 +50,7 @@ public class SessionReconcilerTest {
                     }
                 };
 
-        SessionReconciler reconciler =
-                new SessionReconciler(
-                        null, flinkService, operatorConfiguration, new Configuration());
+        SessionReconciler reconciler = new SessionReconciler(null, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         reconciler.reconcile(deployment, context);
         assertEquals(1, count.get());

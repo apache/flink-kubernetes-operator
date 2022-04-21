@@ -21,6 +21,7 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 import org.apache.flink.kubernetes.operator.validation.TestValidator;
 
@@ -69,7 +70,8 @@ public class ValidatorUtilsTest {
                             Arrays.asList(
                                     DefaultValidator.class.getName(),
                                     TestValidator.class.getName())),
-                    ValidatorUtils.discoverValidators(new Configuration()).stream()
+                    ValidatorUtils.discoverValidators(new FlinkConfigManager(new Configuration()))
+                            .stream()
                             .map(v -> v.getClass().getName())
                             .collect(Collectors.toSet()));
         } finally {

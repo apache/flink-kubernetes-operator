@@ -22,8 +22,6 @@ import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
@@ -51,23 +49,6 @@ public class FlinkUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    public static Configuration getEffectiveConfig(
-            FlinkDeployment flinkApp, Configuration flinkConfig) {
-        return getEffectiveConfig(flinkApp.getMetadata(), flinkApp.getSpec(), flinkConfig);
-    }
-
-    public static Configuration getEffectiveConfig(
-            ObjectMeta meta, FlinkDeploymentSpec spec, Configuration flinkConfig) {
-        try {
-            final Configuration effectiveConfig =
-                    FlinkConfigBuilder.buildFrom(meta, spec, flinkConfig);
-            LOG.debug("Effective config: {}", effectiveConfig);
-            return effectiveConfig;
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to load configuration", e);
-        }
-    }
 
     public static Pod mergePodTemplates(Pod toPod, Pod fromPod) {
         if (fromPod == null) {

@@ -19,7 +19,7 @@ package org.apache.flink.kubernetes.operator.artifact;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.util.Preconditions;
 
@@ -56,8 +56,7 @@ public class ArtifactManagerTest {
         configuration.setString(
                 KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR,
                 tempDir.toAbsolutePath().toString());
-        artifactManager =
-                new ArtifactManager(FlinkOperatorConfiguration.fromConfiguration(configuration));
+        artifactManager = new ArtifactManager(new FlinkConfigManager(configuration));
     }
 
     @Test

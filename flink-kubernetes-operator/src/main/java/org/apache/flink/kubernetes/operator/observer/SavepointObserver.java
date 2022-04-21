@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -34,12 +34,11 @@ public class SavepointObserver {
     private static final Logger LOG = LoggerFactory.getLogger(SavepointObserver.class);
 
     private final FlinkService flinkService;
-    private final FlinkOperatorConfiguration operatorConfiguration;
+    private final FlinkConfigManager configManager;
 
-    public SavepointObserver(
-            FlinkService flinkService, FlinkOperatorConfiguration operatorConfiguration) {
+    public SavepointObserver(FlinkService flinkService, FlinkConfigManager configManager) {
         this.flinkService = flinkService;
-        this.operatorConfiguration = operatorConfiguration;
+        this.configManager = configManager;
     }
 
     /**
@@ -71,7 +70,7 @@ public class SavepointObserver {
             String error = savepointFetchResult.getError();
             if (error != null
                     || SavepointUtils.gracePeriodEnded(
-                            operatorConfiguration, currentSavepointInfo)) {
+                            configManager.getOperatorConfiguration(), currentSavepointInfo)) {
                 String errorMsg = error != null ? error : "Savepoint status unknown";
                 LOG.error(errorMsg);
                 currentSavepointInfo.resetTrigger();

@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
@@ -29,7 +29,6 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
@@ -55,16 +54,11 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
     public static final String JOB_STATE_UNKNOWN = "UNKNOWN";
 
     protected final FlinkService flinkService;
-    protected final FlinkOperatorConfiguration operatorConfiguration;
-    protected final Configuration flinkConfig;
+    protected final FlinkConfigManager configManager;
 
-    public AbstractDeploymentObserver(
-            FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration,
-            Configuration flinkConfig) {
+    public AbstractDeploymentObserver(FlinkService flinkService, FlinkConfigManager configManager) {
         this.flinkService = flinkService;
-        this.operatorConfiguration = operatorConfiguration;
-        this.flinkConfig = flinkConfig;
+        this.configManager = configManager;
     }
 
     @Override
@@ -80,7 +74,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
             return;
         }
 
-        Configuration observeConfig = ReconciliationUtils.getDeployedConfig(flinkApp, flinkConfig);
+        Configuration observeConfig = configManager.getObserveConfig(flinkApp);
         if (!isJmDeploymentReady(flinkApp)) {
             observeJmDeployment(flinkApp, context, observeConfig);
         }
@@ -157,7 +151,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
     private Optional<Deployment> getSecondaryResource(FlinkDeployment flinkApp, Context context) {
         return context.getSecondaryResource(
                 Deployment.class,
-                operatorConfiguration.getWatchedNamespaces().size() > 1
+                configManager.getOperatorConfiguration().getWatchedNamespaces().size() > 1
                         ? flinkApp.getMetadata().getNamespace()
                         : null);
     }

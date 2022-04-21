@@ -20,7 +20,7 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.Observer;
@@ -43,17 +43,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /** {@link SessionObserver} unit tests. */
 public class SessionObserverTest {
     private final Context readyContext = TestUtils.createContextWithReadyJobManagerDeployment();
+    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     @Test
     public void observeSessionCluster() {
         TestingFlinkService flinkService = new TestingFlinkService();
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
-        Configuration flinkConf = new Configuration();
-        SessionObserver observer =
-                new SessionObserver(
-                        flinkService,
-                        FlinkOperatorConfiguration.fromConfiguration(new Configuration()),
-                        flinkConf);
+        SessionObserver observer = new SessionObserver(flinkService, configManager);
         deployment
                 .getStatus()
                 .getReconciliationStatus()
@@ -103,7 +99,6 @@ public class SessionObserverTest {
 
     @Test
     public void testWatchMultipleNamespaces() {
-        Configuration flinkConf = new Configuration();
         FlinkService flinkService = new TestingFlinkService();
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         deployment
@@ -111,22 +106,13 @@ public class SessionObserverTest {
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(deployment.getSpec());
 
-        FlinkOperatorConfiguration allNsConfig =
-                FlinkOperatorConfiguration.fromConfiguration(new Configuration());
-        FlinkOperatorConfiguration specificNsConfig =
-                FlinkOperatorConfiguration.fromConfiguration(
-                        new Configuration(), Set.of(deployment.getMetadata().getNamespace()));
-        FlinkOperatorConfiguration multipleNsConfig =
-                FlinkOperatorConfiguration.fromConfiguration(
-                        new Configuration(), Set.of(deployment.getMetadata().getNamespace(), "ns"));
-
         Deployment k8sDeployment = new Deployment();
         k8sDeployment.setSpec(new DeploymentSpec());
         k8sDeployment.setStatus(new DeploymentStatus());
 
         AtomicInteger secondaryResourceAccessed = new AtomicInteger(0);
-        Observer allNsObserver = new SessionObserver(flinkService, allNsConfig, flinkConf);
-        allNsObserver.observe(
+        Observer observer = new SessionObserver(flinkService, configManager);
+        observer.observe(
                 deployment,
                 new Context() {
                     @Override
@@ -144,9 +130,8 @@ public class SessionObserverTest {
 
         assertEquals(1, secondaryResourceAccessed.get());
 
-        Observer specificNsObserver =
-                new SessionObserver(flinkService, specificNsConfig, flinkConf);
-        specificNsObserver.observe(
+        configManager.setWatchedNamespaces(Set.of(deployment.getMetadata().getNamespace()));
+        observer.observe(
                 deployment,
                 new Context() {
                     @Override
@@ -164,9 +149,8 @@ public class SessionObserverTest {
 
         assertEquals(2, secondaryResourceAccessed.get());
 
-        Observer multipleNsObserver =
-                new SessionObserver(flinkService, multipleNsConfig, flinkConf);
-        multipleNsObserver.observe(
+        configManager.setWatchedNamespaces(Set.of(deployment.getMetadata().getNamespace(), "ns"));
+        observer.observe(
                 deployment,
                 new Context() {
                     @Override
@@ -182,6 +166,7 @@ public class SessionObserverTest {
                     }
                 });
 
+        configManager.setWatchedNamespaces(null);
         assertEquals(3, secondaryResourceAccessed.get());
     }
 }

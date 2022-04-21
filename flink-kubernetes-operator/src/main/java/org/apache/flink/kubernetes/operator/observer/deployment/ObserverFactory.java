@@ -17,8 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.observer.Observer;
@@ -31,17 +30,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ObserverFactory {
 
     private final FlinkService flinkService;
-    private final FlinkOperatorConfiguration operatorConfig;
-    private final Configuration flinkConfig;
+    private final FlinkConfigManager configManager;
     private final Map<Mode, Observer<FlinkDeployment>> observerMap;
 
-    public ObserverFactory(
-            FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration,
-            Configuration flinkConfig) {
+    public ObserverFactory(FlinkService flinkService, FlinkConfigManager configManager) {
         this.flinkService = flinkService;
-        this.operatorConfig = operatorConfiguration;
-        this.flinkConfig = flinkConfig;
+        this.configManager = configManager;
         this.observerMap = new ConcurrentHashMap<>();
     }
 
@@ -51,10 +45,9 @@ public class ObserverFactory {
                 mode -> {
                     switch (mode) {
                         case SESSION:
-                            return new SessionObserver(flinkService, operatorConfig, flinkConfig);
+                            return new SessionObserver(flinkService, configManager);
                         case APPLICATION:
-                            return new ApplicationObserver(
-                                    flinkService, operatorConfig, flinkConfig);
+                            return new ApplicationObserver(flinkService, configManager);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

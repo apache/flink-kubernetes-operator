@@ -21,7 +21,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
@@ -46,9 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Tests for {@link FlinkSessionJobReconciler}. */
 public class FlinkSessionJobReconcilerTest {
 
-    private final FlinkOperatorConfiguration operatorConfiguration =
-            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
-    private final Configuration defaultConfig = new Configuration();
+    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     @Test
     public void testSubmitAndCleanUp() throws Exception {
@@ -56,8 +54,7 @@ public class FlinkSessionJobReconcilerTest {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
 
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(
-                        null, flinkService, operatorConfiguration, defaultConfig);
+                new FlinkSessionJobReconciler(null, flinkService, configManager);
         // session not found
         reconciler.reconcile(sessionJob, TestUtils.createEmptyContext());
         assertEquals(0, flinkService.listSessionJobs().size());
@@ -88,8 +85,7 @@ public class FlinkSessionJobReconcilerTest {
         var initSavepointPath = "file:///init-sp";
         sessionJob.getSpec().getJob().setInitialSavepointPath(initSavepointPath);
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(
-                        null, flinkService, operatorConfiguration, defaultConfig);
+                new FlinkSessionJobReconciler(null, flinkService, configManager);
         reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
@@ -106,8 +102,7 @@ public class FlinkSessionJobReconcilerTest {
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(
-                        null, flinkService, operatorConfiguration, defaultConfig);
+                new FlinkSessionJobReconciler(null, flinkService, configManager);
         reconciler.reconcile(sessionJob, readyContext);
         assertEquals(1, flinkService.listSessionJobs().size());
         verifyAndSetRunningJobsToStatus(
@@ -140,8 +135,7 @@ public class FlinkSessionJobReconcilerTest {
         TestingFlinkService flinkService = new TestingFlinkService();
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(
-                        null, flinkService, operatorConfiguration, defaultConfig);
+                new FlinkSessionJobReconciler(null, flinkService, configManager);
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
         reconciler.reconcile(sessionJob, readyContext);
@@ -178,8 +172,7 @@ public class FlinkSessionJobReconcilerTest {
                 TestUtils.createContextWithReadyFlinkDeployment(Map.of("key", "newValue"));
 
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(
-                        null, flinkService, operatorConfiguration, defaultConfig);
+                new FlinkSessionJobReconciler(null, flinkService, configManager);
 
         reconciler.reconcile(sessionJob, readyContext);
 
@@ -197,8 +190,7 @@ public class FlinkSessionJobReconcilerTest {
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(
-                        null, flinkService, operatorConfiguration, defaultConfig);
+                new FlinkSessionJobReconciler(null, flinkService, configManager);
         reconciler.reconcile(sessionJob, readyContext);
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
@@ -365,8 +357,7 @@ public class FlinkSessionJobReconcilerTest {
         Context readyContext = TestUtils.createContextWithReadyFlinkDeployment();
         TestingFlinkService flinkService = new TestingFlinkService();
         FlinkSessionJobReconciler reconciler =
-                new FlinkSessionJobReconciler(
-                        null, flinkService, operatorConfiguration, defaultConfig);
+                new FlinkSessionJobReconciler(null, flinkService, configManager);
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
         reconciler.reconcile(sessionJob, readyContext);
         verifyAndSetRunningJobsToStatus(
@@ -387,16 +378,15 @@ public class FlinkSessionJobReconcilerTest {
                 spSessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         assertEquals(JobState.RUNNING.name(), spSessionJob.getStatus().getJobStatus().getState());
 
+        configManager.updateDefaultConfig(
+                Configuration.fromMap(
+                        Map.of(
+                                KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT
+                                        .key(),
+                                "true")),
+                configManager.getOperatorConfiguration());
         // Force upgrade when savepoint is in progress.
-        reconciler =
-                new FlinkSessionJobReconciler(
-                        null,
-                        flinkService,
-                        operatorConfiguration,
-                        defaultConfig.set(
-                                KubernetesOperatorConfigOptions
-                                        .JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT,
-                                true));
+        reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
         spSessionJob.getSpec().getJob().setParallelism(100);
         reconciler.reconcile(spSessionJob, readyContext);
         assertEquals(

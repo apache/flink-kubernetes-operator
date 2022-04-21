@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -57,22 +57,22 @@ public class FlinkDeploymentController
                 EventSourceInitializer<FlinkDeployment> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
 
+    private final FlinkConfigManager configManager;
     private final KubernetesClient kubernetesClient;
 
     private final Set<FlinkResourceValidator> validators;
     private final ReconcilerFactory reconcilerFactory;
     private final ObserverFactory observerFactory;
-    private final FlinkOperatorConfiguration operatorConfiguration;
 
     private FlinkControllerConfig<FlinkDeployment> controllerConfig;
 
     public FlinkDeploymentController(
-            FlinkOperatorConfiguration operatorConfiguration,
+            FlinkConfigManager configManager,
             KubernetesClient kubernetesClient,
             Set<FlinkResourceValidator> validators,
             ReconcilerFactory reconcilerFactory,
             ObserverFactory observerFactory) {
-        this.operatorConfiguration = operatorConfiguration;
+        this.configManager = configManager;
         this.kubernetesClient = kubernetesClient;
         this.validators = validators;
         this.reconcilerFactory = reconcilerFactory;
@@ -101,7 +101,7 @@ public class FlinkDeploymentController
                 LOG.error("Validation failed: " + validationError.get());
                 ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
                 return ReconciliationUtils.toUpdateControl(
-                        operatorConfiguration, originalCopy, flinkApp, false);
+                        configManager.getOperatorConfiguration(), originalCopy, flinkApp, false);
             }
             reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context);
         } catch (DeploymentFailedException dfe) {
@@ -112,7 +112,7 @@ public class FlinkDeploymentController
 
         LOG.info("End of reconciliation");
         return ReconciliationUtils.toUpdateControl(
-                operatorConfiguration, originalCopy, flinkApp, true);
+                configManager.getOperatorConfiguration(), originalCopy, flinkApp, true);
     }
 
     private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {

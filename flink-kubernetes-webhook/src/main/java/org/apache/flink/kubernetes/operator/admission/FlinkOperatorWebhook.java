@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 
@@ -34,6 +35,7 @@ import org.apache.flink.shaded.netty4.io.netty.handler.ssl.SslContextBuilder;
 import org.apache.flink.shaded.netty4.io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import org.apache.flink.shaded.netty4.io.netty.handler.stream.ChunkedWriteHandler;
 
+import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,8 +57,9 @@ public class FlinkOperatorWebhook {
 
     public static void main(String[] args) throws Exception {
         EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
+        FlinkConfigManager configManager = new FlinkConfigManager(new DefaultKubernetesClient());
         AdmissionHandler endpoint =
-                new AdmissionHandler(new FlinkValidator(new DefaultValidator()));
+                new AdmissionHandler(new FlinkValidator(new DefaultValidator(configManager)));
         ChannelInitializer<SocketChannel> initializer = createChannelInitializer(endpoint);
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();

@@ -19,9 +19,9 @@ package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -56,20 +56,16 @@ public class DefaultValidator implements FlinkResourceValidator {
     private static final Set<String> ALLOWED_LOG_CONF_KEYS =
             Set.of(Constants.CONFIG_FILE_LOG4J_NAME, Constants.CONFIG_FILE_LOGBACK_NAME);
 
-    private final Configuration defaultFlinkConf;
+    private final FlinkConfigManager configManager;
 
-    public DefaultValidator() {
-        this(GlobalConfiguration.loadConfiguration());
-    }
-
-    public DefaultValidator(Configuration defaultFlinkConf) {
-        this.defaultFlinkConf = defaultFlinkConf;
+    public DefaultValidator(FlinkConfigManager configManager) {
+        this.configManager = configManager;
     }
 
     @Override
     public Optional<String> validateDeployment(FlinkDeployment deployment) {
         FlinkDeploymentSpec spec = deployment.getSpec();
-        Map<String, String> effectiveConfig = defaultFlinkConf.toMap();
+        Map<String, String> effectiveConfig = configManager.getDefaultConfig().toMap();
         if (spec.getFlinkConfiguration() != null) {
             effectiveConfig.putAll(spec.getFlinkConfiguration());
         }
@@ -276,7 +272,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                     && deployment.getStatus().getJobManagerDeploymentStatus()
                             != JobManagerDeploymentStatus.MISSING
                     && ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-                            deployment, defaultFlinkConf)) {
+                            deployment, configManager)) {
                 return Optional.of(
                         String.format(
                                 "Job could not be upgraded to last-state while config key[%s] is not set",

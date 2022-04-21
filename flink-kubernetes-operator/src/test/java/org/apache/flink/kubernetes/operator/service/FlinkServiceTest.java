@@ -27,7 +27,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingClusterClient;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
@@ -186,8 +186,7 @@ public class FlinkServiceTest {
     }
 
     private FlinkService createFlinkService(ClusterClient<String> clusterClient) {
-        return new FlinkService(
-                client, FlinkOperatorConfiguration.fromConfiguration(configuration)) {
+        return new FlinkService(client, new FlinkConfigManager(configuration)) {
             @Override
             protected ClusterClient<String> getClusterClient(Configuration config) {
                 return clusterClient;

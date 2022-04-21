@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
@@ -67,7 +68,7 @@ public class FlinkOperatorTest {
                                 KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_MAX_PARALLELISM,
                                 p));
 
-        FlinkOperator flinkOperator = new FlinkOperator(operatorConfig);
+        FlinkOperator flinkOperator = new FlinkOperator(new FlinkConfigManager(operatorConfig));
         return flinkOperator.getOperator().getConfigurationService().getExecutorService();
     }
 }

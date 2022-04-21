@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
@@ -47,15 +47,12 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
     public SessionReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration,
-            Configuration defaultConfig) {
-        super(kubernetesClient, flinkService, operatorConfiguration, defaultConfig);
+            FlinkConfigManager configManager) {
+        super(kubernetesClient, flinkService, configManager);
     }
 
     @Override
     public void reconcile(FlinkDeployment flinkApp, Context context) throws Exception {
-
-        Configuration effectiveConfig = FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig);
 
         FlinkDeploymentStatus status = flinkApp.getStatus();
         ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
@@ -65,10 +62,12 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
         FlinkDeploymentSpec currentDeploySpec = flinkApp.getSpec();
 
         if (lastReconciledSpec == null) {
-            flinkService.submitSessionCluster(effectiveConfig);
+            Configuration conf =
+                    configManager.getDeployConfig(flinkApp.getMetadata(), currentDeploySpec);
+            flinkService.submitSessionCluster(conf);
             status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
             IngressUtils.updateIngressRules(
-                    flinkApp.getMetadata(), currentDeploySpec, effectiveConfig, kubernetesClient);
+                    flinkApp.getMetadata(), currentDeploySpec, conf, kubernetesClient);
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null);
             return;
         }
@@ -76,9 +75,13 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
         boolean specChanged = !currentDeploySpec.equals(lastReconciledSpec);
         if (specChanged) {
             upgradeSessionCluster(
-                    flinkApp.getMetadata(), currentDeploySpec, status, effectiveConfig);
+                    flinkApp.getMetadata(),
+                    currentDeploySpec,
+                    status,
+                    configManager.getDeployConfig(flinkApp.getMetadata(), currentDeploySpec));
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null);
-        } else if (ReconciliationUtils.shouldRollBack(reconciliationStatus, effectiveConfig)) {
+        } else if (ReconciliationUtils.shouldRollBack(
+                reconciliationStatus, configManager.getObserveConfig(flinkApp))) {
             rollbackSessionCluster(flinkApp);
         }
     }
@@ -94,11 +97,17 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
                 objectMeta,
                 effectiveConfig,
                 false,
-                operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
+                configManager
+                        .getOperatorConfiguration()
+                        .getFlinkShutdownClusterTimeout()
+                        .toSeconds());
         FlinkUtils.waitForClusterShutdown(
                 kubernetesClient,
                 effectiveConfig,
-                operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
+                configManager
+                        .getOperatorConfiguration()
+                        .getFlinkShutdownClusterTimeout()
+                        .toSeconds());
         flinkService.submitSessionCluster(effectiveConfig);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         IngressUtils.updateIngressRules(objectMeta, deploySpec, effectiveConfig, kubernetesClient);
@@ -114,8 +123,7 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
                 status.getReconciliationStatus();
         FlinkDeploymentSpec rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
         Configuration rollbackConfig =
-                FlinkUtils.getEffectiveConfig(
-                        deployment.getMetadata(), rollbackSpec, defaultConfig);
+                configManager.getDeployConfig(deployment.getMetadata(), rollbackSpec);
         upgradeSessionCluster(deployment.getMetadata(), rollbackSpec, status, rollbackConfig);
         reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
     }
@@ -127,6 +135,9 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
                 flinkApp.getMetadata(),
                 effectiveConfig,
                 true,
-                operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
+                configManager
+                        .getOperatorConfiguration()
+                        .getFlinkShutdownClusterTimeout()
+                        .toSeconds());
     }
 }

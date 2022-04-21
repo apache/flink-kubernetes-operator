@@ -34,7 +34,7 @@ import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
@@ -105,15 +105,14 @@ public class FlinkService {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkService.class);
 
     private final KubernetesClient kubernetesClient;
-    private final FlinkOperatorConfiguration operatorConfiguration;
     private final ArtifactManager artifactManager;
+    private final FlinkConfigManager configManager;
     private final ExecutorService executorService;
 
-    public FlinkService(
-            KubernetesClient kubernetesClient, FlinkOperatorConfiguration operatorConfiguration) {
+    public FlinkService(KubernetesClient kubernetesClient, FlinkConfigManager configManager) {
         this.kubernetesClient = kubernetesClient;
-        this.operatorConfiguration = operatorConfiguration;
-        this.artifactManager = new ArtifactManager(operatorConfiguration);
+        this.artifactManager = new ArtifactManager(configManager);
+        this.configManager = configManager;
         this.executorService =
                 Executors.newFixedThreadPool(
                         4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
@@ -195,7 +194,10 @@ public class FlinkService {
             return clusterClient
                     .sendRequest(headers, parameters, runRequestBody)
                     .get(
-                            operatorConfiguration.getFlinkClientTimeout().toSeconds(),
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkClientTimeout()
+                                    .toSeconds(),
                             TimeUnit.SECONDS);
         } catch (Exception e) {
             LOG.error("Failed to submit job to session cluster.", e);
@@ -218,7 +220,7 @@ public class FlinkService {
         int port = conf.getInteger(RestOptions.PORT);
         String host =
                 ObjectUtils.firstNonNull(
-                        operatorConfiguration.getFlinkServiceHostOverride(),
+                        configManager.getOperatorConfiguration().getFlinkServiceHostOverride(),
                         ExternalServiceDecorator.getNamespacedExternalServiceName(
                                 clusterId, namespace));
         try (RestClient restClient = new RestClient(conf, executorService)) {
@@ -234,7 +236,10 @@ public class FlinkService {
                                     new FileUpload(
                                             jarFile.toPath(), RestConstants.CONTENT_TYPE_JAR)))
                     .get(
-                            operatorConfiguration.getFlinkClientTimeout().toSeconds(),
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkClientTimeout()
+                                    .toSeconds(),
                             TimeUnit.SECONDS);
         } finally {
             FileUtils.deleteFileOrDirectory(jarFile);
@@ -250,7 +255,10 @@ public class FlinkService {
             clusterClient
                     .sendRequest(headers, parameters, EmptyRequestBody.getInstance())
                     .get(
-                            operatorConfiguration.getFlinkClientTimeout().toSeconds(),
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkClientTimeout()
+                                    .toSeconds(),
                             TimeUnit.SECONDS);
         } catch (Exception e) {
             LOG.error("Failed to delete the jar: {}.", jarId, e);
@@ -281,7 +289,10 @@ public class FlinkService {
             return clusterClient
                     .listJobs()
                     .get(
-                            operatorConfiguration.getFlinkClientTimeout().getSeconds(),
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkClientTimeout()
+                                    .getSeconds(),
                             TimeUnit.SECONDS);
         }
     }
@@ -293,7 +304,7 @@ public class FlinkService {
         final int port = config.getInteger(RestOptions.PORT);
         final String host =
                 ObjectUtils.firstNonNull(
-                        operatorConfiguration.getFlinkServiceHostOverride(),
+                        configManager.getOperatorConfiguration().getFlinkServiceHostOverride(),
                         ExternalServiceDecorator.getNamespacedExternalServiceName(
                                 clusterId, namespace));
         final String restServerAddress = String.format("http://%s:%s", host, port);
@@ -312,7 +323,10 @@ public class FlinkService {
                     clusterClient
                             .cancel(jobID)
                             .get(
-                                    operatorConfiguration.getFlinkCancelJobTimeout().toSeconds(),
+                                    configManager
+                                            .getOperatorConfiguration()
+                                            .getFlinkCancelJobTimeout()
+                                            .toSeconds(),
                                     TimeUnit.SECONDS);
                     break;
                 case SAVEPOINT:
@@ -346,7 +360,10 @@ public class FlinkService {
                             clusterId,
                             kubernetesClient,
                             false,
-                            operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkShutdownClusterTimeout()
+                                    .toSeconds());
                     break;
                 default:
                     throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
@@ -355,7 +372,10 @@ public class FlinkService {
         FlinkUtils.waitForClusterShutdown(
                 kubernetesClient,
                 conf,
-                operatorConfiguration.getFlinkShutdownClusterTimeout().toSeconds());
+                configManager
+                        .getOperatorConfiguration()
+                        .getFlinkShutdownClusterTimeout()
+                        .toSeconds());
         return savepointOpt;
     }
 
@@ -370,7 +390,10 @@ public class FlinkService {
                     clusterClient
                             .cancel(jobID)
                             .get(
-                                    operatorConfiguration.getFlinkCancelJobTimeout().toSeconds(),
+                                    configManager
+                                            .getOperatorConfiguration()
+                                            .getFlinkCancelJobTimeout()
+                                            .toSeconds(),
                                     TimeUnit.SECONDS);
                     break;
                 case SAVEPOINT:
@@ -426,7 +449,8 @@ public class FlinkService {
 
             final String savepointDirectory =
                     Preconditions.checkNotNull(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
-            final long timeout = operatorConfiguration.getFlinkClientTimeout().getSeconds();
+            final long timeout =
+                    configManager.getOperatorConfiguration().getFlinkClientTimeout().getSeconds();
             TriggerResponse response =
                     clusterClient
                             .sendRequest(
