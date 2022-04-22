@@ -21,24 +21,24 @@ import org.apache.flink.annotation.Experimental;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 /** Last observed status of the Flink deployment. */
 @Experimental
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
-public class FlinkDeploymentStatus {
-    /** Last observed status of the Flink job on Application deployments. */
-    private JobStatus jobStatus = new JobStatus();
+@NoArgsConstructor
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
+public class FlinkDeploymentStatus extends CommonStatus {
 
     /** Last observed status of the JobManager deployment. */
     private JobManagerDeploymentStatus jobManagerDeploymentStatus =
             JobManagerDeploymentStatus.MISSING;
 
     /** Status of the last reconcile operation. */
-    private ReconciliationStatus reconciliationStatus = new ReconciliationStatus();
-
-    /** Error information about the Flink deployment. */
-    private String error;
+    private FlinkDeploymentReconciliationStatus reconciliationStatus =
+            new FlinkDeploymentReconciliationStatus();
 }

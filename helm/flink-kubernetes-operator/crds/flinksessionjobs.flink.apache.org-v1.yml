@@ -52,6 +52,21 @@ spec:
             type: object
           status:
             properties:
+              reconciliationStatus:
+                properties:
+                  reconciliationTimestamp:
+                    type: integer
+                  lastReconciledSpec:
+                    type: string
+                  lastStableSpec:
+                    type: string
+                  state:
+                    enum:
+                    - DEPLOYED
+                    - ROLLING_BACK
+                    - ROLLED_BACK
+                    type: string
+                type: object
               jobStatus:
                 properties:
                   jobName:
@@ -78,11 +93,6 @@ spec:
                       triggerTimestamp:
                         type: integer
                     type: object
-                type: object
-              reconciliationStatus:
-                properties:
-                  lastReconciledSpec:
-                    type: string
                 type: object
               error:
                 type: string

@@ -17,24 +17,22 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
-import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
-/** Last observed status of the Flink Session job. */
-@Experimental
+/** Status of the last reconcile step for the flink deployment. */
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
-public class FlinkSessionJobStatus extends CommonStatus {
+public class FlinkDeploymentReconciliationStatus extends ReconciliationStatus<FlinkDeploymentSpec> {
 
-    /** Status of the last reconcile operation. */
-    private FlinkSessionJobReconciliationStatus reconciliationStatus =
-            new FlinkSessionJobReconciliationStatus();
+    @Override
+    public Class<FlinkDeploymentSpec> getSpecClass() {
+        return FlinkDeploymentSpec.class;
+    }
 }

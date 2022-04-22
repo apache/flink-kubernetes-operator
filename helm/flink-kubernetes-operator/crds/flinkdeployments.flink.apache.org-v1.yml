@@ -9081,6 +9081,29 @@ spec:
             type: object
           status:
             properties:
+              jobManagerDeploymentStatus:
+                enum:
+                - READY
+                - DEPLOYED_NOT_READY
+                - DEPLOYING
+                - MISSING
+                - ERROR
+                type: string
+              reconciliationStatus:
+                properties:
+                  reconciliationTimestamp:
+                    type: integer
+                  lastReconciledSpec:
+                    type: string
+                  lastStableSpec:
+                    type: string
+                  state:
+                    enum:
+                    - DEPLOYED
+                    - ROLLING_BACK
+                    - ROLLED_BACK
+                    type: string
+                type: object
               jobStatus:
                 properties:
                   jobName:
@@ -9107,29 +9130,6 @@ spec:
                       triggerTimestamp:
                         type: integer
                     type: object
-                type: object
-              jobManagerDeploymentStatus:
-                enum:
-                - READY
-                - DEPLOYED_NOT_READY
-                - DEPLOYING
-                - MISSING
-                - ERROR
-                type: string
-              reconciliationStatus:
-                properties:
-                  reconciliationTimestamp:
-                    type: integer
-                  lastReconciledSpec:
-                    type: string
-                  lastStableSpec:
-                    type: string
-                  state:
-                    enum:
-                    - DEPLOYED
-                    - ROLLING_BACK
-                    - ROLLED_BACK
-                    type: string
                 type: object
               error:
                 type: string

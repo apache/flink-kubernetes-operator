@@ -18,7 +18,9 @@
 package org.apache.flink.kubernetes.operator.crd.spec;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.reconciler.ReconcileTarget;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -30,7 +32,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class FlinkSessionJobSpec {
+public class FlinkSessionJobSpec implements ReconcileTarget.SpecView {
 
     /**
      * The cluster id of the target session cluster. When deployed using the operator the cluster id
@@ -40,4 +42,10 @@ public class FlinkSessionJobSpec {
 
     /** A specification of a job . */
     private JobSpec job;
+
+    @JsonIgnore
+    @Override
+    public JobSpec getJobSpec() {
+        return job;
+    }
 }

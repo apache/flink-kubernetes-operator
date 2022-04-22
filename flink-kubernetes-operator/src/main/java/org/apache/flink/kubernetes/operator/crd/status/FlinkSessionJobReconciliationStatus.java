@@ -17,37 +17,20 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
-import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
-/** Status of the last reconcile step for the session job. */
-@Experimental
+/** Status of the last reconcile step for the flink sessionjob. */
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class FlinkSessionJobReconciliationStatus {
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
+public class FlinkSessionJobReconciliationStatus extends ReconciliationStatus<FlinkSessionJobSpec> {
 
-    /**
-     * Last reconciled job spec. Used to decide whether further reconciliation steps are necessary.
-     */
-    private String lastReconciledSpec;
-
-    @JsonIgnore
-    public FlinkSessionJobSpec deserializeLastReconciledSpec() {
-        return ReconciliationUtils.deserializedSpecWithVersion(
-                lastReconciledSpec, FlinkSessionJobSpec.class);
-    }
-
-    @JsonIgnore
-    public void serializeAndSetLastReconciledSpec(FlinkSessionJobSpec spec) {
-        setLastReconciledSpec(ReconciliationUtils.writeSpecWithCurrentVersion(spec));
+    @Override
+    public Class<FlinkSessionJobSpec> getSpecClass() {
+        return FlinkSessionJobSpec.class;
     }
 }

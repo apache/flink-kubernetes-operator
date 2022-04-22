@@ -20,7 +20,10 @@ package org.apache.flink.kubernetes.operator.crd;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.reconciler.ReconcileTarget;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.fabric8.kubernetes.api.model.Namespaced;
@@ -37,10 +40,21 @@ import io.fabric8.kubernetes.model.annotation.Version;
 @Version(CrdConstants.API_VERSION)
 @ShortNames({"flinkdep"})
 public class FlinkDeployment extends CustomResource<FlinkDeploymentSpec, FlinkDeploymentStatus>
-        implements Namespaced {
+        implements Namespaced, ReconcileTarget<FlinkDeploymentSpec> {
 
     @Override
     protected FlinkDeploymentStatus initStatus() {
         return new FlinkDeploymentStatus();
+    }
+
+    @JsonIgnore
+    @Override
+    public ReconciliationStatus<FlinkDeploymentSpec> getReconcileStatus() {
+        return status.getReconciliationStatus();
+    }
+
+    @Override
+    public void handleError(String error) {
+        status.setError(error);
     }
 }

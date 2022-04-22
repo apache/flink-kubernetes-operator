@@ -18,22 +18,17 @@
 package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Status of the last reconcile step for the deployment. */
+/** Status of the last reconcile step for the FlinkDeployment/FlinkSessionJob. */
 @Experimental
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class ReconciliationStatus {
+public abstract class ReconciliationStatus<SPEC> {
 
     /** Epoch timestamp of the last successful reconcile operation. */
     private long reconciliationTimestamp;
@@ -54,19 +49,20 @@ public class ReconciliationStatus {
     private ReconciliationState state = ReconciliationState.DEPLOYED;
 
     @JsonIgnore
-    public FlinkDeploymentSpec deserializeLastReconciledSpec() {
-        return ReconciliationUtils.deserializedSpecWithVersion(
-                lastReconciledSpec, FlinkDeploymentSpec.class);
+    public abstract Class<SPEC> getSpecClass();
+
+    @JsonIgnore
+    public SPEC deserializeLastReconciledSpec() {
+        return ReconciliationUtils.deserializedSpecWithVersion(lastReconciledSpec, getSpecClass());
     }
 
     @JsonIgnore
-    public FlinkDeploymentSpec deserializeLastStableSpec() {
-        return ReconciliationUtils.deserializedSpecWithVersion(
-                lastStableSpec, FlinkDeploymentSpec.class);
+    public SPEC deserializeLastStableSpec() {
+        return ReconciliationUtils.deserializedSpecWithVersion(lastStableSpec, getSpecClass());
     }
 
     @JsonIgnore
-    public void serializeAndSetLastReconciledSpec(FlinkDeploymentSpec spec) {
+    public void serializeAndSetLastReconciledSpec(SPEC spec) {
         setLastReconciledSpec(ReconciliationUtils.writeSpecWithCurrentVersion(spec));
     }
 

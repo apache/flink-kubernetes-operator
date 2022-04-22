@@ -20,21 +20,21 @@ package org.apache.flink.kubernetes.operator.crd.status;
 import org.apache.flink.annotation.Experimental;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import lombok.ToString;
 
-/** Last observed status of the Flink Session job. */
+/** Last observed common status of the Flink deployment/Flink SessionJob. */
 @Experimental
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-@ToString(callSuper = true)
-public class FlinkSessionJobStatus extends CommonStatus {
+@Builder
+public class CommonStatus {
 
-    /** Status of the last reconcile operation. */
-    private FlinkSessionJobReconciliationStatus reconciliationStatus =
-            new FlinkSessionJobReconciliationStatus();
+    /** Last observed status of the Flink job on Application/Session cluster. */
+    private JobStatus jobStatus = new JobStatus();
+
+    /** Error information about the FlinkDeployment/FlinkSessionJob. */
+    private String error;
 }

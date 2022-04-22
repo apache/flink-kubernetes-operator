@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
+import org.apache.flink.kubernetes.operator.reconciler.DefaultReconcileResultUpdater;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
@@ -99,7 +100,8 @@ public class FlinkDeploymentController
             Optional<String> validationError = validateDeployment(flinkApp);
             if (validationError.isPresent()) {
                 LOG.error("Validation failed: " + validationError.get());
-                ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
+                DefaultReconcileResultUpdater.INSTANCE.updateForReconciliationError(
+                        flinkApp, validationError.get());
                 return ReconciliationUtils.toUpdateControl(
                         operatorConfiguration, originalCopy, flinkApp, false);
             }
@@ -118,7 +120,8 @@ public class FlinkDeploymentController
     private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
         LOG.error("Flink Deployment failed", dfe);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-        ReconciliationUtils.updateForReconciliationError(flinkApp, dfe.getMessage());
+        DefaultReconcileResultUpdater.INSTANCE.updateForReconciliationError(
+                flinkApp, dfe.getMessage());
 
         // TODO: avoid repeated event
         Event event = DeploymentFailedException.asEvent(dfe, flinkApp);
@@ -150,7 +153,7 @@ public class FlinkDeploymentController
                 retryInfo.getAttemptCount(),
                 retryInfo.isLastAttempt());
 
-        ReconciliationUtils.updateForReconciliationError(
+        DefaultReconcileResultUpdater.INSTANCE.updateForReconciliationError(
                 flinkApp,
                 (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
         return Optional.of(flinkApp);

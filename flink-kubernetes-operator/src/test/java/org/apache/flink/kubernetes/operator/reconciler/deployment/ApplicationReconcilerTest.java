@@ -125,6 +125,7 @@ public class ApplicationReconcilerTest {
                 JobState.SUSPENDED
                         .name()
                         .equalsIgnoreCase(deployment.getStatus().getJobStatus().getState()));
+
         assertEquals(
                 expectedSavepointPath,
                 deployment
@@ -180,11 +181,13 @@ public class ApplicationReconcilerTest {
         assertEquals(
                 "trigger_0",
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
         spDeployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId(null);
 
         // don't trigger when nonce is the same
         reconciler.reconcile(spDeployment, context);
         assertNull(spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
         spDeployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId(null);
 
         // trigger when new nonce is defined
@@ -196,6 +199,7 @@ public class ApplicationReconcilerTest {
         assertEquals(
                 "trigger_1",
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
         spDeployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId(null);
 
         // don't trigger nonce is cleared

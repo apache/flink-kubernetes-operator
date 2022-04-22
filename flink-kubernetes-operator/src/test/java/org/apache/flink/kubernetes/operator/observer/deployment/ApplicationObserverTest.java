@@ -174,6 +174,7 @@ public class ApplicationObserverTest {
         assertEquals(
                 "trigger_0",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
         observer.observe(deployment, readyContext);
         assertEquals(
                 "savepoint_0",
@@ -184,6 +185,7 @@ public class ApplicationObserverTest {
                         .getLastSavepoint()
                         .getLocation());
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerTimestamp());
 
         flinkService.triggerSavepoint(
@@ -193,6 +195,7 @@ public class ApplicationObserverTest {
         assertEquals(
                 "trigger_1",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
         observer.observe(deployment, readyContext);
         assertEquals(
                 "savepoint_1",
@@ -203,6 +206,7 @@ public class ApplicationObserverTest {
                         .getLastSavepoint()
                         .getLocation());
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerTimestamp());
     }
 
