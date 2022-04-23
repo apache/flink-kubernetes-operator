@@ -22,9 +22,9 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
-import org.apache.flink.kubernetes.operator.crd.spec.SpecView;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
@@ -50,49 +50,47 @@ public class ReconciliationUtils {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    public static <SPEC extends SpecView, STATUS extends CommonStatus<SPEC>>
+    public static <SPEC extends AbstractFlinkSpec, STATUS extends CommonStatus<SPEC>>
             void updateForSpecReconciliationSuccess(
                     CustomResource<SPEC, STATUS> target, JobState stateAfterReconcile) {
         var commonStatus = target.getStatus();
-        var specView = target.getSpec();
+        var spec = target.getSpec();
 
         ReconciliationStatus<SPEC> reconciliationStatus = commonStatus.getReconciliationStatus();
         commonStatus.setError(null);
 
-        var clonedSpec = ReconciliationUtils.clone(specView);
-        SpecView lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
-        if (lastReconciledSpec != null && lastReconciledSpec.getJobSpec() != null) {
-            Long oldSavepointTriggerNonce =
-                    lastReconciledSpec.getJobSpec().getSavepointTriggerNonce();
-            clonedSpec.getJobSpec().setSavepointTriggerNonce(oldSavepointTriggerNonce);
-            clonedSpec.getJobSpec().setState(stateAfterReconcile);
+        var clonedSpec = ReconciliationUtils.clone(spec);
+        AbstractFlinkSpec lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        if (lastReconciledSpec != null && lastReconciledSpec.getJob() != null) {
+            Long oldSavepointTriggerNonce = lastReconciledSpec.getJob().getSavepointTriggerNonce();
+            clonedSpec.getJob().setSavepointTriggerNonce(oldSavepointTriggerNonce);
+            clonedSpec.getJob().setState(stateAfterReconcile);
         }
         reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec);
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
         reconciliationStatus.setState(ReconciliationState.DEPLOYED);
 
-        if (specView.getJobSpec() != null
-                && specView.getJobSpec().getState() == JobState.SUSPENDED) {
+        if (spec.getJob() != null && spec.getJob().getState() == JobState.SUSPENDED) {
             // When a job is suspended by the user it is automatically marked stable
             reconciliationStatus.markReconciledSpecAsStable();
         }
     }
 
-    public static <SPEC extends SpecView, STATUS extends CommonStatus<SPEC>>
+    public static <SPEC extends AbstractFlinkSpec, STATUS extends CommonStatus<SPEC>>
             void updateSavepointReconciliationSuccess(CustomResource<SPEC, STATUS> target) {
         var commonStatus = target.getStatus();
-        var specView = target.getSpec();
+        var spec = target.getSpec();
         ReconciliationStatus<SPEC> reconciliationStatus = commonStatus.getReconciliationStatus();
         commonStatus.setError(null);
         SPEC lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
         lastReconciledSpec
-                .getJobSpec()
-                .setSavepointTriggerNonce(specView.getJobSpec().getSavepointTriggerNonce());
+                .getJob()
+                .setSavepointTriggerNonce(spec.getJob().getSavepointTriggerNonce());
         reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec);
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
     }
 
-    public static <SPEC extends SpecView, STATUS extends CommonStatus<SPEC>>
+    public static <SPEC extends AbstractFlinkSpec, STATUS extends CommonStatus<SPEC>>
             void updateForReconciliationError(CustomResource<SPEC, STATUS> target, String error) {
         target.getStatus().setError(error);
     }

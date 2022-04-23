@@ -17,7 +17,21 @@
 
 package org.apache.flink.kubernetes.operator.crd.spec;
 
+import org.apache.flink.annotation.Experimental;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
+
 /** The common view of the spec. */
-public interface SpecView {
-    JobSpec getJobSpec();
+@Experimental
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@SuperBuilder
+public abstract class AbstractFlinkSpec {
+
+    /** Job specification for application deployments/session job. Null for session clusters. */
+    private JobSpec job;
 }

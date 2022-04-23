@@ -9044,6 +9044,12 @@ spec:
                         type: object
                     type: object
                 type: object
+              restartNonce:
+                type: integer
+              logConfiguration:
+                additionalProperties:
+                  type: string
+                type: object
               job:
                 properties:
                   jarURI:
@@ -9071,12 +9077,6 @@ spec:
                     - last-state
                     - stateless
                     type: string
-                type: object
-              restartNonce:
-                type: integer
-              logConfiguration:
-                additionalProperties:
-                  type: string
                 type: object
             type: object
           status:

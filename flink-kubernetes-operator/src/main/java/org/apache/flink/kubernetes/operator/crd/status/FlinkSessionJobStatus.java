@@ -25,6 +25,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
+import lombok.experimental.SuperBuilder;
 
 /** Last observed status of the Flink Session job. */
 @Experimental
@@ -33,6 +34,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
+@SuperBuilder
 public class FlinkSessionJobStatus extends CommonStatus<FlinkSessionJobSpec> {
 
     /** Status of the last reconcile operation. */

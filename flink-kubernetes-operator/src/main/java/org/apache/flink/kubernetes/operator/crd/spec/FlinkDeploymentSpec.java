@@ -19,12 +19,13 @@ package org.apache.flink.kubernetes.operator.crd.spec;
 
 import org.apache.flink.annotation.Experimental;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.fabric8.kubernetes.api.model.Pod;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import lombok.experimental.SuperBuilder;
 
 import java.util.Map;
 
@@ -33,8 +34,10 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class FlinkDeploymentSpec implements SpecView {
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
+@SuperBuilder
+public class FlinkDeploymentSpec extends AbstractFlinkSpec {
     /** Flink docker image used to start the Job and TaskManager pods. */
     private String image;
 
@@ -65,9 +68,6 @@ public class FlinkDeploymentSpec implements SpecView {
     /** TaskManager specs. */
     private TaskManagerSpec taskManager;
 
-    /** Job specification for application deployments. Null for session clusters. */
-    private JobSpec job;
-
     /**
      * Nonce used to manually trigger restart for the cluster. In order to trigger restart, change
      * the number to anything other than the current value.
@@ -79,10 +79,4 @@ public class FlinkDeploymentSpec implements SpecView {
      * configContent.
      */
     private Map<String, String> logConfiguration;
-
-    @JsonIgnore
-    @Override
-    public JobSpec getJobSpec() {
-        return job;
-    }
 }
