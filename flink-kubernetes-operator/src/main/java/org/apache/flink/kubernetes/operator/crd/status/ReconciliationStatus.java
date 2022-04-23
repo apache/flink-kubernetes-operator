@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.crd.spec.SpecView;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -28,7 +29,7 @@ import lombok.NoArgsConstructor;
 @Experimental
 @Data
 @NoArgsConstructor
-public abstract class ReconciliationStatus<SPEC> {
+public abstract class ReconciliationStatus<SPEC extends SpecView> {
 
     /** Epoch timestamp of the last successful reconcile operation. */
     private long reconciliationTimestamp;

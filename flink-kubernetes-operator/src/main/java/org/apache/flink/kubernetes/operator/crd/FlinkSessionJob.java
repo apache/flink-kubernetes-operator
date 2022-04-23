@@ -20,10 +20,7 @@ package org.apache.flink.kubernetes.operator.crd;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
-import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
-import org.apache.flink.kubernetes.operator.reconciler.ReconcileTarget;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.fabric8.kubernetes.api.model.Namespaced;
@@ -40,22 +37,10 @@ import io.fabric8.kubernetes.model.annotation.Version;
 @Version(CrdConstants.API_VERSION)
 @ShortNames({"sessionjob"})
 public class FlinkSessionJob extends CustomResource<FlinkSessionJobSpec, FlinkSessionJobStatus>
-        implements Namespaced, ReconcileTarget<FlinkSessionJobSpec> {
+        implements Namespaced {
 
     @Override
     protected FlinkSessionJobStatus initStatus() {
         return new FlinkSessionJobStatus();
-    }
-
-    @JsonIgnore
-    @Override
-    public void handleError(String error) {
-        status.setError(error);
-    }
-
-    @JsonIgnore
-    @Override
-    public ReconciliationStatus<FlinkSessionJobSpec> getReconcileStatus() {
-        return status.getReconciliationStatus();
     }
 }

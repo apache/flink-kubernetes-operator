@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -32,7 +33,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
-public class FlinkSessionJobStatus extends CommonStatus {
+public class FlinkSessionJobStatus extends CommonStatus<FlinkSessionJobSpec> {
 
     /** Status of the last reconcile operation. */
     private FlinkSessionJobReconciliationStatus reconciliationStatus =

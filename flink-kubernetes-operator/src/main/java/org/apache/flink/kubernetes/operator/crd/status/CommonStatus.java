@@ -18,9 +18,9 @@
 package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.crd.spec.SpecView;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -29,12 +29,13 @@ import lombok.NoArgsConstructor;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Builder
-public class CommonStatus {
+public abstract class CommonStatus<SPEC extends SpecView> {
 
     /** Last observed status of the Flink job on Application/Session cluster. */
     private JobStatus jobStatus = new JobStatus();
 
     /** Error information about the FlinkDeployment/FlinkSessionJob. */
     private String error;
+
+    public abstract ReconciliationStatus<SPEC> getReconciliationStatus();
 }

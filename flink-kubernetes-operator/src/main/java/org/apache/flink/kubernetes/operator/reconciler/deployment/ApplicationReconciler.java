@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
-import org.apache.flink.kubernetes.operator.reconciler.DefaultReconcileResultUpdater;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -86,8 +85,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                     Optional.ofNullable(desiredJobSpec.getInitialSavepointPath()));
             IngressUtils.updateIngressRules(
                     deployMeta, currentDeploySpec, effectiveConfig, kubernetesClient);
-            DefaultReconcileResultUpdater.INSTANCE.updateForSpecReconciliationSuccess(
-                    flinkApp, JobState.RUNNING);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, JobState.RUNNING);
             return;
         }
 
@@ -123,14 +121,13 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             }
             IngressUtils.updateIngressRules(
                     deployMeta, currentDeploySpec, effectiveConfig, kubernetesClient);
-            DefaultReconcileResultUpdater.INSTANCE.updateForSpecReconciliationSuccess(
-                    flinkApp, stateAfterReconcile);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, stateAfterReconcile);
         } else if (ReconciliationUtils.shouldRollBack(reconciliationStatus, effectiveConfig)) {
             rollbackApplication(flinkApp);
         } else if (SavepointUtils.shouldTriggerSavepoint(desiredJobSpec, status)
                 && isJobRunning(status)) {
             triggerSavepoint(flinkApp, effectiveConfig);
-            DefaultReconcileResultUpdater.INSTANCE.updateSavepointReconciliationSuccess(flinkApp);
+            ReconciliationUtils.updateSavepointReconciliationSuccess(flinkApp);
         } else {
             LOG.info("Deployment is fully reconciled, nothing to do.");
         }

@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.ApplicationObserverContext;
-import org.apache.flink.kubernetes.operator.reconciler.DefaultReconcileResultUpdater;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
@@ -83,10 +83,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
         if (jobFound) {
             savepointObserver
                     .observe(jobStatus.getSavepointInfo(), jobStatus.getJobId(), deployedConfig)
-                    .ifPresent(
-                            e ->
-                                    DefaultReconcileResultUpdater.INSTANCE
-                                            .updateForReconciliationError(flinkApp, e));
+                    .ifPresent(e -> ReconciliationUtils.updateForReconciliationError(flinkApp, e));
         }
         return isJobReady(jobStatus);
     }

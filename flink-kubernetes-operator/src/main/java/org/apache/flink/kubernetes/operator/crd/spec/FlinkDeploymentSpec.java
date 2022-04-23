@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.crd.spec;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.reconciler.ReconcileTarget;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -35,7 +34,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class FlinkDeploymentSpec implements ReconcileTarget.SpecView {
+public class FlinkDeploymentSpec implements SpecView {
     /** Flink docker image used to start the Job and TaskManager pods. */
     private String image;
 

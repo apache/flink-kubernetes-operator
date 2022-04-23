@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.VoidObserverContext;
-import org.apache.flink.kubernetes.operator.reconciler.DefaultReconcileResultUpdater;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobHelper;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -128,8 +127,8 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
                             deployedConfig)
                     .ifPresent(
                             e ->
-                                    DefaultReconcileResultUpdater.INSTANCE
-                                            .updateForReconciliationError(flinkSessionJob, e));
+                                    ReconciliationUtils.updateForReconciliationError(
+                                            flinkSessionJob, e));
         }
     }
 }

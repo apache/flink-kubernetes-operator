@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
-import org.apache.flink.kubernetes.operator.reconciler.DefaultReconcileResultUpdater;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -70,8 +69,7 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
             status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
             IngressUtils.updateIngressRules(
                     flinkApp.getMetadata(), currentDeploySpec, effectiveConfig, kubernetesClient);
-            DefaultReconcileResultUpdater.INSTANCE.updateForSpecReconciliationSuccess(
-                    flinkApp, null);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null);
             return;
         }
 
@@ -79,8 +77,7 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
         if (specChanged) {
             upgradeSessionCluster(
                     flinkApp.getMetadata(), currentDeploySpec, status, effectiveConfig);
-            DefaultReconcileResultUpdater.INSTANCE.updateForSpecReconciliationSuccess(
-                    flinkApp, null);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null);
         } else if (ReconciliationUtils.shouldRollBack(reconciliationStatus, effectiveConfig)) {
             rollbackSessionCluster(flinkApp);
         }

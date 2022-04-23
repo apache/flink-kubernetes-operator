@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.reconciler.DefaultReconcileResultUpdater;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -90,8 +89,7 @@ public class ReconciliationUtilsTest {
         current.getStatus()
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(ReconciliationUtils.clone(current.getSpec()));
-        DefaultReconcileResultUpdater.INSTANCE.updateForSpecReconciliationSuccess(
-                current, JobState.SUSPENDED);
+        ReconciliationUtils.updateForSpecReconciliationSuccess(current, JobState.SUSPENDED);
 
         UpdateControl<FlinkDeployment> updateControl =
                 ReconciliationUtils.toUpdateControl(operatorConfiguration, app, current, true);

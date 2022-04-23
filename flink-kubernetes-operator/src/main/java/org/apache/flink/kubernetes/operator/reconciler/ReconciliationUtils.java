@@ -24,7 +24,9 @@ import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.SpecView;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -47,6 +49,53 @@ import java.util.Objects;
 public class ReconciliationUtils {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    public static <SPEC extends SpecView, STATUS extends CommonStatus<SPEC>>
+            void updateForSpecReconciliationSuccess(
+                    CustomResource<SPEC, STATUS> target, JobState stateAfterReconcile) {
+        var commonStatus = target.getStatus();
+        var specView = target.getSpec();
+
+        ReconciliationStatus<SPEC> reconciliationStatus = commonStatus.getReconciliationStatus();
+        commonStatus.setError(null);
+
+        var clonedSpec = ReconciliationUtils.clone(specView);
+        SpecView lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        if (lastReconciledSpec != null && lastReconciledSpec.getJobSpec() != null) {
+            Long oldSavepointTriggerNonce =
+                    lastReconciledSpec.getJobSpec().getSavepointTriggerNonce();
+            clonedSpec.getJobSpec().setSavepointTriggerNonce(oldSavepointTriggerNonce);
+            clonedSpec.getJobSpec().setState(stateAfterReconcile);
+        }
+        reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec);
+        reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
+        reconciliationStatus.setState(ReconciliationState.DEPLOYED);
+
+        if (specView.getJobSpec() != null
+                && specView.getJobSpec().getState() == JobState.SUSPENDED) {
+            // When a job is suspended by the user it is automatically marked stable
+            reconciliationStatus.markReconciledSpecAsStable();
+        }
+    }
+
+    public static <SPEC extends SpecView, STATUS extends CommonStatus<SPEC>>
+            void updateSavepointReconciliationSuccess(CustomResource<SPEC, STATUS> target) {
+        var commonStatus = target.getStatus();
+        var specView = target.getSpec();
+        ReconciliationStatus<SPEC> reconciliationStatus = commonStatus.getReconciliationStatus();
+        commonStatus.setError(null);
+        SPEC lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        lastReconciledSpec
+                .getJobSpec()
+                .setSavepointTriggerNonce(specView.getJobSpec().getSavepointTriggerNonce());
+        reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec);
+        reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
+    }
+
+    public static <SPEC extends SpecView, STATUS extends CommonStatus<SPEC>>
+            void updateForReconciliationError(CustomResource<SPEC, STATUS> target, String error) {
+        target.getStatus().setError(error);
+    }
 
     public static <T> T clone(T object) {
         if (object == null) {

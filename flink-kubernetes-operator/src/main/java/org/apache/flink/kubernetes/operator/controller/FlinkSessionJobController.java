@@ -22,7 +22,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
-import org.apache.flink.kubernetes.operator.reconciler.DefaultReconcileResultUpdater;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
@@ -104,7 +103,7 @@ public class FlinkSessionJobController
         Optional<String> validationError = validateSessionJob(flinkSessionJob, context);
         if (validationError.isPresent()) {
             LOG.error("Validation failed: " + validationError.get());
-            DefaultReconcileResultUpdater.INSTANCE.updateForReconciliationError(
+            ReconciliationUtils.updateForReconciliationError(
                     flinkSessionJob, validationError.get());
             return ReconciliationUtils.toUpdateControl(originalCopy, flinkSessionJob);
         }
@@ -135,7 +134,7 @@ public class FlinkSessionJobController
                 retryInfo.getAttemptCount(),
                 retryInfo.isLastAttempt());
 
-        DefaultReconcileResultUpdater.INSTANCE.updateForReconciliationError(
+        ReconciliationUtils.updateForReconciliationError(
                 flinkSessionJob,
                 (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
         return Optional.of(flinkSessionJob);

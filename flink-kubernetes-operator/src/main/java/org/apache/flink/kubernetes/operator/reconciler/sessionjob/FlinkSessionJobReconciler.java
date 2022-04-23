@@ -27,8 +27,8 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
-import org.apache.flink.kubernetes.operator.reconciler.DefaultReconcileResultUpdater;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
@@ -94,7 +94,7 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                     Optional.ofNullable(
                                     flinkSessionJob.getSpec().getJob().getInitialSavepointPath())
                             .orElse(null));
-            DefaultReconcileResultUpdater.INSTANCE.updateForSpecReconciliationSuccess(
+            ReconciliationUtils.updateForSpecReconciliationSuccess(
                     flinkSessionJob, JobState.RUNNING);
             return;
         }
@@ -128,12 +128,11 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                 }
                 stateAfterReconcile = JobState.RUNNING;
             }
-            DefaultReconcileResultUpdater.INSTANCE.updateForSpecReconciliationSuccess(
+            ReconciliationUtils.updateForSpecReconciliationSuccess(
                     flinkSessionJob, stateAfterReconcile);
         } else if (helper.shouldTriggerSavepoint() && helper.isJobRunning(flinkDepOptional.get())) {
             triggerSavepoint(flinkSessionJob, effectiveConfig);
-            DefaultReconcileResultUpdater.INSTANCE.updateSavepointReconciliationSuccess(
-                    flinkSessionJob);
+            ReconciliationUtils.updateSavepointReconciliationSuccess(flinkSessionJob);
         }
     }
 
