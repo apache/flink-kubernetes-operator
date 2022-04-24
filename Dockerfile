@@ -62,6 +62,7 @@ COPY docker-entrypoint.sh /
 RUN chown -R flink:flink $FLINK_HOME && \
     chown flink:flink $OPERATOR_JAR && \
     chown flink:flink $WEBHOOK_JAR && \
+    chown flink:flink $FLINK_KUBERNETES_SHADED_JAR && \
     chown flink:flink docker-entrypoint.sh
 
 USER flink

@@ -57,6 +57,38 @@ function wait_for_status {
   exit 1
 }
 
+function assert_available_slots() {
+  expected=$1
+  CLUSTER_ID=$2
+  ip=$(minikube ip)
+  actual=$(curl http://$ip/default/${CLUSTER_ID}/overview 2>/dev/null | grep -E -o '"slots-available":[0-9]+' | awk -F':' '{print $2}')
+  if [[ expected -ne actual ]]; then
+    echo "Expected available slots: $expected, actual: $actual"
+    exit 1
+  fi
+  echo "Successfully assert available slots"
+}
+
+function wait_for_jobmanager_running() {
+    CLUSTER_ID=$1
+    TIMEOUT=$2
+    retry_times 30 3 "kubectl get deploy/${CLUSTER_ID}" || exit 1
+
+    kubectl wait --for=condition=Available --timeout=${TIMEOUT}s deploy/${CLUSTER_ID} || exit 1
+    jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
+
+    echo "Waiting for jobmanager pod ${jm_pod_name} ready."
+    kubectl wait --for=condition=Ready --timeout=${TIMEOUT}s pod/$jm_pod_name || exit 1
+
+    wait_for_logs $jm_pod_name "Rest endpoint listening at" ${TIMEOUT} || exit 1
+}
+
+function get_jm_pod_name() {
+   CLUSTER_ID=$1
+   jm_pod_name=$(kubectl get pods --selector="app=${CLUSTER_ID},component=jobmanager" -o jsonpath='{..metadata.name}')
+   echo $jm_pod_name
+}
+
 function retry_times() {
     local retriesNumber=$1
     local backoff=$2
@@ -131,6 +163,20 @@ function stop_minikube {
     fi
 }
 
+function cleanup_and_exit() {
+    if [ $TRAPPED_EXIT_CODE != 0 ];then
+      debug_and_show_logs
+    fi
+
+    APPLICATION_YAML=$1
+    TIMEOUT=$2
+    CLUSTER_ID=$3
+
+    kubectl delete -f $APPLICATION_YAML
+    kubectl wait --for=delete pod --timeout=${TIMEOUT}s --selector="app=${CLUSTER_ID}"
+    kubectl delete cm --selector="app=${CLUSTER_ID},configmap-type=high-availability"
+}
+
 function _on_exit_callback {
   # Export the exit code so that it could be used by the callback commands
   export TRAPPED_EXIT_CODE=$?
@@ -154,5 +200,5 @@ function on_exit {
   local command="$1"
 
   # Keep commands in reverse order, so commands would be executed in LIFO order.
-  _on_exit_commands=("${command}" "${_on_exit_commands[@]-}")
+  _on_exit_commands=("${command} `echo "${@:2}"`" "${_on_exit_commands[@]-}")
 }
