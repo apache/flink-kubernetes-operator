@@ -35,7 +35,6 @@ import org.apache.flink.shaded.netty4.io.netty.handler.ssl.SslContextBuilder;
 import org.apache.flink.shaded.netty4.io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import org.apache.flink.shaded.netty4.io.netty.handler.stream.ChunkedWriteHandler;
 
-import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,7 +56,7 @@ public class FlinkOperatorWebhook {
 
     public static void main(String[] args) throws Exception {
         EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
-        FlinkConfigManager configManager = new FlinkConfigManager(new DefaultKubernetesClient());
+        FlinkConfigManager configManager = new FlinkConfigManager();
         AdmissionHandler endpoint =
                 new AdmissionHandler(new FlinkValidator(new DefaultValidator(configManager)));
         ChannelInitializer<SocketChannel> initializer = createChannelInitializer(endpoint);

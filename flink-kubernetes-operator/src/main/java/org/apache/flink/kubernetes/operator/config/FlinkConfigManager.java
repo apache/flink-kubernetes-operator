@@ -25,9 +25,7 @@ import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
-import org.apache.flink.util.FileUtils;
 
 import org.apache.flink.shaded.guava30.com.google.common.cache.Cache;
 import org.apache.flink.shaded.guava30.com.google.common.cache.CacheBuilder;
@@ -35,16 +33,10 @@ import org.apache.flink.shaded.guava30.com.google.common.cache.CacheBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -58,8 +50,6 @@ public class FlinkConfigManager {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigManager.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    public static final String OP_CM_NAME = "flink-operator-config";
-
     private static final int CACHE_SIZE = 1000;
 
     private volatile Configuration defaultConfig;
@@ -67,21 +57,17 @@ public class FlinkConfigManager {
 
     private final Cache<Tuple4<String, String, ObjectNode, Boolean>, Configuration> cache;
     private Set<String> namespaces = OperatorUtils.getWatchedNamespaces();
-    private ConfigUpdater configUpdater;
 
-    public FlinkConfigManager(KubernetesClient client) {
-        this(readConfiguration(client));
-
-        if (defaultConfig.getBoolean(OPERATOR_DYNAMIC_CONFIG_ENABLED)) {
-            scheduleConfigWatcher(client);
-        }
+    public FlinkConfigManager() {
+        this(GlobalConfiguration.loadConfiguration());
     }
 
     public FlinkConfigManager(Configuration defaultConfig) {
         this.cache = CacheBuilder.newBuilder().maximumSize(CACHE_SIZE).build();
-        updateDefaultConfig(
-                defaultConfig,
-                FlinkOperatorConfiguration.fromConfiguration(defaultConfig, namespaces));
+        updateDefaultConfig(defaultConfig);
+        if (defaultConfig.getBoolean(OPERATOR_DYNAMIC_CONFIG_ENABLED)) {
+            scheduleConfigWatcher();
+        }
     }
 
     public Configuration getDefaultConfig() {
@@ -89,11 +75,17 @@ public class FlinkConfigManager {
     }
 
     @VisibleForTesting
-    public void updateDefaultConfig(
-            Configuration defaultConfig, FlinkOperatorConfiguration operatorConfiguration) {
-        this.defaultConfig = defaultConfig;
+    public void updateDefaultConfig(Configuration newConf) {
+        if (newConf.equals(defaultConfig)) {
+            LOG.info("Default configuration did not change, nothing to do...");
+            return;
+        }
+
+        LOG.info("Updating default configuration");
+        this.operatorConfiguration =
+                FlinkOperatorConfiguration.fromConfiguration(newConf, namespaces);
+        this.defaultConfig = newConf.clone();
         cache.invalidateAll();
-        this.operatorConfiguration = operatorConfiguration;
     }
 
     public FlinkOperatorConfiguration getOperatorConfiguration() {
@@ -144,12 +136,11 @@ public class FlinkConfigManager {
         }
     }
 
-    private void scheduleConfigWatcher(KubernetesClient client) {
+    private void scheduleConfigWatcher() {
         var checkInterval = defaultConfig.get(OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL);
         var millis = checkInterval.toMillis();
-        configUpdater = new ConfigUpdater(client);
         Executors.newSingleThreadScheduledExecutor()
-                .scheduleAtFixedRate(configUpdater, millis, millis, TimeUnit.MILLISECONDS);
+                .scheduleAtFixedRate(new ConfigUpdater(), millis, millis, TimeUnit.MILLISECONDS);
         LOG.info("Enabled dynamic config updates, checking config changes every {}", checkInterval);
     }
 
@@ -160,52 +151,11 @@ public class FlinkConfigManager {
                 FlinkOperatorConfiguration.fromConfiguration(defaultConfig, namespaces);
     }
 
-    @VisibleForTesting
-    public Runnable getConfigUpdater() {
-        return configUpdater;
-    }
-
-    private static Configuration readConfiguration(KubernetesClient client) {
-        var operatorNamespace = EnvUtils.getOrDefault(EnvUtils.ENV_OPERATOR_NAMESPACE, "default");
-        var configMap =
-                client.configMaps().inNamespace(operatorNamespace).withName(OP_CM_NAME).get();
-        Map<String, String> data = configMap.getData();
-        Path tmpDir = null;
-        try {
-            tmpDir = Files.createTempDirectory("flink-conf");
-            Files.write(
-                    tmpDir.resolve(GlobalConfiguration.FLINK_CONF_FILENAME),
-                    data.get(GlobalConfiguration.FLINK_CONF_FILENAME)
-                            .getBytes(Charset.defaultCharset()));
-            return GlobalConfiguration.loadConfiguration(tmpDir.toAbsolutePath().toString());
-        } catch (IOException ioe) {
-            throw new RuntimeException("Could not load default config", ioe);
-        } finally {
-            if (tmpDir != null) {
-                FileUtils.deleteDirectoryQuietly(tmpDir.toFile());
-            }
-        }
-    }
-
-    class ConfigUpdater implements Runnable {
-        KubernetesClient kubeClient;
-
-        public ConfigUpdater(KubernetesClient kubeClient) {
-            this.kubeClient = kubeClient;
-        }
-
+    private class ConfigUpdater implements Runnable {
         public void run() {
             try {
                 LOG.debug("Checking for config update changes...");
-                var newConf = readConfiguration(kubeClient);
-                if (!newConf.equals(defaultConfig)) {
-                    LOG.info("Updating default configuration");
-                    updateDefaultConfig(
-                            newConf,
-                            FlinkOperatorConfiguration.fromConfiguration(newConf, namespaces));
-                } else {
-                    LOG.debug("Default configuration did not change, nothing to do...");
-                }
+                updateDefaultConfig(GlobalConfiguration.loadConfiguration());
             } catch (Exception e) {
                 LOG.error("Error while updating operator configuration", e);
             }

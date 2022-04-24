@@ -120,6 +120,6 @@ public class KubernetesOperatorConfigOptions {
     public static final ConfigOption<Duration> OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL =
             ConfigOptions.key("kubernetes.operator.dynamic.config.check.interval")
                     .durationType()
-                    .defaultValue(Duration.ofSeconds(30))
+                    .defaultValue(Duration.ofMinutes(5))
                     .withDescription("Time interval for checking config changes.");
 }

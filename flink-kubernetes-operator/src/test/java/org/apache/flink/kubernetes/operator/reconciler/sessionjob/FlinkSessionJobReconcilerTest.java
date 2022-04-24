@@ -383,8 +383,7 @@ public class FlinkSessionJobReconcilerTest {
                         Map.of(
                                 KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT
                                         .key(),
-                                "true")),
-                configManager.getOperatorConfiguration());
+                                "true")));
         // Force upgrade when savepoint is in progress.
         reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
         spSessionJob.getSpec().getJob().setParallelism(100);

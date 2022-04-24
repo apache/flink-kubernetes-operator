@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.core.plugin.PluginUtils;
@@ -66,9 +67,9 @@ public class FlinkOperator {
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
 
-    public FlinkOperator(@Nullable FlinkConfigManager cm) {
+    public FlinkOperator(@Nullable Configuration conf) {
         this.client = new DefaultKubernetesClient();
-        this.configManager = cm != null ? cm : new FlinkConfigManager(client);
+        this.configManager = conf != null ? new FlinkConfigManager(conf) : new FlinkConfigManager();
         this.configurationService =
                 getConfigurationService(configManager.getOperatorConfiguration());
         this.operator = new Operator(client, configurationService);

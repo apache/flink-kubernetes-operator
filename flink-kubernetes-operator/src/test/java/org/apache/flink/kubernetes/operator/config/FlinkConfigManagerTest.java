@@ -20,17 +20,11 @@ package org.apache.flink.kubernetes.operator.config;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 
-import io.fabric8.kubernetes.api.model.ConfigMap;
-import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -40,37 +34,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /** Test for FlinkConfigManager. */
-@EnableKubernetesMockClient(crud = true)
 public class FlinkConfigManagerTest {
-
-    private KubernetesClient kubernetesClient;
-
-    @BeforeEach
-    public void setup() {
-        Configuration conf = new Configuration();
-        conf.set(KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_ENABLED, false);
-        updateConfigMap(conf);
-    }
-
-    private void updateConfigMap(Configuration configuration) {
-        ConfigMap cm = new ConfigMap();
-        ObjectMeta objectMeta = new ObjectMeta();
-        objectMeta.setNamespace("default");
-        objectMeta.setName(FlinkConfigManager.OP_CM_NAME);
-        cm.setMetadata(objectMeta);
-        cm.setData(Map.of(GlobalConfiguration.FLINK_CONF_FILENAME, writeAsYaml(configuration)));
-        kubernetesClient
-                .configMaps()
-                .inNamespace("default")
-                .withName(FlinkConfigManager.OP_CM_NAME)
-                .createOrReplace(cm);
-    }
 
     @Test
     public void testConfigGeneration() {
         ConfigOption<String> testConf = ConfigOptions.key("test").stringType().noDefaultValue();
 
-        FlinkConfigManager configManager = new FlinkConfigManager(kubernetesClient);
+        FlinkConfigManager configManager =
+                new FlinkConfigManager(
+                        Configuration.fromMap(
+                                Map.of(
+                                        KubernetesOperatorConfigOptions
+                                                .OPERATOR_DYNAMIC_CONFIG_ENABLED
+                                                .key(),
+                                        "false")));
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         ReconciliationStatus reconciliationStatus =
                 deployment.getStatus().getReconciliationStatus();
@@ -101,8 +78,7 @@ public class FlinkConfigManagerTest {
     @Test
     public void testConfUpdate() {
         Configuration config = new Configuration();
-        updateConfigMap(config);
-        FlinkConfigManager configManager = new FlinkConfigManager(kubernetesClient);
+        FlinkConfigManager configManager = new FlinkConfigManager(config);
         assertFalse(
                 configManager
                         .getDefaultConfig()
@@ -113,9 +89,8 @@ public class FlinkConfigManagerTest {
         config.set(
                 KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL,
                 Duration.ofSeconds(15));
-        updateConfigMap(config);
 
-        configManager.getConfigUpdater().run();
+        configManager.updateDefaultConfig(config);
 
         assertEquals(
                 Duration.ofSeconds(15),
@@ -127,11 +102,5 @@ public class FlinkConfigManagerTest {
         assertEquals(
                 Duration.ofSeconds(15),
                 configManager.getOperatorConfiguration().getReconcileInterval());
-    }
-
-    private static String writeAsYaml(Configuration configuration) {
-        StringBuilder stringBuilder = new StringBuilder();
-        configuration.toMap().forEach((k, v) -> stringBuilder.append(k + ": " + v + "\n"));
-        return stringBuilder.toString();
     }
 }
