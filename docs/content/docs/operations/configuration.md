@@ -62,4 +62,7 @@ To learn more about metrics and logging configuration please refer to the dedica
 | kubernetes.operator.observer.flink.client.timeout     |     10s    |  Duration    | The timeout for the observer to wait the flink rest client to return.            |
 | kubernetes.operator.reconciler.flink.cancel.job.timeout     |     1min    |  Duration    | The timeout for the reconciler to wait for flink to cancel job.            |
 | kubernetes.operator.reconciler.flink.cluster.shutdown.timeout     |     60s    |  Duration    | The timeout for the reconciler to wait for flink to shutdown cluster.           |
+| kubernetes.operator.deployment.rollback.enabled     |     false    |  Boolean    | Whether to enable rolling back failed deployment upgrades.          |
+| kubernetes.operator.deployment.readiness.timeout     |     1min    |  Duration    | The timeout for deployments to become ready/stable before being rolled back if rollback is enabled.            |
 | kubernetes.operator.user.artifacts.base.dir     |     /opt/flink/artifacts    |  String |     The base dir to put the session job artifacts.           |
+| kubernetes.operator.job.upgrade.ignore-pending-savepoint     |     false    |  Boolean    | Whether to ignore pending savepoint during job upgrade.          |

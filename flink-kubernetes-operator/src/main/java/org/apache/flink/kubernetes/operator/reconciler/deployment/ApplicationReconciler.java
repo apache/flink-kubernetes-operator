@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
@@ -89,8 +90,10 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             return;
         }
 
-        if (SavepointUtils.savepointInProgress(status.getJobStatus())) {
-            LOG.info("Delaying job reconciliation until pending savepoint is completed");
+        if (!effectiveConfig.getBoolean(
+                        KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT)
+                && SavepointUtils.savepointInProgress(status.getJobStatus())) {
+            LOG.info("Delaying job reconciliation until pending savepoint is completed.");
             return;
         }
 

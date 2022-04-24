@@ -35,6 +35,10 @@ parallelism.default: 2
 # kubernetes.operator.observer.progress-check.interval: 10 s
 # kubernetes.operator.observer.savepoint.trigger.grace-period: 10 s
 # kubernetes.operator.observer.flink.client.timeout: 10 s
+# kubernetes.operator.deployment.rollback.enabled: false
+# kubernetes.operator.deployment.readiness.timeout: 1min
+# kubernetes.operator.user.artifacts.base.dir: /opt/flink/artifacts
+# kubernetes.operator.job.upgrade.ignore-pending-savepoint: false
 
 # kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
 # kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE

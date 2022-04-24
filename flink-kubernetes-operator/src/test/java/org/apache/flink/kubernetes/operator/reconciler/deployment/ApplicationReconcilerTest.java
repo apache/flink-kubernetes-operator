@@ -23,6 +23,7 @@ import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
@@ -360,5 +361,42 @@ public class ApplicationReconcilerTest {
                                 .state("RUNNING")
                                 .build());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+    }
+
+    @Test
+    public void testJobUpgradeIgnorePendingSavepoint() throws Exception {
+        Context context = TestUtils.createContextWithReadyJobManagerDeployment();
+        TestingFlinkService flinkService = new TestingFlinkService();
+        ApplicationReconciler reconciler =
+                new ApplicationReconciler(
+                        null, flinkService, operatorConfiguration, new Configuration());
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        reconciler.reconcile(deployment, context);
+        List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs);
+
+        FlinkDeployment spDeployment = ReconciliationUtils.clone(deployment);
+        spDeployment
+                .getSpec()
+                .getJob()
+                .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
+        reconciler.reconcile(spDeployment, context);
+        assertEquals(
+                "trigger_0",
+                spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertEquals(JobState.RUNNING.name(), spDeployment.getStatus().getJobStatus().getState());
+
+        // Force upgrade when savepoint is in progress.
+        spDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT.key(),
+                        "true");
+        reconciler.reconcile(spDeployment, context);
+        assertEquals(
+                "trigger_0",
+                spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertEquals(JobState.SUSPENDED.name(), spDeployment.getStatus().getJobStatus().getState());
     }
 }

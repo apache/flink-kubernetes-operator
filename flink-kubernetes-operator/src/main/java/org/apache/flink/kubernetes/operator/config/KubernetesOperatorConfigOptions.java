@@ -103,4 +103,10 @@ public class KubernetesOperatorConfigOptions {
                     .stringType()
                     .defaultValue("/opt/flink/artifacts")
                     .withDescription("The base dir to put the session job artifacts.");
+
+    public static final ConfigOption<Boolean> JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT =
+            ConfigOptions.key("kubernetes.operator.job.upgrade.ignore-pending-savepoint")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("Whether to ignore pending savepoint during job upgrade.");
 }

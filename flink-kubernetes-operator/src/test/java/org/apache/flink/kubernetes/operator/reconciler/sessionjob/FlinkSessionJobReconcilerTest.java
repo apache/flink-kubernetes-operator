@@ -22,18 +22,21 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.Nullable;
 
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.apache.flink.kubernetes.operator.observer.deployment.AbstractDeploymentObserver.JOB_STATE_UNKNOWN;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -355,5 +358,50 @@ public class FlinkSessionJobReconcilerTest {
                         .getState());
 
         assertEquals(jobStatusObserved, sessionJob.getStatus().getJobStatus().getState());
+    }
+
+    @Test
+    public void testJobUpgradeIgnorePendingSavepoint() throws Exception {
+        Context readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+        TestingFlinkService flinkService = new TestingFlinkService();
+        FlinkSessionJobReconciler reconciler =
+                new FlinkSessionJobReconciler(
+                        null, flinkService, operatorConfiguration, defaultConfig);
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        reconciler.reconcile(sessionJob, readyContext);
+        verifyAndSetRunningJobsToStatus(
+                sessionJob,
+                JobState.RUNNING,
+                JOB_STATE_UNKNOWN,
+                null,
+                flinkService.listSessionJobs());
+
+        FlinkSessionJob spSessionJob = ReconciliationUtils.clone(sessionJob);
+        spSessionJob
+                .getSpec()
+                .getJob()
+                .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
+        reconciler.reconcile(spSessionJob, readyContext);
+        assertEquals(
+                "trigger_0",
+                spSessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertEquals(JobState.RUNNING.name(), spSessionJob.getStatus().getJobStatus().getState());
+
+        // Force upgrade when savepoint is in progress.
+        reconciler =
+                new FlinkSessionJobReconciler(
+                        null,
+                        flinkService,
+                        operatorConfiguration,
+                        defaultConfig.set(
+                                KubernetesOperatorConfigOptions
+                                        .JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT,
+                                true));
+        spSessionJob.getSpec().getJob().setParallelism(100);
+        reconciler.reconcile(spSessionJob, readyContext);
+        assertEquals(
+                "trigger_0",
+                spSessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertEquals(JobState.SUSPENDED.name(), spSessionJob.getStatus().getJobStatus().getState());
     }
 }
