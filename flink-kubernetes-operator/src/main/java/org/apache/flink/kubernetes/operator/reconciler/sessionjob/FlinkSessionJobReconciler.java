@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.reconciler.sessionjob;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
@@ -85,9 +86,9 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
             return;
         }
 
+        Configuration effectiveConfig =
+                FlinkUtils.getEffectiveConfig(flinkDepOptional.get(), defaultConfig);
         if (lastReconciledSpec == null) {
-            Configuration effectiveConfig =
-                    FlinkUtils.getEffectiveConfig(flinkDepOptional.get(), defaultConfig);
             submitAndInitStatus(
                     flinkSessionJob,
                     effectiveConfig,
@@ -99,14 +100,15 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
             return;
         }
 
-        if (helper.savepointInProgress()) {
+        if (!effectiveConfig.getBoolean(
+                        KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT)
+                && helper.savepointInProgress()) {
             LOG.info("Delaying job reconciliation until pending savepoint is completed");
             return;
         }
 
         boolean specChanged = helper.specChanged(lastReconciledSpec);
 
-        var effectiveConfig = FlinkUtils.getEffectiveConfig(flinkDepOptional.get(), defaultConfig);
         if (specChanged) {
             var jobSpec = flinkSessionJob.getSpec().getJob();
             JobState currentJobState = lastReconciledSpec.getJob().getState();
