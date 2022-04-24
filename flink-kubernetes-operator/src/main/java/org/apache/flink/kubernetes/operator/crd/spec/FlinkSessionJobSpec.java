@@ -20,24 +20,25 @@ package org.apache.flink.kubernetes.operator.crd.spec;
 import org.apache.flink.annotation.Experimental;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import lombok.experimental.SuperBuilder;
 
 /** Spec that describes a Flink session job. */
 @Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class FlinkSessionJobSpec {
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
+@SuperBuilder
+public class FlinkSessionJobSpec extends AbstractFlinkSpec {
 
     /**
      * The cluster id of the target session cluster. When deployed using the operator the cluster id
      * is the name of the deployment.
      */
     private String clusterId;
-
-    /** A specification of a job . */
-    private JobSpec job;
 }

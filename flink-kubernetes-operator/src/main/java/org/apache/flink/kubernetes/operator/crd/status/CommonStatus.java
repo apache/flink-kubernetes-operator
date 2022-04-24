@@ -18,30 +18,27 @@
 package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-/** Last observed status of the Flink deployment. */
+/** Last observed common status of the Flink deployment/Flink SessionJob. */
 @Experimental
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-@ToString(callSuper = true)
 @SuperBuilder
-public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
+public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
 
-    /** Last observed status of the JobManager deployment. */
-    private JobManagerDeploymentStatus jobManagerDeploymentStatus =
-            JobManagerDeploymentStatus.MISSING;
+    /** Last observed status of the Flink job on Application/Session cluster. */
+    private JobStatus jobStatus = new JobStatus();
+
+    /** Error information about the FlinkDeployment/FlinkSessionJob. */
+    private String error;
 
     /** Status of the last reconcile operation. */
-    private FlinkDeploymentReconciliationStatus reconciliationStatus =
-            new FlinkDeploymentReconciliationStatus();
+    public abstract ReconciliationStatus<SPEC> getReconciliationStatus();
 }

@@ -70,7 +70,8 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
         ObjectMeta deployMeta = flinkApp.getMetadata();
         Configuration effectiveConfig = FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig);
         FlinkDeploymentStatus status = flinkApp.getStatus();
-        ReconciliationStatus reconciliationStatus = status.getReconciliationStatus();
+        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
+                status.getReconciliationStatus();
         FlinkDeploymentSpec lastReconciledSpec =
                 reconciliationStatus.deserializeLastReconciledSpec();
         FlinkDeploymentSpec currentDeploySpec = flinkApp.getSpec();
@@ -133,7 +134,8 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
     }
 
     private void rollbackApplication(FlinkDeployment flinkApp) throws Exception {
-        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
+        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
+                flinkApp.getStatus().getReconciliationStatus();
 
         if (initiateRollBack(flinkApp.getStatus())) {
             return;

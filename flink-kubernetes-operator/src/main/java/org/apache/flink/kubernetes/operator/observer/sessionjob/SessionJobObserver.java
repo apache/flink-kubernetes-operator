@@ -126,9 +126,9 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
                             flinkSessionJob.getStatus().getJobStatus().getJobId(),
                             deployedConfig)
                     .ifPresent(
-                            error ->
+                            e ->
                                     ReconciliationUtils.updateForReconciliationError(
-                                            flinkSessionJob, error));
+                                            flinkSessionJob, e));
         }
     }
 }

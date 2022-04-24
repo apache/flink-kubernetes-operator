@@ -191,6 +191,7 @@ public class FlinkSessionJobReconcilerTest {
         TestingFlinkService flinkService = new TestingFlinkService();
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
         assertNull(sessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
         FlinkSessionJobReconciler reconciler =
                 new FlinkSessionJobReconciler(
@@ -262,6 +263,7 @@ public class FlinkSessionJobReconcilerTest {
         assertEquals(
                 "trigger_0",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
         // parallelism not changed
         assertEquals(
                 1,
@@ -307,6 +309,7 @@ public class FlinkSessionJobReconcilerTest {
         assertEquals(
                 "trigger_1",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
 
         // don't trigger when nonce is cleared

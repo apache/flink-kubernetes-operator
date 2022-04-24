@@ -38,6 +38,15 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 ## Spec
 
+### AbstractFlinkSpec
+**Class**: org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec
+
+**Description**: The common view of the spec.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| job | org.apache.flink.kubernetes.operator.crd.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
+
 ### FlinkDeploymentSpec
 **Class**: org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec
 
@@ -54,7 +63,6 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | podTemplate | io.fabric8.kubernetes.api.model.Pod | Base pod template for job and task manager pods. Can be overridden by the jobManager and  taskManager pod templates. |
 | jobManager | org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec | JobManager specs. |
 | taskManager | org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec | TaskManager specs. |
-| job | org.apache.flink.kubernetes.operator.crd.spec.JobSpec | Job specification for application deployments. Null for session clusters. |
 | restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster. In order to trigger restart, change  the number to anything other than the current value. |
 | logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the Flink deployment. Format logConfigFileName ->  configContent. |
 
@@ -66,7 +74,6 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | clusterId | java.lang.String | The cluster id of the target session cluster. When deployed using the operator the cluster id  is the name of the deployment. |
-| job | org.apache.flink.kubernetes.operator.crd.spec.JobSpec | A specification of a job . |
 
 ### FlinkVersion
 **Class**: org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion
@@ -160,6 +167,24 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 ## Status
 
+### CommonStatus
+**Class**: org.apache.flink.kubernetes.operator.crd.status.CommonStatus
+
+**Description**: Last observed common status of the Flink deployment/Flink SessionJob.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| jobStatus | org.apache.flink.kubernetes.operator.crd.status.JobStatus | Last observed status of the Flink job on Application/Session cluster. |
+| error | java.lang.String | Error information about the FlinkDeployment/FlinkSessionJob. |
+
+### FlinkDeploymentReconciliationStatus
+**Class**: org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentReconciliationStatus
+
+**Description**: Status of the last reconcile step for the flink deployment.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+
 ### FlinkDeploymentStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus
 
@@ -167,19 +192,16 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| jobStatus | org.apache.flink.kubernetes.operator.crd.status.JobStatus | Last observed status of the Flink job on Application deployments. |
 | jobManagerDeploymentStatus | org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus | Last observed status of the JobManager deployment. |
-| reconciliationStatus | org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus | Status of the last reconcile operation. |
-| error | java.lang.String | Error information about the Flink deployment. |
+| reconciliationStatus | org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentReconciliationStatus | Status of the last reconcile operation. |
 
 ### FlinkSessionJobReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobReconciliationStatus
 
-**Description**: Status of the last reconcile step for the session job.
+**Description**: Status of the last reconcile step for the flink sessionjob.
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| lastReconciledSpec | java.lang.String | Last reconciled job spec. Used to decide whether further reconciliation steps are necessary. |
 
 ### FlinkSessionJobStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus
@@ -188,9 +210,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| jobStatus | org.apache.flink.kubernetes.operator.crd.status.JobStatus | Last observed status of the job. |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobReconciliationStatus | Status of the last reconcile operation. |
-| error | java.lang.String | Error information about the session job. |
 
 ### JobManagerDeploymentStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus
@@ -233,7 +253,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 ### ReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus
 
-**Description**: Status of the last reconcile step for the deployment.
+**Description**: Status of the last reconcile step for the FlinkDeployment/FlinkSessionJob.
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |

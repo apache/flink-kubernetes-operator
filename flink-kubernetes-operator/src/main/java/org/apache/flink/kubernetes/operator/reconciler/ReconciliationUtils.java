@@ -22,13 +22,11 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobReconciliationStatus;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -52,13 +50,17 @@ public class ReconciliationUtils {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    public static void updateForSpecReconciliationSuccess(
-            FlinkDeployment flinkApp, JobState stateAfterReconcile) {
-        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
-        flinkApp.getStatus().setError(null);
-        FlinkDeploymentSpec clonedSpec = clone(flinkApp.getSpec());
-        FlinkDeploymentSpec lastReconciledSpec =
-                reconciliationStatus.deserializeLastReconciledSpec();
+    public static <SPEC extends AbstractFlinkSpec, STATUS extends CommonStatus<SPEC>>
+            void updateForSpecReconciliationSuccess(
+                    CustomResource<SPEC, STATUS> target, JobState stateAfterReconcile) {
+        var commonStatus = target.getStatus();
+        var spec = target.getSpec();
+
+        ReconciliationStatus<SPEC> reconciliationStatus = commonStatus.getReconciliationStatus();
+        commonStatus.setError(null);
+
+        var clonedSpec = ReconciliationUtils.clone(spec);
+        AbstractFlinkSpec lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
         if (lastReconciledSpec != null && lastReconciledSpec.getJob() != null) {
             Long oldSavepointTriggerNonce = lastReconciledSpec.getJob().getSavepointTriggerNonce();
             clonedSpec.getJob().setSavepointTriggerNonce(oldSavepointTriggerNonce);
@@ -68,59 +70,29 @@ public class ReconciliationUtils {
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
         reconciliationStatus.setState(ReconciliationState.DEPLOYED);
 
-        if (flinkApp.getSpec().getJob() != null
-                && flinkApp.getSpec().getJob().getState() == JobState.SUSPENDED) {
+        if (spec.getJob() != null && spec.getJob().getState() == JobState.SUSPENDED) {
             // When a job is suspended by the user it is automatically marked stable
             reconciliationStatus.markReconciledSpecAsStable();
         }
     }
 
-    public static void updateSavepointReconciliationSuccess(FlinkDeployment flinkApp) {
-        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
-        flinkApp.getStatus().setError(null);
-        FlinkDeploymentSpec lastReconciledSpec =
-                reconciliationStatus.deserializeLastReconciledSpec();
+    public static <SPEC extends AbstractFlinkSpec, STATUS extends CommonStatus<SPEC>>
+            void updateSavepointReconciliationSuccess(CustomResource<SPEC, STATUS> target) {
+        var commonStatus = target.getStatus();
+        var spec = target.getSpec();
+        ReconciliationStatus<SPEC> reconciliationStatus = commonStatus.getReconciliationStatus();
+        commonStatus.setError(null);
+        SPEC lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
         lastReconciledSpec
                 .getJob()
-                .setSavepointTriggerNonce(flinkApp.getSpec().getJob().getSavepointTriggerNonce());
+                .setSavepointTriggerNonce(spec.getJob().getSavepointTriggerNonce());
         reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec);
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
     }
 
-    public static void updateForReconciliationError(FlinkDeployment flinkApp, String err) {
-        flinkApp.getStatus().setError(err);
-    }
-
-    public static void updateForSpecReconciliationSuccess(
-            FlinkSessionJob sessionJob, JobState stateAfterReconcile) {
-        FlinkSessionJobReconciliationStatus reconciliationStatus =
-                sessionJob.getStatus().getReconciliationStatus();
-        sessionJob.getStatus().setError(null);
-        FlinkSessionJobSpec clonedSpec = clone(sessionJob.getSpec());
-        if (reconciliationStatus.getLastReconciledSpec() != null) {
-            var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
-            Long oldSavepointTriggerNonce = lastReconciledSpec.getJob().getSavepointTriggerNonce();
-            clonedSpec.getJob().setSavepointTriggerNonce(oldSavepointTriggerNonce);
-            clonedSpec.getJob().setState(stateAfterReconcile);
-        }
-        reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec);
-    }
-
-    public static void updateSavepointReconciliationSuccess(FlinkSessionJob flinkSessionJob) {
-        FlinkSessionJobStatus status = flinkSessionJob.getStatus();
-        status.setError(null);
-
-        FlinkSessionJobReconciliationStatus reconciliationStatus = status.getReconciliationStatus();
-        var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
-        lastReconciledSpec
-                .getJob()
-                .setSavepointTriggerNonce(
-                        flinkSessionJob.getSpec().getJob().getSavepointTriggerNonce());
-        reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec);
-    }
-
-    public static void updateForReconciliationError(FlinkSessionJob flinkSessionJob, String err) {
-        flinkSessionJob.getStatus().setError(err);
+    public static <SPEC extends AbstractFlinkSpec, STATUS extends CommonStatus<SPEC>>
+            void updateForReconciliationError(CustomResource<SPEC, STATUS> target, String error) {
+        target.getStatus().setError(error);
     }
 
     public static <T> T clone(T object) {
@@ -192,7 +164,7 @@ public class ReconciliationUtils {
     }
 
     public static FlinkDeploymentSpec getDeployedSpec(FlinkDeployment deployment) {
-        ReconciliationStatus reconciliationStatus =
+        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
                 deployment.getStatus().getReconciliationStatus();
 
         if (reconciliationStatus.getState() == ReconciliationState.DEPLOYED) {
@@ -209,7 +181,8 @@ public class ReconciliationUtils {
     }
 
     private static boolean isJobUpgradeInProgress(FlinkDeployment current) {
-        ReconciliationStatus reconciliationStatus = current.getStatus().getReconciliationStatus();
+        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
+                current.getStatus().getReconciliationStatus();
 
         if (reconciliationStatus == null) {
             return false;
@@ -256,7 +229,8 @@ public class ReconciliationUtils {
     }
 
     public static boolean shouldRollBack(
-            ReconciliationStatus reconciliationStatus, Configuration configuration) {
+            ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus,
+            Configuration configuration) {
 
         if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
             return true;

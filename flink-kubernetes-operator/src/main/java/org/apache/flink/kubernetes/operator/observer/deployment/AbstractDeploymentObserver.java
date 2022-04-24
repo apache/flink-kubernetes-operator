@@ -69,7 +69,8 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
 
     @Override
     public void observe(FlinkDeployment flinkApp, Context context) {
-        ReconciliationStatus reconciliationStatus = flinkApp.getStatus().getReconciliationStatus();
+        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
+                flinkApp.getStatus().getReconciliationStatus();
         FlinkDeploymentSpec lastReconciledSpec =
                 reconciliationStatus.deserializeLastReconciledSpec();
 

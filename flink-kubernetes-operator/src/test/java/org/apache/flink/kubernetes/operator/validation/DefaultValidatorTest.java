@@ -31,10 +31,10 @@ import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
-import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -184,7 +184,8 @@ public class DefaultValidatorTest {
                             .getSavepointInfo()
                             .setLastSavepoint(Savepoint.of("sp"));
 
-                    dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
+                    dep.getStatus()
+                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
                     FlinkDeploymentSpec spec = ReconciliationUtils.clone(dep.getSpec());
                     spec.getJob().setState(JobState.SUSPENDED);
 
@@ -205,7 +206,8 @@ public class DefaultValidatorTest {
                     dep.setStatus(new FlinkDeploymentStatus());
                     dep.getStatus().setJobStatus(new JobStatus());
 
-                    dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
+                    dep.getStatus()
+                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
                     FlinkDeploymentSpec spec = ReconciliationUtils.clone(dep.getSpec());
                     spec.getJob().setState(JobState.SUSPENDED);
                     dep.getStatus()
@@ -227,7 +229,8 @@ public class DefaultValidatorTest {
                     dep.setStatus(new FlinkDeploymentStatus());
                     dep.getStatus().setJobStatus(new JobStatus());
 
-                    dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
+                    dep.getStatus()
+                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
                     dep.getStatus()
                             .getReconciliationStatus()
                             .serializeAndSetLastReconciledSpec(
@@ -241,7 +244,8 @@ public class DefaultValidatorTest {
                     dep.setStatus(new FlinkDeploymentStatus());
                     dep.getStatus().setJobStatus(new JobStatus());
 
-                    dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
+                    dep.getStatus()
+                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
                     FlinkDeploymentSpec spec = ReconciliationUtils.clone(dep.getSpec());
                     spec.setJob(null);
                     dep.getStatus()
@@ -257,7 +261,8 @@ public class DefaultValidatorTest {
                     dep.setStatus(new FlinkDeploymentStatus());
                     dep.getStatus().setJobStatus(new JobStatus());
 
-                    dep.getStatus().setReconciliationStatus(new ReconciliationStatus());
+                    dep.getStatus()
+                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
                     FlinkDeploymentSpec spec = ReconciliationUtils.clone(dep.getSpec());
                     spec.getJob().setUpgradeMode(UpgradeMode.STATELESS);
                     spec.getFlinkConfiguration().remove(HighAvailabilityOptions.HA_MODE.key());

@@ -83,10 +83,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
         if (jobFound) {
             savepointObserver
                     .observe(jobStatus.getSavepointInfo(), jobStatus.getJobId(), deployedConfig)
-                    .ifPresent(
-                            error ->
-                                    ReconciliationUtils.updateForReconciliationError(
-                                            flinkApp, error));
+                    .ifPresent(e -> ReconciliationUtils.updateForReconciliationError(flinkApp, e));
         }
         return isJobReady(jobStatus);
     }

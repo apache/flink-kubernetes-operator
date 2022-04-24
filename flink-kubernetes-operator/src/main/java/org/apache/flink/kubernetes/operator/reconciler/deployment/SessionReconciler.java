@@ -58,7 +58,8 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
         Configuration effectiveConfig = FlinkUtils.getEffectiveConfig(flinkApp, defaultConfig);
 
         FlinkDeploymentStatus status = flinkApp.getStatus();
-        ReconciliationStatus reconciliationStatus = status.getReconciliationStatus();
+        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
+                status.getReconciliationStatus();
         FlinkDeploymentSpec lastReconciledSpec =
                 reconciliationStatus.deserializeLastReconciledSpec();
         FlinkDeploymentSpec currentDeploySpec = flinkApp.getSpec();
@@ -109,7 +110,8 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
             return;
         }
 
-        ReconciliationStatus reconciliationStatus = status.getReconciliationStatus();
+        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
+                status.getReconciliationStatus();
         FlinkDeploymentSpec rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
         Configuration rollbackConfig =
                 FlinkUtils.getEffectiveConfig(

@@ -21,9 +21,11 @@ import org.apache.flink.annotation.Experimental;
 
 import io.fabric8.kubernetes.api.model.Pod;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
+import lombok.experimental.SuperBuilder;
 
 import java.util.Map;
 
@@ -32,8 +34,10 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class FlinkDeploymentSpec {
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
+@SuperBuilder
+public class FlinkDeploymentSpec extends AbstractFlinkSpec {
     /** Flink docker image used to start the Job and TaskManager pods. */
     private String image;
 
@@ -63,9 +67,6 @@ public class FlinkDeploymentSpec {
 
     /** TaskManager specs. */
     private TaskManagerSpec taskManager;
-
-    /** Job specification for application deployments. Null for session clusters. */
-    private JobSpec job;
 
     /**
      * Nonce used to manually trigger restart for the cluster. In order to trigger restart, change
