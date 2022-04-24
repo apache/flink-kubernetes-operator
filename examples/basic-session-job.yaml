@@ -61,7 +61,7 @@ metadata:
   namespace: default
   name: basic-session-ha-job-example
 spec:
-  clusterId: basic-session-cluster-with-ha
+  deploymentName: basic-session-cluster-with-ha
   job:
     jarURI: file:///opt/flink/artifacts/TopSpeedWindowing.jar
     parallelism: 4
@@ -75,7 +75,7 @@ metadata:
   namespace: default
   name: basic-session-ha-job-example2
 spec:
-  clusterId: basic-session-cluster-with-ha
+  deploymentName: basic-session-cluster-with-ha
   job:
     jarURI: file:///opt/flink/artifacts/flink-examples-streaming_2.12-1.14.3.jar
     parallelism: 2
