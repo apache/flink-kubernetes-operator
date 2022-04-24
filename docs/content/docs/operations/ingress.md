@@ -104,6 +104,6 @@ kubectl get ingress -A
 NAMESPACE   NAME               CLASS   HOSTS          ADDRESS     PORTS   AGE
 default     sample-job         nginx   *              localhost   80      54m
 ```
-The Flink Web UI can be accessed at https://localhost/defalt/sample-job/
+The Flink Web UI can be accessed at https://localhost/default/sample-job/
 >Note: All the examples  were created on a minikube cluster. Check the [description](https://kubernetes.io/docs/tasks/access-application-cluster/ingress-minikube/) for easily enabling the NGINX Ingress Controller on minikube.
 
