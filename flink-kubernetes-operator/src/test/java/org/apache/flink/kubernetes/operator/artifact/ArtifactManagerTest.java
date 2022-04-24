@@ -109,7 +109,7 @@ public class ArtifactManagerTest {
     }
 
     private HttpServer startHttpServer() throws IOException {
-        int port = RandomUtils.nextInt(1000, 2000);
+        int port = RandomUtils.nextInt(2000, 3000);
         HttpServer httpServer = null;
         while (httpServer == null && port <= 65536) {
             try {
