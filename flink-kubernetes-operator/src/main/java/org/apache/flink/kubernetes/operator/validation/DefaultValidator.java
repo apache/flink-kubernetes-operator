@@ -313,7 +313,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                     if (!deployment
                             .getMetadata()
                             .getName()
-                            .equals(sessionJob.getSpec().getClusterId())) {
+                            .equals(sessionJob.getSpec().getDeploymentName())) {
                         return Optional.of(
                                 "The session job's cluster id is not match with the session cluster");
                     } else {

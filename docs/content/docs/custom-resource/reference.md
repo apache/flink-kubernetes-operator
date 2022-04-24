@@ -73,7 +73,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| clusterId | java.lang.String | The cluster id of the target session cluster. When deployed using the operator the cluster id  is the name of the deployment. |
+| deploymentName | java.lang.String | The name of the target session cluster deployment. |
 
 ### FlinkVersion
 **Class**: org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion

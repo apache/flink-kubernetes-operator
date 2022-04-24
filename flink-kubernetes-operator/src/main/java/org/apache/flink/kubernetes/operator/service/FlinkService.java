@@ -213,7 +213,7 @@ public class FlinkService {
                 jarFile.exists(),
                 String.format("The jar file %s not exists", jarFile.getAbsolutePath()));
         JarUploadHeaders headers = JarUploadHeaders.getInstance();
-        String clusterId = sessionJob.getSpec().getClusterId();
+        String clusterId = sessionJob.getSpec().getDeploymentName();
         String namespace = sessionJob.getMetadata().getNamespace();
         int port = conf.getInteger(RestOptions.PORT);
         String host =

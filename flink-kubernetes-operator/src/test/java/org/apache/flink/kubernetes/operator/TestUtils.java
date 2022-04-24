@@ -115,7 +115,7 @@ public class TestUtils {
                         .build());
         sessionJob.setSpec(
                 FlinkSessionJobSpec.builder()
-                        .clusterId(TEST_DEPLOYMENT_NAME)
+                        .deploymentName(TEST_DEPLOYMENT_NAME)
                         .job(
                                 JobSpec.builder()
                                         .jarURI(SAMPLE_JAR)

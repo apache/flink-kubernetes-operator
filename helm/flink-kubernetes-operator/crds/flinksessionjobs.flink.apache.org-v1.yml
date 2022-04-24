@@ -19,7 +19,7 @@ spec:
         properties:
           spec:
             properties:
-              clusterId:
+              deploymentName:
                 type: string
               job:
                 properties:

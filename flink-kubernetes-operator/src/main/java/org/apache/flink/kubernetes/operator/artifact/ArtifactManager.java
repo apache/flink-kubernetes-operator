@@ -67,7 +67,7 @@ public class ArtifactManager {
                 new String[] {
                     baseDir.getAbsolutePath(),
                     sessionJob.getMetadata().getNamespace(),
-                    sessionJob.getSpec().getClusterId(),
+                    sessionJob.getSpec().getDeploymentName(),
                     sessionJob.getMetadata().getName()
                 });
     }

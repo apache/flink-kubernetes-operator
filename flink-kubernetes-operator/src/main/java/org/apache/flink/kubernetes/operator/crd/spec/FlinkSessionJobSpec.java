@@ -36,9 +36,6 @@ import lombok.experimental.SuperBuilder;
 @SuperBuilder
 public class FlinkSessionJobSpec extends AbstractFlinkSpec {
 
-    /**
-     * The cluster id of the target session cluster. When deployed using the operator the cluster id
-     * is the name of the deployment.
-     */
-    private String clusterId;
+    /** The name of the target session cluster deployment. */
+    private String deploymentName;
 }
