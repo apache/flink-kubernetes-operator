@@ -172,7 +172,7 @@ public class FlinkSessionJobController
                 primaryResourceRetriever(),
                 sessionJob ->
                         new ResourceID(
-                                sessionJob.getSpec().getClusterId(),
+                                sessionJob.getSpec().getDeploymentName(),
                                 sessionJob.getMetadata().getNamespace()),
                 false) {
             @Override
@@ -245,7 +245,8 @@ public class FlinkSessionJobController
     }
 
     private Map<String, Function<FlinkSessionJob, List<String>>> clusterToSessionJobIndexer() {
-        return Map.of(CLUSTER_ID_INDEX, sessionJob -> List.of(sessionJob.getSpec().getClusterId()));
+        return Map.of(
+                CLUSTER_ID_INDEX, sessionJob -> List.of(sessionJob.getSpec().getDeploymentName()));
     }
 
     private Optional<String> validateSessionJob(FlinkSessionJob sessionJob, Context context) {

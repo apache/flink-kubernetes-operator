@@ -301,7 +301,7 @@ public class DefaultValidatorTest {
         testSessionJobValidateSuccess(job -> {}, session -> {});
 
         testSessionJobValidateError(
-                sessionJob -> sessionJob.getSpec().setClusterId("not-match"),
+                sessionJob -> sessionJob.getSpec().setDeploymentName("not-match"),
                 deployment -> {},
                 "The session job's cluster id is not match with the session cluster");
 
