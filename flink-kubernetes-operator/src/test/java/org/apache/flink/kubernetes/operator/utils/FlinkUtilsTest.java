@@ -29,14 +29,17 @@ import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.Test;
 
+import java.net.HttpURLConnection;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** FlinkUtilsTest. */
@@ -44,6 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class FlinkUtilsTest {
 
     KubernetesClient kubernetesClient;
+    KubernetesMockServer mockServer;
 
     @Test
     public void testMergePods() throws Exception {
@@ -74,18 +78,7 @@ public class FlinkUtilsTest {
         final Map<String, String> data = new HashMap<>();
         data.put(Constants.JOB_GRAPH_STORE_KEY_PREFIX + JobID.generate(), "job-graph-data");
         data.put("leader", "localhost");
-        final ConfigMap kubernetesConfigMap =
-                new ConfigMapBuilder()
-                        .withNewMetadata()
-                        .withName(name)
-                        .withLabels(
-                                KubernetesUtils.getConfigMapLabels(
-                                        clusterId,
-                                        Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
-                        .endMetadata()
-                        .withData(data)
-                        .build();
-        kubernetesClient.configMaps().create(kubernetesConfigMap);
+        createHAConfigMapWithData(name, clusterId, data);
         assertNotNull(kubernetesClient.configMaps().withName(name).get());
         assertEquals(2, kubernetesClient.configMaps().withName(name).get().getData().size());
 
@@ -95,5 +88,38 @@ public class FlinkUtilsTest {
         assertEquals(1, kubernetesClient.configMaps().withName(name).get().getData().size());
         assertTrue(
                 kubernetesClient.configMaps().withName(name).get().getData().containsKey("leader"));
+    }
+
+    @Test
+    public void testDeleteJobGraphInKubernetesHAShouldNotUpdateWithEmptyConfigMap() {
+        final String name = "empty-ha-configmap";
+        final String clusterId = "cluster-id-2";
+        mockServer
+                .expect()
+                .put()
+                .withPath("/api/v1/namespaces/test/configmaps/" + name)
+                .andReturn(HttpURLConnection.HTTP_INTERNAL_ERROR, new ConfigMapBuilder().build())
+                .once();
+        createHAConfigMapWithData(name, clusterId, null);
+        assertNull(kubernetesClient.configMaps().withName(name).get().getData());
+        FlinkUtils.deleteJobGraphInKubernetesHA(
+                clusterId, kubernetesClient.getNamespace(), kubernetesClient);
+    }
+
+    private void createHAConfigMapWithData(
+            String configMapName, String clusterId, Map<String, String> data) {
+        final ConfigMap kubernetesConfigMap =
+                new ConfigMapBuilder()
+                        .withNewMetadata()
+                        .withName(configMapName)
+                        .withLabels(
+                                KubernetesUtils.getConfigMapLabels(
+                                        clusterId,
+                                        Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
+                        .endMetadata()
+                        .withData(data)
+                        .build();
+
+        kubernetesClient.configMaps().create(kubernetesConfigMap);
     }
 }

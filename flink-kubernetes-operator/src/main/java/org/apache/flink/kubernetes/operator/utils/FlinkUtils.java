@@ -31,6 +31,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapList;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -243,22 +244,21 @@ public class FlinkUtils {
                         .withLabels(haConfigMapLabels)
                         .list();
 
-        configMaps
-                .getItems()
-                .forEach(
-                        configMap -> {
-                            final boolean isDeleted =
-                                    configMap
-                                            .getData()
-                                            .entrySet()
-                                            .removeIf(FlinkUtils::isJobGraphKey);
-                            if (isDeleted) {
-                                LOG.info(
-                                        "Job graph in ConfigMap {} is deleted",
-                                        configMap.getMetadata().getName());
-                            }
-                        });
-        kubernetesClient.resourceList(configMaps).inNamespace(namespace).createOrReplace();
+        boolean shouldUpdate = false;
+        for (ConfigMap configMap : configMaps.getItems()) {
+            if (configMap.getData() == null || configMap.getData().isEmpty()) {
+                continue;
+            }
+            final boolean isDeleted =
+                    configMap.getData().entrySet().removeIf(FlinkUtils::isJobGraphKey);
+            if (isDeleted) {
+                shouldUpdate = true;
+                LOG.info("Job graph in ConfigMap {} is deleted", configMap.getMetadata().getName());
+            }
+        }
+        if (shouldUpdate) {
+            kubernetesClient.resourceList(configMaps).inNamespace(namespace).createOrReplace();
+        }
     }
 
     private static boolean isJobGraphKey(Map.Entry<String, String> entry) {
