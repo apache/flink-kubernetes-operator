@@ -83,7 +83,7 @@ public class FlinkConfigManagerTest {
 
     @Test
     public void testConfUpdateAndCleanup() {
-        Configuration config = new Configuration();
+        Configuration config = Configuration.fromMap(Map.of("k1", "v1"));
         FlinkConfigManager configManager = new FlinkConfigManager(config);
         assertFalse(
                 configManager
@@ -99,8 +99,10 @@ public class FlinkConfigManagerTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getSpec().setLogConfiguration(Map.of(Constants.CONFIG_FILE_LOG4J_NAME, "test"));
         deployment.getSpec().setPodTemplate(new Pod());
-        Configuration deployConfig =
-                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+        Configuration deployConfig = configManager.getObserveConfig(deployment);
+        assertFalse(
+                deployConfig.contains(
+                        KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL));
         assertTrue(new File(deployConfig.get(DeploymentOptionsInternal.CONF_DIR)).exists());
         assertTrue(
                 new File(deployConfig.get(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE))
@@ -113,6 +115,19 @@ public class FlinkConfigManagerTest {
                         .exists());
 
         configManager.updateDefaultConfig(config);
+
+        assertTrue(new File(deployConfig.get(DeploymentOptionsInternal.CONF_DIR)).exists());
+        assertTrue(
+                new File(deployConfig.get(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE))
+                        .exists());
+        assertTrue(
+                new File(deployConfig.get(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE))
+                        .exists());
+        assertTrue(
+                new File(deployConfig.get(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE))
+                        .exists());
+
+        configManager.getCache().invalidateAll();
 
         assertFalse(new File(deployConfig.get(DeploymentOptionsInternal.CONF_DIR)).exists());
         assertFalse(
@@ -135,5 +150,13 @@ public class FlinkConfigManagerTest {
         assertEquals(
                 Duration.ofSeconds(15),
                 configManager.getOperatorConfiguration().getReconcileInterval());
+
+        assertEquals(
+                Duration.ofSeconds(15),
+                configManager
+                        .getObserveConfig(deployment)
+                        .get(
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_RECONCILER_RESCHEDULE_INTERVAL));
     }
 }

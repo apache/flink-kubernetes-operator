@@ -19,7 +19,7 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -29,10 +29,13 @@ import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 
 import org.apache.flink.shaded.guava30.com.google.common.cache.Cache;
 import org.apache.flink.shaded.guava30.com.google.common.cache.CacheBuilder;
+import org.apache.flink.shaded.guava30.com.google.common.cache.CacheLoader;
+import org.apache.flink.shaded.guava30.com.google.common.cache.LoadingCache;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,6 +43,7 @@ import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_ENABLED;
@@ -51,12 +55,13 @@ public class FlinkConfigManager {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final int MAX_CACHE_SIZE = 1000;
-    private static final Duration CACHE_TIMEOUT = Duration.ofHours(1);
+    private static final Duration CACHE_TIMEOUT = Duration.ofMinutes(30);
 
     private volatile Configuration defaultConfig;
     private volatile FlinkOperatorConfiguration operatorConfiguration;
+    private final AtomicLong defaultConfigVersion = new AtomicLong(0);
 
-    private final Cache<Tuple3<String, String, ObjectNode>, Configuration> cache;
+    private final LoadingCache<Tuple4<Long, String, String, ObjectNode>, Configuration> cache;
     private Set<String> namespaces = OperatorUtils.getWatchedNamespaces();
 
     public FlinkConfigManager() {
@@ -72,7 +77,14 @@ public class FlinkConfigManager {
                                 removalNotification ->
                                         FlinkConfigBuilder.cleanupTmpFiles(
                                                 (Configuration) removalNotification.getValue()))
-                        .build();
+                        .build(
+                                new CacheLoader<>() {
+                                    @Override
+                                    public Configuration load(
+                                            Tuple4<Long, String, String, ObjectNode> k) {
+                                        return generateConfig(k);
+                                    }
+                                });
 
         updateDefaultConfig(defaultConfig);
         if (defaultConfig.getBoolean(OPERATOR_DYNAMIC_CONFIG_ENABLED)) {
@@ -95,7 +107,9 @@ public class FlinkConfigManager {
         this.operatorConfiguration =
                 FlinkOperatorConfiguration.fromConfiguration(newConf, namespaces);
         this.defaultConfig = newConf.clone();
-        cache.invalidateAll();
+        // We do not invalidate the cache to avoid deleting currently used temp files, simply bump
+        // the version
+        this.defaultConfigVersion.incrementAndGet();
     }
 
     public FlinkOperatorConfiguration getOperatorConfiguration() {
@@ -110,31 +124,26 @@ public class FlinkConfigManager {
         return getConfig(deployment.getMetadata(), ReconciliationUtils.getDeployedSpec(deployment));
     }
 
+    @SneakyThrows
     private Configuration getConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
-
         var key =
-                Tuple3.of(
+                Tuple4.of(
+                        defaultConfigVersion.get(),
                         objectMeta.getNamespace(),
                         objectMeta.getName(),
                         objectMapper.convertValue(spec, ObjectNode.class));
 
-        var conf = cache.getIfPresent(key);
-        if (conf == null) {
-            conf = generateConfig(key);
-            cache.put(key, conf);
-        }
-
         // Always return a copy of the configuration to avoid polluting the cache
-        return conf.clone();
+        return cache.get(key).clone();
     }
 
-    private Configuration generateConfig(Tuple3<String, String, ObjectNode> key) {
+    private Configuration generateConfig(Tuple4<Long, String, String, ObjectNode> key) {
         try {
             LOG.info("Generating new config");
             return FlinkConfigBuilder.buildFrom(
-                    key.f0,
                     key.f1,
-                    objectMapper.convertValue(key.f2, FlinkDeploymentSpec.class),
+                    key.f2,
+                    objectMapper.convertValue(key.f3, FlinkDeploymentSpec.class),
                     defaultConfig);
         } catch (Exception e) {
             throw new RuntimeException("Failed to load configuration", e);
@@ -154,6 +163,11 @@ public class FlinkConfigManager {
         this.namespaces = namespaces;
         operatorConfiguration =
                 FlinkOperatorConfiguration.fromConfiguration(defaultConfig, namespaces);
+    }
+
+    @VisibleForTesting
+    protected Cache<Tuple4<Long, String, String, ObjectNode>, Configuration> getCache() {
+        return cache;
     }
 
     private class ConfigUpdater implements Runnable {
