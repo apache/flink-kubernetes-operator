@@ -19,7 +19,6 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -35,7 +34,9 @@ import org.apache.flink.shaded.guava30.com.google.common.cache.LoadingCache;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import lombok.Builder;
 import lombok.SneakyThrows;
+import lombok.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +62,7 @@ public class FlinkConfigManager {
     private volatile FlinkOperatorConfiguration operatorConfiguration;
     private final AtomicLong defaultConfigVersion = new AtomicLong(0);
 
-    private final LoadingCache<Tuple4<Long, String, String, ObjectNode>, Configuration> cache;
+    private final LoadingCache<Key, Configuration> cache;
     private Set<String> namespaces = OperatorUtils.getWatchedNamespaces();
 
     public FlinkConfigManager() {
@@ -80,8 +81,7 @@ public class FlinkConfigManager {
                         .build(
                                 new CacheLoader<>() {
                                     @Override
-                                    public Configuration load(
-                                            Tuple4<Long, String, String, ObjectNode> k) {
+                                    public Configuration load(Key k) {
                                         return generateConfig(k);
                                     }
                                 });
@@ -103,12 +103,12 @@ public class FlinkConfigManager {
             return;
         }
 
-        LOG.info("Updating default configuration");
+        LOG.info("Updating default configuration to {}", newConf);
         this.operatorConfiguration =
                 FlinkOperatorConfiguration.fromConfiguration(newConf, namespaces);
         this.defaultConfig = newConf.clone();
-        // We do not invalidate the cache to avoid deleting currently used temp files, simply bump
-        // the version
+        // We do not invalidate the cache to avoid deleting currently used temp files,
+        // simply bump the version
         this.defaultConfigVersion.incrementAndGet();
     }
 
@@ -127,23 +127,24 @@ public class FlinkConfigManager {
     @SneakyThrows
     private Configuration getConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
         var key =
-                Tuple4.of(
-                        defaultConfigVersion.get(),
-                        objectMeta.getNamespace(),
-                        objectMeta.getName(),
-                        objectMapper.convertValue(spec, ObjectNode.class));
+                Key.builder()
+                        .configVersion(defaultConfigVersion.get())
+                        .name(objectMeta.getName())
+                        .namespace(objectMeta.getNamespace())
+                        .spec(objectMapper.convertValue(spec, ObjectNode.class))
+                        .build();
 
         // Always return a copy of the configuration to avoid polluting the cache
         return cache.get(key).clone();
     }
 
-    private Configuration generateConfig(Tuple4<Long, String, String, ObjectNode> key) {
+    private Configuration generateConfig(Key key) {
         try {
             LOG.info("Generating new config");
             return FlinkConfigBuilder.buildFrom(
-                    key.f1,
-                    key.f2,
-                    objectMapper.convertValue(key.f3, FlinkDeploymentSpec.class),
+                    key.namespace,
+                    key.name,
+                    objectMapper.convertValue(key.spec, FlinkDeploymentSpec.class),
                     defaultConfig);
         } catch (Exception e) {
             throw new RuntimeException("Failed to load configuration", e);
@@ -166,7 +167,7 @@ public class FlinkConfigManager {
     }
 
     @VisibleForTesting
-    protected Cache<Tuple4<Long, String, String, ObjectNode>, Configuration> getCache() {
+    protected Cache<Key, Configuration> getCache() {
         return cache;
     }
 
@@ -179,5 +180,14 @@ public class FlinkConfigManager {
                 LOG.error("Error while updating operator configuration", e);
             }
         }
+    }
+
+    @Value
+    @Builder
+    private static class Key {
+        long configVersion;
+        String namespace;
+        String name;
+        ObjectNode spec;
     }
 }
