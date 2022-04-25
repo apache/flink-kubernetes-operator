@@ -19,7 +19,7 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.java.tuple.Tuple4;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -52,11 +52,12 @@ public class FlinkConfigManager {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final int MAX_CACHE_SIZE = 1000;
+    private static final Duration CACHE_TIMEOUT = Duration.ofHours(1);
 
     private volatile Configuration defaultConfig;
     private volatile FlinkOperatorConfiguration operatorConfiguration;
 
-    private final Cache<Tuple4<String, String, ObjectNode, Boolean>, Configuration> cache;
+    private final Cache<Tuple3<String, String, ObjectNode>, Configuration> cache;
     private Set<String> namespaces = OperatorUtils.getWatchedNamespaces();
 
     public FlinkConfigManager() {
@@ -64,13 +65,10 @@ public class FlinkConfigManager {
     }
 
     public FlinkConfigManager(Configuration defaultConfig) {
-        Duration rescheduleInterval =
-                defaultConfig.get(
-                        KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL);
         this.cache =
                 CacheBuilder.newBuilder()
                         .maximumSize(MAX_CACHE_SIZE)
-                        .expireAfterAccess(Duration.ofSeconds(rescheduleInterval.getSeconds() * 3))
+                        .expireAfterAccess(CACHE_TIMEOUT)
                         .removalListener(
                                 removalNotification ->
                                         FlinkConfigBuilder.cleanupTmpFiles(
@@ -105,25 +103,22 @@ public class FlinkConfigManager {
         return operatorConfiguration;
     }
 
-    public Configuration getObserveConfig(FlinkDeployment deployment) {
-        return getConfig(
-                deployment.getMetadata(), ReconciliationUtils.getDeployedSpec(deployment), false);
+    public Configuration getDeployConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
+        return getConfig(objectMeta, spec);
     }
 
-    public Configuration getDeployConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
-        return getConfig(objectMeta, spec, true);
+    public Configuration getObserveConfig(FlinkDeployment deployment) {
+        return getConfig(deployment.getMetadata(), ReconciliationUtils.getDeployedSpec(deployment));
     }
 
     @SneakyThrows
-    private Configuration getConfig(
-            ObjectMeta objectMeta, FlinkDeploymentSpec spec, boolean forDeploy) {
+    private Configuration getConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
 
         var key =
-                Tuple4.of(
+                Tuple3.of(
                         objectMeta.getNamespace(),
                         objectMeta.getName(),
-                        objectMapper.convertValue(spec, ObjectNode.class),
-                        forDeploy);
+                        objectMapper.convertValue(spec, ObjectNode.class));
 
         var conf = cache.getIfPresent(key);
         if (conf == null) {
@@ -135,15 +130,14 @@ public class FlinkConfigManager {
         return conf.clone();
     }
 
-    private Configuration generateConfig(Tuple4<String, String, ObjectNode, Boolean> key) {
+    private Configuration generateConfig(Tuple3<String, String, ObjectNode> key) {
         try {
-            LOG.info("Generating new {} config", key.f3 ? "deployment" : "observe");
+            LOG.info("Generating new config");
             return FlinkConfigBuilder.buildFrom(
                     key.f0,
                     key.f1,
                     objectMapper.convertValue(key.f2, FlinkDeploymentSpec.class),
-                    defaultConfig,
-                    key.f3);
+                    defaultConfig);
         } catch (Exception e) {
             throw new RuntimeException("Failed to load configuration", e);
         }

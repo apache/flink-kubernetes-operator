@@ -68,29 +68,24 @@ public class FlinkConfigBuilder {
     private final String clusterId;
     private final FlinkDeploymentSpec spec;
     private final Configuration effectiveConfig;
-    private final boolean forDeployment;
 
-    protected FlinkConfigBuilder(
-            FlinkDeployment deployment, Configuration flinkConfig, boolean forDeployment) {
+    protected FlinkConfigBuilder(FlinkDeployment deployment, Configuration flinkConfig) {
         this(
                 deployment.getMetadata().getNamespace(),
                 deployment.getMetadata().getName(),
                 deployment.getSpec(),
-                flinkConfig,
-                forDeployment);
+                flinkConfig);
     }
 
     protected FlinkConfigBuilder(
             String namespace,
             String clusterId,
             FlinkDeploymentSpec spec,
-            Configuration flinkConfig,
-            boolean forDeployment) {
+            Configuration flinkConfig) {
         this.namespace = namespace;
         this.clusterId = clusterId;
         this.spec = spec;
         this.effectiveConfig = new Configuration(flinkConfig);
-        this.forDeployment = forDeployment;
     }
 
     protected FlinkConfigBuilder applyImage() {
@@ -144,7 +139,7 @@ public class FlinkConfigBuilder {
     }
 
     protected FlinkConfigBuilder applyLogConfiguration() throws IOException {
-        if (spec.getLogConfiguration() != null && forDeployment) {
+        if (spec.getLogConfiguration() != null) {
             String confDir =
                     createLogConfigFiles(
                             spec.getLogConfiguration().get(CONFIG_FILE_LOG4J_NAME),
@@ -155,7 +150,7 @@ public class FlinkConfigBuilder {
     }
 
     protected FlinkConfigBuilder applyCommonPodTemplate() throws IOException {
-        if (spec.getPodTemplate() != null && forDeployment) {
+        if (spec.getPodTemplate() != null) {
             effectiveConfig.set(
                     KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE,
                     createTempFile(spec.getPodTemplate()));
@@ -184,13 +179,11 @@ public class FlinkConfigBuilder {
     protected FlinkConfigBuilder applyJobManagerSpec() throws IOException {
         if (spec.getJobManager() != null) {
             setResource(spec.getJobManager().getResource(), effectiveConfig, true);
-            if (forDeployment) {
-                setPodTemplate(
-                        spec.getPodTemplate(),
-                        spec.getJobManager().getPodTemplate(),
-                        effectiveConfig,
-                        true);
-            }
+            setPodTemplate(
+                    spec.getPodTemplate(),
+                    spec.getJobManager().getPodTemplate(),
+                    effectiveConfig,
+                    true);
             if (spec.getJobManager().getReplicas() > 0) {
                 effectiveConfig.set(
                         KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS,
@@ -203,13 +196,11 @@ public class FlinkConfigBuilder {
     protected FlinkConfigBuilder applyTaskManagerSpec() throws IOException {
         if (spec.getTaskManager() != null) {
             setResource(spec.getTaskManager().getResource(), effectiveConfig, false);
-            if (forDeployment) {
-                setPodTemplate(
-                        spec.getPodTemplate(),
-                        spec.getTaskManager().getPodTemplate(),
-                        effectiveConfig,
-                        false);
-            }
+            setPodTemplate(
+                    spec.getPodTemplate(),
+                    spec.getTaskManager().getPodTemplate(),
+                    effectiveConfig,
+                    false);
         }
         return this;
     }
@@ -241,13 +232,9 @@ public class FlinkConfigBuilder {
     }
 
     protected static Configuration buildFrom(
-            String namespace,
-            String clusterId,
-            FlinkDeploymentSpec spec,
-            Configuration flinkConfig,
-            boolean deployment)
+            String namespace, String clusterId, FlinkDeploymentSpec spec, Configuration flinkConfig)
             throws IOException, URISyntaxException {
-        return new FlinkConfigBuilder(namespace, clusterId, spec, flinkConfig, deployment)
+        return new FlinkConfigBuilder(namespace, clusterId, spec, flinkConfig)
                 .applyFlinkConfiguration()
                 .applyLogConfiguration()
                 .applyImage()
