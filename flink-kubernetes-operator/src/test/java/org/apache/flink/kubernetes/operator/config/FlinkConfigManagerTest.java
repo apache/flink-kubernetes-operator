@@ -20,18 +20,24 @@ package org.apache.flink.kubernetes.operator.config;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.DeploymentOptionsInternal;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.utils.Constants;
 
+import io.fabric8.kubernetes.api.model.Pod;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.time.Duration;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for FlinkConfigManager. */
 public class FlinkConfigManagerTest {
@@ -76,7 +82,7 @@ public class FlinkConfigManagerTest {
     }
 
     @Test
-    public void testConfUpdate() {
+    public void testConfUpdateAndCleanup() {
         Configuration config = new Configuration();
         FlinkConfigManager configManager = new FlinkConfigManager(config);
         assertFalse(
@@ -90,7 +96,34 @@ public class FlinkConfigManagerTest {
                 KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL,
                 Duration.ofSeconds(15));
 
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().setLogConfiguration(Map.of(Constants.CONFIG_FILE_LOG4J_NAME, "test"));
+        deployment.getSpec().setPodTemplate(new Pod());
+        Configuration deployConfig =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+        assertTrue(new File(deployConfig.get(DeploymentOptionsInternal.CONF_DIR)).exists());
+        assertTrue(
+                new File(deployConfig.get(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE))
+                        .exists());
+        assertTrue(
+                new File(deployConfig.get(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE))
+                        .exists());
+        assertTrue(
+                new File(deployConfig.get(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE))
+                        .exists());
+
         configManager.updateDefaultConfig(config);
+
+        assertFalse(new File(deployConfig.get(DeploymentOptionsInternal.CONF_DIR)).exists());
+        assertFalse(
+                new File(deployConfig.get(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE))
+                        .exists());
+        assertFalse(
+                new File(deployConfig.get(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE))
+                        .exists());
+        assertFalse(
+                new File(deployConfig.get(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE))
+                        .exists());
 
         assertEquals(
                 Duration.ofSeconds(15),

@@ -37,6 +37,7 @@ import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -50,7 +51,7 @@ public class FlinkConfigManager {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigManager.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final int CACHE_SIZE = 1000;
+    private static final int MAX_CACHE_SIZE = 1000;
 
     private volatile Configuration defaultConfig;
     private volatile FlinkOperatorConfiguration operatorConfiguration;
@@ -63,7 +64,19 @@ public class FlinkConfigManager {
     }
 
     public FlinkConfigManager(Configuration defaultConfig) {
-        this.cache = CacheBuilder.newBuilder().maximumSize(CACHE_SIZE).build();
+        Duration rescheduleInterval =
+                defaultConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL);
+        this.cache =
+                CacheBuilder.newBuilder()
+                        .maximumSize(MAX_CACHE_SIZE)
+                        .expireAfterAccess(Duration.ofSeconds(rescheduleInterval.getSeconds() * 3))
+                        .removalListener(
+                                removalNotification ->
+                                        FlinkConfigBuilder.cleanupTmpFiles(
+                                                (Configuration) removalNotification.getValue()))
+                        .build();
+
         updateDefaultConfig(defaultConfig);
         if (defaultConfig.getBoolean(OPERATOR_DYNAMIC_CONFIG_ENABLED)) {
             scheduleConfigWatcher();

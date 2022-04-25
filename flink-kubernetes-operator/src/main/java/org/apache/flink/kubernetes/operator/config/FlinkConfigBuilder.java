@@ -21,6 +21,7 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
+import org.apache.flink.configuration.DeploymentOptionsInternal;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
@@ -32,10 +33,13 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
+import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
 
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.internal.SerializationUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -54,13 +58,17 @@ import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOGBACK_NA
 
 /** Builder to get effective flink config from {@link FlinkDeployment}. */
 public class FlinkConfigBuilder {
+
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigBuilder.class);
+
+    protected static final String GENERATED_FILE_PREFIX = "flink_op_generated_";
+    protected static final Duration DEFAULT_CHECKPOINTING_INTERVAL = Duration.ofMinutes(5);
+
     private final String namespace;
     private final String clusterId;
     private final FlinkDeploymentSpec spec;
     private final Configuration effectiveConfig;
     private final boolean forDeployment;
-
-    protected static final Duration DEFAULT_CHECKPOINTING_INTERVAL = Duration.ofMinutes(5);
 
     protected FlinkConfigBuilder(
             FlinkDeployment deployment, Configuration flinkConfig, boolean forDeployment) {
@@ -287,7 +295,7 @@ public class FlinkConfigBuilder {
 
     private static String createLogConfigFiles(String log4jConf, String logbackConf)
             throws IOException {
-        File tmpDir = Files.createTempDirectory("conf").toFile();
+        File tmpDir = Files.createTempDirectory(GENERATED_FILE_PREFIX + "conf_").toFile();
 
         if (log4jConf != null) {
             File log4jConfFile = new File(tmpDir.getAbsolutePath(), CONFIG_FILE_LOG4J_NAME);
@@ -303,9 +311,37 @@ public class FlinkConfigBuilder {
     }
 
     private static String createTempFile(Pod podTemplate) throws IOException {
-        final File tmp = File.createTempFile("podTemplate_", ".yaml");
+        final File tmp = File.createTempFile(GENERATED_FILE_PREFIX + "podTemplate_", ".yaml");
         Files.write(tmp.toPath(), SerializationUtils.dumpAsYaml(podTemplate).getBytes());
         tmp.deleteOnExit();
         return tmp.getAbsolutePath();
+    }
+
+    protected static void cleanupTmpFiles(Configuration configuration) {
+        configuration
+                .getOptional(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE)
+                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
+        configuration
+                .getOptional(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE)
+                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
+        configuration
+                .getOptional(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE)
+                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
+        configuration
+                .getOptional(DeploymentOptionsInternal.CONF_DIR)
+                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
+    }
+
+    private static void deleteSilentlyIfGenerated(String file) {
+        try {
+            File localFile = new File(file);
+            if (!localFile.getName().startsWith(FlinkConfigBuilder.GENERATED_FILE_PREFIX)) {
+                return;
+            }
+            LOG.debug("Deleting tmp config file {}", localFile);
+            FileUtils.deleteFileOrDirectory(localFile);
+        } catch (Exception err) {
+            LOG.error("Could not clean up file " + file, err);
+        }
     }
 }
