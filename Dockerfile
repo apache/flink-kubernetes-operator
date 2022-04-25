@@ -23,6 +23,7 @@ WORKDIR /app
 ENV SHADED_DIR=flink-kubernetes-shaded
 ENV OPERATOR_DIR=flink-kubernetes-operator
 ENV WEBHOOK_DIR=flink-kubernetes-webhook
+ENV DOCS_DIR=flink-kubernetes-docs
 
 RUN mkdir $OPERATOR_DIR $WEBHOOK_DIR
 
@@ -30,6 +31,7 @@ COPY pom.xml .
 COPY $SHADED_DIR/pom.xml ./$SHADED_DIR/
 COPY $WEBHOOK_DIR/pom.xml ./$WEBHOOK_DIR/
 COPY $OPERATOR_DIR/pom.xml ./$OPERATOR_DIR/
+COPY $DOCS_DIR/pom.xml ./$DOCS_DIR/
 
 COPY $OPERATOR_DIR/src ./$OPERATOR_DIR/src
 COPY $WEBHOOK_DIR/src ./$WEBHOOK_DIR/src
@@ -37,7 +39,7 @@ COPY $WEBHOOK_DIR/src ./$WEBHOOK_DIR/src
 COPY .git ./.git
 COPY tools ./tools
 
-RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -DskipTests=$SKIP_TESTS
+RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl !flink-kubernetes-docs -DskipTests=$SKIP_TESTS
 
 # stage
 FROM openjdk:11-jre

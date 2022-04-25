@@ -31,10 +31,6 @@ under the License.
     <name>Flink Kubernetes Webhook</name>
     <packaging>jar</packaging>
 
-    <properties>
-        <junit.jupiter.version>5.8.2</junit.jupiter.version>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>org.apache.flink</groupId>

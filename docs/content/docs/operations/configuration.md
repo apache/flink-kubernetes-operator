@@ -52,17 +52,4 @@ To learn more about metrics and logging configuration please refer to the dedica
 
 ## Operator Configuration Reference
 
-| Key  | Default | Type | Description |
-| ---- | ------- | ---- | ----------- |
-| kubernetes.operator.reconciler.reschedule.interval     |    60s     |  Duration    | The interval for the controller to reschedule the reconcile process.            |
-| kubernetes.operator.observer.rest-ready.delay    |  10s       |     Duration |     Final delay before deployment is marked ready after port becomes accessible.        |
-| kubernetes.operator.reconciler.max.parallelism     |     5    |  Integer    |    The maximum number of threads running the reconciliation loop. Use -1 for infinite.         |
-| kubernetes.operator.observer.progress-check.interval     |  10s       |  Duration    |     The interval for observing status for in-progress operations such as deployment and savepoints.        |
-| kubernetes.operator.observer.savepoint.trigger.grace-period     |     10s    |   Duration   |   The interval before a savepoint trigger attempt is marked as unsuccessful.          |
-| kubernetes.operator.observer.flink.client.timeout     |     10s    |  Duration    | The timeout for the observer to wait the flink rest client to return.            |
-| kubernetes.operator.reconciler.flink.cancel.job.timeout     |     1min    |  Duration    | The timeout for the reconciler to wait for flink to cancel job.            |
-| kubernetes.operator.reconciler.flink.cluster.shutdown.timeout     |     60s    |  Duration    | The timeout for the reconciler to wait for flink to shutdown cluster.           |
-| kubernetes.operator.deployment.rollback.enabled     |     false    |  Boolean    | Whether to enable rolling back failed deployment upgrades.          |
-| kubernetes.operator.deployment.readiness.timeout     |     1min    |  Duration    | The timeout for deployments to become ready/stable before being rolled back if rollback is enabled.            |
-| kubernetes.operator.user.artifacts.base.dir     |     /opt/flink/artifacts    |  String |     The base dir to put the session job artifacts.           |
-| kubernetes.operator.job.upgrade.ignore-pending-savepoint     |     false    |  Boolean    | Whether to ignore pending savepoint during job upgrade.          |
+{{< generated/kubernetes_operator_config_configuration >}}
