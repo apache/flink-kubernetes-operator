@@ -33,7 +33,6 @@ import org.apache.flink.shaded.guava30.com.google.common.cache.CacheBuilder;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
-import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,7 +110,6 @@ public class FlinkConfigManager {
         return getConfig(deployment.getMetadata(), ReconciliationUtils.getDeployedSpec(deployment));
     }
 
-    @SneakyThrows
     private Configuration getConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
 
         var key =
