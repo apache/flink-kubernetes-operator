@@ -27,12 +27,16 @@ import org.apache.commons.io.FileUtils;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.Modifier;
 import javax.lang.model.util.ElementScanner9;
+import javax.lang.model.util.Types;
 
 import java.io.File;
 import java.io.PrintStream;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -40,9 +44,14 @@ import java.util.stream.Collectors;
 /** Doclet for generating the FlinkDeployment CRD reference. */
 public class CrdReferenceDoclet implements Doclet {
 
+    private static final String SPEC_PACKAGE_PREFIX =
+            "org.apache.flink.kubernetes.operator.crd.spec";
+    private static final String STATUS_PACKAGE_PREFIX =
+            "org.apache.flink.kubernetes.operator.crd.status";
     private DocTrees treeUtils;
     private String templateFile;
     private String outputFile;
+    private Map<Element, Element> child2ParentElements;
 
     @Override
     public void init(Locale locale, Reporter reporter) {}
@@ -86,31 +95,53 @@ public class CrdReferenceDoclet implements Doclet {
             MdPrinter se = new MdPrinter(printStream);
             printStream.println("");
             printStream.println("## Spec");
-            se.show(
+            var spec =
                     sortedByName(
                             environment.getIncludedElements().stream()
-                                    .filter(
-                                            e ->
-                                                    e.toString()
-                                                            .startsWith(
-                                                                    "org.apache.flink.kubernetes.operator.crd.spec"))
-                                    .collect(Collectors.toSet())));
+                                    .filter(e -> e.toString().startsWith(SPEC_PACKAGE_PREFIX))
+                                    .collect(Collectors.toSet()));
+            handleAbstractClass(spec, environment.getTypeUtils());
+            se.show(spec);
 
             printStream.println("");
             printStream.println("## Status");
-
-            se.show(
+            var status =
                     sortedByName(
                             environment.getIncludedElements().stream()
-                                    .filter(
-                                            e ->
-                                                    e.toString()
-                                                            .startsWith(
-                                                                    "org.apache.flink.kubernetes.operator.crd.status"))
-                                    .collect(Collectors.toSet())));
+                                    .filter(e -> e.toString().startsWith(STATUS_PACKAGE_PREFIX))
+                                    .collect(Collectors.toSet()));
+            handleAbstractClass(status, environment.getTypeUtils());
+            se.show(status);
             return true;
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private void handleAbstractClass(Set<? extends Element> elements, Types typeUtils) {
+        this.child2ParentElements = new HashMap<>();
+        var classElements =
+                elements.stream()
+                        .filter(element -> element.getKind() == ElementKind.CLASS)
+                        .collect(Collectors.toList());
+
+        for (Element element : classElements) {
+            if (element.getModifiers().contains(Modifier.ABSTRACT)) {
+                var enclosedElements = element.getEnclosedElements();
+                // do not print the abstract class's elements
+                enclosedElements.forEach(elements::remove);
+                elements.remove(element);
+            } else {
+                var directSuperTypes = typeUtils.directSupertypes(element.asType());
+                if (directSuperTypes.size() == 1) {
+                    var parentElement = typeUtils.asElement(directSuperTypes.get(0));
+                    String name = parentElement.toString();
+                    if (name.startsWith(SPEC_PACKAGE_PREFIX)
+                            || name.startsWith(STATUS_PACKAGE_PREFIX)) {
+                        child2ParentElements.put(element, parentElement);
+                    }
+                }
+            }
         }
     }
 
@@ -150,6 +181,11 @@ public class CrdReferenceDoclet implements Doclet {
                     out.println("");
                     out.println("| Parameter | Type | Docs |");
                     out.println("| ----------| ---- | ---- |");
+                    // if this is a child class, print it's parent's enclosed elements.
+                    if (child2ParentElements.containsKey(e)) {
+                        MdPrinter mdPrinter = new MdPrinter(out);
+                        mdPrinter.scan(child2ParentElements.get(e).getEnclosedElements(), depth);
+                    }
                     break;
                 case FIELD:
                     out.println(
