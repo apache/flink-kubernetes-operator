@@ -54,6 +54,7 @@ under the License.
         <module>flink-kubernetes-shaded</module>
         <module>flink-kubernetes-operator</module>
         <module>flink-kubernetes-webhook</module>
+        <module>flink-kubernetes-docs</module>
     </modules>
 
     <properties>
@@ -75,6 +76,7 @@ under the License.
 
         <slf4j.version>1.7.36</slf4j.version>
         <log4j.version>2.17.1</log4j.version>
+        <junit.jupiter.version>5.8.2</junit.jupiter.version>
 
         <spotless.version>2.4.2</spotless.version>
         <it.skip>true</it.skip>
@@ -272,6 +274,7 @@ under the License.
                             <exclude>docs/themes/book/**</exclude>
                             <exclude>docs/assets/github.css</exclude>
                             <exclude>docs/static/js/anchor.min.js</exclude>
+                            <exclude>docs/layouts/shortcodes/generated/**</exclude>
                             <!-- PyCharm -->
                             <exclude>**/.idea/**</exclude>
                             <!-- Generated CRD -->
@@ -285,6 +288,29 @@ under the License.
                         </excludes>
                     </configuration>
                 </plugin>
+
+            <!-- generate configuration docs -->
+            <plugin>
+                <groupId>org.commonjava.maven.plugins</groupId>
+                <artifactId>directory-maven-plugin</artifactId>
+                <version>0.1</version>
+                <executions>
+                    <execution>
+                        <id>directories</id>
+                        <goals>
+                            <goal>directory-of</goal>
+                        </goals>
+                        <phase>initialize</phase>
+                        <configuration>
+                            <property>rootDir</property>
+                            <project>
+                                <groupId>org.apache.flink</groupId>
+                                <artifactId>flink-kubernetes-operator-parent</artifactId>
+                            </project>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
