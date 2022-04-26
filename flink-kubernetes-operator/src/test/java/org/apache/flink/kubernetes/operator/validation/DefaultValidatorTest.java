@@ -23,6 +23,7 @@ import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -56,7 +57,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 /** Test deployment validation logic. */
 public class DefaultValidatorTest {
 
-    private final DefaultValidator validator = new DefaultValidator();
+    private final DefaultValidator validator =
+            new DefaultValidator(new FlinkConfigManager(new Configuration()));
 
     @Test
     public void testValidationWithoutDefaultConfig() {
@@ -287,7 +289,8 @@ public class DefaultValidatorTest {
         defaultFlinkConf.set(
                 HighAvailabilityOptions.HA_MODE,
                 KubernetesHaServicesFactory.class.getCanonicalName());
-        final DefaultValidator validatorWithDefaultConfig = new DefaultValidator(defaultFlinkConf);
+        final DefaultValidator validatorWithDefaultConfig =
+                new DefaultValidator(new FlinkConfigManager(defaultFlinkConf));
         testSuccess(
                 dep -> {
                     dep.getSpec().setFlinkConfiguration(new HashMap<>());

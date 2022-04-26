@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
-import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 
 import lombok.Value;
 
@@ -42,11 +41,6 @@ public class FlinkOperatorConfiguration {
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
     String artifactsBaseDir;
-
-    public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
-        Set<String> watchedNamespaces = OperatorUtils.getWatchedNamespaces();
-        return fromConfiguration(operatorConfig, watchedNamespaces);
-    }
 
     public static FlinkOperatorConfiguration fromConfiguration(
             Configuration operatorConfig, Set<String> watchedNamespaces) {

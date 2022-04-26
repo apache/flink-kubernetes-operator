@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -67,22 +67,22 @@ public class FlinkSessionJobController
     private static final String CLUSTER_ID_INDEX = "clusterId_index";
     private static final String ALL_NAMESPACE = "allNamespace";
 
+    private final FlinkConfigManager configManager;
     private final KubernetesClient kubernetesClient;
 
     private final Set<FlinkResourceValidator> validators;
     private final Reconciler<FlinkSessionJob> reconciler;
     private final Observer<FlinkSessionJob> observer;
-    private final FlinkOperatorConfiguration operatorConfiguration;
     private Map<String, SharedIndexInformer<FlinkSessionJob>> informers;
     private FlinkControllerConfig<FlinkSessionJob> controllerConfig;
 
     public FlinkSessionJobController(
-            FlinkOperatorConfiguration operatorConfiguration,
+            FlinkConfigManager configManager,
             KubernetesClient kubernetesClient,
             Set<FlinkResourceValidator> validators,
             Reconciler<FlinkSessionJob> reconciler,
             Observer<FlinkSessionJob> observer) {
-        this.operatorConfiguration = operatorConfiguration;
+        this.configManager = configManager;
         this.kubernetesClient = kubernetesClient;
         this.validators = validators;
         this.reconciler = reconciler;
@@ -116,7 +116,8 @@ public class FlinkSessionJobController
         }
 
         return ReconciliationUtils.toUpdateControl(originalCopy, flinkSessionJob)
-                .rescheduleAfter(operatorConfiguration.getReconcileInterval().toMillis());
+                .rescheduleAfter(
+                        configManager.getOperatorConfiguration().getReconcileInterval().toMillis());
     }
 
     @Override
@@ -256,7 +257,9 @@ public class FlinkSessionJobController
                             validator.validateSessionJob(
                                     sessionJob,
                                     OperatorUtils.getSecondaryResource(
-                                            sessionJob, context, operatorConfiguration)))
+                                            sessionJob,
+                                            context,
+                                            configManager.getOperatorConfiguration())))
                     .isPresent()) {
                 break;
             }

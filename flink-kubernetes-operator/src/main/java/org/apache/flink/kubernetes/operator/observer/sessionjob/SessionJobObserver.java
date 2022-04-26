@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.observer.sessionjob;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
@@ -44,18 +44,13 @@ import java.util.stream.Collectors;
 public class SessionJobObserver implements Observer<FlinkSessionJob> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionJobObserver.class);
-    private final FlinkOperatorConfiguration operatorConfiguration;
-    private final Configuration defaultConfig;
+    private final FlinkConfigManager configManager;
     private final SavepointObserver savepointObserver;
     private final JobStatusObserver<VoidObserverContext> jobStatusObserver;
 
-    public SessionJobObserver(
-            FlinkOperatorConfiguration operatorConfiguration,
-            FlinkService flinkService,
-            Configuration defaultConfig) {
-        this.operatorConfiguration = operatorConfiguration;
-        this.defaultConfig = defaultConfig;
-        this.savepointObserver = new SavepointObserver(flinkService, operatorConfiguration);
+    public SessionJobObserver(FlinkService flinkService, FlinkConfigManager configManager) {
+        this.configManager = configManager;
+        this.savepointObserver = new SavepointObserver(flinkService, configManager);
         this.jobStatusObserver =
                 new JobStatusObserver<>(flinkService) {
                     @Override
@@ -104,7 +99,8 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
         }
 
         var flinkDepOpt =
-                OperatorUtils.getSecondaryResource(flinkSessionJob, context, operatorConfiguration);
+                OperatorUtils.getSecondaryResource(
+                        flinkSessionJob, context, configManager.getOperatorConfiguration());
 
         var helper = new SessionJobHelper(flinkSessionJob, LOG);
 
@@ -112,8 +108,7 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
             return;
         }
 
-        Configuration deployedConfig =
-                ReconciliationUtils.getDeployedConfig(flinkDepOpt.get(), defaultConfig);
+        Configuration deployedConfig = configManager.getObserveConfig(flinkDepOpt.get());
         var jobFound =
                 jobStatusObserver.observe(
                         flinkSessionJob.getStatus().getJobStatus(),

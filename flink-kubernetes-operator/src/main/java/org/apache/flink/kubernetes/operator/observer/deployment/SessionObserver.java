@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
@@ -29,11 +29,8 @@ import java.util.concurrent.TimeoutException;
 /** The observer of the {@link org.apache.flink.kubernetes.operator.config.Mode#SESSION} cluster. */
 public class SessionObserver extends AbstractDeploymentObserver {
 
-    public SessionObserver(
-            FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration,
-            Configuration flinkConfig) {
-        super(flinkService, operatorConfiguration, flinkConfig);
+    public SessionObserver(FlinkService flinkService, FlinkConfigManager configManager) {
+        super(flinkService, configManager);
     }
 
     @Override

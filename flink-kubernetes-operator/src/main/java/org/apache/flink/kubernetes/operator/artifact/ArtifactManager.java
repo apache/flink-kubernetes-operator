@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.artifact;
 
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.util.FlinkRuntimeException;
 
@@ -32,10 +32,10 @@ import java.net.URI;
 public class ArtifactManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(ArtifactManager.class);
-    private final File baseDir;
+    private final FlinkConfigManager configManager;
 
-    public ArtifactManager(FlinkOperatorConfiguration operatorConfiguration) {
-        this.baseDir = new File(operatorConfiguration.getArtifactsBaseDir());
+    public ArtifactManager(FlinkConfigManager configManager) {
+        this.configManager = configManager;
     }
 
     private synchronized void createIfNotExists(File targetDir) {
@@ -65,7 +65,8 @@ public class ArtifactManager {
         return String.join(
                 File.separator,
                 new String[] {
-                    baseDir.getAbsolutePath(),
+                    new File(configManager.getOperatorConfiguration().getArtifactsBaseDir())
+                            .getAbsolutePath(),
                     sessionJob.getMetadata().getNamespace(),
                     sessionJob.getSpec().getDeploymentName(),
                     sessionJob.getMetadata().getName()

@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
@@ -39,12 +39,9 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     private final SavepointObserver savepointObserver;
     private final JobStatusObserver<ApplicationObserverContext> jobStatusObserver;
 
-    public ApplicationObserver(
-            FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration,
-            Configuration flinkConfig) {
-        super(flinkService, operatorConfiguration, flinkConfig);
-        this.savepointObserver = new SavepointObserver(flinkService, operatorConfiguration);
+    public ApplicationObserver(FlinkService flinkService, FlinkConfigManager configManager) {
+        super(flinkService, configManager);
+        this.savepointObserver = new SavepointObserver(flinkService, configManager);
         this.jobStatusObserver =
                 new JobStatusObserver<>(flinkService) {
                     @Override

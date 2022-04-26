@@ -21,7 +21,7 @@ import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
@@ -51,8 +51,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class RollbackTest {
 
     private final Context context = TestUtils.createContextWithReadyJobManagerDeployment();
-    private final FlinkOperatorConfiguration operatorConfiguration =
-            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
 
     private TestingFlinkService flinkService;
     private FlinkDeploymentController testController;
@@ -64,7 +62,9 @@ public class RollbackTest {
         flinkService = new TestingFlinkService();
         testController =
                 TestUtils.createTestController(
-                        operatorConfiguration, kubernetesClient, flinkService);
+                        new FlinkConfigManager(new Configuration()),
+                        kubernetesClient,
+                        flinkService);
     }
 
     @Test

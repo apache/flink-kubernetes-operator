@@ -23,7 +23,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
@@ -66,8 +66,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class FlinkDeploymentControllerTest {
 
     private final Context context = TestUtils.createContextWithReadyJobManagerDeployment();
-    private final FlinkOperatorConfiguration operatorConfiguration =
-            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
+    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     private TestingFlinkService flinkService;
     private FlinkDeploymentController testController;
@@ -79,8 +78,7 @@ public class FlinkDeploymentControllerTest {
     public void setup() {
         flinkService = new TestingFlinkService();
         testController =
-                TestUtils.createTestController(
-                        operatorConfiguration, kubernetesClient, flinkService);
+                TestUtils.createTestController(configManager, kubernetesClient, flinkService);
     }
 
     @Test
@@ -92,7 +90,11 @@ public class FlinkDeploymentControllerTest {
         updateControl = testController.reconcile(appCluster, TestUtils.createEmptyContext());
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                Optional.of(operatorConfiguration.getProgressCheckInterval().toMillis()),
+                Optional.of(
+                        configManager
+                                .getOperatorConfiguration()
+                                .getProgressCheckInterval()
+                                .toMillis()),
                 updateControl.getScheduleDelay());
 
         // Validate reconciliation status
@@ -105,13 +107,15 @@ public class FlinkDeploymentControllerTest {
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                Optional.of(operatorConfiguration.getRestApiReadyDelay().toMillis()),
+                Optional.of(
+                        configManager.getOperatorConfiguration().getRestApiReadyDelay().toMillis()),
                 updateControl.getScheduleDelay());
 
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                Optional.of(operatorConfiguration.getReconcileInterval().toMillis()),
+                Optional.of(
+                        configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
                 updateControl.getScheduleDelay());
 
         // Validate job status
@@ -168,7 +172,8 @@ public class FlinkDeploymentControllerTest {
                         appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                Optional.of(operatorConfiguration.getReconcileInterval().toMillis()),
+                Optional.of(
+                        configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
                 updateControl.getScheduleDelay());
 
         RecordedRequest recordedRequest = mockServer.getLastRequest();
@@ -191,7 +196,7 @@ public class FlinkDeploymentControllerTest {
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 JobManagerDeploymentStatus.ERROR
-                        .rescheduleAfter(appCluster, operatorConfiguration)
+                        .rescheduleAfter(appCluster, configManager.getOperatorConfiguration())
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
     }
@@ -219,7 +224,8 @@ public class FlinkDeploymentControllerTest {
                         appCluster, TestUtils.createContextWithInProgressDeployment());
         assertTrue(updateControl.isUpdateStatus());
         assertEquals(
-                Optional.of(operatorConfiguration.getReconcileInterval().toMillis()),
+                Optional.of(
+                        configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
                 updateControl.getScheduleDelay());
 
         RecordedRequest recordedRequest = mockServer.getLastRequest();
@@ -245,7 +251,7 @@ public class FlinkDeploymentControllerTest {
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 JobManagerDeploymentStatus.READY
-                        .rescheduleAfter(appCluster, operatorConfiguration)
+                        .rescheduleAfter(appCluster, configManager.getOperatorConfiguration())
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
     }
@@ -345,7 +351,7 @@ public class FlinkDeploymentControllerTest {
         updateControl = testController.reconcile(appCluster, context);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING
-                        .rescheduleAfter(appCluster, operatorConfiguration)
+                        .rescheduleAfter(appCluster, configManager.getOperatorConfiguration())
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
 

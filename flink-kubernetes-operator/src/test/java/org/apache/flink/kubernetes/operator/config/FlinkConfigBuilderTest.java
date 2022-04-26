@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.utils;
+package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
@@ -57,7 +57,7 @@ import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE;
 import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE_POLICY;
 import static org.apache.flink.kubernetes.operator.TestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.TestUtils.SERVICE_ACCOUNT;
-import static org.apache.flink.kubernetes.operator.utils.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
+import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 
 /** FlinkConfigBuilderTest. */
@@ -154,12 +154,12 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyLogConfiguration() throws IOException {
-        final Configuration configuration =
+        Configuration configuration =
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyLogConfiguration()
                         .build();
 
-        final File log4jFile =
+        File log4jFile =
                 new File(
                         configuration.get(DeploymentOptionsInternal.CONF_DIR),
                         CONFIG_FILE_LOG4J_NAME);
@@ -169,7 +169,7 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyCommonPodTemplate() throws Exception {
-        final Configuration configuration =
+        Configuration configuration =
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyCommonPodTemplate()
                         .build();
@@ -273,7 +273,11 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testBuildFrom() throws Exception {
         final Configuration configuration =
-                FlinkConfigBuilder.buildFrom(flinkDeployment, new Configuration());
+                FlinkConfigBuilder.buildFrom(
+                        flinkDeployment.getMetadata().getNamespace(),
+                        flinkDeployment.getMetadata().getName(),
+                        flinkDeployment.getSpec(),
+                        new Configuration());
         final String namespace = flinkDeployment.getMetadata().getNamespace();
         final String clusterId = flinkDeployment.getMetadata().getName();
         // Most configs have been tested by previous unit tests, thus we only verify the namespace

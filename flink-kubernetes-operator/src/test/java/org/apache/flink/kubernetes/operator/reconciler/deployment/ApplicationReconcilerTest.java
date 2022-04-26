@@ -22,7 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
@@ -46,8 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** @link JobStatusObserver unit tests */
 public class ApplicationReconcilerTest {
 
-    private final FlinkOperatorConfiguration operatorConfiguration =
-            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
+    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     @Test
     public void testUpgrade() throws Exception {
@@ -55,8 +54,7 @@ public class ApplicationReconcilerTest {
         TestingFlinkService flinkService = new TestingFlinkService();
 
         ApplicationReconciler reconciler =
-                new ApplicationReconciler(
-                        null, flinkService, operatorConfiguration, new Configuration());
+                new ApplicationReconciler(null, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
@@ -107,8 +105,7 @@ public class ApplicationReconcilerTest {
         final TestingFlinkService flinkService = new TestingFlinkService();
 
         final ApplicationReconciler reconciler =
-                new ApplicationReconciler(
-                        null, flinkService, operatorConfiguration, new Configuration());
+                new ApplicationReconciler(null, flinkService, configManager);
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
@@ -151,8 +148,7 @@ public class ApplicationReconcilerTest {
         Context context = TestUtils.createContextWithReadyJobManagerDeployment();
         TestingFlinkService flinkService = new TestingFlinkService();
         ApplicationReconciler reconciler =
-                new ApplicationReconciler(
-                        null, flinkService, operatorConfiguration, new Configuration());
+                new ApplicationReconciler(null, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
@@ -216,8 +212,7 @@ public class ApplicationReconcilerTest {
         final TestingFlinkService flinkService = new TestingFlinkService();
 
         final ApplicationReconciler reconciler =
-                new ApplicationReconciler(
-                        null, flinkService, operatorConfiguration, new Configuration());
+                new ApplicationReconciler(null, flinkService, configManager);
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getSpec().getFlinkConfiguration().remove(HighAvailabilityOptions.HA_MODE.key());
 
@@ -265,8 +260,7 @@ public class ApplicationReconcilerTest {
         final TestingFlinkService flinkService = new TestingFlinkService();
 
         final ApplicationReconciler reconciler =
-                new ApplicationReconciler(
-                        null, flinkService, operatorConfiguration, new Configuration());
+                new ApplicationReconciler(null, flinkService, configManager);
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
@@ -303,8 +297,7 @@ public class ApplicationReconcilerTest {
         TestingFlinkService flinkService = new TestingFlinkService();
 
         ApplicationReconciler reconciler =
-                new ApplicationReconciler(
-                        null, flinkService, operatorConfiguration, new Configuration());
+                new ApplicationReconciler(null, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
@@ -368,8 +361,7 @@ public class ApplicationReconcilerTest {
         Context context = TestUtils.createContextWithReadyJobManagerDeployment();
         TestingFlinkService flinkService = new TestingFlinkService();
         ApplicationReconciler reconciler =
-                new ApplicationReconciler(
-                        null, flinkService, operatorConfiguration, new Configuration());
+                new ApplicationReconciler(null, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         reconciler.reconcile(deployment, context);
         List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();

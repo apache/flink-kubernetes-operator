@@ -18,8 +18,8 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.ConfigConstants;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
@@ -34,13 +34,12 @@ public final class ValidatorUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
 
-    public static Set<FlinkResourceValidator> discoverValidators(Configuration configuration) {
+    public static Set<FlinkResourceValidator> discoverValidators(FlinkConfigManager configManager) {
         Set<FlinkResourceValidator> resourceValidators = new HashSet<>();
-        resourceValidators.add(new DefaultValidator());
-        DefaultValidator defaultValidator = new DefaultValidator();
-        defaultValidator.configure(configuration);
+        DefaultValidator defaultValidator = new DefaultValidator(configManager);
+        defaultValidator.configure(configManager.getDefaultConfig());
         resourceValidators.add(defaultValidator);
-        PluginUtils.createPluginManagerFromRootFolder(configuration)
+        PluginUtils.createPluginManagerFromRootFolder(configManager.getDefaultConfig())
                 .load(FlinkResourceValidator.class)
                 .forEachRemaining(
                         validator -> {
@@ -51,7 +50,7 @@ public final class ValidatorUtils {
                                                     ConfigConstants.ENV_FLINK_PLUGINS_DIR,
                                                     ConfigConstants.DEFAULT_FLINK_PLUGINS_DIRS),
                                     validator.getClass().getName());
-                            validator.configure(configuration);
+                            validator.configure(configManager.getDefaultConfig());
                             resourceValidators.add(validator);
                         });
         return resourceValidators;

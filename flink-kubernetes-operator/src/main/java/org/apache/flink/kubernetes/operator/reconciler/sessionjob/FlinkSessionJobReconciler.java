@@ -19,7 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler.sessionjob;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.util.Preconditions;
 
@@ -52,20 +51,17 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSessionJobReconciler.class);
 
-    private final FlinkOperatorConfiguration operatorConfiguration;
-    private final Configuration defaultConfig;
+    private final FlinkConfigManager configManager;
     private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
 
     public FlinkSessionJobReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkOperatorConfiguration operatorConfiguration,
-            Configuration defaultConfig) {
+            FlinkConfigManager configManager) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
-        this.operatorConfiguration = operatorConfiguration;
-        this.defaultConfig = defaultConfig;
+        this.configManager = configManager;
     }
 
     @Override
@@ -79,19 +75,20 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                         .deserializeLastReconciledSpec();
 
         Optional<FlinkDeployment> flinkDepOptional =
-                OperatorUtils.getSecondaryResource(flinkSessionJob, context, operatorConfiguration);
+                OperatorUtils.getSecondaryResource(
+                        flinkSessionJob, context, configManager.getOperatorConfiguration());
 
         // if session cluster is not ready, we can't do reconcile for the job.
         if (!helper.sessionClusterReady(flinkDepOptional)) {
             return;
         }
 
-        Configuration effectiveConfig =
-                FlinkUtils.getEffectiveConfig(flinkDepOptional.get(), defaultConfig);
+        Configuration deployedConfig = configManager.getObserveConfig(flinkDepOptional.get());
+
         if (lastReconciledSpec == null) {
             submitAndInitStatus(
                     flinkSessionJob,
-                    effectiveConfig,
+                    deployedConfig,
                     Optional.ofNullable(
                                     flinkSessionJob.getSpec().getJob().getInitialSavepointPath())
                             .orElse(null));
@@ -100,7 +97,7 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
             return;
         }
 
-        if (!effectiveConfig.getBoolean(
+        if (!deployedConfig.getBoolean(
                         KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT)
                 && helper.savepointInProgress()) {
             LOG.info("Delaying job reconciliation until pending savepoint is completed");
@@ -119,21 +116,21 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                 if (desiredJobState == JobState.RUNNING) {
                     LOG.info("Upgrading/Restarting running job, suspending first...");
                 }
-                stateAfterReconcile = suspendJob(flinkSessionJob, upgradeMode, effectiveConfig);
+                stateAfterReconcile = suspendJob(flinkSessionJob, upgradeMode, deployedConfig);
             }
             if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
                 if (upgradeMode == UpgradeMode.STATELESS) {
-                    submitAndInitStatus(flinkSessionJob, effectiveConfig, null);
+                    submitAndInitStatus(flinkSessionJob, deployedConfig, null);
                 } else if (upgradeMode == UpgradeMode.LAST_STATE
                         || upgradeMode == UpgradeMode.SAVEPOINT) {
-                    restoreFromLastSavepoint(flinkSessionJob, effectiveConfig);
+                    restoreFromLastSavepoint(flinkSessionJob, deployedConfig);
                 }
                 stateAfterReconcile = JobState.RUNNING;
             }
             ReconciliationUtils.updateForSpecReconciliationSuccess(
                     flinkSessionJob, stateAfterReconcile);
         } else if (helper.shouldTriggerSavepoint() && helper.isJobRunning(flinkDepOptional.get())) {
-            triggerSavepoint(flinkSessionJob, effectiveConfig);
+            triggerSavepoint(flinkSessionJob, deployedConfig);
             ReconciliationUtils.updateSavepointReconciliationSuccess(flinkSessionJob);
         }
     }
@@ -141,16 +138,17 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
     @Override
     public DeleteControl cleanup(FlinkSessionJob sessionJob, Context context) {
         Optional<FlinkDeployment> flinkDepOptional =
-                OperatorUtils.getSecondaryResource(sessionJob, context, operatorConfiguration);
+                OperatorUtils.getSecondaryResource(
+                        sessionJob, context, configManager.getOperatorConfiguration());
 
         if (flinkDepOptional.isPresent()) {
-            Configuration effectiveConfig =
-                    FlinkUtils.getEffectiveConfig(flinkDepOptional.get(), defaultConfig);
             String jobID = sessionJob.getStatus().getJobStatus().getJobId();
             if (jobID != null) {
                 try {
                     flinkService.cancelSessionJob(
-                            JobID.fromHexString(jobID), UpgradeMode.STATELESS, effectiveConfig);
+                            JobID.fromHexString(jobID),
+                            UpgradeMode.STATELESS,
+                            configManager.getObserveConfig(flinkDepOptional.get()));
                 } catch (Exception e) {
                     LOG.error("Failed to cancel job.", e);
                 }

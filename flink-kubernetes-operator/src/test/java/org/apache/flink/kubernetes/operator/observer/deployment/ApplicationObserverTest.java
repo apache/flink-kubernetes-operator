@@ -20,14 +20,13 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
@@ -41,20 +40,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class ApplicationObserverTest {
 
     private final Context readyContext = TestUtils.createContextWithReadyJobManagerDeployment();
+    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     @Test
     public void observeApplicationCluster() {
-        Configuration flinkConf = new Configuration();
         TestingFlinkService flinkService = new TestingFlinkService();
-        ApplicationObserver observer =
-                new ApplicationObserver(
-                        flinkService,
-                        FlinkOperatorConfiguration.fromConfiguration(new Configuration()),
-                        flinkConf);
+        ApplicationObserver observer = new ApplicationObserver(flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.setStatus(new FlinkDeploymentStatus());
 
-        Configuration conf = FlinkUtils.getEffectiveConfig(deployment, flinkConf);
+        Configuration conf =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
 
         observer.observe(deployment, TestUtils.createEmptyContext());
         assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
@@ -151,15 +147,11 @@ public class ApplicationObserverTest {
 
     @Test
     public void observeSavepoint() throws Exception {
-        Configuration flinkConf = new Configuration();
         TestingFlinkService flinkService = new TestingFlinkService();
-        ApplicationObserver observer =
-                new ApplicationObserver(
-                        flinkService,
-                        FlinkOperatorConfiguration.fromConfiguration(new Configuration()),
-                        flinkConf);
+        ApplicationObserver observer = new ApplicationObserver(flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        Configuration conf = FlinkUtils.getEffectiveConfig(deployment, flinkConf);
+        Configuration conf =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf);
         bringToReadyStatus(deployment);
         observer.observe(deployment, readyContext);
@@ -225,15 +217,9 @@ public class ApplicationObserverTest {
 
     @Test
     public void observeListJobsError() {
-        Configuration flinkConf = new Configuration();
         TestingFlinkService flinkService = new TestingFlinkService();
-        ApplicationObserver observer =
-                new ApplicationObserver(
-                        flinkService,
-                        FlinkOperatorConfiguration.fromConfiguration(new Configuration()),
-                        flinkConf);
+        ApplicationObserver observer = new ApplicationObserver(flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        Configuration conf = FlinkUtils.getEffectiveConfig(deployment, flinkConf);
         bringToReadyStatus(deployment);
         observer.observe(deployment, readyContext);
         assertEquals(

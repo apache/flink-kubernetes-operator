@@ -109,4 +109,17 @@ public class KubernetesOperatorConfigOptions {
                     .booleanType()
                     .defaultValue(false)
                     .withDescription("Whether to ignore pending savepoint during job upgrade.");
+
+    public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_CONFIG_ENABLED =
+            ConfigOptions.key("kubernetes.operator.dynamic.config.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Whether to enable on-the-fly config changes through the operator configmap.");
+
+    public static final ConfigOption<Duration> OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL =
+            ConfigOptions.key("kubernetes.operator.dynamic.config.check.interval")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(5))
+                    .withDescription("Time interval for checking config changes.");
 }

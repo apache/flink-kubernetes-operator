@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.utils;
+package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
+import org.apache.flink.configuration.DeploymentOptionsInternal;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
@@ -32,11 +33,13 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
+import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
 
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.internal.SerializationUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -55,31 +58,44 @@ import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOGBACK_NA
 
 /** Builder to get effective flink config from {@link FlinkDeployment}. */
 public class FlinkConfigBuilder {
-    private final ObjectMeta meta;
+
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigBuilder.class);
+
+    protected static final String GENERATED_FILE_PREFIX = "flink_op_generated_";
+    protected static final Duration DEFAULT_CHECKPOINTING_INTERVAL = Duration.ofMinutes(5);
+
+    private final String namespace;
+    private final String clusterId;
     private final FlinkDeploymentSpec spec;
     private final Configuration effectiveConfig;
 
-    public static final Duration DEFAULT_CHECKPOINTING_INTERVAL = Duration.ofMinutes(5);
-
-    public FlinkConfigBuilder(FlinkDeployment deploy, Configuration flinkConfig) {
-        this(deploy.getMetadata(), deploy.getSpec(), flinkConfig);
+    protected FlinkConfigBuilder(FlinkDeployment deployment, Configuration flinkConfig) {
+        this(
+                deployment.getMetadata().getNamespace(),
+                deployment.getMetadata().getName(),
+                deployment.getSpec(),
+                flinkConfig);
     }
 
-    public FlinkConfigBuilder(
-            ObjectMeta metadata, FlinkDeploymentSpec spec, Configuration flinkConfig) {
-        this.meta = metadata;
+    protected FlinkConfigBuilder(
+            String namespace,
+            String clusterId,
+            FlinkDeploymentSpec spec,
+            Configuration flinkConfig) {
+        this.namespace = namespace;
+        this.clusterId = clusterId;
         this.spec = spec;
         this.effectiveConfig = new Configuration(flinkConfig);
     }
 
-    public FlinkConfigBuilder applyImage() {
+    protected FlinkConfigBuilder applyImage() {
         if (!StringUtils.isNullOrWhitespaceOnly(spec.getImage())) {
             effectiveConfig.set(KubernetesConfigOptions.CONTAINER_IMAGE, spec.getImage());
         }
         return this;
     }
 
-    public FlinkConfigBuilder applyImagePullPolicy() {
+    protected FlinkConfigBuilder applyImagePullPolicy() {
         if (!StringUtils.isNullOrWhitespaceOnly(spec.getImagePullPolicy())) {
             effectiveConfig.set(
                     KubernetesConfigOptions.CONTAINER_IMAGE_PULL_POLICY,
@@ -88,7 +104,7 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    public FlinkConfigBuilder applyFlinkConfiguration() {
+    protected FlinkConfigBuilder applyFlinkConfiguration() {
         // Parse config from spec's flinkConfiguration
         if (spec.getFlinkConfiguration() != null && !spec.getFlinkConfiguration().isEmpty()) {
             spec.getFlinkConfiguration().forEach(effectiveConfig::setString);
@@ -122,7 +138,7 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    public FlinkConfigBuilder applyLogConfiguration() throws IOException {
+    protected FlinkConfigBuilder applyLogConfiguration() throws IOException {
         if (spec.getLogConfiguration() != null) {
             String confDir =
                     createLogConfigFiles(
@@ -133,7 +149,7 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    public FlinkConfigBuilder applyCommonPodTemplate() throws IOException {
+    protected FlinkConfigBuilder applyCommonPodTemplate() throws IOException {
         if (spec.getPodTemplate() != null) {
             effectiveConfig.set(
                     KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE,
@@ -142,7 +158,7 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    public FlinkConfigBuilder applyIngressDomain() {
+    protected FlinkConfigBuilder applyIngressDomain() {
         // Web UI
         if (spec.getIngress() != null) {
             effectiveConfig.set(
@@ -152,7 +168,7 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    public FlinkConfigBuilder applyServiceAccount() {
+    protected FlinkConfigBuilder applyServiceAccount() {
         if (spec.getServiceAccount() != null) {
             effectiveConfig.set(
                     KubernetesConfigOptions.KUBERNETES_SERVICE_ACCOUNT, spec.getServiceAccount());
@@ -160,7 +176,7 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    public FlinkConfigBuilder applyJobManagerSpec() throws IOException {
+    protected FlinkConfigBuilder applyJobManagerSpec() throws IOException {
         if (spec.getJobManager() != null) {
             setResource(spec.getJobManager().getResource(), effectiveConfig, true);
             setPodTemplate(
@@ -177,7 +193,7 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    public FlinkConfigBuilder applyTaskManagerSpec() throws IOException {
+    protected FlinkConfigBuilder applyTaskManagerSpec() throws IOException {
         if (spec.getTaskManager() != null) {
             setResource(spec.getTaskManager().getResource(), effectiveConfig, false);
             setPodTemplate(
@@ -189,7 +205,7 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    public FlinkConfigBuilder applyJobOrSessionSpec() throws URISyntaxException {
+    protected FlinkConfigBuilder applyJobOrSessionSpec() throws URISyntaxException {
         if (spec.getJob() != null) {
             effectiveConfig.set(
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());
@@ -207,25 +223,18 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    public Configuration build() {
+    protected Configuration build() {
 
         // Set cluster config
-        final String namespace = meta.getNamespace();
-        final String clusterId = meta.getName();
         effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
         effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
         return effectiveConfig;
     }
 
-    public static Configuration buildFrom(FlinkDeployment dep, Configuration flinkConfig)
+    protected static Configuration buildFrom(
+            String namespace, String clusterId, FlinkDeploymentSpec spec, Configuration flinkConfig)
             throws IOException, URISyntaxException {
-        return buildFrom(dep.getMetadata(), dep.getSpec(), flinkConfig);
-    }
-
-    public static Configuration buildFrom(
-            ObjectMeta meta, FlinkDeploymentSpec spec, Configuration flinkConfig)
-            throws IOException, URISyntaxException {
-        return new FlinkConfigBuilder(meta, spec, flinkConfig)
+        return new FlinkConfigBuilder(namespace, clusterId, spec, flinkConfig)
                 .applyFlinkConfiguration()
                 .applyLogConfiguration()
                 .applyImage()
@@ -273,7 +282,7 @@ public class FlinkConfigBuilder {
 
     private static String createLogConfigFiles(String log4jConf, String logbackConf)
             throws IOException {
-        File tmpDir = Files.createTempDirectory("conf").toFile();
+        File tmpDir = Files.createTempDirectory(GENERATED_FILE_PREFIX + "conf_").toFile();
 
         if (log4jConf != null) {
             File log4jConfFile = new File(tmpDir.getAbsolutePath(), CONFIG_FILE_LOG4J_NAME);
@@ -289,9 +298,37 @@ public class FlinkConfigBuilder {
     }
 
     private static String createTempFile(Pod podTemplate) throws IOException {
-        final File tmp = File.createTempFile("podTemplate_", ".yaml");
+        final File tmp = File.createTempFile(GENERATED_FILE_PREFIX + "podTemplate_", ".yaml");
         Files.write(tmp.toPath(), SerializationUtils.dumpAsYaml(podTemplate).getBytes());
         tmp.deleteOnExit();
         return tmp.getAbsolutePath();
+    }
+
+    protected static void cleanupTmpFiles(Configuration configuration) {
+        configuration
+                .getOptional(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE)
+                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
+        configuration
+                .getOptional(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE)
+                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
+        configuration
+                .getOptional(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE)
+                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
+        configuration
+                .getOptional(DeploymentOptionsInternal.CONF_DIR)
+                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
+    }
+
+    private static void deleteSilentlyIfGenerated(String file) {
+        try {
+            File localFile = new File(file);
+            if (!localFile.getName().startsWith(FlinkConfigBuilder.GENERATED_FILE_PREFIX)) {
+                return;
+            }
+            LOG.debug("Deleting tmp config file {}", localFile);
+            FileUtils.deleteFileOrDirectory(localFile);
+        } catch (Exception err) {
+            LOG.error("Could not clean up file " + file, err);
+        }
     }
 }
