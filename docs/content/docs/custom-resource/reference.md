@@ -46,6 +46,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | job | org.apache.flink.kubernetes.operator.crd.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
+| restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger  restart, change the number to anything other than the current value. |
 | image | java.lang.String | Flink docker image used to start the Job and TaskManager pods. |
 | imagePullPolicy | java.lang.String | Image pull policy of the Flink docker image. |
 | serviceAccount | java.lang.String | Kubernetes service used by the Flink deployment. |
@@ -55,7 +56,6 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | podTemplate | io.fabric8.kubernetes.api.model.Pod | Base pod template for job and task manager pods. Can be overridden by the jobManager and  taskManager pod templates. |
 | jobManager | org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec | JobManager specs. |
 | taskManager | org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec | TaskManager specs. |
-| restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster. In order to trigger restart, change  the number to anything other than the current value. |
 | logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the Flink deployment. Format logConfigFileName ->  configContent. |
 
 ### FlinkSessionJobSpec
@@ -66,6 +66,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | job | org.apache.flink.kubernetes.operator.crd.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
+| restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger  restart, change the number to anything other than the current value. |
 | deploymentName | java.lang.String | The name of the target session cluster deployment. |
 
 ### FlinkVersion

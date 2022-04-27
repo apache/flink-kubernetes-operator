@@ -9044,8 +9044,6 @@ spec:
                         type: object
                     type: object
                 type: object
-              restartNonce:
-                type: integer
               logConfiguration:
                 additionalProperties:
                   type: string
@@ -9078,6 +9076,8 @@ spec:
                     - stateless
                     type: string
                 type: object
+              restartNonce:
+                type: integer
             type: object
           status:
             properties:

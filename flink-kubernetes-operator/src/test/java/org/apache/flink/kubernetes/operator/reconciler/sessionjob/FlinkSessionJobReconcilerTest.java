@@ -78,6 +78,34 @@ public class FlinkSessionJobReconcilerTest {
     }
 
     @Test
+    public void testRestart() throws Exception {
+        TestingFlinkService flinkService = new TestingFlinkService();
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        FlinkSessionJobReconciler reconciler =
+                new FlinkSessionJobReconciler(null, flinkService, configManager);
+        // session ready
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(1, flinkService.listSessionJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob,
+                JobState.RUNNING,
+                JOB_STATE_UNKNOWN,
+                null,
+                flinkService.listSessionJobs());
+        sessionJob.getSpec().setRestartNonce(2L);
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(0, flinkService.listSessionJobs().size());
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob,
+                JobState.RUNNING,
+                JOB_STATE_UNKNOWN,
+                null,
+                flinkService.listSessionJobs());
+    }
+
+    @Test
     public void testSubmitWithInitialSavepointPath() throws Exception {
         TestingFlinkService flinkService = new TestingFlinkService();
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
