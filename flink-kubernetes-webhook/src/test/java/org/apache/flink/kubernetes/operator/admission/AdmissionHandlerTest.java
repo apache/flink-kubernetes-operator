@@ -30,6 +30,7 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultHttpRes
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import io.fabric8.kubernetes.api.model.GroupVersionKind;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionRequest;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
 import org.junit.jupiter.api.Test;
@@ -91,6 +92,11 @@ public class AdmissionHandlerTest {
         final AdmissionRequest admissionRequest = new AdmissionRequest();
         admissionRequest.setOperation(CREATE.name());
         admissionRequest.setObject(flinkDeployment);
+        admissionRequest.setKind(
+                new GroupVersionKind(
+                        flinkDeployment.getGroup(),
+                        flinkDeployment.getVersion(),
+                        flinkDeployment.getKind()));
         final AdmissionReview admissionReview = new AdmissionReview();
         admissionReview.setRequest(admissionRequest);
         embeddedChannel.writeInbound(

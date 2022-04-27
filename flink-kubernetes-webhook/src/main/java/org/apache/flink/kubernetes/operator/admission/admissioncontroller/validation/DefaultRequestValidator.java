@@ -43,7 +43,7 @@ public class DefaultRequestValidator<T extends KubernetesResource> implements Re
         T originalResource = (T) getTargetResource(admissionRequest, operation);
         AdmissionResponse admissionResponse;
         try {
-            validator.validate(originalResource, operation);
+            validator.validate(originalResource, operation, admissionRequest.getKind());
             admissionResponse = allowedAdmissionResponse();
         } catch (NotAllowedException e) {
             admissionResponse = AdmissionUtils.notAllowedExceptionToAdmissionResponse(e);

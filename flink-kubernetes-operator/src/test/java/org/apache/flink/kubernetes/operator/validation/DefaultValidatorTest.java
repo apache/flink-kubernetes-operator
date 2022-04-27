@@ -43,13 +43,14 @@ import org.apache.flink.kubernetes.utils.Constants;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import javax.annotation.Nullable;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -299,21 +300,6 @@ public class DefaultValidatorTest {
                 validatorWithDefaultConfig);
     }
 
-    @Test
-    public void testSessionJobWithSession() {
-        testSessionJobValidateSuccess(job -> {}, session -> {});
-
-        testSessionJobValidateError(
-                sessionJob -> sessionJob.getSpec().setDeploymentName("not-match"),
-                deployment -> {},
-                "The session job's cluster id is not match with the session cluster");
-
-        testSessionJobValidateError(
-                job -> {},
-                deployment -> deployment.getSpec().setJob(new JobSpec()),
-                "Can not submit to application cluster");
-    }
-
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {
         testSuccess(deploymentModifier, validator);
     }
@@ -336,46 +322,59 @@ public class DefaultValidatorTest {
         }
     }
 
-    private void testSessionJobValidateSuccess(
-            Consumer<FlinkSessionJob> sessionJobModifier,
-            Consumer<FlinkDeployment> sessionModifier) {
-        FlinkDeployment session = TestUtils.buildSessionCluster();
-        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+    @Test
+    public void testSessionJobWithSession() {
+        testSessionJobValidateWithModifier(job -> {}, session -> {}, null);
 
-        sessionModifier.accept(session);
-        sessionJobModifier.accept(sessionJob);
-        validator.validateSessionJob(sessionJob, Optional.of(session)).ifPresent(Assertions::fail);
+        testSessionJobValidate(TestUtils.buildSessionJob(), Optional.empty(), null);
+        testSessionJobValidateWithModifier(
+                sessionJob -> sessionJob.getSpec().setDeploymentName("not-match"),
+                deployment -> {},
+                "The session job's cluster id is not match with the session cluster");
+
+        testSessionJobValidateWithModifier(
+                job -> {},
+                deployment -> deployment.getSpec().setJob(new JobSpec()),
+                "Can not submit session job to application cluster");
+
+        testSessionJobValidateWithModifier(
+                sessionJob -> sessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE),
+                flinkDeployment -> {},
+                "The LAST_STATE upgrade mode is not supported in session job now.");
+
+        testSessionJobValidateWithModifier(
+                sessionJob -> {
+                    sessionJob.getSpec().getJob().setState(JobState.SUSPENDED);
+                },
+                flinkDeployment -> {},
+                "Job must start in running state");
     }
 
-    private void testSessionJobValidateError(
+    private void testSessionJobValidateWithModifier(
             Consumer<FlinkSessionJob> sessionJobModifier,
             Consumer<FlinkDeployment> sessionModifier,
-            String expectedErr) {
+            @Nullable String expectedErr) {
         FlinkDeployment session = TestUtils.buildSessionCluster();
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
 
         sessionModifier.accept(session);
         sessionJobModifier.accept(sessionJob);
-        testSessionJobValidateError(sessionJob, Optional.of(session), expectedErr);
+        testSessionJobValidate(sessionJob, Optional.of(session), expectedErr);
     }
 
-    private void testSessionJobValidateError(
-            Consumer<FlinkSessionJob> sessionJobModifier,
-            Supplier<Optional<FlinkDeployment>> sessionSupplier,
-            String expectedErr) {
-        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
-
-        sessionJobModifier.accept(sessionJob);
-        testSessionJobValidateError(sessionJob, sessionSupplier.get(), expectedErr);
-    }
-
-    private void testSessionJobValidateError(
-            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session, String expectedErr) {
+    private void testSessionJobValidate(
+            FlinkSessionJob sessionJob,
+            Optional<FlinkDeployment> session,
+            @Nullable String expectedErr) {
         Optional<String> error = validator.validateSessionJob(sessionJob, session);
-        if (error.isPresent()) {
-            assertTrue(error.get().startsWith(expectedErr), error.get());
+        if (expectedErr == null) {
+            error.ifPresent(Assertions::fail);
         } else {
-            fail("Did not get expected error: " + expectedErr);
+            if (error.isPresent()) {
+                assertTrue(error.get().startsWith(expectedErr), error.get());
+            } else {
+                fail("Did not get expected error: " + expectedErr);
+            }
         }
     }
 }

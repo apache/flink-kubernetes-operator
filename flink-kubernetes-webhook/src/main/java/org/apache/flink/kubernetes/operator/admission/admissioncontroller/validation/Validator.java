@@ -20,10 +20,12 @@ package org.apache.flink.kubernetes.operator.admission.admissioncontroller.valid
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.NotAllowedException;
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation;
 
+import io.fabric8.kubernetes.api.model.GroupVersionKind;
 import io.fabric8.kubernetes.api.model.KubernetesResource;
 
 /** Copied as is from https://github.com/java-operator-sdk/admission-controller-framework. */
 public interface Validator<T extends KubernetesResource> {
 
-    void validate(T resource, Operation operation) throws NotAllowedException;
+    void validate(T resource, Operation operation, GroupVersionKind kind)
+            throws NotAllowedException;
 }
