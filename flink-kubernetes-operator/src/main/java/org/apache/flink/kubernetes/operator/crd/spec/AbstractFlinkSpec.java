@@ -24,7 +24,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
-/** The common view of the spec. */
+/** The common spec. */
 @Experimental
 @Data
 @AllArgsConstructor
@@ -34,4 +34,10 @@ public abstract class AbstractFlinkSpec {
 
     /** Job specification for application deployments/session job. Null for session clusters. */
     private JobSpec job;
+
+    /**
+     * Nonce used to manually trigger restart for the cluster/session job. In order to trigger
+     * restart, change the number to anything other than the current value.
+     */
+    private Long restartNonce;
 }

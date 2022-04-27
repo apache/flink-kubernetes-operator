@@ -69,12 +69,6 @@ public class FlinkDeploymentSpec extends AbstractFlinkSpec {
     private TaskManagerSpec taskManager;
 
     /**
-     * Nonce used to manually trigger restart for the cluster. In order to trigger restart, change
-     * the number to anything other than the current value.
-     */
-    private Long restartNonce;
-
-    /**
      * Log configuration overrides for the Flink deployment. Format logConfigFileName ->
      * configContent.
      */
