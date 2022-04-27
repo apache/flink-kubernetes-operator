@@ -83,7 +83,7 @@ metadata:
     cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/flink-operator-serving-cert
   name: flink-operator-{{ .Release.Namespace }}-webhook-configuration
 webhooks:
-- name: vflinkdeployments.flink.apache.org
+- name: flinkoperator.flink.apache.org
   admissionReviewVersions: ["v1"]
   clientConfig:
     service:
@@ -100,6 +100,7 @@ webhooks:
     - UPDATE
     resources:
     - flinkdeployments
+    - flinksessionjobs
   sideEffects: None
   {{- if .Values.watchNamespaces }}
   namespaceSelector:

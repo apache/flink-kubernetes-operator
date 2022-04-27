@@ -21,4 +21,6 @@ package org.apache.flink.kubernetes.operator.crd;
 public class CrdConstants {
     public static final String API_GROUP = "flink.apache.org";
     public static final String API_VERSION = "v1beta1";
+    public static final String KIND_SESSION_JOB = "FlinkSessionJob";
+    public static final String KIND_FLINK_DEPLOYMENT = "FlinkDeployment";
 }

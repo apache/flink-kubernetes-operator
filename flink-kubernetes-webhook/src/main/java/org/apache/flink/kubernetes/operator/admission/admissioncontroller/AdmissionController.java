@@ -35,8 +35,8 @@ public class AdmissionController<T extends KubernetesResource> {
         this(new DefaultRequestMutator<>(mutator));
     }
 
-    public AdmissionController(Validator<T> mutator) {
-        this(new DefaultRequestValidator<>(mutator));
+    public AdmissionController(Validator<T> validator) {
+        this(new DefaultRequestValidator<>(validator));
     }
 
     public AdmissionController(RequestHandler requestHandler) {

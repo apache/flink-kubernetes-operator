@@ -19,16 +19,10 @@
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
-  name: basic-session-cluster-with-ha
+  name: basic-session-cluster
 spec:
   image: flink:1.14
   flinkVersion: v1_14
-  flinkConfiguration:
-    taskmanager.numberOfTaskSlots: "2"
-    state.savepoints.dir: file:///flink-data/savepoints
-    high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
-    high-availability.storageDir: file:///flink-data/ha
-#    kubernetes.rest-service.exposed.type: LoadBalancer
   jobManager:
     replicas: 1
     resource:
@@ -38,43 +32,28 @@ spec:
     resource:
       memory: "2048m"
       cpu: 1
-  podTemplate:
-    spec:
-      serviceAccount: flink
-      containers:
-        - name: flink-main-container
-          volumeMounts:
-            - mountPath: /flink-data
-              name: flink-volume
-      volumes:
-        - name: flink-volume
-          hostPath:
-            # directory location on host
-            path: /tmp/flink
-            # this field is optional
-            type: Directory
+  serviceAccount: flink
 ---
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkSessionJob
 metadata:
-  name: basic-session-ha-job-example
+  name: basic-session-job-example
 spec:
-  deploymentName: basic-session-cluster-with-ha
+  deploymentName: basic-session-cluster
   job:
-    jarURI: file:///opt/flink/artifacts/TopSpeedWindowing.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.3/flink-examples-streaming_2.12-1.14.3-TopSpeedWindowing.jar
     parallelism: 4
-    upgradeMode: savepoint
-    savepointTriggerNonce: 1
+    upgradeMode: stateless
 
 ---
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkSessionJob
 metadata:
-  name: basic-session-ha-job-example2
+  name: basic-session-job-example2
 spec:
-  deploymentName: basic-session-cluster-with-ha
+  deploymentName: basic-session-cluster
   job:
-    jarURI: file:///opt/flink/artifacts/flink-examples-streaming_2.12-1.14.3.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.3/flink-examples-streaming_2.12-1.14.3.jar
     parallelism: 2
     upgradeMode: stateless
     entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample

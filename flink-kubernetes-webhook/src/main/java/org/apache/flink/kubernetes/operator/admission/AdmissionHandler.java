@@ -40,7 +40,7 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.LastHttpConten
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.QueryStringDecoder;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
+import io.fabric8.kubernetes.api.model.KubernetesResource;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
@@ -64,9 +64,9 @@ public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
     private static final ObjectMapper objectMapper = new ObjectMapper();
     protected static final String VALIDATE_REQUEST_PATH = "/validate";
 
-    private final AdmissionController<GenericKubernetesResource> validatingController;
+    private final AdmissionController<KubernetesResource> validatingController;
 
-    public AdmissionHandler(Validator<GenericKubernetesResource> validator) {
+    public AdmissionHandler(Validator<KubernetesResource> validator) {
         this.validatingController = new AdmissionController<>(validator);
     }
 
@@ -83,6 +83,7 @@ public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
                 AdmissionReview response = validatingController.handle(review);
                 sendResponse(ctx, objectMapper.writeValueAsString(response));
             } catch (Exception e) {
+                LOG.error("Failed to validate", e);
                 sendError(ctx, ExceptionUtils.getStackTrace(e));
             }
         } else {

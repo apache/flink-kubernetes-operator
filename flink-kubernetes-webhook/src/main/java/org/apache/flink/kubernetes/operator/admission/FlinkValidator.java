@@ -20,11 +20,16 @@ package org.apache.flink.kubernetes.operator.admission;
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.NotAllowedException;
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation;
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.validation.Validator;
+import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
+import io.fabric8.kubernetes.api.model.GroupVersionKind;
+import io.fabric8.kubernetes.api.model.KubernetesResource;
+import io.fabric8.kubernetes.client.DefaultKubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,26 +37,54 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Validator for FlinkDeployment creation and updates. */
-public class FlinkValidator implements Validator<GenericKubernetesResource> {
+public class FlinkValidator implements Validator<KubernetesResource> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkValidator.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private final Set<FlinkResourceValidator> validators;
+    private final KubernetesClient client;
 
     public FlinkValidator(Set<FlinkResourceValidator> validators) {
         this.validators = validators;
+        this.client = new DefaultKubernetesClient();
     }
 
     @Override
-    public void validate(GenericKubernetesResource resource, Operation operation)
+    public void validate(KubernetesResource resource, Operation operation, GroupVersionKind kind)
             throws NotAllowedException {
         LOG.debug("Validating resource {}", resource);
 
+        if (CrdConstants.KIND_FLINK_DEPLOYMENT.equals(kind.getKind())) {
+            validateDeployment(resource);
+        } else if (CrdConstants.KIND_SESSION_JOB.equals(kind.getKind())) {
+            validateSessionJob(resource);
+        } else {
+            throw new NotAllowedException("Unexpected resource: " + kind.getKind());
+        }
+    }
+
+    private void validateDeployment(KubernetesResource resource) {
         FlinkDeployment flinkDeployment =
                 objectMapper.convertValue(resource, FlinkDeployment.class);
-
         for (FlinkResourceValidator validator : validators) {
             Optional<String> validationError = validator.validateDeployment(flinkDeployment);
+            if (validationError.isPresent()) {
+                throw new NotAllowedException(validationError.get());
+            }
+        }
+    }
+
+    private void validateSessionJob(KubernetesResource resource) {
+        FlinkSessionJob sessionJob = objectMapper.convertValue(resource, FlinkSessionJob.class);
+        var deployment =
+                client.resources(FlinkDeployment.class)
+                        .inNamespace(sessionJob.getMetadata().getNamespace())
+                        .withName(sessionJob.getSpec().getDeploymentName())
+                        .get();
+
+        for (FlinkResourceValidator validator : validators) {
+            Optional<String> validationError =
+                    validator.validateSessionJob(sessionJob, Optional.ofNullable(deployment));
             if (validationError.isPresent()) {
                 throw new NotAllowedException(validationError.get());
             }

@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
@@ -287,12 +288,35 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     @Override
     public Optional<String> validateSessionJob(
-            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
+            FlinkSessionJob sessionJob, Optional<FlinkDeployment> sessionOpt) {
 
+        if (sessionOpt.isEmpty()) {
+            return validateSessionJobOnly(sessionJob);
+        } else {
+            return firstPresent(
+                    validateSessionJobOnly(sessionJob),
+                    validateSessionJobWithCluster(sessionJob, sessionOpt.get()));
+        }
+    }
+
+    private Optional<String> validateSessionJobOnly(FlinkSessionJob sessionJob) {
         return firstPresent(
                 validateJobNotEmpty(sessionJob),
-                validateNotApplicationCluster(session),
-                validateSessionClusterId(sessionJob, session));
+                validateNotLastStateUpgradeMode(sessionJob),
+                validateSpecChange(sessionJob));
+    }
+
+    private Optional<String> validateSessionJobWithCluster(
+            FlinkSessionJob sessionJob, FlinkDeployment sessionCluster) {
+        Map<String, String> effectiveConfig = configManager.getDefaultConfig().toMap();
+        if (sessionCluster.getSpec().getFlinkConfiguration() != null) {
+            effectiveConfig.putAll(sessionCluster.getSpec().getFlinkConfiguration());
+        }
+
+        return firstPresent(
+                validateNotApplicationCluster(sessionCluster),
+                validateSessionClusterId(sessionJob, sessionCluster),
+                validateJobSpec(sessionJob.getSpec().getJob(), effectiveConfig));
     }
 
     private Optional<String> validateJobNotEmpty(FlinkSessionJob sessionJob) {
@@ -302,30 +326,63 @@ public class DefaultValidator implements FlinkResourceValidator {
         return Optional.empty();
     }
 
-    private Optional<String> validateSessionClusterId(
-            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
-        return session.flatMap(
-                deployment -> {
-                    if (!deployment
-                            .getMetadata()
-                            .getName()
-                            .equals(sessionJob.getSpec().getDeploymentName())) {
-                        return Optional.of(
-                                "The session job's cluster id is not match with the session cluster");
-                    } else {
-                        return Optional.empty();
-                    }
-                });
+    private Optional<String> validateNotApplicationCluster(FlinkDeployment session) {
+        if (session.getSpec().getJob() != null) {
+            return Optional.of("Can not submit session job to application cluster");
+        } else {
+            return Optional.empty();
+        }
     }
 
-    private Optional<String> validateNotApplicationCluster(Optional<FlinkDeployment> session) {
-        return session.flatMap(
-                deployment -> {
-                    if (deployment.getSpec().getJob() != null) {
-                        return Optional.of("Can not submit to application cluster");
-                    } else {
-                        return Optional.empty();
-                    }
-                });
+    private Optional<String> validateSessionClusterId(
+            FlinkSessionJob sessionJob, FlinkDeployment session) {
+        var deploymentName = session.getMetadata().getName();
+        if (!deploymentName.equals(sessionJob.getSpec().getDeploymentName())) {
+            return Optional.of(
+                    "The session job's cluster id is not match with the session cluster");
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<String> validateNotLastStateUpgradeMode(FlinkSessionJob sessionJob) {
+        if (sessionJob.getSpec().getJob().getUpgradeMode() == UpgradeMode.LAST_STATE) {
+            return Optional.of(
+                    String.format(
+                            "The %s upgrade mode is not supported in session job now.",
+                            UpgradeMode.LAST_STATE));
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateSpecChange(FlinkSessionJob sessionJob) {
+        FlinkSessionJobSpec newSpec = sessionJob.getSpec();
+
+        if (sessionJob.getStatus() == null
+                || sessionJob.getStatus().getReconciliationStatus() == null
+                || sessionJob.getStatus().getReconciliationStatus().getLastReconciledSpec()
+                        == null) {
+            // New job
+            if (newSpec.getJob() != null && !newSpec.getJob().getState().equals(JobState.RUNNING)) {
+                return Optional.of("Job must start in running state");
+            }
+
+            return Optional.empty();
+        }
+
+        FlinkSessionJobSpec oldSpec =
+                sessionJob.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+
+        JobSpec oldJob = oldSpec.getJob();
+        JobSpec newJob = newSpec.getJob();
+        if (oldJob.getState() == JobState.SUSPENDED
+                && newJob.getState() == JobState.RUNNING
+                && newJob.getUpgradeMode() == UpgradeMode.SAVEPOINT
+                && (sessionJob.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint()
+                        == null)) {
+            return Optional.of("Cannot perform savepoint restore without a valid savepoint");
+        }
+
+        return Optional.empty();
     }
 }
