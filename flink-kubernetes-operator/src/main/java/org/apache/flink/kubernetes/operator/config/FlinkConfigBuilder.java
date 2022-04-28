@@ -272,12 +272,17 @@ public class FlinkConfigBuilder {
             return;
         }
 
-        final ConfigOption<String> podConfigOption =
-                isJM
-                        ? KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE
-                        : KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE;
-        effectiveConfig.setString(
-                podConfigOption, createTempFile(mergePodTemplates(basicPod, appendPod)));
+        // Avoid to create temporary pod template files for JobManager and TaskManager if it is not
+        // configured explicitly via .spec.JobManagerSpec.podTemplate or
+        // .spec.TaskManagerSpec.podTemplate.
+        if (appendPod != null) {
+            final ConfigOption<String> podConfigOption =
+                    isJM
+                            ? KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE
+                            : KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE;
+            effectiveConfig.setString(
+                    podConfigOption, createTempFile(mergePodTemplates(basicPod, appendPod)));
+        }
     }
 
     private static String createLogConfigFiles(String log4jConf, String logbackConf)
