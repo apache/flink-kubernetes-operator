@@ -36,6 +36,7 @@ import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.Set;
 
 import static org.apache.flink.kubernetes.operator.admission.AdmissionHandler.VALIDATE_REQUEST_PATH;
 import static org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation.CREATE;
@@ -52,7 +53,9 @@ public class AdmissionHandlerTest {
     private final AdmissionHandler admissionHandler =
             new AdmissionHandler(
                     new FlinkValidator(
-                            new DefaultValidator(new FlinkConfigManager(new Configuration()))));
+                            Set.of(
+                                    new DefaultValidator(
+                                            new FlinkConfigManager(new Configuration())))));
 
     @Test
     public void testHandleIllegalRequest() {
