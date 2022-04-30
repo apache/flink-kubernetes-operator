@@ -17,11 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.validation.DefaultValidator;
+import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
 import org.apache.flink.shaded.netty4.io.netty.channel.embedded.EmbeddedChannel;
@@ -36,7 +35,6 @@ import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.util.Set;
 
 import static org.apache.flink.kubernetes.operator.admission.AdmissionHandler.VALIDATE_REQUEST_PATH;
 import static org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation.CREATE;
@@ -53,9 +51,7 @@ public class AdmissionHandlerTest {
     private final AdmissionHandler admissionHandler =
             new AdmissionHandler(
                     new FlinkValidator(
-                            Set.of(
-                                    new DefaultValidator(
-                                            new FlinkConfigManager(new Configuration())))));
+                            ValidatorUtils.discoverValidators(new FlinkConfigManager())));
 
     @Test
     public void testHandleIllegalRequest() {
