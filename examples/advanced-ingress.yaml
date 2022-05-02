@@ -19,7 +19,6 @@
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
-  namespace: default
   name: advanced-ingress
 spec:
   image: flink:1.14
