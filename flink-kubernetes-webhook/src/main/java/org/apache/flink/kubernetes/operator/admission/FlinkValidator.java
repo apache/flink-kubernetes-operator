@@ -29,16 +29,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
+import java.util.Set;
 
 /** Validator for FlinkDeployment creation and updates. */
 public class FlinkValidator implements Validator<GenericKubernetesResource> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkValidator.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private final FlinkResourceValidator deploymentValidator;
+    private final Set<FlinkResourceValidator> validators;
 
-    public FlinkValidator(FlinkResourceValidator deploymentValidator) {
-        this.deploymentValidator = deploymentValidator;
+    public FlinkValidator(Set<FlinkResourceValidator> validators) {
+        this.validators = validators;
     }
 
     @Override
@@ -49,9 +50,11 @@ public class FlinkValidator implements Validator<GenericKubernetesResource> {
         FlinkDeployment flinkDeployment =
                 objectMapper.convertValue(resource, FlinkDeployment.class);
 
-        Optional<String> validationError = deploymentValidator.validateDeployment(flinkDeployment);
-        if (validationError.isPresent()) {
-            throw new NotAllowedException(validationError.get());
+        for (FlinkResourceValidator validator : validators) {
+            Optional<String> validationError = validator.validateDeployment(flinkDeployment);
+            if (validationError.isPresent()) {
+                throw new NotAllowedException(validationError.get());
+            }
         }
     }
 }
