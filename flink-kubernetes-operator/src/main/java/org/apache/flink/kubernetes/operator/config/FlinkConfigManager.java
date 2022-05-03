@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -54,9 +55,6 @@ public class FlinkConfigManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigManager.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
-
-    private static final int MAX_CACHE_SIZE = 1000;
-    private static final Duration CACHE_TIMEOUT = Duration.ofMinutes(30);
 
     private volatile Configuration defaultConfig;
     private volatile FlinkOperatorConfiguration operatorConfiguration;
@@ -70,10 +68,14 @@ public class FlinkConfigManager {
     }
 
     public FlinkConfigManager(Configuration defaultConfig) {
+        Duration cacheTimeout =
+                defaultConfig.get(KubernetesOperatorConfigOptions.OPERATOR_CONFIG_CACHE_TIMEOUT);
         this.cache =
                 CacheBuilder.newBuilder()
-                        .maximumSize(MAX_CACHE_SIZE)
-                        .expireAfterAccess(CACHE_TIMEOUT)
+                        .maximumSize(
+                                defaultConfig.get(
+                                        KubernetesOperatorConfigOptions.OPERATOR_CONFIG_CACHE_SIZE))
+                        .expireAfterAccess(cacheTimeout)
                         .removalListener(
                                 removalNotification ->
                                         FlinkConfigBuilder.cleanupTmpFiles(
@@ -87,8 +89,15 @@ public class FlinkConfigManager {
                                 });
 
         updateDefaultConfig(defaultConfig);
+        ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+        executorService.scheduleWithFixedDelay(
+                cache::cleanUp,
+                cacheTimeout.toMillis(),
+                cacheTimeout.toMillis(),
+                TimeUnit.MILLISECONDS);
+
         if (defaultConfig.getBoolean(OPERATOR_DYNAMIC_CONFIG_ENABLED)) {
-            scheduleConfigWatcher();
+            scheduleConfigWatcher(executorService);
         }
     }
 
@@ -151,11 +160,11 @@ public class FlinkConfigManager {
         }
     }
 
-    private void scheduleConfigWatcher() {
+    private void scheduleConfigWatcher(ScheduledExecutorService executorService) {
         var checkInterval = defaultConfig.get(OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL);
         var millis = checkInterval.toMillis();
-        Executors.newSingleThreadScheduledExecutor()
-                .scheduleAtFixedRate(new ConfigUpdater(), millis, millis, TimeUnit.MILLISECONDS);
+        executorService.scheduleAtFixedRate(
+                new ConfigUpdater(), millis, millis, TimeUnit.MILLISECONDS);
         LOG.info("Enabled dynamic config updates, checking config changes every {}", checkInterval);
     }
 

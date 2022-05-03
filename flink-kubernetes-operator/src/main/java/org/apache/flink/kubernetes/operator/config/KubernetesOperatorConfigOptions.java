@@ -122,4 +122,16 @@ public class KubernetesOperatorConfigOptions {
                     .durationType()
                     .defaultValue(Duration.ofMinutes(5))
                     .withDescription("Time interval for checking config changes.");
+
+    public static final ConfigOption<Duration> OPERATOR_CONFIG_CACHE_TIMEOUT =
+            ConfigOptions.key("kubernetes.operator.config.cache.timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(10))
+                    .withDescription("Expiration time for cached configs.");
+
+    public static final ConfigOption<Integer> OPERATOR_CONFIG_CACHE_SIZE =
+            ConfigOptions.key("kubernetes.operator.config.cache.size")
+                    .intType()
+                    .defaultValue(1000)
+                    .withDescription("Max config cache size.");
 }
