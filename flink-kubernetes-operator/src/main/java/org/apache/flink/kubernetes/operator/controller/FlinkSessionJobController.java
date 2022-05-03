@@ -21,6 +21,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -73,6 +74,7 @@ public class FlinkSessionJobController
     private final Set<FlinkResourceValidator> validators;
     private final Reconciler<FlinkSessionJob> reconciler;
     private final Observer<FlinkSessionJob> observer;
+    private final MetricManager<FlinkSessionJob> metricManager;
     private Map<String, SharedIndexInformer<FlinkSessionJob>> informers;
     private FlinkControllerConfig<FlinkSessionJob> controllerConfig;
 
@@ -81,12 +83,14 @@ public class FlinkSessionJobController
             KubernetesClient kubernetesClient,
             Set<FlinkResourceValidator> validators,
             Reconciler<FlinkSessionJob> reconciler,
-            Observer<FlinkSessionJob> observer) {
+            Observer<FlinkSessionJob> observer,
+            MetricManager<FlinkSessionJob> metricManager) {
         this.configManager = configManager;
         this.kubernetesClient = kubernetesClient;
         this.validators = validators;
         this.reconciler = reconciler;
         this.observer = observer;
+        this.metricManager = metricManager;
     }
 
     public void init(FlinkControllerConfig<FlinkSessionJob> config) {
@@ -105,6 +109,7 @@ public class FlinkSessionJobController
             LOG.error("Validation failed: " + validationError.get());
             ReconciliationUtils.updateForReconciliationError(
                     flinkSessionJob, validationError.get());
+            metricManager.onUpdate(flinkSessionJob);
             return ReconciliationUtils.toUpdateControl(originalCopy, flinkSessionJob);
         }
 
@@ -114,7 +119,7 @@ public class FlinkSessionJobController
         } catch (Exception e) {
             throw new ReconciliationException(e);
         }
-
+        metricManager.onUpdate(flinkSessionJob);
         return ReconciliationUtils.toUpdateControl(originalCopy, flinkSessionJob)
                 .rescheduleAfter(
                         configManager.getOperatorConfiguration().getReconcileInterval().toMillis());
@@ -123,7 +128,7 @@ public class FlinkSessionJobController
     @Override
     public DeleteControl cleanup(FlinkSessionJob sessionJob, Context context) {
         LOG.info("Deleting FlinkSessionJob");
-
+        metricManager.onRemove(sessionJob);
         return reconciler.cleanup(sessionJob, context);
     }
 
@@ -138,6 +143,7 @@ public class FlinkSessionJobController
         ReconciliationUtils.updateForReconciliationError(
                 flinkSessionJob,
                 (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
+        metricManager.onUpdate(flinkSessionJob);
         return Optional.of(flinkSessionJob);
     }
 

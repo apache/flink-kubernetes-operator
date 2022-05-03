@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
@@ -40,6 +41,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
+import org.apache.flink.metrics.MetricGroup;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -66,6 +68,7 @@ public class FlinkOperator {
     private final ConfigurationService configurationService;
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
+    private final MetricGroup metricGroup;
 
     public FlinkOperator(@Nullable Configuration conf) {
         this.client = new DefaultKubernetesClient();
@@ -75,7 +78,8 @@ public class FlinkOperator {
         this.operator = new Operator(client, configurationService);
         this.flinkService = new FlinkService(client, configManager);
         this.validators = ValidatorUtils.discoverValidators(configManager);
-        OperatorMetricUtils.initOperatorMetrics(configManager.getDefaultConfig());
+        this.metricGroup =
+                OperatorMetricUtils.initOperatorMetrics(configManager.getDefaultConfig());
         PluginManager pluginManager =
                 PluginUtils.createPluginManagerFromRootFolder(configManager.getDefaultConfig());
         FileSystem.initialize(configManager.getDefaultConfig(), pluginManager);
@@ -88,7 +92,12 @@ public class FlinkOperator {
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(
-                        configManager, client, validators, reconcilerFactory, observerFactory);
+                        configManager,
+                        client,
+                        validators,
+                        reconcilerFactory,
+                        observerFactory,
+                        new MetricManager<>(metricGroup));
 
         FlinkControllerConfig<FlinkDeployment> controllerConfig =
                 new FlinkControllerConfig<>(
@@ -105,7 +114,12 @@ public class FlinkOperator {
         Observer<FlinkSessionJob> observer = new SessionJobObserver(flinkService, configManager);
         FlinkSessionJobController controller =
                 new FlinkSessionJobController(
-                        configManager, client, validators, reconciler, observer);
+                        configManager,
+                        client,
+                        validators,
+                        reconciler,
+                        observer,
+                        new MetricManager<>(metricGroup));
 
         FlinkControllerConfig<FlinkSessionJob> controllerConfig =
                 new FlinkControllerConfig<>(
