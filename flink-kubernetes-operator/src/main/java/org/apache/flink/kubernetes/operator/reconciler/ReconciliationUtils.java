@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -25,9 +26,12 @@ import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -254,5 +258,44 @@ public class ReconciliationUtils {
         return Instant.now()
                 .minus(readinessTimeout)
                 .isAfter(Instant.ofEpochMilli(reconciliationStatus.getReconciliationTimestamp()));
+    }
+
+    public static boolean deploymentRecoveryEnabled(Configuration conf) {
+        return conf.getOptional(
+                        KubernetesOperatorConfigOptions.OPERATOR_RECOVER_JM_DEPLOYMENT_ENABLED)
+                .orElse(
+                        conf.get(FlinkConfigBuilder.FLINK_VERSION)
+                                        .isNewerVersionThan(FlinkVersion.v1_14)
+                                ? true
+                                : false);
+    }
+
+    public static boolean jobManagerMissingForRunningDeployment(FlinkDeploymentStatus status) {
+        return status.getReconciliationStatus().deserializeLastReconciledSpec().getJob().getState()
+                        == JobState.RUNNING
+                && (status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING
+                        || status.getJobManagerDeploymentStatus()
+                                == JobManagerDeploymentStatus.ERROR);
+    }
+
+    public static boolean isJobInTerminalState(FlinkDeploymentStatus status) {
+        JobManagerDeploymentStatus deploymentStatus = status.getJobManagerDeploymentStatus();
+        if (deploymentStatus == JobManagerDeploymentStatus.MISSING
+                || deploymentStatus == JobManagerDeploymentStatus.ERROR) {
+            return true;
+        }
+
+        String jobState = status.getJobStatus().getState();
+
+        return deploymentStatus == JobManagerDeploymentStatus.READY
+                && org.apache.flink.api.common.JobStatus.valueOf(jobState).isTerminalState();
+    }
+
+    public static boolean isJobRunning(FlinkDeploymentStatus status) {
+        JobManagerDeploymentStatus deploymentStatus = status.getJobManagerDeploymentStatus();
+        return deploymentStatus == JobManagerDeploymentStatus.READY
+                && org.apache.flink.api.common.JobStatus.RUNNING
+                        .name()
+                        .equals(status.getJobStatus().getState());
     }
 }

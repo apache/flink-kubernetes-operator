@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.TestingClusterClient;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
@@ -44,7 +45,6 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -58,19 +58,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class FlinkServiceTest {
     KubernetesClient client;
     private final Configuration configuration = new Configuration();
-    private static final String CLUSTER_ID = "testing-flink-cluster";
-    private static final String TESTING_NAMESPACE = "test";
 
     @BeforeEach
     public void setup() {
-        configuration.set(KubernetesConfigOptions.CLUSTER_ID, CLUSTER_ID);
-        configuration.set(KubernetesConfigOptions.NAMESPACE, TESTING_NAMESPACE);
+        configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
+        configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
     }
 
     @Test
     public void testCancelJobWithStatelessUpgradeMode() throws Exception {
         final TestingClusterClient<String> testingClusterClient =
-                new TestingClusterClient<>(configuration, CLUSTER_ID);
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final CompletableFuture<JobID> cancelFuture = new CompletableFuture<>();
         testingClusterClient.setCancelFunction(
                 jobID -> {
@@ -80,18 +78,21 @@ public class FlinkServiceTest {
 
         final FlinkService flinkService = createFlinkService(testingClusterClient);
 
-        final JobID jobID = JobID.generate();
-        Optional<String> result =
-                flinkService.cancelJob(jobID, UpgradeMode.STATELESS, configuration);
+        JobID jobID = JobID.generate();
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        JobStatus jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+
+        flinkService.cancelJob(deployment, UpgradeMode.STATELESS);
         assertTrue(cancelFuture.isDone());
         assertEquals(jobID, cancelFuture.get());
-        assertFalse(result.isPresent());
+        assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
     }
 
     @Test
     public void testCancelJobWithSavepointUpgradeMode() throws Exception {
         final TestingClusterClient<String> testingClusterClient =
-                new TestingClusterClient<>(configuration, CLUSTER_ID);
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final CompletableFuture<Tuple3<JobID, Boolean, String>> stopWithSavepointFuture =
                 new CompletableFuture<>();
         final String savepointPath = "file:///path/of/svp-1";
@@ -105,53 +106,65 @@ public class FlinkServiceTest {
 
         final FlinkService flinkService = createFlinkService(testingClusterClient);
 
-        final JobID jobID = JobID.generate();
-        Optional<String> result =
-                flinkService.cancelJob(jobID, UpgradeMode.SAVEPOINT, configuration);
+        JobID jobID = JobID.generate();
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), savepointPath);
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        JobStatus jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+
+        flinkService.cancelJob(deployment, UpgradeMode.SAVEPOINT);
         assertTrue(stopWithSavepointFuture.isDone());
         assertEquals(jobID, stopWithSavepointFuture.get().f0);
         assertFalse(stopWithSavepointFuture.get().f1);
         assertEquals(savepointPath, stopWithSavepointFuture.get().f2);
-        assertTrue(result.isPresent());
-        assertEquals(savepointPath, result.get());
+        assertEquals(savepointPath, jobStatus.getSavepointInfo().getLastSavepoint().getLocation());
     }
 
     @Test
     public void testCancelJobWithLastStateUpgradeMode() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         configuration.set(
                 HighAvailabilityOptions.HA_MODE,
                 KubernetesHaServicesFactory.class.getCanonicalName());
         configuration.set(HighAvailabilityOptions.HA_STORAGE_PATH, "file:///path/of/ha");
         final TestingClusterClient<String> testingClusterClient =
-                new TestingClusterClient<>(configuration, CLUSTER_ID);
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final FlinkService flinkService = createFlinkService(testingClusterClient);
 
         client.apps()
                 .deployments()
-                .inNamespace(TESTING_NAMESPACE)
+                .inNamespace(TestUtils.TEST_NAMESPACE)
                 .create(createTestingDeployment());
         assertNotNull(
                 client.apps()
                         .deployments()
-                        .inNamespace(TESTING_NAMESPACE)
-                        .withName(CLUSTER_ID)
+                        .inNamespace(TestUtils.TEST_NAMESPACE)
+                        .withName(TestUtils.TEST_DEPLOYMENT_NAME)
                         .get());
-        final JobID jobID = JobID.generate();
-        Optional<String> result =
-                flinkService.cancelJob(jobID, UpgradeMode.LAST_STATE, configuration);
-        assertFalse(result.isPresent());
+
+        JobID jobID = JobID.generate();
+        JobStatus jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+
+        flinkService.cancelJob(deployment, UpgradeMode.LAST_STATE);
+        assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
         assertNull(
                 client.apps()
                         .deployments()
-                        .inNamespace(TESTING_NAMESPACE)
-                        .withName(CLUSTER_ID)
+                        .inNamespace(TestUtils.TEST_NAMESPACE)
+                        .withName(TestUtils.TEST_DEPLOYMENT_NAME)
                         .get());
     }
 
     @Test
     public void testTriggerSavepoint() throws Exception {
         final TestingClusterClient<String> testingClusterClient =
-                new TestingClusterClient<>(configuration, CLUSTER_ID);
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final CompletableFuture<Tuple3<JobID, String, Boolean>> triggerSavepointFuture =
                 new CompletableFuture<>();
         final String savepointPath = "file:///path/of/svp";
@@ -197,8 +210,8 @@ public class FlinkServiceTest {
     private Deployment createTestingDeployment() {
         return new DeploymentBuilder()
                 .withNewMetadata()
-                .withName(CLUSTER_ID)
-                .withNamespace(TESTING_NAMESPACE)
+                .withName(TestUtils.TEST_DEPLOYMENT_NAME)
+                .withNamespace(TestUtils.TEST_NAMESPACE)
                 .endMetadata()
                 .withNewSpec()
                 .endSpec()

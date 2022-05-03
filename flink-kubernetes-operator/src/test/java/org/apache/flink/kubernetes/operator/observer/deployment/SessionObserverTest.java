@@ -49,7 +49,7 @@ public class SessionObserverTest {
     public void observeSessionCluster() {
         TestingFlinkService flinkService = new TestingFlinkService();
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
-        SessionObserver observer = new SessionObserver(flinkService, configManager);
+        SessionObserver observer = new SessionObserver(null, flinkService, configManager);
         deployment
                 .getStatus()
                 .getReconciliationStatus()
@@ -111,7 +111,7 @@ public class SessionObserverTest {
         k8sDeployment.setStatus(new DeploymentStatus());
 
         AtomicInteger secondaryResourceAccessed = new AtomicInteger(0);
-        Observer observer = new SessionObserver(flinkService, configManager);
+        Observer observer = new SessionObserver(null, flinkService, configManager);
         observer.observe(
                 deployment,
                 new Context() {

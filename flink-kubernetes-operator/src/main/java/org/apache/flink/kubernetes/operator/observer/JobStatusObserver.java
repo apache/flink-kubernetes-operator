@@ -30,8 +30,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 
-import static org.apache.flink.kubernetes.operator.observer.deployment.AbstractDeploymentObserver.JOB_STATE_UNKNOWN;
-
 /** An observer to observe the job status. */
 public abstract class JobStatusObserver<CTX> {
 
@@ -57,7 +55,7 @@ public abstract class JobStatusObserver<CTX> {
             clusterJobStatuses = new ArrayList<>(flinkService.listJobs(deployedConfig));
         } catch (Exception e) {
             LOG.error("Exception while listing jobs", e);
-            jobStatus.setState(JOB_STATE_UNKNOWN);
+            jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
             if (e instanceof TimeoutException) {
                 onTimeout(ctx);
             }
@@ -67,7 +65,7 @@ public abstract class JobStatusObserver<CTX> {
         if (!clusterJobStatuses.isEmpty()) {
             Optional<String> targetJobStatus = updateJobStatus(jobStatus, clusterJobStatuses);
             if (targetJobStatus.isEmpty()) {
-                jobStatus.setState(JOB_STATE_UNKNOWN);
+                jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
                 return false;
             } else {
                 if (targetJobStatus.get().equals(previousJobStatus)) {
@@ -76,12 +74,12 @@ public abstract class JobStatusObserver<CTX> {
                     LOG.info(
                             "Job status successfully updated from {} to {}",
                             previousJobStatus,
-                            targetJobStatus);
+                            targetJobStatus.get());
                 }
             }
             return true;
         } else {
-            jobStatus.setState(JOB_STATE_UNKNOWN);
+            jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
             LOG.info("No job found on cluster yet");
             return false;
         }

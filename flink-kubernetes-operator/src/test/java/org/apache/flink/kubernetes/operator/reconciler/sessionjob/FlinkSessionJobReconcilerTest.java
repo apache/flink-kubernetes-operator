@@ -38,7 +38,6 @@ import javax.annotation.Nullable;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static org.apache.flink.kubernetes.operator.observer.deployment.AbstractDeploymentObserver.JOB_STATE_UNKNOWN;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -69,7 +68,7 @@ public class FlinkSessionJobReconcilerTest {
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
                 JobState.RUNNING,
-                JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 null,
                 flinkService.listSessionJobs());
         // clean up
@@ -90,7 +89,7 @@ public class FlinkSessionJobReconcilerTest {
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
                 JobState.RUNNING,
-                JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 null,
                 flinkService.listSessionJobs());
         sessionJob.getSpec().setRestartNonce(2L);
@@ -100,7 +99,7 @@ public class FlinkSessionJobReconcilerTest {
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
                 JobState.RUNNING,
-                JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 null,
                 flinkService.listSessionJobs());
     }
@@ -118,7 +117,7 @@ public class FlinkSessionJobReconcilerTest {
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
                 JobState.RUNNING,
-                JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 initSavepointPath,
                 flinkService.listSessionJobs());
     }
@@ -136,7 +135,7 @@ public class FlinkSessionJobReconcilerTest {
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
                 JobState.RUNNING,
-                JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 null,
                 flinkService.listSessionJobs());
 
@@ -153,7 +152,7 @@ public class FlinkSessionJobReconcilerTest {
         verifyAndSetRunningJobsToStatus(
                 statelessSessionJob,
                 JobState.RUNNING,
-                JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 null,
                 flinkService.listSessionJobs());
     }
@@ -186,7 +185,7 @@ public class FlinkSessionJobReconcilerTest {
         verifyAndSetRunningJobsToStatus(
                 statefulSessionJob,
                 JobState.RUNNING,
-                JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 "savepoint_0",
                 flinkService.listSessionJobs());
     }
@@ -223,7 +222,7 @@ public class FlinkSessionJobReconcilerTest {
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
                 JobState.RUNNING,
-                JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 null,
                 flinkService.listSessionJobs());
 
@@ -315,7 +314,7 @@ public class FlinkSessionJobReconcilerTest {
         verifyAndSetRunningJobsToStatus(
                 sp1SessionJob,
                 JobState.RUNNING,
-                JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 null,
                 flinkService.listSessionJobs());
 
@@ -391,7 +390,7 @@ public class FlinkSessionJobReconcilerTest {
         verifyAndSetRunningJobsToStatus(
                 sessionJob,
                 JobState.RUNNING,
-                JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 null,
                 flinkService.listSessionJobs());
 

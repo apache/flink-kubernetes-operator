@@ -44,8 +44,6 @@ import javax.annotation.Nullable;
 
 import java.util.Optional;
 
-import static org.apache.flink.kubernetes.operator.observer.deployment.AbstractDeploymentObserver.JOB_STATE_UNKNOWN;
-
 /** The reconciler for the {@link FlinkSessionJob}. */
 public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
 
@@ -169,7 +167,7 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                         new JobStatus()
                                 .toBuilder()
                                 .jobId(jobID.toHexString())
-                                .state(JOB_STATE_UNKNOWN)
+                                .state(org.apache.flink.api.common.JobStatus.RECONCILING.name())
                                 .build());
     }
 

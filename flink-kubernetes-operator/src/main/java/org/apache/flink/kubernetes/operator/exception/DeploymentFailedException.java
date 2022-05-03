@@ -56,6 +56,15 @@ public class DeploymentFailedException extends RuntimeException {
         this.lastUpdateTime = null;
     }
 
+    public DeploymentFailedException(String component, String type, String error) {
+        super(error);
+        this.component = component;
+        this.type = type;
+        this.reason = error;
+        this.lastTransitionTime = null;
+        this.lastUpdateTime = null;
+    }
+
     public static Event asEvent(DeploymentFailedException dfe, FlinkDeployment flinkApp) {
         EventBuilder evtb =
                 new EventBuilder()

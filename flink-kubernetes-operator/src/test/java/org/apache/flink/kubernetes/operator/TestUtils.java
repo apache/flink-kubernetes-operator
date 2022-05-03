@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
@@ -81,6 +82,10 @@ public class TestUtils {
     public static final String SAMPLE_JAR = "local:///tmp/sample.jar";
 
     public static FlinkDeployment buildSessionCluster() {
+        return buildSessionCluster(FlinkVersion.v1_14);
+    }
+
+    public static FlinkDeployment buildSessionCluster(FlinkVersion version) {
         FlinkDeployment deployment = new FlinkDeployment();
         deployment.setStatus(new FlinkDeploymentStatus());
         deployment.setMetadata(
@@ -88,12 +93,12 @@ public class TestUtils {
                         .withName(TEST_DEPLOYMENT_NAME)
                         .withNamespace(TEST_NAMESPACE)
                         .build());
-        deployment.setSpec(getTestFlinkDeploymentSpec());
+        deployment.setSpec(getTestFlinkDeploymentSpec(version));
         return deployment;
     }
 
-    public static FlinkDeployment buildApplicationCluster() {
-        FlinkDeployment deployment = buildSessionCluster();
+    public static FlinkDeployment buildApplicationCluster(FlinkVersion version) {
+        FlinkDeployment deployment = buildSessionCluster(version);
         deployment
                 .getSpec()
                 .setJob(
@@ -104,6 +109,10 @@ public class TestUtils {
                                 .state(JobState.RUNNING)
                                 .build());
         return deployment;
+    }
+
+    public static FlinkDeployment buildApplicationCluster() {
+        return buildApplicationCluster(FlinkVersion.v1_14);
     }
 
     public static FlinkSessionJob buildSessionJob() {
@@ -128,19 +137,20 @@ public class TestUtils {
         return sessionJob;
     }
 
-    public static FlinkDeploymentSpec getTestFlinkDeploymentSpec() {
+    public static FlinkDeploymentSpec getTestFlinkDeploymentSpec(FlinkVersion version) {
         Map<String, String> conf = new HashMap<>();
         conf.put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
         conf.put(
                 HighAvailabilityOptions.HA_MODE.key(),
                 KubernetesHaServicesFactory.class.getCanonicalName());
         conf.put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), "test");
+        conf.put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), "test-savepoint-dir");
 
         return FlinkDeploymentSpec.builder()
                 .image(IMAGE)
                 .imagePullPolicy(IMAGE_POLICY)
                 .serviceAccount(SERVICE_ACCOUNT)
-                .flinkVersion(FlinkVersion.v1_14)
+                .flinkVersion(version)
                 .flinkConfiguration(conf)
                 .jobManager(new JobManagerSpec(new Resource(1, "2048m"), 1, null))
                 .taskManager(new TaskManagerSpec(new Resource(1, "2048m"), null))
@@ -352,7 +362,7 @@ public class TestUtils {
                         kubernetesClient,
                         ValidatorUtils.discoverValidators(configManager),
                         new ReconcilerFactory(kubernetesClient, flinkService, configManager),
-                        new ObserverFactory(flinkService, configManager),
+                        new ObserverFactory(kubernetesClient, flinkService, configManager),
                         new MetricManager<>(new MetricListener().getMetricGroup()));
         controller.setControllerConfig(
                 new FlinkControllerConfig(controller, Collections.emptySet()));

@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.JobGraph;
@@ -44,6 +45,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /** Testing ClusterClient used implementation. */
 public class TestingClusterClient<T> extends RestClusterClient<T> {
@@ -63,11 +65,22 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
                     (ignore1, ignore2, ignore) ->
                             CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
 
+    private Supplier<CompletableFuture<Collection<JobStatusMessage>>> listJobsFunction =
+            () -> {
+                throw new UnsupportedOperationException();
+            };
+
+    private final Configuration configuration;
     private final T clusterId;
 
     public TestingClusterClient(Configuration configuration, T clusterId) throws Exception {
         super(configuration, clusterId, (c, e) -> new StandaloneClientHAServices("localhost"));
+        this.configuration = configuration;
         this.clusterId = clusterId;
+    }
+
+    public TestingClusterClient(Configuration configuration) throws Exception {
+        this(configuration, (T) configuration.get(KubernetesConfigOptions.CLUSTER_ID));
     }
 
     public void setCancelFunction(Function<JobID, CompletableFuture<Acknowledge>> cancelFunction) {
@@ -88,6 +101,11 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
                             CompletableFuture<ResponseBody>>
                     triggerSavepointFunction) {
         this.triggerSavepointFunction = triggerSavepointFunction;
+    }
+
+    public void setListJobsFunction(
+            Supplier<CompletableFuture<Collection<JobStatusMessage>>> listJobsFunction) {
+        this.listJobsFunction = listJobsFunction;
     }
 
     @Override
@@ -112,7 +130,7 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
 
     @Override
     public CompletableFuture<Collection<JobStatusMessage>> listJobs() {
-        throw new UnsupportedOperationException();
+        return listJobsFunction.get();
     }
 
     @Override

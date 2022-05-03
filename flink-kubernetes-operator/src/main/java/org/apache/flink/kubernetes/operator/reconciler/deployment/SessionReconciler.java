@@ -30,7 +30,6 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
@@ -53,7 +52,6 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
 
     @Override
     public void reconcile(FlinkDeployment flinkApp, Context context) throws Exception {
-
         FlinkDeploymentStatus status = flinkApp.getStatus();
         ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
                 status.getReconciliationStatus();
@@ -72,35 +70,30 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
             return;
         }
 
+        Configuration observeConfig = configManager.getObserveConfig(flinkApp);
         boolean specChanged = !currentDeploySpec.equals(lastReconciledSpec);
         if (specChanged) {
             upgradeSessionCluster(
-                    flinkApp.getMetadata(),
+                    flinkApp,
                     currentDeploySpec,
-                    status,
                     configManager.getDeployConfig(flinkApp.getMetadata(), currentDeploySpec));
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null);
-        } else if (ReconciliationUtils.shouldRollBack(
-                reconciliationStatus, configManager.getObserveConfig(flinkApp))) {
+        } else if (ReconciliationUtils.shouldRollBack(reconciliationStatus, observeConfig)) {
             rollbackSessionCluster(flinkApp);
+        } else if (ReconciliationUtils.deploymentRecoveryEnabled(observeConfig)
+                && status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING) {
+            recoverSession(flinkApp, observeConfig);
         }
     }
 
     private void upgradeSessionCluster(
-            ObjectMeta objectMeta,
+            FlinkDeployment deployment,
             FlinkDeploymentSpec deploySpec,
-            FlinkDeploymentStatus status,
             Configuration effectiveConfig)
             throws Exception {
         LOG.info("Upgrading session cluster");
-        flinkService.stopSessionCluster(
-                objectMeta,
-                effectiveConfig,
-                false,
-                configManager
-                        .getOperatorConfiguration()
-                        .getFlinkShutdownClusterTimeout()
-                        .toSeconds());
+        flinkService.deleteClusterDeployment(
+                deployment.getMetadata(), deployment.getStatus(), false);
         FlinkUtils.waitForClusterShutdown(
                 kubernetesClient,
                 effectiveConfig,
@@ -109,8 +102,15 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
                         .getFlinkShutdownClusterTimeout()
                         .toSeconds());
         flinkService.submitSessionCluster(effectiveConfig);
-        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-        IngressUtils.updateIngressRules(objectMeta, deploySpec, effectiveConfig, kubernetesClient);
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+        IngressUtils.updateIngressRules(
+                deployment.getMetadata(), deploySpec, effectiveConfig, kubernetesClient);
+    }
+
+    private void recoverSession(FlinkDeployment deployment, Configuration effectiveConfig)
+            throws Exception {
+        flinkService.submitSessionCluster(effectiveConfig);
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
     }
 
     private void rollbackSessionCluster(FlinkDeployment deployment) throws Exception {
@@ -124,20 +124,14 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
         FlinkDeploymentSpec rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
         Configuration rollbackConfig =
                 configManager.getDeployConfig(deployment.getMetadata(), rollbackSpec);
-        upgradeSessionCluster(deployment.getMetadata(), rollbackSpec, status, rollbackConfig);
+        upgradeSessionCluster(deployment, rollbackSpec, rollbackConfig);
         reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
     }
 
     @Override
-    protected void shutdown(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+    protected void shutdown(FlinkDeployment deployment) {
         LOG.info("Stopping session cluster");
-        flinkService.stopSessionCluster(
-                flinkApp.getMetadata(),
-                effectiveConfig,
-                true,
-                configManager
-                        .getOperatorConfiguration()
-                        .getFlinkShutdownClusterTimeout()
-                        .toSeconds());
+        flinkService.deleteClusterDeployment(
+                deployment.getMetadata(), deployment.getStatus(), true);
     }
 }

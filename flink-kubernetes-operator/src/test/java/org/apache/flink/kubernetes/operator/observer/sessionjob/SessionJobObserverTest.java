@@ -31,8 +31,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.apache.flink.kubernetes.operator.observer.deployment.AbstractDeploymentObserver.JOB_STATE_UNKNOWN;
-
 /** Tests for {@link SessionJobObserver}. */
 public class SessionJobObserverTest {
 
@@ -54,12 +52,12 @@ public class SessionJobObserverTest {
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertEquals(
-                JOB_STATE_UNKNOWN, sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
 
         // observe with empty context will do nothing
         observer.observe(sessionJob, TestUtils.createEmptyContext());
         Assertions.assertEquals(
-                JOB_STATE_UNKNOWN, sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
 
         // observe with ready context
         observer.observe(sessionJob, readyContext);
@@ -69,7 +67,7 @@ public class SessionJobObserverTest {
         flinkService.setPortReady(false);
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
-                JOB_STATE_UNKNOWN, sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
 
         sessionJob.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
         // no matched job id, update the state to unknown
@@ -77,7 +75,7 @@ public class SessionJobObserverTest {
         sessionJob.getStatus().getJobStatus().setJobId(new JobID().toHexString());
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
-                JOB_STATE_UNKNOWN, sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
         sessionJob.getStatus().getJobStatus().setJobId(jobID);
 
         // testing multi job
@@ -89,7 +87,7 @@ public class SessionJobObserverTest {
         Assertions.assertNotNull(jobID);
         Assertions.assertNotEquals(jobID, jobID2);
         Assertions.assertEquals(
-                JOB_STATE_UNKNOWN, sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
         observer.observe(sessionJob2, readyContext);
         Assertions.assertEquals(
                 JobStatus.RUNNING.name(), sessionJob2.getStatus().getJobStatus().getState());
@@ -113,7 +111,7 @@ public class SessionJobObserverTest {
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertEquals(
-                JOB_STATE_UNKNOWN, sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
 
         flinkService.setListJobConsumer(
                 configuration ->
@@ -136,7 +134,7 @@ public class SessionJobObserverTest {
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
         Assertions.assertNotNull(jobID);
         Assertions.assertEquals(
-                JOB_STATE_UNKNOWN, sessionJob.getStatus().getJobStatus().getState());
+                JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
 
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
