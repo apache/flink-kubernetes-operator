@@ -38,9 +38,11 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
+import org.apache.flink.metrics.testutils.MetricListener;
 
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -350,7 +352,8 @@ public class TestUtils {
                         kubernetesClient,
                         ValidatorUtils.discoverValidators(configManager),
                         new ReconcilerFactory(kubernetesClient, flinkService, configManager),
-                        new ObserverFactory(flinkService, configManager));
+                        new ObserverFactory(flinkService, configManager),
+                        new MetricManager<>(new MetricListener().getMetricGroup()));
         controller.setControllerConfig(
                 new FlinkControllerConfig(controller, Collections.emptySet()));
         return controller;

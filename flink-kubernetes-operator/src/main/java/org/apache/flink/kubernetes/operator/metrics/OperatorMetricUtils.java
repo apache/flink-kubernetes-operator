@@ -43,7 +43,7 @@ public class OperatorMetricUtils {
     private static final String OPERATOR_METRICS_PREFIX = "kubernetes.operator.metrics.";
     private static final String METRICS_PREFIX = "metrics.";
 
-    public static void initOperatorMetrics(Configuration defaultConfig) {
+    public static MetricGroup initOperatorMetrics(Configuration defaultConfig) {
         Configuration metricConfig = createMetricConfig(defaultConfig);
         LOG.info("Initializing operator metrics using conf: {}", metricConfig);
         PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(metricConfig);
@@ -58,6 +58,7 @@ public class OperatorMetricUtils {
                         EnvUtils.getOrDefault(EnvUtils.ENV_HOSTNAME, "localhost"));
         MetricGroup statusGroup = operatorMetricGroup.addGroup("Status");
         MetricUtils.instantiateStatusMetrics(statusGroup);
+        return operatorMetricGroup;
     }
 
     @VisibleForTesting
