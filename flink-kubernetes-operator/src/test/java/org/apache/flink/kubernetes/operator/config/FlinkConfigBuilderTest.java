@@ -74,16 +74,10 @@ public class FlinkConfigBuilderTest {
         final Pod pod0 =
                 TestUtils.getTestPod(
                         "pod0 hostname", "pod0 api version", Arrays.asList(container0));
-        final Pod pod1 =
-                TestUtils.getTestPod("pod1 hostname", "pod1 api version", new ArrayList<>());
-        final Pod pod2 =
-                TestUtils.getTestPod("pod2 hostname", "pod2 api version", new ArrayList<>());
 
         flinkDeployment.getSpec().setPodTemplate(pod0);
         flinkDeployment.getSpec().setIngress(IngressSpec.builder().template("test.com").build());
-        flinkDeployment.getSpec().getJobManager().setPodTemplate(pod1);
         flinkDeployment.getSpec().getJobManager().setReplicas(2);
-        flinkDeployment.getSpec().getTaskManager().setPodTemplate(pod2);
         flinkDeployment.getSpec().getJob().setParallelism(2);
         flinkDeployment
                 .getSpec()
@@ -213,25 +207,40 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyJobManagerSpec() throws Exception {
-        final Configuration configuration =
+        Configuration configuration =
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyJobManagerSpec()
                         .build();
+
+        Assert.assertNull(
+                configuration.getString(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE));
+        Assert.assertEquals(
+                MemorySize.parse("2048m"),
+                configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
+        Assert.assertEquals(
+                Double.valueOf(1), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
+        Assert.assertEquals(
+                Integer.valueOf(2),
+                configuration.get(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS));
+
+        flinkDeployment
+                .getSpec()
+                .getJobManager()
+                .setPodTemplate(
+                        TestUtils.getTestPod(
+                                "pod1 hostname", "pod1 api version", new ArrayList<>()));
+        configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobManagerSpec()
+                        .build();
+
         final Pod jmPod =
                 OBJECT_MAPPER.readValue(
                         new File(
                                 configuration.getString(
                                         KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE)),
                         Pod.class);
-        Assert.assertEquals(
-                MemorySize.parse("2048m"),
-                configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
-        Assert.assertEquals(
-                Double.valueOf(1), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
         Assert.assertEquals("pod1 api version", jmPod.getApiVersion());
-        Assert.assertEquals(
-                Integer.valueOf(2),
-                configuration.get(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS));
     }
 
     @Test
@@ -239,21 +248,36 @@ public class FlinkConfigBuilderTest {
         FlinkDeployment deploymentClone = ReconciliationUtils.clone(flinkDeployment);
         deploymentClone.getSpec().setPodTemplate(null);
 
-        final Configuration configuration =
+        Configuration configuration =
                 new FlinkConfigBuilder(deploymentClone, new Configuration())
                         .applyTaskManagerSpec()
                         .build();
+
+        Assert.assertNull(
+                configuration.getString(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE));
+        Assert.assertEquals(
+                MemorySize.parse("2048m"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+        Assert.assertEquals(
+                Double.valueOf(1), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
+
+        deploymentClone
+                .getSpec()
+                .getTaskManager()
+                .setPodTemplate(
+                        TestUtils.getTestPod(
+                                "pod2 hostname", "pod2 api version", new ArrayList<>()));
+        configuration =
+                new FlinkConfigBuilder(deploymentClone, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+
         final Pod tmPod =
                 OBJECT_MAPPER.readValue(
                         new File(
                                 configuration.getString(
                                         KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE)),
                         Pod.class);
-        Assert.assertEquals(
-                MemorySize.parse("2048m"),
-                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
-        Assert.assertEquals(
-                Double.valueOf(1), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
         Assert.assertEquals("pod2 api version", tmPod.getApiVersion());
     }
 
