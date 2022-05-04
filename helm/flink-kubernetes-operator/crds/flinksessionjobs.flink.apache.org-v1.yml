@@ -48,6 +48,8 @@ spec:
                     - last-state
                     - stateless
                     type: string
+                  allowNonRestoredState:
+                    type: boolean
                 type: object
               restartNonce:
                 type: integer

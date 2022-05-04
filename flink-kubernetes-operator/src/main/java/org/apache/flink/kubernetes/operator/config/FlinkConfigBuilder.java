@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
@@ -223,6 +224,15 @@ public class FlinkConfigBuilder {
         return this;
     }
 
+    protected FlinkConfigBuilder applyAllowNonRestoredState() {
+        if (spec.getJob() != null) {
+            if (spec.getJob().isAllowNonRestoredState()) {
+                effectiveConfig.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
+            }
+        }
+        return this;
+    }
+
     protected Configuration build() {
 
         // Set cluster config
@@ -245,6 +255,7 @@ public class FlinkConfigBuilder {
                 .applyJobManagerSpec()
                 .applyTaskManagerSpec()
                 .applyJobOrSessionSpec()
+                .applyAllowNonRestoredState()
                 .build();
     }
 

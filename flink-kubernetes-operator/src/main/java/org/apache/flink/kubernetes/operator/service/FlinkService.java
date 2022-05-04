@@ -188,7 +188,7 @@ public class FlinkService {
                             job.getArgs() == null ? null : Arrays.asList(job.getArgs()),
                             job.getParallelism() > 0 ? job.getParallelism() : null,
                             jobID,
-                            null,
+                            job.isAllowNonRestoredState(),
                             savepoint);
             LOG.info("Submitting job: {} to session cluster.", jobID.toHexString());
             return clusterClient
