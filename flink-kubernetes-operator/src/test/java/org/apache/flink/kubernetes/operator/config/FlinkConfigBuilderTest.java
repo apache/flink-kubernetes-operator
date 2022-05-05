@@ -49,6 +49,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -297,6 +298,33 @@ public class FlinkConfigBuilderTest {
         Assertions.assertEquals(SAMPLE_JAR, configuration.get(PipelineOptions.JARS).get(0));
         Assertions.assertEquals(
                 Integer.valueOf(2), configuration.get(CoreOptions.DEFAULT_PARALLELISM));
+    }
+
+    @Test
+    public void testAllowNonRestoredStateInSpecOverrideInFlinkConf() throws URISyntaxException {
+        flinkDeployment.getSpec().getJob().setAllowNonRestoredState(false);
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE.key(), "true");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobOrSessionSpec()
+                        .build();
+        Assertions.assertFalse(
+                configuration.getBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE));
+
+        flinkDeployment.getSpec().getJob().setAllowNonRestoredState(true);
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE.key(), "false");
+        configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobOrSessionSpec()
+                        .build();
+        Assertions.assertTrue(
+                configuration.getBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE));
     }
 
     @Test

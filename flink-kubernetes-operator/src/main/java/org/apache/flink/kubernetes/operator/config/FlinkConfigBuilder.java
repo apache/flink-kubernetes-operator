@@ -217,8 +217,10 @@ public class FlinkConfigBuilder {
                 effectiveConfig.set(
                         CoreOptions.DEFAULT_PARALLELISM, spec.getJob().getParallelism());
             }
-            if (spec.getJob().isAllowNonRestoredState()) {
-                effectiveConfig.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
+            if (spec.getJob().getAllowNonRestoredState() != null) {
+                effectiveConfig.set(
+                        SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE,
+                        spec.getJob().getAllowNonRestoredState());
             }
         } else {
             effectiveConfig.set(

@@ -67,5 +67,5 @@ public class JobSpec {
     @EqualsAndHashCode.Exclude private UpgradeMode upgradeMode = UpgradeMode.STATELESS;
 
     /** Allow checkpoint state that cannot be mapped to any job vertex in tasks. */
-    @EqualsAndHashCode.Exclude private boolean allowNonRestoredState = false;
+    @EqualsAndHashCode.Exclude private Boolean allowNonRestoredState;
 }

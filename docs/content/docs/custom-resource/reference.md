@@ -117,7 +117,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | savepointTriggerNonce | java.lang.Long | Nonce used to manually trigger savepoint for the running job. In order to trigger a  savepoint, change the number to anything other than the current value. |
 | initialSavepointPath | java.lang.String | Savepoint path used by the job the first time it is deployed. Upgrades/redeployments will not  be affected. |
 | upgradeMode | org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode | Upgrade mode of the Flink job. |
-| allowNonRestoredState | boolean | Allow checkpoint state that cannot be mapped to any job vertex in tasks. |
+| allowNonRestoredState | java.lang.Boolean | Allow checkpoint state that cannot be mapped to any job vertex in tasks. |
 
 ### JobState
 **Class**: org.apache.flink.kubernetes.operator.crd.spec.JobState
