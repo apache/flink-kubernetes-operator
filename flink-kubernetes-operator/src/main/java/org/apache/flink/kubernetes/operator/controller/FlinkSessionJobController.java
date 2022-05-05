@@ -104,13 +104,9 @@ public class FlinkSessionJobController
         LOG.info("Starting reconciliation");
         FlinkSessionJob originalCopy = ReconciliationUtils.clone(flinkSessionJob);
         observer.observe(flinkSessionJob, context);
-        Optional<String> validationError = validateSessionJob(flinkSessionJob, context);
-        if (validationError.isPresent()) {
-            LOG.error("Validation failed: " + validationError.get());
-            ReconciliationUtils.updateForReconciliationError(
-                    flinkSessionJob, validationError.get());
+        if (!validateSessionJob(flinkSessionJob, context)) {
             metricManager.onUpdate(flinkSessionJob);
-            return ReconciliationUtils.toUpdateControl(originalCopy, flinkSessionJob);
+            return ReconciliationUtils.toUpdateControl(flinkSessionJob, flinkSessionJob);
         }
 
         try {
@@ -256,20 +252,18 @@ public class FlinkSessionJobController
                 CLUSTER_ID_INDEX, sessionJob -> List.of(sessionJob.getSpec().getDeploymentName()));
     }
 
-    private Optional<String> validateSessionJob(FlinkSessionJob sessionJob, Context context) {
-        Optional<String> validationError = Optional.empty();
+    private boolean validateSessionJob(FlinkSessionJob sessionJob, Context context) {
         for (FlinkResourceValidator validator : validators) {
-            if ((validationError =
-                            validator.validateSessionJob(
-                                    sessionJob,
-                                    OperatorUtils.getSecondaryResource(
-                                            sessionJob,
-                                            context,
-                                            configManager.getOperatorConfiguration())))
-                    .isPresent()) {
-                break;
+            Optional<String> validationError =
+                    validator.validateSessionJob(
+                            sessionJob,
+                            OperatorUtils.getSecondaryResource(
+                                    sessionJob, context, configManager.getOperatorConfiguration()));
+            if (validationError.isPresent()) {
+                return ReconciliationUtils.applyValidationErrorAndResetSpec(
+                        sessionJob, validationError.get());
             }
         }
-        return validationError;
+        return true;
     }
 }

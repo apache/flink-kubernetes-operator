@@ -243,7 +243,8 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Value | Docs |
 | ----- | ---- |
-| DEPLOYED | The last reconciledSpec is currently deployed. |
+| DEPLOYED | The lastReconciledSpec is currently deployed. |
+| UPGRADING | The spec is being upgraded. |
 | ROLLING_BACK | In the process of rolling back to the lastStableSpec. |
 | ROLLED_BACK | Rolled back to the lastStableSpec. |
 

@@ -37,7 +37,6 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for {@link org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils}. */
@@ -46,19 +45,6 @@ public class ReconciliationUtilsTest {
     FlinkOperatorConfiguration operatorConfiguration =
             FlinkOperatorConfiguration.fromConfiguration(
                     new Configuration(), Collections.emptySet());
-
-    @Test
-    public void testSpecChangedException() {
-        FlinkDeployment previous = TestUtils.buildApplicationCluster();
-        FlinkDeployment current = ReconciliationUtils.clone(previous);
-
-        current.getSpec().setImage("changed-image");
-        assertThrows(
-                UnsupportedOperationException.class,
-                () ->
-                        ReconciliationUtils.toUpdateControl(
-                                operatorConfiguration, previous, current, true));
-    }
 
     @Test
     public void testStatusChanged() {

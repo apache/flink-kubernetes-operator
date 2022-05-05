@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.api.model.EventBuilder;
@@ -52,6 +53,7 @@ import java.net.HttpURLConnection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -136,7 +138,6 @@ public class FlinkDeploymentControllerTest {
         appCluster.getSpec().setJob(null);
         updateControl = testController.reconcile(appCluster, context);
         assertTrue(updateControl.isUpdateStatus());
-        assertFalse(updateControl.getScheduleDelay().isPresent());
 
         reconciliationStatus = appCluster.getStatus().getReconciliationStatus();
         assertEquals(
@@ -384,6 +385,37 @@ public class FlinkDeploymentControllerTest {
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals(null, jobs.get(0).f0);
+
+        // Inject validation error in the middle of the upgrade
+        appCluster.getSpec().setRestartNonce(123L);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobState.SUSPENDED,
+                appCluster
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState());
+        appCluster.getSpec().setLogConfiguration(Map.of("invalid", "conf"));
+        testController.reconcile(appCluster, TestUtils.createEmptyContext());
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getJobStatus().getState());
+        assertEquals(
+                JobState.RUNNING,
+                appCluster
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState());
     }
 
     @ParameterizedTest
@@ -480,6 +512,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertNotNull(ReconciliationUtils.getDeployedSpec(appCluster).getJob());
         // Verify jobStatus is running
         jobStatus = appCluster.getStatus().getJobStatus();
         JobStatusMessage expectedJobStatus = flinkService.listJobs().get(0).f1;

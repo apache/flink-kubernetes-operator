@@ -99,12 +99,10 @@ public class FlinkDeploymentController
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context) {
         LOG.info("Starting reconciliation");
         FlinkDeployment originalCopy = ReconciliationUtils.clone(flinkApp);
+
         try {
             observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);
-            Optional<String> validationError = validateDeployment(flinkApp);
-            if (validationError.isPresent()) {
-                LOG.error("Validation failed: " + validationError.get());
-                ReconciliationUtils.updateForReconciliationError(flinkApp, validationError.get());
+            if (!validateDeployment(flinkApp)) {
                 metricManager.onUpdate(flinkApp);
                 return ReconciliationUtils.toUpdateControl(
                         configManager.getOperatorConfiguration(), originalCopy, flinkApp, false);
@@ -169,13 +167,14 @@ public class FlinkDeploymentController
         this.controllerConfig = config;
     }
 
-    private Optional<String> validateDeployment(FlinkDeployment deployment) {
-        Optional<String> validationError = Optional.empty();
+    private boolean validateDeployment(FlinkDeployment deployment) {
         for (FlinkResourceValidator validator : validators) {
-            if ((validationError = validator.validateDeployment(deployment)).isPresent()) {
-                break;
+            Optional<String> validationError = validator.validateDeployment(deployment);
+            if (validationError.isPresent()) {
+                return ReconciliationUtils.applyValidationErrorAndResetSpec(
+                        deployment, validationError.get());
             }
         }
-        return validationError;
+        return true;
     }
 }

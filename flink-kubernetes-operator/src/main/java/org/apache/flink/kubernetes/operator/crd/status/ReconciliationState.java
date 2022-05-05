@@ -19,8 +19,10 @@ package org.apache.flink.kubernetes.operator.crd.status;
 
 /** Current state of the reconciliation. */
 public enum ReconciliationState {
-    /** The last reconciledSpec is currently deployed. */
+    /** The lastReconciledSpec is currently deployed. */
     DEPLOYED,
+    /** The spec is being upgraded. */
+    UPGRADING,
     /** In the process of rolling back to the lastStableSpec. */
     ROLLING_BACK,
     /** Rolled back to the lastStableSpec. */

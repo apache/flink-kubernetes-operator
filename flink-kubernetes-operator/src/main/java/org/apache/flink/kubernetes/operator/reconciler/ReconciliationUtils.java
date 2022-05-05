@@ -43,6 +43,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
@@ -52,6 +54,8 @@ import java.util.Objects;
 
 /** Reconciliation utilities. */
 public class ReconciliationUtils {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ReconciliationUtils.class);
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -66,14 +70,20 @@ public class ReconciliationUtils {
 
         var clonedSpec = ReconciliationUtils.clone(spec);
         AbstractFlinkSpec lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        boolean upgrading = false;
         if (lastReconciledSpec != null && lastReconciledSpec.getJob() != null) {
             Long oldSavepointTriggerNonce = lastReconciledSpec.getJob().getSavepointTriggerNonce();
             clonedSpec.getJob().setSavepointTriggerNonce(oldSavepointTriggerNonce);
+            if (clonedSpec.getJob().getState() == JobState.RUNNING
+                    && stateAfterReconcile == JobState.SUSPENDED) {
+                upgrading = true;
+            }
             clonedSpec.getJob().setState(stateAfterReconcile);
         }
         reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec);
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
-        reconciliationStatus.setState(ReconciliationState.DEPLOYED);
+        reconciliationStatus.setState(
+                upgrading ? ReconciliationState.UPGRADING : ReconciliationState.DEPLOYED);
 
         if (spec.getJob() != null && spec.getJob().getState() == JobState.SUSPENDED) {
             // When a job is suspended by the user it is automatically marked stable
@@ -116,21 +126,11 @@ public class ReconciliationUtils {
     public static <CR extends CustomResource> UpdateControl<CR> toUpdateControl(
             CR originalCopy, CR current) {
 
-        UpdateControl<CR> updateControl;
-        if (!Objects.equals(originalCopy.getSpec(), current.getSpec())) {
-            throw new UnsupportedOperationException(
-                    "Detected spec change after reconcile, this probably indicates a bug.");
-        }
+        current.setSpec(originalCopy.getSpec());
 
-        boolean statusChanged = !Objects.equals(originalCopy.getStatus(), current.getStatus());
+        var statusChanged = !Objects.equals(originalCopy.getStatus(), current.getStatus());
 
-        if (statusChanged) {
-            updateControl = UpdateControl.updateStatus(current);
-        } else {
-            updateControl = UpdateControl.noUpdate();
-        }
-
-        return updateControl;
+        return statusChanged ? UpdateControl.updateStatus(current) : UpdateControl.noUpdate();
     }
 
     public static UpdateControl<FlinkDeployment> toUpdateControl(
@@ -170,7 +170,9 @@ public class ReconciliationUtils {
 
     public static FlinkDeploymentSpec getDeployedSpec(FlinkDeployment deployment) {
         var reconciliationStatus = deployment.getStatus().getReconciliationStatus();
-        if (reconciliationStatus.getState() == ReconciliationState.DEPLOYED) {
+        var reconciliationState = reconciliationStatus.getState();
+        if (reconciliationState == ReconciliationState.DEPLOYED
+                || reconciliationState == ReconciliationState.UPGRADING) {
             var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
             if (lastReconciledSpec == null) {
                 // No deployment submitted, use the provided one
@@ -304,5 +306,47 @@ public class ReconciliationUtils {
                 && org.apache.flink.api.common.JobStatus.RUNNING
                         .name()
                         .equals(status.getJobStatus().getState());
+    }
+
+    /**
+     * In case of validation errors we need to (temporarily) reset the old spec so that we can
+     * reconcile other outstanding changes, instead of simply blocking.
+     *
+     * <p>This is only possible if we have a previously reconciled spec.
+     *
+     * <p>For in-flight application upgrades we need extra logic to set the desired job state to
+     * running
+     *
+     * @param deployment The current deployment to be reconciled
+     * @param validationError Validation error encountered for the current spec
+     * @return True if the spec was reset and reconciliation can continue. False if nothing to
+     *     reconcile.
+     */
+    public static <
+                    SPEC extends AbstractFlinkSpec,
+                    STATUS extends CommonStatus<SPEC>,
+                    CR extends CustomResource<SPEC, STATUS>>
+            boolean applyValidationErrorAndResetSpec(CR deployment, String validationError) {
+
+        var status = deployment.getStatus();
+        if (!validationError.equals(status.getError())) {
+            LOG.error("Validation failed: " + validationError);
+            ReconciliationUtils.updateForReconciliationError(deployment, validationError);
+        }
+
+        var lastReconciledSpec = status.getReconciliationStatus().deserializeLastReconciledSpec();
+        if (lastReconciledSpec == null) {
+            // Validation failed before anything was deployed, nothing to do
+            return false;
+        } else {
+            // We need to observe/reconcile using the last version of the deployment spec
+            deployment.setSpec(lastReconciledSpec);
+            if (status.getReconciliationStatus().getState() == ReconciliationState.UPGRADING) {
+                // We were in the middle of an application upgrade, must set desired state to
+                // running
+                deployment.getSpec().getJob().setState(JobState.RUNNING);
+            }
+            return true;
+        }
     }
 }
