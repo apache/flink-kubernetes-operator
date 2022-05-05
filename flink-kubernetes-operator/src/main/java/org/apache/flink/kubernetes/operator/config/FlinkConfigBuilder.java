@@ -217,18 +217,12 @@ public class FlinkConfigBuilder {
                 effectiveConfig.set(
                         CoreOptions.DEFAULT_PARALLELISM, spec.getJob().getParallelism());
             }
-        } else {
-            effectiveConfig.set(
-                    DeploymentOptions.TARGET, KubernetesDeploymentTarget.SESSION.getName());
-        }
-        return this;
-    }
-
-    protected FlinkConfigBuilder applyAllowNonRestoredState() {
-        if (spec.getJob() != null) {
             if (spec.getJob().isAllowNonRestoredState()) {
                 effectiveConfig.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
             }
+        } else {
+            effectiveConfig.set(
+                    DeploymentOptions.TARGET, KubernetesDeploymentTarget.SESSION.getName());
         }
         return this;
     }
@@ -255,7 +249,6 @@ public class FlinkConfigBuilder {
                 .applyJobManagerSpec()
                 .applyTaskManagerSpec()
                 .applyJobOrSessionSpec()
-                .applyAllowNonRestoredState()
                 .build();
     }
 

@@ -284,27 +284,19 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyJobOrSessionSpec() throws Exception {
+        flinkDeployment.getSpec().getJob().setAllowNonRestoredState(true);
         final Configuration configuration =
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyJobOrSessionSpec()
                         .build();
+        Assertions.assertTrue(
+                configuration.getBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE));
         Assertions.assertEquals(
                 KubernetesDeploymentTarget.APPLICATION.getName(),
                 configuration.get(DeploymentOptions.TARGET));
         Assertions.assertEquals(SAMPLE_JAR, configuration.get(PipelineOptions.JARS).get(0));
         Assertions.assertEquals(
                 Integer.valueOf(2), configuration.get(CoreOptions.DEFAULT_PARALLELISM));
-    }
-
-    @Test
-    public void testApplyAllowNonRestoredState() {
-        flinkDeployment.getSpec().getJob().setAllowNonRestoredState(true);
-        final Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
-                        .applyAllowNonRestoredState()
-                        .build();
-        Assertions.assertTrue(
-                configuration.getBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE));
     }
 
     @Test
