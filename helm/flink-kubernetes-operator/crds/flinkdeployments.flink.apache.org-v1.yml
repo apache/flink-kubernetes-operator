@@ -9102,6 +9102,7 @@ spec:
                   state:
                     enum:
                     - DEPLOYED
+                    - UPGRADING
                     - ROLLING_BACK
                     - ROLLED_BACK
                     type: string

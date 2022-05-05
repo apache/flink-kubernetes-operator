@@ -42,6 +42,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -103,7 +104,8 @@ public class RollbackTest {
                     assertEquals(savepoints.get(0), flinkService.listJobs().get(0).f0);
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
-                });
+                },
+                false);
     }
 
     @ParameterizedTest
@@ -132,7 +134,8 @@ public class RollbackTest {
                     assertEquals(1, flinkService.listJobs().size());
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
-                });
+                },
+                true);
     }
 
     @ParameterizedTest
@@ -167,7 +170,8 @@ public class RollbackTest {
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
                     flinkService.setPortReady(true);
-                });
+                },
+                false);
     }
 
     @ParameterizedTest
@@ -202,7 +206,8 @@ public class RollbackTest {
 
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
-                });
+                },
+                true);
     }
 
     @ParameterizedTest
@@ -223,13 +228,15 @@ public class RollbackTest {
                             JobManagerDeploymentStatus.READY,
                             dep.getStatus().getJobManagerDeploymentStatus());
                     dep.getSpec().setRestartNonce(10L);
-                });
+                },
+                false);
     }
 
     public void testRollback(
             FlinkDeployment deployment,
             ThrowingRunnable<Exception> triggerRollback,
-            ThrowingRunnable<Exception> validateAndRecover)
+            ThrowingRunnable<Exception> validateAndRecover,
+            boolean injectValidationError)
             throws Exception {
 
         var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
@@ -257,8 +264,13 @@ public class RollbackTest {
                 "Deployment is not ready within the configured timeout, rolling back.",
                 deployment.getStatus().getError());
 
+        if (injectValidationError) {
+            deployment.getSpec().setLogConfiguration(Map.of("invalid", "entry"));
+        }
+
         testController.reconcile(deployment, context);
         assertEquals(ReconciliationState.ROLLED_BACK, reconciliationStatus.getState());
+        deployment.getSpec().setLogConfiguration(null);
 
         testController.reconcile(deployment, context);
         testController.reconcile(deployment, context);
