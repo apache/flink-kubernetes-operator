@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
@@ -215,6 +216,11 @@ public class FlinkConfigBuilder {
             if (spec.getJob().getParallelism() > 0) {
                 effectiveConfig.set(
                         CoreOptions.DEFAULT_PARALLELISM, spec.getJob().getParallelism());
+            }
+            if (spec.getJob().getAllowNonRestoredState() != null) {
+                effectiveConfig.set(
+                        SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE,
+                        spec.getJob().getAllowNonRestoredState());
             }
         } else {
             effectiveConfig.set(

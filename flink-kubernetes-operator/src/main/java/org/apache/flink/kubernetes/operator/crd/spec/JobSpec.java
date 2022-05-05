@@ -65,4 +65,7 @@ public class JobSpec {
 
     /** Upgrade mode of the Flink job. */
     @EqualsAndHashCode.Exclude private UpgradeMode upgradeMode = UpgradeMode.STATELESS;
+
+    /** Allow checkpoint state that cannot be mapped to any job vertex in tasks. */
+    @EqualsAndHashCode.Exclude private Boolean allowNonRestoredState;
 }

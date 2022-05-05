@@ -36,18 +36,20 @@ import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.Pod;
-import org.junit.Assert;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -88,7 +90,7 @@ public class FlinkConfigBuilderTest {
     public void testApplyImage() {
         final Configuration configuration =
                 new FlinkConfigBuilder(flinkDeployment, new Configuration()).applyImage().build();
-        Assert.assertEquals(IMAGE, configuration.get(KubernetesConfigOptions.CONTAINER_IMAGE));
+        Assertions.assertEquals(IMAGE, configuration.get(KubernetesConfigOptions.CONTAINER_IMAGE));
     }
 
     @Test
@@ -97,7 +99,7 @@ public class FlinkConfigBuilderTest {
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyImagePullPolicy()
                         .build();
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 IMAGE_POLICY,
                 configuration.get(KubernetesConfigOptions.CONTAINER_IMAGE_PULL_POLICY).toString());
     }
@@ -108,11 +110,11 @@ public class FlinkConfigBuilderTest {
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyFlinkConfiguration()
                         .build();
-        Assert.assertEquals(2, (int) configuration.get(TaskManagerOptions.NUM_TASK_SLOTS));
-        Assert.assertEquals(
+        Assertions.assertEquals(2, (int) configuration.get(TaskManagerOptions.NUM_TASK_SLOTS));
+        Assertions.assertEquals(
                 KubernetesConfigOptions.ServiceExposedType.ClusterIP,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
-        Assert.assertEquals(false, configuration.get(WebOptions.CANCEL_ENABLE));
+        Assertions.assertEquals(false, configuration.get(WebOptions.CANCEL_ENABLE));
 
         FlinkDeployment deployment = ReconciliationUtils.clone(flinkDeployment);
         deployment
@@ -126,7 +128,7 @@ public class FlinkConfigBuilderTest {
                 new FlinkConfigBuilder(deployment, new Configuration())
                         .applyFlinkConfiguration()
                         .build();
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 KubernetesConfigOptions.ServiceExposedType.LoadBalancer,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
 
@@ -141,7 +143,7 @@ public class FlinkConfigBuilderTest {
                                                         .getCanonicalName()))
                         .applyFlinkConfiguration()
                         .build();
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 DEFAULT_CHECKPOINTING_INTERVAL,
                 configuration.get(ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL));
     }
@@ -157,8 +159,8 @@ public class FlinkConfigBuilderTest {
                 new File(
                         configuration.get(DeploymentOptionsInternal.CONF_DIR),
                         CONFIG_FILE_LOG4J_NAME);
-        Assert.assertTrue(log4jFile.exists() && log4jFile.isFile() && log4jFile.canRead());
-        Assert.assertEquals(CUSTOM_LOG_CONFIG, Files.readString(log4jFile.toPath()));
+        Assertions.assertTrue(log4jFile.exists() && log4jFile.isFile() && log4jFile.canRead());
+        Assertions.assertEquals(CUSTOM_LOG_CONFIG, Files.readString(log4jFile.toPath()));
     }
 
     @Test
@@ -179,8 +181,8 @@ public class FlinkConfigBuilderTest {
                                 configuration.getString(
                                         KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE)),
                         Pod.class);
-        Assert.assertEquals("container0", jmPod.getSpec().getContainers().get(0).getName());
-        Assert.assertEquals("container0", tmPod.getSpec().getContainers().get(0).getName());
+        Assertions.assertEquals("container0", jmPod.getSpec().getContainers().get(0).getName());
+        Assertions.assertEquals("container0", tmPod.getSpec().getContainers().get(0).getName());
     }
 
     @Test
@@ -189,7 +191,7 @@ public class FlinkConfigBuilderTest {
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyIngressDomain()
                         .build();
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 KubernetesConfigOptions.ServiceExposedType.ClusterIP,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
     }
@@ -200,7 +202,7 @@ public class FlinkConfigBuilderTest {
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyServiceAccount()
                         .build();
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 SERVICE_ACCOUNT,
                 configuration.get(KubernetesConfigOptions.KUBERNETES_SERVICE_ACCOUNT));
     }
@@ -212,14 +214,14 @@ public class FlinkConfigBuilderTest {
                         .applyJobManagerSpec()
                         .build();
 
-        Assert.assertNull(
+        Assertions.assertNull(
                 configuration.getString(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE));
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 MemorySize.parse("2048m"),
                 configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 Double.valueOf(1), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 Integer.valueOf(2),
                 configuration.get(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS));
 
@@ -240,7 +242,7 @@ public class FlinkConfigBuilderTest {
                                 configuration.getString(
                                         KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE)),
                         Pod.class);
-        Assert.assertEquals("pod1 api version", jmPod.getApiVersion());
+        Assertions.assertEquals("pod1 api version", jmPod.getApiVersion());
     }
 
     @Test
@@ -253,12 +255,12 @@ public class FlinkConfigBuilderTest {
                         .applyTaskManagerSpec()
                         .build();
 
-        Assert.assertNull(
+        Assertions.assertNull(
                 configuration.getString(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE));
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 MemorySize.parse("2048m"),
                 configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
-        Assert.assertEquals(
+        Assertions.assertEquals(
                 Double.valueOf(1), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
 
         deploymentClone
@@ -278,20 +280,51 @@ public class FlinkConfigBuilderTest {
                                 configuration.getString(
                                         KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE)),
                         Pod.class);
-        Assert.assertEquals("pod2 api version", tmPod.getApiVersion());
+        Assertions.assertEquals("pod2 api version", tmPod.getApiVersion());
     }
 
     @Test
     public void testApplyJobOrSessionSpec() throws Exception {
+        flinkDeployment.getSpec().getJob().setAllowNonRestoredState(true);
         final Configuration configuration =
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyJobOrSessionSpec()
                         .build();
-        Assert.assertEquals(
+        Assertions.assertTrue(
+                configuration.getBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE));
+        Assertions.assertEquals(
                 KubernetesDeploymentTarget.APPLICATION.getName(),
                 configuration.get(DeploymentOptions.TARGET));
-        Assert.assertEquals(SAMPLE_JAR, configuration.get(PipelineOptions.JARS).get(0));
-        Assert.assertEquals(Integer.valueOf(2), configuration.get(CoreOptions.DEFAULT_PARALLELISM));
+        Assertions.assertEquals(SAMPLE_JAR, configuration.get(PipelineOptions.JARS).get(0));
+        Assertions.assertEquals(
+                Integer.valueOf(2), configuration.get(CoreOptions.DEFAULT_PARALLELISM));
+    }
+
+    @Test
+    public void testAllowNonRestoredStateInSpecOverrideInFlinkConf() throws URISyntaxException {
+        flinkDeployment.getSpec().getJob().setAllowNonRestoredState(false);
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE.key(), "true");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobOrSessionSpec()
+                        .build();
+        Assertions.assertFalse(
+                configuration.getBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE));
+
+        flinkDeployment.getSpec().getJob().setAllowNonRestoredState(true);
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE.key(), "false");
+        configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobOrSessionSpec()
+                        .build();
+        Assertions.assertTrue(
+                configuration.getBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE));
     }
 
     @Test
@@ -306,7 +339,7 @@ public class FlinkConfigBuilderTest {
         final String clusterId = flinkDeployment.getMetadata().getName();
         // Most configs have been tested by previous unit tests, thus we only verify the namespace
         // and clusterId here.
-        Assert.assertEquals(namespace, configuration.get(KubernetesConfigOptions.NAMESPACE));
-        Assert.assertEquals(clusterId, configuration.get(KubernetesConfigOptions.CLUSTER_ID));
+        Assertions.assertEquals(namespace, configuration.get(KubernetesConfigOptions.NAMESPACE));
+        Assertions.assertEquals(clusterId, configuration.get(KubernetesConfigOptions.CLUSTER_ID));
     }
 }
