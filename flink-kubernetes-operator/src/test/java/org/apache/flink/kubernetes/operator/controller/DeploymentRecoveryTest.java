@@ -101,7 +101,7 @@ public class DeploymentRecoveryTest {
         } else {
             assertEquals(
                     JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
-            assertEquals(JobStatus.RECONCILING.name(), status.getJobStatus().getState());
+            assertEquals(JobStatus.FAILED.name(), status.getJobStatus().getState());
         }
 
         // Remove deployment

@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
@@ -124,6 +125,7 @@ public class FlinkDeploymentController
     private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
         LOG.error("Flink Deployment failed", dfe);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
+        flinkApp.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
         ReconciliationUtils.updateForReconciliationError(flinkApp, dfe.getMessage());
 
         // TODO: avoid repeated event

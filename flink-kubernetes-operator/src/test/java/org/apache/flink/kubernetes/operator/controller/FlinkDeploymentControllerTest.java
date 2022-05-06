@@ -241,6 +241,9 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.ERROR,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.FAILED.name(),
+                appCluster.getStatus().getJobStatus().getState());
 
         // Validate status status
         assertNotNull(appCluster.getStatus().getError());

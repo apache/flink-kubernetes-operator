@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -138,6 +139,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
                 checkCrashLoopBackoff(flinkApp, effectiveConfig);
             } catch (DeploymentFailedException dfe) {
                 // throw only when not already in error status to allow for spec update
+                deploymentStatus.getJobStatus().setState(JobStatus.FAILED.name());
                 if (!JobManagerDeploymentStatus.ERROR.equals(
                         deploymentStatus.getJobManagerDeploymentStatus())) {
                     throw dfe;
@@ -151,6 +153,8 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         }
 
         deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        deploymentStatus.getJobStatus().setState(JobStatus.FAILED.name());
+
         if (previousJmStatus != JobManagerDeploymentStatus.MISSING
                 && previousJmStatus != JobManagerDeploymentStatus.ERROR) {
             onMissingDeployment(flinkApp);
