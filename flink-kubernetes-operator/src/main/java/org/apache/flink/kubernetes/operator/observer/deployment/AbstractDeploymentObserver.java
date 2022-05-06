@@ -221,7 +221,11 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
     }
 
     private void onMissingDeployment(FlinkDeployment deployment) {
-        String err = "Missing JobManager deployment";
+        String err =
+                "Missing JobManager deployment for "
+                        + deployment.getMetadata().getNamespace()
+                        + "/"
+                        + deployment.getMetadata().getName();
         logger.error(err);
         Event event =
                 DeploymentFailedException.asEvent(

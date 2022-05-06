@@ -392,6 +392,8 @@ public class ApplicationReconcilerTest {
         assertEquals(
                 "trigger_0",
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
-        assertEquals(JobState.SUSPENDED.name(), spDeployment.getStatus().getJobStatus().getState());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.FINISHED.name(),
+                spDeployment.getStatus().getJobStatus().getState());
     }
 }

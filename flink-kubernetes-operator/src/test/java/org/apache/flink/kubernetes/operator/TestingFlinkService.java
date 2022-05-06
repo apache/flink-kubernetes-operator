@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
@@ -243,7 +242,7 @@ public class TestingFlinkService extends FlinkService {
                     new JobStatusMessage(
                             oldStatus.getJobId(),
                             oldStatus.getJobName(),
-                            JobStatus.SUSPENDED,
+                            JobStatus.FINISHED,
                             oldStatus.getStartTime());
         } else {
             jobs.removeIf(js -> js.f1.getJobId().equals(jobID));
@@ -256,7 +255,7 @@ public class TestingFlinkService extends FlinkService {
         jobs.clear();
         sessions.remove(meta.getName());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
-        status.getJobStatus().setState(JobState.SUSPENDED.name());
+        status.getJobStatus().setState(JobStatus.FINISHED.name());
     }
 
     @Override

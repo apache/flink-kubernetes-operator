@@ -518,9 +518,13 @@ public class FlinkDeploymentControllerTest {
             testController.reconcile(appCluster, context);
             testController.reconcile(appCluster, context);
             if (appCluster.getSpec().getJob() != null) {
-                assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+                assertEquals(
+                        org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                        appCluster.getStatus().getJobStatus().getState());
             } else {
-                assertEquals("SUSPENDED", appCluster.getStatus().getJobStatus().getState());
+                assertEquals(
+                        org.apache.flink.api.common.JobStatus.FINISHED.name(),
+                        appCluster.getStatus().getJobStatus().getState());
             }
             assertEquals(
                     JobManagerDeploymentStatus.READY,
@@ -559,7 +563,9 @@ public class FlinkDeploymentControllerTest {
 
             testController.reconcile(appCluster, context);
 
-            assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+            assertEquals(
+                    org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                    appCluster.getStatus().getJobStatus().getState());
             assertEquals(
                     JobManagerDeploymentStatus.READY,
                     appCluster.getStatus().getJobManagerDeploymentStatus());

@@ -288,7 +288,8 @@ public class ReconciliationUtils {
         String jobState = status.getJobStatus().getState();
 
         return deploymentStatus == JobManagerDeploymentStatus.READY
-                && org.apache.flink.api.common.JobStatus.valueOf(jobState).isTerminalState();
+                && org.apache.flink.api.common.JobStatus.valueOf(jobState)
+                        .isGloballyTerminalState();
     }
 
     public static boolean isJobRunning(FlinkDeploymentStatus status) {
