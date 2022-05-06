@@ -126,7 +126,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
         } else if (ReconciliationUtils.shouldRollBack(reconciliationStatus, deployConfig)) {
             rollbackApplication(flinkApp);
         } else if (ReconciliationUtils.deploymentRecoveryEnabled(deployConfig)
-                && ReconciliationUtils.jobManagerMissingForRunningDeployment(status)) {
+                && ReconciliationUtils.jmMissingForRunningDeployment(status)) {
             recoverJmDeployment(flinkApp);
         } else if (SavepointUtils.shouldTriggerSavepoint(desiredJobSpec, status)
                 && ReconciliationUtils.isJobRunning(status)) {
@@ -195,7 +195,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
 
         FlinkDeploymentStatus status = deployment.getStatus();
 
-        if (ReconciliationUtils.jobManagerMissingForRunningDeployment(status)) {
+        if (ReconciliationUtils.jmMissingOrErrorForRunningDep(status)) {
             // JobManager is missing for savepoint upgrade, we cannot roll back
             throw new DeploymentFailedException(
                     DeploymentFailedException.COMPONENT_JOBMANAGER,

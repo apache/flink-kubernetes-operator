@@ -90,7 +90,22 @@ public class DeploymentRecoveryTest {
         // Remove deployment
         flinkService.setPortReady(false);
         flinkService.clear();
+
+        // Make sure we do not try to recover JM deployment errors (only missing)
+        testController.reconcile(
+                appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+        testController.reconcile(
+                appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+        assertEquals(JobManagerDeploymentStatus.ERROR, status.getJobManagerDeploymentStatus());
+
         testController.reconcile(appCluster, context);
+        if (flinkVersion != FlinkVersion.v1_14 || enabled) {
+            assertEquals(
+                    JobManagerDeploymentStatus.DEPLOYING, status.getJobManagerDeploymentStatus());
+        } else {
+            assertEquals(
+                    JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
+        }
         flinkService.setPortReady(true);
 
         testController.reconcile(appCluster, context);

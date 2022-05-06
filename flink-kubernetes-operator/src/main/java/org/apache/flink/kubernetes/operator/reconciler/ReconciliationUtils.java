@@ -270,7 +270,13 @@ public class ReconciliationUtils {
                                 : false);
     }
 
-    public static boolean jobManagerMissingForRunningDeployment(FlinkDeploymentStatus status) {
+    public static boolean jmMissingForRunningDeployment(FlinkDeploymentStatus status) {
+        return status.getReconciliationStatus().deserializeLastReconciledSpec().getJob().getState()
+                        == JobState.RUNNING
+                && (status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING);
+    }
+
+    public static boolean jmMissingOrErrorForRunningDep(FlinkDeploymentStatus status) {
         return status.getReconciliationStatus().deserializeLastReconciledSpec().getJob().getState()
                         == JobState.RUNNING
                 && (status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING
