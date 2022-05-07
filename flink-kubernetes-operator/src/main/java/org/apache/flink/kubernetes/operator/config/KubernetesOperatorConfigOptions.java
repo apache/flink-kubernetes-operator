@@ -134,4 +134,11 @@ public class KubernetesOperatorConfigOptions {
                     .intType()
                     .defaultValue(1000)
                     .withDescription("Max config cache size.");
+
+    public static final ConfigOption<Boolean> OPERATOR_RECOVER_JM_DEPLOYMENT_ENABLED =
+            ConfigOptions.key("kubernetes.operator.reconciler.jm-deployment-recovery.enabled")
+                    .booleanType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Whether to enable recovery of missing/deleted jobmanager deployments. False by default for Flink 1.14, true for newer Flink version.");
 }

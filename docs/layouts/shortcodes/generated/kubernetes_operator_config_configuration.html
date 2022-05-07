@@ -87,6 +87,12 @@
             <td>The timeout for the reconciler to wait for flink to shutdown cluster.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.reconciler.jm-deployment-recovery.enabled</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>Boolean</td>
+            <td>Whether to enable recovery of missing/deleted jobmanager deployments. False by default for Flink 1.14, true for newer Flink version.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.reconciler.max.parallelism</h5></td>
             <td style="word-wrap: break-word;">5</td>
             <td>Integer</td>

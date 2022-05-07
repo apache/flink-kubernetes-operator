@@ -24,6 +24,8 @@ import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 
+import java.time.Instant;
+
 /** Exception to signal terminal deployment failure. */
 public class DeploymentFailedException extends RuntimeException {
     public static final String COMPONENT_JOBMANAGER = "JobManagerDeployment";
@@ -54,6 +56,15 @@ public class DeploymentFailedException extends RuntimeException {
         this.reason = stateWaiting.getReason();
         this.lastTransitionTime = null;
         this.lastUpdateTime = null;
+    }
+
+    public DeploymentFailedException(String message, String component, String type, String reason) {
+        super(message);
+        this.component = component;
+        this.type = type;
+        this.reason = reason;
+        this.lastTransitionTime = Instant.now().toString();
+        this.lastUpdateTime = lastTransitionTime;
     }
 
     public static Event asEvent(DeploymentFailedException dfe, FlinkDeployment flinkApp) {

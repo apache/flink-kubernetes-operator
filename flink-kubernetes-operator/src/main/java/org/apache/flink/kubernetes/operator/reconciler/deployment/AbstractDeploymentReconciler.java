@@ -17,16 +17,13 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
-import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -54,31 +51,12 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
 
     @Override
     public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
-        return shutdownAndDelete(flinkApp, configManager.getObserveConfig(flinkApp));
-    }
-
-    private DeleteControl shutdownAndDelete(
-            FlinkDeployment flinkApp, Configuration effectiveConfig) {
-
-        if (JobManagerDeploymentStatus.READY
-                == flinkApp.getStatus().getJobManagerDeploymentStatus()) {
-            shutdown(flinkApp, effectiveConfig);
-        } else {
-            FlinkUtils.deleteCluster(
-                    flinkApp.getMetadata(),
-                    kubernetesClient,
-                    true,
-                    configManager
-                            .getOperatorConfiguration()
-                            .getFlinkShutdownClusterTimeout()
-                            .toSeconds());
-        }
-
+        shutdown(flinkApp);
         return DeleteControl.defaultDelete();
     }
 
     protected boolean initiateRollBack(FlinkDeploymentStatus status) {
-        ReconciliationStatus reconciliationStatus = status.getReconciliationStatus();
+        ReconciliationStatus<?> reconciliationStatus = status.getReconciliationStatus();
         if (reconciliationStatus.getState() != ReconciliationState.ROLLING_BACK) {
             LOG.warn("Preparing to roll back to last stable spec.");
             if (status.getError() == null) {
@@ -91,5 +69,5 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
         return false;
     }
 
-    protected abstract void shutdown(FlinkDeployment flinkApp, Configuration effectiveConfig);
+    protected abstract void shutdown(FlinkDeployment flinkApp);
 }

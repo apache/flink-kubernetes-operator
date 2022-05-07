@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
 import java.util.List;
@@ -39,8 +40,11 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     private final SavepointObserver savepointObserver;
     private final JobStatusObserver<ApplicationObserverContext> jobStatusObserver;
 
-    public ApplicationObserver(FlinkService flinkService, FlinkConfigManager configManager) {
-        super(flinkService, configManager);
+    public ApplicationObserver(
+            KubernetesClient kubernetesClient,
+            FlinkService flinkService,
+            FlinkConfigManager configManager) {
+        super(kubernetesClient, flinkService, configManager);
         this.savepointObserver = new SavepointObserver(flinkService, configManager);
         this.jobStatusObserver =
                 new JobStatusObserver<>(flinkService) {

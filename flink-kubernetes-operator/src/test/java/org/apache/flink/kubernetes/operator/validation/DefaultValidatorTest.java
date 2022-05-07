@@ -261,6 +261,9 @@ public class DefaultValidatorTest {
         testError(
                 dep -> {
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .remove(CheckpointingOptions.SAVEPOINT_DIRECTORY.key());
                     dep.setStatus(new FlinkDeploymentStatus());
                     dep.getStatus().setJobStatus(new JobStatus());
 

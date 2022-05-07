@@ -43,9 +43,9 @@ public class ApplicationObserverTest {
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     @Test
-    public void observeApplicationCluster() {
+    public void observeApplicationCluster() throws Exception {
         TestingFlinkService flinkService = new TestingFlinkService();
-        ApplicationObserver observer = new ApplicationObserver(flinkService, configManager);
+        ApplicationObserver observer = new ApplicationObserver(null, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.setStatus(new FlinkDeploymentStatus());
 
@@ -140,7 +140,7 @@ public class ApplicationObserverTest {
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
         assertEquals(
-                AbstractDeploymentObserver.JOB_STATE_UNKNOWN,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 deployment.getStatus().getJobStatus().getState());
         assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
     }
@@ -148,7 +148,7 @@ public class ApplicationObserverTest {
     @Test
     public void observeSavepoint() throws Exception {
         TestingFlinkService flinkService = new TestingFlinkService();
-        ApplicationObserver observer = new ApplicationObserver(flinkService, configManager);
+        ApplicationObserver observer = new ApplicationObserver(null, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
@@ -218,7 +218,7 @@ public class ApplicationObserverTest {
     @Test
     public void observeListJobsError() {
         TestingFlinkService flinkService = new TestingFlinkService();
-        ApplicationObserver observer = new ApplicationObserver(flinkService, configManager);
+        ApplicationObserver observer = new ApplicationObserver(null, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         bringToReadyStatus(deployment);
         observer.observe(deployment, readyContext);

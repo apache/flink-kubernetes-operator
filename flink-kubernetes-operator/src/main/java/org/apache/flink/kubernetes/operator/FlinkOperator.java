@@ -88,7 +88,7 @@ public class FlinkOperator {
     private void registerDeploymentController() {
         ReconcilerFactory reconcilerFactory =
                 new ReconcilerFactory(client, flinkService, configManager);
-        ObserverFactory observerFactory = new ObserverFactory(flinkService, configManager);
+        ObserverFactory observerFactory = new ObserverFactory(client, flinkService, configManager);
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(

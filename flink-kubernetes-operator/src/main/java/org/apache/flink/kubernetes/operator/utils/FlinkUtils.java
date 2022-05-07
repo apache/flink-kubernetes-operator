@@ -17,11 +17,16 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
@@ -93,34 +98,26 @@ public class FlinkUtils {
         }
     }
 
-    public static void deleteCluster(
-            ObjectMeta meta,
-            KubernetesClient kubernetesClient,
-            boolean deleteHaConfigmaps,
-            long shutdownTimeout) {
-        deleteCluster(
-                meta.getNamespace(),
-                meta.getName(),
-                kubernetesClient,
-                deleteHaConfigmaps,
-                shutdownTimeout);
-    }
-
     /**
      * Delete Flink kubernetes cluster by deleting the kubernetes resources directly. Optionally
      * allows deleting the native kubernetes HA resources as well.
      *
-     * @param namespace Namespace where the Flink cluster is deployed
-     * @param clusterId ClusterId of the Flink cluster
+     * @param status Deployment status object
+     * @param meta ObjectMeta of the deployment
      * @param kubernetesClient Kubernetes client
      * @param deleteHaConfigmaps Flag to indicate whether k8s HA metadata should be removed as well
+     * @param shutdownTimeout maximum time allowed for cluster shutdown
      */
     public static void deleteCluster(
-            String namespace,
-            String clusterId,
+            FlinkDeploymentStatus status,
+            ObjectMeta meta,
             KubernetesClient kubernetesClient,
             boolean deleteHaConfigmaps,
             long shutdownTimeout) {
+
+        String namespace = meta.getNamespace();
+        String clusterId = meta.getName();
+
         LOG.info("Deleting Flink cluster resources");
         kubernetesClient
                 .apps()
@@ -141,6 +138,8 @@ public class FlinkUtils {
                                     clusterId, LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
                     .delete();
         }
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        status.getJobStatus().setState(JobStatus.FINISHED.name());
     }
 
     /** Wait until the FLink cluster has completely shut down. */
@@ -250,5 +249,9 @@ public class FlinkUtils {
         return configuration
                 .get(HighAvailabilityOptions.HA_MODE)
                 .equalsIgnoreCase(KubernetesHaServicesFactory.class.getCanonicalName());
+    }
+
+    public static boolean clusterShutdownDisabled(FlinkDeploymentSpec spec) {
+        return spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_14);
     }
 }

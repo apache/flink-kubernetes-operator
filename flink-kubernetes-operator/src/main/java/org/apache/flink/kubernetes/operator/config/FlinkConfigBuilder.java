@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
@@ -30,9 +31,11 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
@@ -61,6 +64,23 @@ import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOGBACK_NA
 public class FlinkConfigBuilder {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigBuilder.class);
+
+    // Flink 1.15+ specific config options, should be removed once the Flink base dependency is
+    // bumped
+    private static final ConfigOption<Boolean> SHUTDOWN_ON_APPLICATION_FINISH =
+            ConfigOptions.key("execution.shutdown-on-application-finish")
+                    .booleanType()
+                    .noDefaultValue();
+
+    public static final ConfigOption<Boolean> SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR =
+            ConfigOptions.key("execution.submit-failed-job-on-application-error")
+                    .booleanType()
+                    .noDefaultValue();
+
+    public static final ConfigOption<FlinkVersion> FLINK_VERSION =
+            ConfigOptions.key("$internal.flink.version")
+                    .enumType(FlinkVersion.class)
+                    .noDefaultValue();
 
     protected static final String GENERATED_FILE_PREFIX = "flink_op_generated_";
     protected static final Duration DEFAULT_CHECKPOINTING_INTERVAL = Duration.ofMinutes(5);
@@ -112,30 +132,31 @@ public class FlinkConfigBuilder {
         }
 
         // Adapt default rest service type from 1.15+
-        if (!effectiveConfig.contains(REST_SERVICE_EXPOSED_TYPE)) {
-            effectiveConfig.set(
-                    REST_SERVICE_EXPOSED_TYPE,
-                    KubernetesConfigOptions.ServiceExposedType.ClusterIP);
-        }
+        setDefaultConf(
+                REST_SERVICE_EXPOSED_TYPE, KubernetesConfigOptions.ServiceExposedType.ClusterIP);
 
         if (spec.getJob() != null) {
-            if (!effectiveConfig.contains(CANCEL_ENABLE)) {
-                // Set 'web.cancel.enable' to false for application deployments to avoid users
-                // accidentally cancelling jobs.
-                effectiveConfig.set(CANCEL_ENABLE, false);
-            }
+            // Set 'web.cancel.enable' to false for application deployments to avoid users
+            // accidentally cancelling jobs.
+            setDefaultConf(CANCEL_ENABLE, false);
+
             // With last-state upgrade mode, set the default value of
             // 'execution.checkpointing.interval'
             // to 5 minutes when HA is enabled.
-            if (spec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE
-                    && !effectiveConfig.contains(
-                            ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL)) {
-                effectiveConfig.set(
+            if (spec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE) {
+                setDefaultConf(
                         ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL,
                         DEFAULT_CHECKPOINTING_INTERVAL);
             }
+
+            // We need to keep the application clusters around for proper operator behaviour
+            effectiveConfig.set(SHUTDOWN_ON_APPLICATION_FINISH, false);
+            if (HighAvailabilityMode.isHighAvailabilityModeActivated(effectiveConfig)) {
+                setDefaultConf(SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR, true);
+            }
         }
 
+        effectiveConfig.set(FLINK_VERSION, spec.getFlinkVersion());
         return this;
     }
 
@@ -252,6 +273,12 @@ public class FlinkConfigBuilder {
                 .applyTaskManagerSpec()
                 .applyJobOrSessionSpec()
                 .build();
+    }
+
+    private <T> void setDefaultConf(ConfigOption<T> option, T value) {
+        if (!effectiveConfig.contains(option)) {
+            effectiveConfig.set(option, value);
+        }
     }
 
     private static void setResource(

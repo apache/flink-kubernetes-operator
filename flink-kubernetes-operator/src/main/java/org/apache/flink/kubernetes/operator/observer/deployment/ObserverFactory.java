@@ -23,17 +23,24 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** The factory to create the observer based ob the {@link FlinkDeployment} mode. */
 public class ObserverFactory {
 
+    private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
     private final Map<Mode, Observer<FlinkDeployment>> observerMap;
 
-    public ObserverFactory(FlinkService flinkService, FlinkConfigManager configManager) {
+    public ObserverFactory(
+            KubernetesClient kubernetesClient,
+            FlinkService flinkService,
+            FlinkConfigManager configManager) {
+        this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.configManager = configManager;
         this.observerMap = new ConcurrentHashMap<>();
@@ -45,9 +52,11 @@ public class ObserverFactory {
                 mode -> {
                     switch (mode) {
                         case SESSION:
-                            return new SessionObserver(flinkService, configManager);
+                            return new SessionObserver(
+                                    kubernetesClient, flinkService, configManager);
                         case APPLICATION:
-                            return new ApplicationObserver(flinkService, configManager);
+                            return new ApplicationObserver(
+                                    kubernetesClient, flinkService, configManager);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

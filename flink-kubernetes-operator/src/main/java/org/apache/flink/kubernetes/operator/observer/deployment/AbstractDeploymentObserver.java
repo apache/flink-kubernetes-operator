@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -29,16 +30,19 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,12 +55,15 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
 
     protected final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    public static final String JOB_STATE_UNKNOWN = "UNKNOWN";
-
+    protected final KubernetesClient kubernetesClient;
     protected final FlinkService flinkService;
     protected final FlinkConfigManager configManager;
 
-    public AbstractDeploymentObserver(FlinkService flinkService, FlinkConfigManager configManager) {
+    public AbstractDeploymentObserver(
+            KubernetesClient kubernetesClient,
+            FlinkService flinkService,
+            FlinkConfigManager configManager) {
+        this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.configManager = configManager;
     }
@@ -132,6 +139,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
                 checkCrashLoopBackoff(flinkApp, effectiveConfig);
             } catch (DeploymentFailedException dfe) {
                 // throw only when not already in error status to allow for spec update
+                deploymentStatus.getJobStatus().setState(JobStatus.FAILED.name());
                 if (!JobManagerDeploymentStatus.ERROR.equals(
                         deploymentStatus.getJobManagerDeploymentStatus())) {
                     throw dfe;
@@ -144,8 +152,13 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
             return;
         }
 
-        logger.info("JobManager deployment does not exist");
         deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        deploymentStatus.getJobStatus().setState(JobStatus.FAILED.name());
+
+        if (previousJmStatus != JobManagerDeploymentStatus.MISSING
+                && previousJmStatus != JobManagerDeploymentStatus.ERROR) {
+            onMissingDeployment(flinkApp);
+        }
     }
 
     private Optional<Deployment> getSecondaryResource(FlinkDeployment flinkApp, Context context) {
@@ -209,6 +222,25 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
                 && jobSpec.getState() == JobState.SUSPENDED
                 && lastReconciledSpec != null
                 && lastReconciledSpec.getJob().getState() == JobState.SUSPENDED;
+    }
+
+    private void onMissingDeployment(FlinkDeployment deployment) {
+        String err = "Missing JobManager deployment";
+        logger.error(err);
+        Event event =
+                DeploymentFailedException.asEvent(
+                        new DeploymentFailedException(
+                                err,
+                                DeploymentFailedException.COMPONENT_JOBMANAGER,
+                                "Error",
+                                "Missing"),
+                        deployment);
+        kubernetesClient
+                .v1()
+                .events()
+                .inNamespace(deployment.getMetadata().getNamespace())
+                .create(event);
+        ReconciliationUtils.updateForReconciliationError(deployment, err);
     }
 
     /**
