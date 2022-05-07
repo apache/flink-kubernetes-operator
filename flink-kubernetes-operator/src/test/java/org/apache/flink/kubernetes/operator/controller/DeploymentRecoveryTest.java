@@ -99,7 +99,7 @@ public class DeploymentRecoveryTest {
         assertEquals(JobManagerDeploymentStatus.ERROR, status.getJobManagerDeploymentStatus());
 
         testController.reconcile(appCluster, context);
-        if (flinkVersion != FlinkVersion.v1_14 || enabled) {
+        if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_14) || enabled) {
             assertEquals(
                     JobManagerDeploymentStatus.DEPLOYING, status.getJobManagerDeploymentStatus());
         } else {
@@ -110,7 +110,7 @@ public class DeploymentRecoveryTest {
 
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
-        if (flinkVersion != FlinkVersion.v1_14 || enabled) {
+        if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_14) || enabled) {
             assertEquals(JobManagerDeploymentStatus.READY, status.getJobManagerDeploymentStatus());
             assertEquals(JobStatus.RUNNING.name(), status.getJobStatus().getState());
         } else {
@@ -170,7 +170,7 @@ public class DeploymentRecoveryTest {
         testController.reconcile(appCluster, context);
         flinkService.setPortReady(true);
 
-        if (flinkVersion != FlinkVersion.v1_14 || enabled) {
+        if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_14) || enabled) {
             assertEquals(
                     JobManagerDeploymentStatus.DEPLOYING, status.getJobManagerDeploymentStatus());
             testController.reconcile(appCluster, context);
@@ -189,9 +189,7 @@ public class DeploymentRecoveryTest {
         List<Arguments> args = new ArrayList<>();
         for (FlinkVersion version : FlinkVersion.values()) {
             for (UpgradeMode upgradeMode : UpgradeMode.values()) {
-                if (version == FlinkVersion.v1_14) {
-                    args.add(arguments(version, upgradeMode, true));
-                }
+                args.add(arguments(version, upgradeMode, true));
                 args.add(arguments(version, upgradeMode, false));
             }
         }
