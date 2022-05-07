@@ -198,9 +198,10 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
         if (ReconciliationUtils.jmMissingOrErrorForRunningDep(status)) {
             // JobManager is missing for savepoint upgrade, we cannot roll back
             throw new DeploymentFailedException(
+                    "Cannot perform savepoint upgrade on missing/failed JobManager deployment",
                     DeploymentFailedException.COMPONENT_JOBMANAGER,
                     "Error",
-                    "Cannot perform savepoint upgrade on missing JobManager deployment.");
+                    "UpgradeFailed");
         }
 
         return ReconciliationUtils.isJobInTerminalState(status)

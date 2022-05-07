@@ -225,16 +225,15 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
     }
 
     private void onMissingDeployment(FlinkDeployment deployment) {
-        String err =
-                "Missing JobManager deployment for "
-                        + deployment.getMetadata().getNamespace()
-                        + "/"
-                        + deployment.getMetadata().getName();
+        String err = "Missing JobManager deployment";
         logger.error(err);
         Event event =
                 DeploymentFailedException.asEvent(
                         new DeploymentFailedException(
-                                DeploymentFailedException.COMPONENT_JOBMANAGER, "Error", err),
+                                err,
+                                DeploymentFailedException.COMPONENT_JOBMANAGER,
+                                "Error",
+                                "Missing"),
                         deployment);
         kubernetesClient
                 .v1()
