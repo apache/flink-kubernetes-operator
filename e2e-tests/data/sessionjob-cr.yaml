@@ -22,7 +22,7 @@ metadata:
   namespace: default
   name: session-cluster-1
 spec:
-  image: flink:1.14.3
+  image: flink:1.14
   flinkVersion: v1_14
   ingress:
     template: "/{{namespace}}/{{name}}(/|$)(.*)"
@@ -76,7 +76,7 @@ metadata:
 spec:
   deploymentName: session-cluster-1
   job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.3/flink-examples-streaming_2.12-1.14.3.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4.jar
     parallelism: 2
     upgradeMode: savepoint
     entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample

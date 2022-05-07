@@ -98,6 +98,13 @@ jobs:
           - description: 'WatchNamespaces enabled'
             namespace: flink
             extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
+        versions:
+          - image: flink:1.13
+            flinkVersion: v1_13
+          - image: flink:1.14
+            flinkVersion: v1_14
+          - image: flink:1.15
+            flinkVersion: v1_15
     name: e2e_ci
     steps:
       - uses: actions/checkout@v2
@@ -143,10 +150,14 @@ jobs:
           kubectl get pods
       - name: Run Flink e2e tests
         run: |
+          sed -i "s/image: flink:.*/image: ${{ matrix.versions.image }}/" e2e-tests/data/*.yaml
+          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.versions.flinkVersion }}/" e2e-tests/data/*.yaml
+          git diff HEAD
           ls e2e-tests/test_*.sh | while read script_test;do \
             echo "Running $script_test"
             bash $script_test || exit 1
           done
+          git reset --hard
       - name: Stop the operator
         run: |
           helm uninstall -n ${{ matrix.config.namespace }} flink-kubernetes-operator

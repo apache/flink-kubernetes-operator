@@ -102,7 +102,7 @@ metadata:
   namespace: default
   name: basic-checkpoint-ha-example
 spec:
-  image: flink:1.14.3
+  image: flink:1.14
   flinkVersion: v1_14
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"

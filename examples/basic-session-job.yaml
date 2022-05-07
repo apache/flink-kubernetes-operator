@@ -41,7 +41,7 @@ metadata:
 spec:
   deploymentName: basic-session-cluster
   job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.3/flink-examples-streaming_2.12-1.14.3-TopSpeedWindowing.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4-TopSpeedWindowing.jar
     parallelism: 4
     upgradeMode: stateless
 
@@ -53,7 +53,7 @@ metadata:
 spec:
   deploymentName: basic-session-cluster
   job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.3/flink-examples-streaming_2.12-1.14.3.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4.jar
     parallelism: 2
     upgradeMode: stateless
     entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample
