@@ -118,7 +118,9 @@ public class FlinkUtils {
         String namespace = meta.getNamespace();
         String clusterId = meta.getName();
 
-        LOG.info("Deleting Flink cluster resources");
+        LOG.info(
+                "Deleting JobManager deployment {}.",
+                deleteHaConfigmaps ? "and HA metadata" : "while preserving HA metadata");
         kubernetesClient
                 .apps()
                 .deployments()

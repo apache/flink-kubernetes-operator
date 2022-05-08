@@ -29,6 +29,8 @@ import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.Observer;
@@ -39,6 +41,7 @@ import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFact
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.metrics.MetricGroup;
@@ -86,9 +89,11 @@ public class FlinkOperator {
     }
 
     private void registerDeploymentController() {
+        StatusHelper<FlinkDeploymentStatus> statusHelper = new StatusHelper<>(client);
         ReconcilerFactory reconcilerFactory =
                 new ReconcilerFactory(client, flinkService, configManager);
-        ObserverFactory observerFactory = new ObserverFactory(client, flinkService, configManager);
+        ObserverFactory observerFactory =
+                new ObserverFactory(client, flinkService, configManager, statusHelper);
 
         FlinkDeploymentController controller =
                 new FlinkDeploymentController(
@@ -97,7 +102,8 @@ public class FlinkOperator {
                         validators,
                         reconcilerFactory,
                         observerFactory,
-                        new MetricManager<>(metricGroup));
+                        new MetricManager<>(metricGroup),
+                        statusHelper);
 
         FlinkControllerConfig<FlinkDeployment> controllerConfig =
                 new FlinkControllerConfig<>(
@@ -111,7 +117,9 @@ public class FlinkOperator {
     private void registerSessionJobController() {
         Reconciler<FlinkSessionJob> reconciler =
                 new FlinkSessionJobReconciler(client, flinkService, configManager);
-        Observer<FlinkSessionJob> observer = new SessionJobObserver(flinkService, configManager);
+        StatusHelper<FlinkSessionJobStatus> statusHelper = new StatusHelper<>(client);
+        Observer<FlinkSessionJob> observer =
+                new SessionJobObserver(flinkService, configManager, statusHelper);
         FlinkSessionJobController controller =
                 new FlinkSessionJobController(
                         configManager,
@@ -119,7 +127,8 @@ public class FlinkOperator {
                         validators,
                         reconciler,
                         observer,
-                        new MetricManager<>(metricGroup));
+                        new MetricManager<>(metricGroup),
+                        statusHelper);
 
         FlinkControllerConfig<FlinkSessionJob> controllerConfig =
                 new FlinkControllerConfig<>(

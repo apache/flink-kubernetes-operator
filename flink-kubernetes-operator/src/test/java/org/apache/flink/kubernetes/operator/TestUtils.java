@@ -42,6 +42,7 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.metrics.testutils.MetricListener;
 
@@ -152,6 +153,7 @@ public class TestUtils {
                 KubernetesHaServicesFactory.class.getCanonicalName());
         conf.put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), "test");
         conf.put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), "test-savepoint-dir");
+        conf.put(CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(), "test-checkpoint-dir");
 
         return FlinkDeploymentSpec.builder()
                 .image(IMAGE)
@@ -363,14 +365,17 @@ public class TestUtils {
             KubernetesClient kubernetesClient,
             TestingFlinkService flinkService) {
 
+        var statusHelper = new StatusHelper<FlinkDeploymentStatus>(kubernetesClient);
         var controller =
                 new FlinkDeploymentController(
                         configManager,
                         kubernetesClient,
                         ValidatorUtils.discoverValidators(configManager),
                         new ReconcilerFactory(kubernetesClient, flinkService, configManager),
-                        new ObserverFactory(kubernetesClient, flinkService, configManager),
-                        new MetricManager<>(new MetricListener().getMetricGroup()));
+                        new ObserverFactory(
+                                kubernetesClient, flinkService, configManager, statusHelper),
+                        new MetricManager<>(new MetricListener().getMetricGroup()),
+                        statusHelper);
         controller.setControllerConfig(
                 new FlinkControllerConfig(controller, Collections.emptySet()));
         return controller;

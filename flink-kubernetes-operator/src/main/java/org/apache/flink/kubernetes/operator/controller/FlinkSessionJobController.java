@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
@@ -28,6 +27,7 @@ import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.util.Preconditions;
 
@@ -56,7 +56,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -81,8 +80,7 @@ public class FlinkSessionJobController
     private Map<String, SharedIndexInformer<FlinkSessionJob>> informers;
     private FlinkControllerConfig<FlinkSessionJob> controllerConfig;
 
-    private final ConcurrentHashMap<Tuple2<String, String>, FlinkSessionJobStatus> statusCache =
-            new ConcurrentHashMap<>();
+    private final StatusHelper<FlinkSessionJobStatus> statusHelper;
 
     public FlinkSessionJobController(
             FlinkConfigManager configManager,
@@ -90,13 +88,15 @@ public class FlinkSessionJobController
             Set<FlinkResourceValidator> validators,
             Reconciler<FlinkSessionJob> reconciler,
             Observer<FlinkSessionJob> observer,
-            MetricManager<FlinkSessionJob> metricManager) {
+            MetricManager<FlinkSessionJob> metricManager,
+            StatusHelper<FlinkSessionJobStatus> statusHelper) {
         this.configManager = configManager;
         this.kubernetesClient = kubernetesClient;
         this.validators = validators;
         this.reconciler = reconciler;
         this.observer = observer;
         this.metricManager = metricManager;
+        this.statusHelper = statusHelper;
     }
 
     public void init(FlinkControllerConfig<FlinkSessionJob> config) {
@@ -108,11 +108,11 @@ public class FlinkSessionJobController
     public UpdateControl<FlinkSessionJob> reconcile(
             FlinkSessionJob flinkSessionJob, Context context) {
         LOG.info("Starting reconciliation");
-        OperatorUtils.updateStatusFromCache(flinkSessionJob, statusCache);
+        statusHelper.updateStatusFromCache(flinkSessionJob);
         observer.observe(flinkSessionJob, context);
         if (!validateSessionJob(flinkSessionJob, context)) {
             metricManager.onUpdate(flinkSessionJob);
-            OperatorUtils.patchAndCacheStatus(kubernetesClient, flinkSessionJob, statusCache);
+            statusHelper.patchAndCacheStatus(flinkSessionJob);
             return ReconciliationUtils.toUpdateControl(
                     configManager.getOperatorConfiguration(), flinkSessionJob, false);
         }
@@ -124,7 +124,7 @@ public class FlinkSessionJobController
             throw new ReconciliationException(e);
         }
         metricManager.onUpdate(flinkSessionJob);
-        OperatorUtils.patchAndCacheStatus(kubernetesClient, flinkSessionJob, statusCache);
+        statusHelper.patchAndCacheStatus(flinkSessionJob);
         return ReconciliationUtils.toUpdateControl(
                 configManager.getOperatorConfiguration(), flinkSessionJob, true);
     }
@@ -133,10 +133,7 @@ public class FlinkSessionJobController
     public DeleteControl cleanup(FlinkSessionJob sessionJob, Context context) {
         LOG.info("Deleting FlinkSessionJob");
         metricManager.onRemove(sessionJob);
-        statusCache.remove(
-                Tuple2.of(
-                        sessionJob.getMetadata().getNamespace(),
-                        sessionJob.getMetadata().getName()));
+        statusHelper.removeCachedStatus(sessionJob);
         return reconciler.cleanup(sessionJob, context);
     }
 
@@ -144,7 +141,7 @@ public class FlinkSessionJobController
     public Optional<FlinkSessionJob> updateErrorStatus(
             FlinkSessionJob flinkSessionJob, RetryInfo retryInfo, RuntimeException e) {
         return ReconciliationUtils.updateErrorStatus(
-                kubernetesClient, flinkSessionJob, retryInfo, e, metricManager, statusCache);
+                flinkSessionJob, retryInfo, e, metricManager, statusHelper);
     }
 
     @Override

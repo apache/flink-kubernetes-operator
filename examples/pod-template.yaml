@@ -25,13 +25,13 @@ spec:
   flinkVersion: v1_15
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
+  serviceAccount: flink
   podTemplate:
     apiVersion: v1
     kind: Pod
     metadata:
       name: pod-template
     spec:
-      serviceAccount: flink
       containers:
         # Do not change the main container name
         - name: flink-main-container

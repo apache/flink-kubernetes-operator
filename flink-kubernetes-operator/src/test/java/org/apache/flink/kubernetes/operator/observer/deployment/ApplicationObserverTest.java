@@ -17,9 +17,11 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
+import org.apache.flink.kubernetes.operator.TestingStatusHelper;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
@@ -27,6 +29,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
@@ -45,7 +48,9 @@ public class ApplicationObserverTest {
     @Test
     public void observeApplicationCluster() throws Exception {
         TestingFlinkService flinkService = new TestingFlinkService();
-        ApplicationObserver observer = new ApplicationObserver(null, flinkService, configManager);
+        ApplicationObserver observer =
+                new ApplicationObserver(
+                        null, flinkService, configManager, new TestingStatusHelper<>());
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.setStatus(new FlinkDeploymentStatus());
 
@@ -148,7 +153,9 @@ public class ApplicationObserverTest {
     @Test
     public void observeSavepoint() throws Exception {
         TestingFlinkService flinkService = new TestingFlinkService();
-        ApplicationObserver observer = new ApplicationObserver(null, flinkService, configManager);
+        ApplicationObserver observer =
+                new ApplicationObserver(
+                        null, flinkService, configManager, new TestingStatusHelper<>());
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
@@ -200,6 +207,29 @@ public class ApplicationObserverTest {
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
 
         assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerTimestamp());
+
+        // Simulate Failed job
+        Tuple2<String, JobStatusMessage> jobTuple = flinkService.listJobs().get(0);
+        jobTuple.f0 = "last-SP";
+        jobTuple.f1 =
+                new JobStatusMessage(
+                        jobTuple.f1.getJobId(),
+                        jobTuple.f1.getJobName(),
+                        org.apache.flink.api.common.JobStatus.FAILED,
+                        jobTuple.f1.getStartTime());
+
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.FAILED.name(),
+                deployment.getStatus().getJobStatus().getState());
+        assertEquals(
+                "last-SP",
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
     }
 
     private void bringToReadyStatus(FlinkDeployment deployment) {
@@ -218,7 +248,9 @@ public class ApplicationObserverTest {
     @Test
     public void observeListJobsError() {
         TestingFlinkService flinkService = new TestingFlinkService();
-        ApplicationObserver observer = new ApplicationObserver(null, flinkService, configManager);
+        ApplicationObserver observer =
+                new ApplicationObserver(
+                        null, flinkService, configManager, new TestingStatusHelper<>());
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         bringToReadyStatus(deployment);
         observer.observe(deployment, readyContext);

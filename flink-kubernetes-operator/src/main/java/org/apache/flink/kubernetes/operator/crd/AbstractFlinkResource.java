@@ -18,29 +18,14 @@
 package org.apache.flink.kubernetes.operator.crd;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
+import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.fabric8.kubernetes.api.model.Namespaced;
-import io.fabric8.kubernetes.model.annotation.Group;
-import io.fabric8.kubernetes.model.annotation.ShortNames;
-import io.fabric8.kubernetes.model.annotation.Version;
+import io.fabric8.kubernetes.client.CustomResource;
 
-/** Custom resource definition that represents both Application and Session deployments. */
+/** Abstract base class Flink resources. */
 @Experimental
-@JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonDeserialize()
-@Group(CrdConstants.API_GROUP)
-@Version(CrdConstants.API_VERSION)
-@ShortNames({"flinkdep"})
-public class FlinkDeployment
-        extends AbstractFlinkResource<FlinkDeploymentSpec, FlinkDeploymentStatus>
-        implements Namespaced {
-
-    @Override
-    protected FlinkDeploymentStatus initStatus() {
-        return new FlinkDeploymentStatus();
-    }
-}
+public class AbstractFlinkResource<
+                SPEC extends AbstractFlinkSpec, STATUS extends CommonStatus<SPEC>>
+        extends CustomResource<SPEC, STATUS> implements Namespaced {}

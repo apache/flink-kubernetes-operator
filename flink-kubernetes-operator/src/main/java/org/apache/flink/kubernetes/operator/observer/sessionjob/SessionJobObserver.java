@@ -17,18 +17,18 @@
 
 package org.apache.flink.kubernetes.operator.observer.sessionjob;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.VoidObserverContext;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobHelper;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.util.Preconditions;
 
@@ -48,9 +48,12 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
     private final SavepointObserver savepointObserver;
     private final JobStatusObserver<VoidObserverContext> jobStatusObserver;
 
-    public SessionJobObserver(FlinkService flinkService, FlinkConfigManager configManager) {
+    public SessionJobObserver(
+            FlinkService flinkService,
+            FlinkConfigManager configManager,
+            StatusHelper<FlinkSessionJobStatus> statusHelper) {
         this.configManager = configManager;
-        this.savepointObserver = new SavepointObserver(flinkService, configManager);
+        this.savepointObserver = new SavepointObserver(flinkService, configManager, statusHelper);
         this.jobStatusObserver =
                 new JobStatusObserver<>(flinkService) {
                     @Override
@@ -108,22 +111,14 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
             return;
         }
 
-        Configuration deployedConfig = configManager.getObserveConfig(flinkDepOpt.get());
+        var deployedConfig = configManager.getObserveConfig(flinkDepOpt.get());
         var jobFound =
                 jobStatusObserver.observe(
                         flinkSessionJob.getStatus().getJobStatus(),
                         deployedConfig,
                         VoidObserverContext.INSTANCE);
         if (jobFound) {
-            savepointObserver
-                    .observe(
-                            flinkSessionJob.getStatus().getJobStatus().getSavepointInfo(),
-                            flinkSessionJob.getStatus().getJobStatus().getJobId(),
-                            deployedConfig)
-                    .ifPresent(
-                            e ->
-                                    ReconciliationUtils.updateForReconciliationError(
-                                            flinkSessionJob, e));
+            savepointObserver.observeSavepointStatus(flinkSessionJob, deployedConfig);
         }
     }
 }

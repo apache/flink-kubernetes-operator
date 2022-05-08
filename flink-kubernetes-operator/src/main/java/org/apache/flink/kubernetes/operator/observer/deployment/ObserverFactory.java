@@ -20,8 +20,10 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 
@@ -34,15 +36,18 @@ public class ObserverFactory {
     private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
+    private final StatusHelper<FlinkDeploymentStatus> statusHelper;
     private final Map<Mode, Observer<FlinkDeployment>> observerMap;
 
     public ObserverFactory(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkConfigManager configManager) {
+            FlinkConfigManager configManager,
+            StatusHelper<FlinkDeploymentStatus> statusHelper) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.configManager = configManager;
+        this.statusHelper = statusHelper;
         this.observerMap = new ConcurrentHashMap<>();
     }
 
@@ -56,7 +61,7 @@ public class ObserverFactory {
                                     kubernetesClient, flinkService, configManager);
                         case APPLICATION:
                             return new ApplicationObserver(
-                                    kubernetesClient, flinkService, configManager);
+                                    kubernetesClient, flinkService, configManager, statusHelper);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

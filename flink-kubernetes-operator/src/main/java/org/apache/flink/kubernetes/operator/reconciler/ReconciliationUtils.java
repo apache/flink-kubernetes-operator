@@ -17,12 +17,12 @@
 
 package org.apache.flink.kubernetes.operator.reconciler;
 
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
@@ -38,7 +38,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -46,7 +46,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.fabric8.kubernetes.client.CustomResource;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.slf4j.Logger;
@@ -57,7 +56,6 @@ import javax.annotation.Nullable;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 /** Reconciliation utilities. */
 public class ReconciliationUtils {
@@ -66,9 +64,8 @@ public class ReconciliationUtils {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    public static <SPEC extends AbstractFlinkSpec, STATUS extends CommonStatus<SPEC>>
-            void updateForSpecReconciliationSuccess(
-                    CustomResource<SPEC, STATUS> target, JobState stateAfterReconcile) {
+    public static <SPEC extends AbstractFlinkSpec> void updateForSpecReconciliationSuccess(
+            AbstractFlinkResource<SPEC, ?> target, JobState stateAfterReconcile) {
         var commonStatus = target.getStatus();
         var spec = target.getSpec();
 
@@ -98,8 +95,8 @@ public class ReconciliationUtils {
         }
     }
 
-    public static <SPEC extends AbstractFlinkSpec, STATUS extends CommonStatus<SPEC>>
-            void updateSavepointReconciliationSuccess(CustomResource<SPEC, STATUS> target) {
+    public static <SPEC extends AbstractFlinkSpec> void updateSavepointReconciliationSuccess(
+            AbstractFlinkResource<SPEC, ?> target) {
         var commonStatus = target.getStatus();
         var spec = target.getSpec();
         ReconciliationStatus<SPEC> reconciliationStatus = commonStatus.getReconciliationStatus();
@@ -112,8 +109,8 @@ public class ReconciliationUtils {
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
     }
 
-    public static <SPEC extends AbstractFlinkSpec, STATUS extends CommonStatus<SPEC>>
-            void updateForReconciliationError(CustomResource<SPEC, STATUS> target, String error) {
+    public static void updateForReconciliationError(
+            AbstractFlinkResource<?, ?> target, String error) {
         target.getStatus().setError(error);
     }
 
@@ -327,11 +324,8 @@ public class ReconciliationUtils {
      * @return True if the spec was reset and reconciliation can continue. False if nothing to
      *     reconcile.
      */
-    public static <
-                    SPEC extends AbstractFlinkSpec,
-                    STATUS extends CommonStatus<SPEC>,
-                    CR extends CustomResource<SPEC, STATUS>>
-            boolean applyValidationErrorAndResetSpec(CR deployment, String validationError) {
+    public static <SPEC extends AbstractFlinkSpec> boolean applyValidationErrorAndResetSpec(
+            AbstractFlinkResource<SPEC, ?> deployment, String validationError) {
 
         var status = deployment.getStatus();
         if (!validationError.equals(status.getError())) {
@@ -359,35 +353,30 @@ public class ReconciliationUtils {
      * Update the resource error status and metrics when the operator encountered an exception
      * during reconciliation.
      *
-     * @param client Kubernetes Client used for status updates
      * @param resource Flink Resource to be updated
      * @param retryInfo Current RetryInformation
      * @param e Exception that caused the retry
      * @param metricManager Metric manager to be updated
-     * @param statusCache Cache containing the latest status updates for this resource type
+     * @param statusHelper StatusHelper object for patching status
      * @return This always returns Empty optional currently, due to the status update logic
      */
-    public static <
-                    SPEC extends AbstractFlinkSpec,
-                    STATUS extends CommonStatus<SPEC>,
-                    R extends CustomResource<SPEC, STATUS>>
+    public static <STATUS extends CommonStatus<?>, R extends AbstractFlinkResource<?, STATUS>>
             Optional<R> updateErrorStatus(
-                    KubernetesClient client,
                     R resource,
                     RetryInfo retryInfo,
                     RuntimeException e,
                     MetricManager<R> metricManager,
-                    ConcurrentHashMap<Tuple2<String, String>, STATUS> statusCache) {
+                    StatusHelper<STATUS> statusHelper) {
         LOG.warn(
                 "Attempt count: {}, last attempt: {}",
                 retryInfo.getAttemptCount(),
                 retryInfo.isLastAttempt());
-        OperatorUtils.updateStatusFromCache(resource, statusCache);
+        statusHelper.updateStatusFromCache(resource);
         ReconciliationUtils.updateForReconciliationError(
                 resource,
                 (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
         metricManager.onUpdate(resource);
-        OperatorUtils.patchAndCacheStatus(client, resource, statusCache);
+        statusHelper.patchAndCacheStatus(resource);
 
         // Status was updated already, no need to return anything
         return Optional.empty();

@@ -48,6 +48,7 @@ import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.runtime.checkpoint.CheckpointStatsStatus;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
@@ -58,6 +59,7 @@ import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatistics;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointInfo;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMessageParameters;
@@ -65,6 +67,7 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHea
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 import org.apache.flink.runtime.rest.util.RestConstants;
+import org.apache.flink.runtime.state.memory.NonPersistentMetadataCheckpointStorageLocation;
 import org.apache.flink.runtime.webmonitor.handlers.JarDeleteHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarDeleteMessageParameters;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunHeaders;
@@ -98,6 +101,7 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -334,6 +338,7 @@ public class FlinkService {
             var clusterId = clusterClient.getClusterId();
             switch (upgradeMode) {
                 case STATELESS:
+                    LOG.info("Cancelling job.");
                     clusterClient
                             .cancel(Preconditions.checkNotNull(jobId))
                             .get(
@@ -342,6 +347,7 @@ public class FlinkService {
                                             .getFlinkCancelJobTimeout()
                                             .toSeconds(),
                                     TimeUnit.SECONDS);
+                    LOG.info("Job successfully cancelled.");
                     break;
                 case SAVEPOINT:
                     final String savepointDirectory =
@@ -352,6 +358,7 @@ public class FlinkService {
                                     .getSeconds();
                     try {
                         if (ReconciliationUtils.isJobRunning(deploymentStatus)) {
+                            LOG.info("Suspending job with savepoint.");
                             String savepoint =
                                     clusterClient
                                             .stopWithSavepoint(
@@ -365,6 +372,7 @@ public class FlinkService {
                                                             : null)
                                             .get(timeout, TimeUnit.SECONDS);
                             savepointOpt = Optional.of(savepoint);
+                            LOG.info("Job successfully suspended with savepoint {}.", savepoint);
                         } else if (ReconciliationUtils.isJobInTerminalState(deploymentStatus)) {
                             LOG.info(
                                     "Job is already in terminal state skipping cancel-with-savepoint operation.");
@@ -448,9 +456,10 @@ public class FlinkService {
                                             .getFlinkCancelJobTimeout()
                                             .toSeconds(),
                                     TimeUnit.SECONDS);
+                    LOG.info("Job successfully cancelled.");
                     break;
                 case SAVEPOINT:
-                    LOG.info("Suspending job.");
+                    LOG.info("Suspending job with savepoint.");
                     final String savepointDirectory =
                             Preconditions.checkNotNull(
                                     conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
@@ -471,6 +480,7 @@ public class FlinkService {
                                                         : null)
                                         .get(timeout, TimeUnit.SECONDS);
                         savepointOpt = Optional.of(savepoint);
+                        LOG.info("Job successfully suspended with savepoint {}.", savepoint);
                     } catch (TimeoutException exception) {
                         throw new FlinkException(
                                 String.format(
@@ -525,6 +535,71 @@ public class FlinkService {
 
             savepointInfo.setTrigger(response.getTriggerId().toHexString());
             savepointInfo.setTriggerTimestamp(System.currentTimeMillis());
+        }
+    }
+
+    public Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) throws Exception {
+        try (RestClusterClient<String> clusterClient =
+                (RestClusterClient<String>) getClusterClient(conf)) {
+
+            var headers = CustomCheckpointingStatisticsHeaders.getInstance();
+            var params = headers.getUnresolvedMessageParameters();
+            params.jobPathParameter.resolve(jobId);
+
+            CompletableFuture<CheckpointHistoryWrapper> response =
+                    clusterClient.sendRequest(headers, params, EmptyRequestBody.getInstance());
+
+            var checkpoints =
+                    response.get(
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkClientTimeout()
+                                    .getSeconds(),
+                            TimeUnit.SECONDS);
+
+            var latestCheckpointOpt =
+                    checkpoints.getHistory().stream()
+                            .filter(
+                                    cp ->
+                                            CheckpointStatsStatus.valueOf(
+                                                            cp.get(
+                                                                            CheckpointStatistics
+                                                                                    .FIELD_NAME_STATUS)
+                                                                    .asText())
+                                                    == CheckpointStatsStatus.COMPLETED)
+                            .filter(
+                                    cp ->
+                                            !cp.get(
+                                                            CheckpointStatistics
+                                                                    .CompletedCheckpointStatistics
+                                                                    .FIELD_NAME_EXTERNAL_PATH)
+                                                    .asText()
+                                                    .equals(
+                                                            NonPersistentMetadataCheckpointStorageLocation
+                                                                    .EXTERNAL_POINTER))
+                            .max(
+                                    Comparator.comparingLong(
+                                            cp ->
+                                                    cp.get(CheckpointStatistics.FIELD_NAME_ID)
+                                                            .asLong()))
+                            .map(
+                                    cp ->
+                                            new Savepoint(
+                                                    cp.get(
+                                                                    CheckpointStatistics
+                                                                            .CompletedCheckpointStatistics
+                                                                            .FIELD_NAME_TRIGGER_TIMESTAMP)
+                                                            .asLong(),
+                                                    cp.get(
+                                                                    CheckpointStatistics
+                                                                            .CompletedCheckpointStatistics
+                                                                            .FIELD_NAME_EXTERNAL_PATH)
+                                                            .asText()));
+
+            if (!latestCheckpointOpt.isPresent()) {
+                LOG.warn("Could not find any externally addressable checkpoints.");
+            }
+            return latestCheckpointOpt;
         }
     }
 

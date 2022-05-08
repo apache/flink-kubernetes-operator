@@ -20,12 +20,13 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.ApplicationObserverContext;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -43,9 +44,10 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     public ApplicationObserver(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkConfigManager configManager) {
+            FlinkConfigManager configManager,
+            StatusHelper<FlinkDeploymentStatus> statusHelper) {
         super(kubernetesClient, flinkService, configManager);
-        this.savepointObserver = new SavepointObserver(flinkService, configManager);
+        this.savepointObserver = new SavepointObserver(flinkService, configManager, statusHelper);
         this.jobStatusObserver =
                 new JobStatusObserver<>(flinkService) {
                     @Override
@@ -74,7 +76,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     protected boolean observeFlinkCluster(
             FlinkDeployment flinkApp, Context context, Configuration deployedConfig) {
 
-        JobStatus jobStatus = flinkApp.getStatus().getJobStatus();
+        var jobStatus = flinkApp.getStatus().getJobStatus();
 
         boolean jobFound =
                 jobStatusObserver.observe(
@@ -82,9 +84,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
                         deployedConfig,
                         new ApplicationObserverContext(flinkApp, context, deployedConfig));
         if (jobFound) {
-            savepointObserver
-                    .observe(jobStatus.getSavepointInfo(), jobStatus.getJobId(), deployedConfig)
-                    .ifPresent(e -> ReconciliationUtils.updateForReconciliationError(flinkApp, e));
+            savepointObserver.observeSavepointStatus(flinkApp, deployedConfig);
         }
         return isJobReady(jobStatus);
     }
