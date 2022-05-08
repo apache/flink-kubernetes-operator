@@ -113,7 +113,6 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                 if (desiredJobState == JobState.RUNNING) {
                     LOG.info("Upgrading/Restarting running job, suspending first...");
                 }
-                printCancelLogs(upgradeMode);
                 stateAfterReconcile = suspendJob(flinkApp, upgradeMode);
             }
             if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
@@ -263,7 +262,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
     }
 
     // Workaround for https://issues.apache.org/jira/browse/FLINK-27569
-    public static void setRandomJobResultStorePath(Configuration effectiveConfig) {
+    private static void setRandomJobResultStorePath(Configuration effectiveConfig) {
         if (effectiveConfig.contains(HighAvailabilityOptions.HA_STORAGE_PATH)) {
 
             if (!effectiveConfig.contains(JobResultStoreOptions.DELETE_ON_COMMIT)) {
@@ -277,22 +276,6 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                             + effectiveConfig.getString(KubernetesConfigOptions.CLUSTER_ID)
                             + "/"
                             + UUID.randomUUID());
-        }
-    }
-
-    private void printCancelLogs(UpgradeMode upgradeMode) {
-        switch (upgradeMode) {
-            case STATELESS:
-                LOG.info("Cancelling job");
-                break;
-            case SAVEPOINT:
-                LOG.info("Suspending job");
-                break;
-            case LAST_STATE:
-                LOG.info("Cancelling job with last state retained");
-                break;
-            default:
-                throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
         }
     }
 

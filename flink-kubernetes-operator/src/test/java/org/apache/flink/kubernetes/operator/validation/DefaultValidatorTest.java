@@ -86,12 +86,40 @@ public class DefaultValidatorTest {
 
         testError(
                 dep -> {
-                    dep.getSpec().setFlinkConfiguration(new HashMap<>());
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .remove(CheckpointingOptions.SAVEPOINT_DIRECTORY.key());
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
                 },
                 String.format(
                         "Job could not be upgraded with savepoint while config key[%s] is not set",
                         CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
+
+        testError(
+                dep -> {
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .remove(CheckpointingOptions.CHECKPOINTS_DIRECTORY.key());
+                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+                },
+                "Checkpoint directory");
+
+        testError(
+                dep -> {
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .remove(CheckpointingOptions.CHECKPOINTS_DIRECTORY.key());
+                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+                },
+                "Checkpoint directory");
+
+        testSuccess(
+                dep -> {
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .remove(CheckpointingOptions.CHECKPOINTS_DIRECTORY.key());
+                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
+                });
 
         testError(
                 dep -> {
@@ -299,6 +327,7 @@ public class DefaultValidatorTest {
         defaultFlinkConf.set(
                 HighAvailabilityOptions.HA_MODE,
                 KubernetesHaServicesFactory.class.getCanonicalName());
+        defaultFlinkConf.set(CheckpointingOptions.CHECKPOINTS_DIRECTORY, "cpdir");
         final DefaultValidator validatorWithDefaultConfig =
                 new DefaultValidator(new FlinkConfigManager(defaultFlinkConf));
         testSuccess(

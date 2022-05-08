@@ -23,6 +23,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
+import org.apache.flink.kubernetes.operator.TestingStatusHelper;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 
@@ -41,7 +42,8 @@ public class SessionJobObserverTest {
         final var sessionJob = TestUtils.buildSessionJob();
         final var flinkService = new TestingFlinkService();
         final var reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
-        final var observer = new SessionJobObserver(flinkService, configManager);
+        final var observer =
+                new SessionJobObserver(flinkService, configManager, new TestingStatusHelper<>());
         final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
 
         // observe the brand new job, nothing to do.
@@ -101,7 +103,8 @@ public class SessionJobObserverTest {
         final var sessionJob = TestUtils.buildSessionJob();
         final var flinkService = new TestingFlinkService();
         final var reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
-        final var observer = new SessionJobObserver(flinkService, configManager);
+        final var observer =
+                new SessionJobObserver(flinkService, configManager, new TestingStatusHelper<>());
         final var readyContext =
                 TestUtils.createContextWithReadyFlinkDeployment(
                         Map.of(RestOptions.PORT.key(), "8088"));
@@ -126,7 +129,8 @@ public class SessionJobObserverTest {
         final var sessionJob = TestUtils.buildSessionJob();
         final var flinkService = new TestingFlinkService();
         final var reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
-        final var observer = new SessionJobObserver(flinkService, configManager);
+        final var observer =
+                new SessionJobObserver(flinkService, configManager, new TestingStatusHelper<>());
         final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
 
         // submit job

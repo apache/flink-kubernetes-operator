@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.streaming.api.environment.CheckpointConfig;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
@@ -142,6 +143,10 @@ public class FlinkConfigBuilder {
             if (HighAvailabilityMode.isHighAvailabilityModeActivated(effectiveConfig)) {
                 setDefaultConf(SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR, true);
             }
+
+            setDefaultConf(
+                    ExecutionCheckpointingOptions.EXTERNALIZED_CHECKPOINT,
+                    CheckpointConfig.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION);
         }
 
         effectiveConfig.set(FLINK_VERSION, spec.getFlinkVersion());

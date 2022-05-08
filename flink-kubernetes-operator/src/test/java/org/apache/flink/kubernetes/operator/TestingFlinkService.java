@@ -150,7 +150,7 @@ public class TestingFlinkService extends FlinkService {
     }
 
     public List<Tuple2<String, JobStatusMessage>> listJobs() {
-        return new ArrayList<>(jobs);
+        return jobs;
     }
 
     public long getRunningCount() {
@@ -208,18 +208,17 @@ public class TestingFlinkService extends FlinkService {
         clusterClient.setStopWithSavepointFunction(
                 (jobID, advanceEventTime, savepointDir) -> {
                     try {
-                        cancelJob(flinkVersion, jobID);
+                        return CompletableFuture.completedFuture(
+                                cancelJob(flinkVersion, jobID, true));
                     } catch (Exception e) {
                         return CompletableFuture.failedFuture(e);
                     }
-
-                    return CompletableFuture.completedFuture("savepoint_" + savepointCounter++);
                 });
 
         clusterClient.setCancelFunction(
                 jobID -> {
                     try {
-                        cancelJob(flinkVersion, jobID);
+                        cancelJob(flinkVersion, jobID, false);
                     } catch (Exception e) {
                         return CompletableFuture.failedFuture(e);
                     }
@@ -228,13 +227,16 @@ public class TestingFlinkService extends FlinkService {
         return clusterClient;
     }
 
-    private void cancelJob(FlinkVersion flinkVersion, JobID jobID) throws Exception {
+    private String cancelJob(FlinkVersion flinkVersion, JobID jobID, boolean savepoint)
+            throws Exception {
         Optional<Tuple2<String, JobStatusMessage>> jobOpt =
                 jobs.stream().filter(js -> js.f1.getJobId().equals(jobID)).findAny();
 
         if (!jobOpt.isPresent()) {
             throw new Exception("Job not found");
         }
+
+        var sp = savepoint ? "savepoint_" + savepointCounter++ : null;
 
         if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_14)) {
             JobStatusMessage oldStatus = jobOpt.get().f1;
@@ -244,9 +246,12 @@ public class TestingFlinkService extends FlinkService {
                             oldStatus.getJobName(),
                             JobStatus.FINISHED,
                             oldStatus.getStartTime());
+            jobOpt.get().f0 = sp;
         } else {
             jobs.removeIf(js -> js.f1.getJobId().equals(jobID));
         }
+
+        return sp;
     }
 
     @Override
@@ -265,6 +270,27 @@ public class TestingFlinkService extends FlinkService {
     public SavepointFetchResult fetchSavepointInfo(
             String triggerId, String jobId, Configuration conf) {
         return SavepointFetchResult.completed(Savepoint.of("savepoint_" + savepointCounter++));
+    }
+
+    @Override
+    public Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) throws Exception {
+        Optional<Tuple2<String, JobStatusMessage>> jobOpt =
+                jobs.stream().filter(js -> js.f1.getJobId().equals(jobId)).findAny();
+
+        if (!jobOpt.isPresent()) {
+            throw new Exception("Job not found");
+        }
+
+        Tuple2<String, JobStatusMessage> t = jobOpt.get();
+        if (!t.f1.getJobState().isGloballyTerminalState()) {
+            throw new Exception("Checkpoint should not be queried if job is not in terminal state");
+        }
+
+        if (t.f0 != null) {
+            return Optional.of(Savepoint.of(t.f0));
+        } else {
+            return Optional.empty();
+        }
     }
 
     @Override

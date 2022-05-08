@@ -165,6 +165,16 @@ public class DefaultValidator implements FlinkResourceValidator {
                     "Job could not be upgraded with last-state while Kubernetes HA disabled");
         }
 
+        if (job.getUpgradeMode() != UpgradeMode.STATELESS) {
+            if (StringUtils.isNullOrWhitespaceOnly(
+                    configuration.getString(CheckpointingOptions.CHECKPOINTS_DIRECTORY))) {
+                return Optional.of(
+                        String.format(
+                                "Checkpoint directory[%s] must be defined for last-state and savepoint upgrade modes",
+                                CheckpointingOptions.CHECKPOINTS_DIRECTORY.key()));
+            }
+        }
+
         if (StringUtils.isNullOrWhitespaceOnly(
                 configuration.getString(CheckpointingOptions.SAVEPOINT_DIRECTORY))) {
             if (job.getUpgradeMode() == UpgradeMode.SAVEPOINT) {

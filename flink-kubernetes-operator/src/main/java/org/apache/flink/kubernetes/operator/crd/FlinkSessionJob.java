@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import io.fabric8.kubernetes.api.model.Namespaced;
-import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.model.annotation.Group;
 import io.fabric8.kubernetes.model.annotation.ShortNames;
 import io.fabric8.kubernetes.model.annotation.Version;
@@ -36,7 +35,8 @@ import io.fabric8.kubernetes.model.annotation.Version;
 @Group(CrdConstants.API_GROUP)
 @Version(CrdConstants.API_VERSION)
 @ShortNames({"sessionjob"})
-public class FlinkSessionJob extends CustomResource<FlinkSessionJobSpec, FlinkSessionJobStatus>
+public class FlinkSessionJob
+        extends AbstractFlinkResource<FlinkSessionJobSpec, FlinkSessionJobStatus>
         implements Namespaced {
 
     @Override
