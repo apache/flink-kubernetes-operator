@@ -59,15 +59,22 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.mockwebserver.utils.ResponseProvider;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
+import okhttp3.Headers;
+import okhttp3.mockwebserver.RecordedRequest;
+import org.junit.jupiter.api.Assertions;
 
 import java.lang.reflect.Field;
+import java.net.HttpURLConnection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /** Testing utilities. */
 public class TestUtils {
@@ -367,5 +374,43 @@ public class TestUtils {
         controller.setControllerConfig(
                 new FlinkControllerConfig(controller, Collections.emptySet()));
         return controller;
+    }
+
+    /** Testing ResponseProvider. */
+    public static class ValidatingResponseProvider<T> implements ResponseProvider<Object> {
+
+        private final AtomicBoolean validated = new AtomicBoolean(false);
+
+        private final Consumer<RecordedRequest> validator;
+        private final T returnValue;
+
+        public ValidatingResponseProvider(T returnValue, Consumer<RecordedRequest> validator) {
+            this.validator = validator;
+            this.returnValue = returnValue;
+        }
+
+        public void assertValidated() {
+            Assertions.assertTrue(validated.get());
+        }
+
+        @Override
+        public int getStatusCode(RecordedRequest recordedRequest) {
+            return HttpURLConnection.HTTP_CREATED;
+        }
+
+        @Override
+        public Headers getHeaders() {
+            return new Headers.Builder().build();
+        }
+
+        @Override
+        public void setHeaders(Headers headers) {}
+
+        @Override
+        public Object getBody(RecordedRequest recordedRequest) {
+            validator.accept(recordedRequest);
+            validated.set(true);
+            return returnValue;
+        }
     }
 }

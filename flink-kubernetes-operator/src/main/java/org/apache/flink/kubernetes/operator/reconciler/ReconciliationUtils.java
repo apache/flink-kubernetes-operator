@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -34,7 +35,10 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -42,6 +46,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.fabric8.kubernetes.client.CustomResource;
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,7 +56,8 @@ import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Reconciliation utilities. */
 public class ReconciliationUtils {
@@ -123,37 +130,37 @@ public class ReconciliationUtils {
         }
     }
 
-    public static <CR extends CustomResource> UpdateControl<CR> toUpdateControl(
-            CR originalCopy, CR current) {
+    public static <
+                    SPEC extends AbstractFlinkSpec,
+                    STATUS extends CommonStatus<SPEC>,
+                    R extends CustomResource<SPEC, STATUS>>
+            UpdateControl<R> toUpdateControl(
+                    FlinkOperatorConfiguration operatorConfiguration,
+                    R current,
+                    boolean reschedule) {
 
-        current.setSpec(originalCopy.getSpec());
+        STATUS status = current.getStatus();
 
-        var statusChanged = !Objects.equals(originalCopy.getStatus(), current.getStatus());
-
-        return statusChanged ? UpdateControl.updateStatus(current) : UpdateControl.noUpdate();
-    }
-
-    public static UpdateControl<FlinkDeployment> toUpdateControl(
-            FlinkOperatorConfiguration operatorConfiguration,
-            FlinkDeployment originalCopy,
-            FlinkDeployment current,
-            boolean reschedule) {
-        UpdateControl<FlinkDeployment> updateControl = toUpdateControl(originalCopy, current);
+        UpdateControl<R> updateControl = UpdateControl.noUpdate();
 
         if (!reschedule) {
             return updateControl;
         }
 
-        if (isJobUpgradeInProgress(current)) {
+        if (isJobUpgradeInProgress(current.getSpec(), status)) {
             return updateControl.rescheduleAfter(0);
         }
 
-        Duration rescheduleAfter =
-                current.getStatus()
-                        .getJobManagerDeploymentStatus()
-                        .rescheduleAfter(current, operatorConfiguration);
-
-        return updateControl.rescheduleAfter(rescheduleAfter.toMillis());
+        if (status instanceof FlinkDeploymentStatus) {
+            return updateControl.rescheduleAfter(
+                    ((FlinkDeploymentStatus) status)
+                            .getJobManagerDeploymentStatus()
+                            .rescheduleAfter((FlinkDeployment) current, operatorConfiguration)
+                            .toMillis());
+        } else {
+            return updateControl.rescheduleAfter(
+                    operatorConfiguration.getReconcileInterval().toMillis());
+        }
     }
 
     public static boolean isUpgradeModeChangedToLastStateAndHADisabledPreviously(
@@ -185,9 +192,8 @@ public class ReconciliationUtils {
         }
     }
 
-    private static boolean isJobUpgradeInProgress(FlinkDeployment current) {
-        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
-                current.getStatus().getReconciliationStatus();
+    private static boolean isJobUpgradeInProgress(AbstractFlinkSpec spec, CommonStatus<?> status) {
+        var reconciliationStatus = status.getReconciliationStatus();
 
         if (reconciliationStatus == null) {
             return false;
@@ -197,13 +203,12 @@ public class ReconciliationUtils {
             return true;
         }
 
-        if (current.getSpec().getJob() == null
-                || reconciliationStatus.getLastReconciledSpec() == null) {
+        if (spec.getJob() == null || reconciliationStatus.getLastReconciledSpec() == null) {
             return false;
         }
 
-        return current.getSpec().getJob().getState() == JobState.RUNNING
-                && current.getStatus().getError() == null
+        return spec.getJob().getState() == JobState.RUNNING
+                && status.getError() == null
                 && reconciliationStatus.deserializeLastReconciledSpec().getJob().getState()
                         == JobState.SUSPENDED;
     }
@@ -348,5 +353,29 @@ public class ReconciliationUtils {
             }
             return true;
         }
+    }
+
+    public static <
+                    SPEC extends AbstractFlinkSpec,
+                    STATUS extends CommonStatus<SPEC>,
+                    R extends CustomResource<SPEC, STATUS>>
+            Optional<R> updateErrorStatus(
+                    KubernetesClient client,
+                    R resource,
+                    RetryInfo retryInfo,
+                    RuntimeException e,
+                    MetricManager<R> metricManager,
+                    ConcurrentHashMap<Tuple2<String, String>, STATUS> statusCache) {
+        LOG.warn(
+                "Attempt count: {}, last attempt: {}",
+                retryInfo.getAttemptCount(),
+                retryInfo.isLastAttempt());
+        OperatorUtils.updateStatusFromCache(resource, statusCache);
+        ReconciliationUtils.updateForReconciliationError(
+                resource,
+                (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
+        metricManager.onUpdate(resource);
+        OperatorUtils.patchAndCacheStatus(client, resource, statusCache);
+        return Optional.empty();
     }
 }

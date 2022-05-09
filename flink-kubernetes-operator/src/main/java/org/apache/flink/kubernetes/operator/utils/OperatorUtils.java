@@ -18,14 +18,17 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentList;
+import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.FilterWatchListDeletable;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
@@ -39,6 +42,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Operator SDK related utility functions. */
 public class OperatorUtils {
@@ -94,5 +98,29 @@ public class OperatorUtils {
                         ? sessionJob.getMetadata().getNamespace()
                         : null;
         return context.getSecondaryResource(FlinkDeployment.class, identifier);
+    }
+
+    public static <S, T extends CustomResource<?, S>> void patchAndCacheStatus(
+            KubernetesClient client,
+            T resource,
+            ConcurrentHashMap<Tuple2<String, String>, S> statusCache) {
+        Class<T> resourceClass = (Class<T>) resource.getClass();
+        String namespace = resource.getMetadata().getNamespace();
+        String name = resource.getMetadata().getName();
+
+        client.resources(resourceClass).inNamespace(namespace).withName(name).patchStatus(resource);
+
+        statusCache.put(
+                Tuple2.of(namespace, name), ReconciliationUtils.clone(resource.getStatus()));
+    }
+
+    public static <S, T extends CustomResource<?, S>> void updateStatusFromCache(
+            T resource, ConcurrentHashMap<Tuple2<String, String>, S> statusCache) {
+        String namespace = resource.getMetadata().getNamespace();
+        String name = resource.getMetadata().getName();
+        var cachedStatus = statusCache.get(Tuple2.of(namespace, name));
+        if (cachedStatus != null) {
+            resource.setStatus(ReconciliationUtils.clone(cachedStatus));
+        }
     }
 }

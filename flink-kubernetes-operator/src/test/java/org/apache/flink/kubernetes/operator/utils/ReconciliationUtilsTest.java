@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
-import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -37,7 +36,6 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for {@link org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils}. */
 public class ReconciliationUtilsTest {
@@ -45,30 +43,6 @@ public class ReconciliationUtilsTest {
     FlinkOperatorConfiguration operatorConfiguration =
             FlinkOperatorConfiguration.fromConfiguration(
                     new Configuration(), Collections.emptySet());
-
-    @Test
-    public void testStatusChanged() {
-        FlinkDeployment previous = TestUtils.buildApplicationCluster();
-        FlinkDeployment current = ReconciliationUtils.clone(previous);
-
-        UpdateControl<FlinkDeployment> updateControl =
-                ReconciliationUtils.toUpdateControl(
-                        operatorConfiguration, previous, current, false);
-
-        assertFalse(updateControl.isUpdateResource());
-        assertFalse(updateControl.isUpdateStatus());
-        assertTrue(updateControl.getScheduleDelay().isEmpty());
-
-        // status changed
-        current.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-        updateControl =
-                ReconciliationUtils.toUpdateControl(operatorConfiguration, previous, current, true);
-        assertFalse(updateControl.isUpdateResource());
-        assertTrue(updateControl.isUpdateStatus());
-        assertEquals(
-                operatorConfiguration.getProgressCheckInterval().toMillis(),
-                updateControl.getScheduleDelay().get());
-    }
 
     @Test
     public void testRescheduleUpgradeImmediately() {
@@ -81,10 +55,10 @@ public class ReconciliationUtilsTest {
         ReconciliationUtils.updateForSpecReconciliationSuccess(current, JobState.SUSPENDED);
 
         UpdateControl<FlinkDeployment> updateControl =
-                ReconciliationUtils.toUpdateControl(operatorConfiguration, app, current, true);
+                ReconciliationUtils.toUpdateControl(operatorConfiguration, current, true);
 
         assertFalse(updateControl.isUpdateResource());
-        assertTrue(updateControl.isUpdateStatus());
+        assertFalse(updateControl.isUpdateStatus());
         assertEquals(0, updateControl.getScheduleDelay().get());
     }
 

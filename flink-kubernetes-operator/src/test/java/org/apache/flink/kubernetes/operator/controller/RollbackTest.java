@@ -69,6 +69,7 @@ public class RollbackTest {
                         new FlinkConfigManager(new Configuration()),
                         kubernetesClient,
                         flinkService);
+        kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
     }
 
     @ParameterizedTest
@@ -78,8 +79,6 @@ public class RollbackTest {
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         var flinkConfiguration = dep.getSpec().getFlinkConfiguration();
         flinkConfiguration.put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), "sd");
-        var jobStatus = dep.getStatus().getJobStatus();
-        var reconStatus = dep.getStatus().getReconciliationStatus();
 
         List<String> savepoints = new ArrayList<>();
         testRollback(
@@ -87,10 +86,19 @@ public class RollbackTest {
                 () -> {
                     dep.getSpec().getJob().setParallelism(9999);
                     testController.reconcile(dep, context);
-                    savepoints.add(jobStatus.getSavepointInfo().getLastSavepoint().getLocation());
+                    savepoints.add(
+                            dep.getStatus()
+                                    .getJobStatus()
+                                    .getSavepointInfo()
+                                    .getLastSavepoint()
+                                    .getLocation());
                     assertEquals(
                             JobState.SUSPENDED,
-                            reconStatus.deserializeLastReconciledSpec().getJob().getState());
+                            dep.getStatus()
+                                    .getReconciliationStatus()
+                                    .deserializeLastReconciledSpec()
+                                    .getJob()
+                                    .getState());
                     testController.reconcile(dep, context);
 
                     // Trigger rollback by delaying the recovery
@@ -113,7 +121,6 @@ public class RollbackTest {
     public void testRollbackWithLastState(FlinkVersion flinkVersion) throws Exception {
         var dep = TestUtils.buildApplicationCluster(flinkVersion);
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-        var reconStatus = dep.getStatus().getReconciliationStatus();
 
         testRollback(
                 dep,
@@ -122,7 +129,11 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
                     assertEquals(
                             JobState.SUSPENDED,
-                            reconStatus.deserializeLastReconciledSpec().getJob().getState());
+                            dep.getStatus()
+                                    .getReconciliationStatus()
+                                    .deserializeLastReconciledSpec()
+                                    .getJob()
+                                    .getState());
                     testController.reconcile(dep, context);
 
                     // Trigger rollback by delaying the recovery
@@ -143,7 +154,6 @@ public class RollbackTest {
     public void testRollbackFailureWithLastState(FlinkVersion flinkVersion) throws Exception {
         var dep = TestUtils.buildApplicationCluster(flinkVersion);
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-        var reconStatus = dep.getStatus().getReconciliationStatus();
 
         testRollback(
                 dep,
@@ -152,7 +162,11 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
                     assertEquals(
                             JobState.SUSPENDED,
-                            reconStatus.deserializeLastReconciledSpec().getJob().getState());
+                            dep.getStatus()
+                                    .getReconciliationStatus()
+                                    .deserializeLastReconciledSpec()
+                                    .getJob()
+                                    .getState());
                     testController.reconcile(dep, context);
 
                     // Trigger rollback by delaying the recovery
@@ -179,7 +193,6 @@ public class RollbackTest {
     public void testRollbackStateless(FlinkVersion flinkVersion) throws Exception {
         var dep = TestUtils.buildApplicationCluster();
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
-        var reconStatus = dep.getStatus().getReconciliationStatus();
 
         testRollback(
                 dep,
@@ -188,7 +201,11 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
                     assertEquals(
                             JobState.SUSPENDED,
-                            reconStatus.deserializeLastReconciledSpec().getJob().getState());
+                            dep.getStatus()
+                                    .getReconciliationStatus()
+                                    .deserializeLastReconciledSpec()
+                                    .getJob()
+                                    .getState());
                     testController.reconcile(dep, context);
 
                     // Trigger rollback by delaying the recovery
@@ -248,18 +265,19 @@ public class RollbackTest {
         testController.reconcile(deployment, context);
 
         // Validate reconciliation status
-        var reconciliationStatus = deployment.getStatus().getReconciliationStatus();
 
         testController.reconcile(deployment, context);
         testController.reconcile(deployment, context);
 
         // Validate stable job
-        assertTrue(reconciliationStatus.isLastReconciledSpecStable());
+        assertTrue(deployment.getStatus().getReconciliationStatus().isLastReconciledSpecStable());
 
         triggerRollback.run();
 
-        assertFalse(reconciliationStatus.isLastReconciledSpecStable());
-        assertEquals(ReconciliationState.ROLLING_BACK, reconciliationStatus.getState());
+        assertFalse(deployment.getStatus().getReconciliationStatus().isLastReconciledSpecStable());
+        assertEquals(
+                ReconciliationState.ROLLING_BACK,
+                deployment.getStatus().getReconciliationStatus().getState());
         assertEquals(
                 "Deployment is not ready within the configured timeout, rolling back.",
                 deployment.getStatus().getError());
@@ -269,23 +287,31 @@ public class RollbackTest {
         }
 
         testController.reconcile(deployment, context);
-        assertEquals(ReconciliationState.ROLLED_BACK, reconciliationStatus.getState());
+        assertEquals(
+                ReconciliationState.ROLLED_BACK,
+                deployment.getStatus().getReconciliationStatus().getState());
         deployment.getSpec().setLogConfiguration(null);
 
         testController.reconcile(deployment, context);
         testController.reconcile(deployment, context);
 
-        assertEquals(ReconciliationState.ROLLED_BACK, reconciliationStatus.getState());
-        assertFalse(reconciliationStatus.isLastReconciledSpecStable());
+        assertEquals(
+                ReconciliationState.ROLLED_BACK,
+                deployment.getStatus().getReconciliationStatus().getState());
+        assertFalse(deployment.getStatus().getReconciliationStatus().isLastReconciledSpecStable());
 
         validateAndRecover.run();
         // Test update
         testController.reconcile(deployment, context);
-        assertEquals(deployment.getSpec(), reconciliationStatus.deserializeLastReconciledSpec());
+        assertEquals(
+                deployment.getSpec(),
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
         testController.reconcile(deployment, context);
         testController.reconcile(deployment, context);
-        assertTrue(reconciliationStatus.isLastReconciledSpecStable());
-        assertEquals(ReconciliationState.DEPLOYED, reconciliationStatus.getState());
+        assertTrue(deployment.getStatus().getReconciliationStatus().isLastReconciledSpecStable());
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
         assertNull(deployment.getStatus().getError());
 
         if (deployment.getSpec().getJob() != null) {
@@ -293,8 +319,11 @@ public class RollbackTest {
             deployment.getSpec().getJob().setParallelism(1);
             testController.reconcile(deployment, context);
             testController.reconcile(deployment, context);
-            assertTrue(reconciliationStatus.isLastReconciledSpecStable());
-            assertEquals(ReconciliationState.DEPLOYED, reconciliationStatus.getState());
+            assertTrue(
+                    deployment.getStatus().getReconciliationStatus().isLastReconciledSpecStable());
+            assertEquals(
+                    ReconciliationState.DEPLOYED,
+                    deployment.getStatus().getReconciliationStatus().getState());
             assertNull(deployment.getStatus().getError());
 
             deployment.getSpec().getJob().setState(JobState.RUNNING);
@@ -303,21 +332,29 @@ public class RollbackTest {
             Thread.sleep(200);
             testController.reconcile(deployment, context);
             testController.reconcile(deployment, context);
-            assertTrue(reconciliationStatus.isLastReconciledSpecStable());
-            assertEquals(ReconciliationState.DEPLOYED, reconciliationStatus.getState());
+            assertTrue(
+                    deployment.getStatus().getReconciliationStatus().isLastReconciledSpecStable());
+            assertEquals(
+                    ReconciliationState.DEPLOYED,
+                    deployment.getStatus().getReconciliationStatus().getState());
             assertNull(deployment.getStatus().getError());
 
             // Verify suspending a rolled back job
             triggerRollback.run();
             testController.reconcile(deployment, context);
-            assertEquals(ReconciliationState.ROLLED_BACK, reconciliationStatus.getState());
+            assertEquals(
+                    ReconciliationState.ROLLED_BACK,
+                    deployment.getStatus().getReconciliationStatus().getState());
             testController.reconcile(deployment, context);
             testController.reconcile(deployment, context);
 
             deployment.getSpec().getJob().setState(JobState.SUSPENDED);
             testController.reconcile(deployment, context);
-            assertTrue(reconciliationStatus.isLastReconciledSpecStable());
-            assertEquals(ReconciliationState.DEPLOYED, reconciliationStatus.getState());
+            assertTrue(
+                    deployment.getStatus().getReconciliationStatus().isLastReconciledSpecStable());
+            assertEquals(
+                    ReconciliationState.DEPLOYED,
+                    deployment.getStatus().getReconciliationStatus().getState());
             assertNull(deployment.getStatus().getError());
         }
     }
