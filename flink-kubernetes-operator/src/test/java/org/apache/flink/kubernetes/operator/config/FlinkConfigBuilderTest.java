@@ -146,6 +146,13 @@ public class FlinkConfigBuilderTest {
         Assertions.assertEquals(
                 DEFAULT_CHECKPOINTING_INTERVAL,
                 configuration.get(ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL));
+
+        deployment = TestUtils.buildSessionCluster();
+        configuration =
+                new FlinkConfigBuilder(deployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .build();
+        Assertions.assertEquals(false, configuration.get(WebOptions.CANCEL_ENABLE));
     }
 
     @Test
