@@ -35,7 +35,7 @@ wait_for_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymen
 wait_for_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 assert_available_slots 0 $CLUSTER_ID
 
-job_id=$(kubectl logs $jm_pod_name | grep -E -o 'Job [a-z0-9]+ is submitted' | awk '{print $2}')
+job_id=$(kubectl logs $jm_pod_name -c flink-main-container | grep -E -o 'Job [a-z0-9]+ is submitted' | awk '{print $2}')
 
 # Update the FlinkDeployment and trigger the last state upgrade
 kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"job": {"parallelism": 1 } } }'
