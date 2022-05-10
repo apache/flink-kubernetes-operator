@@ -35,7 +35,10 @@ import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
 import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
+import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -46,6 +49,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Operator SDK related utility functions. */
 public class OperatorUtils {
+
+    private static final Logger LOG = LoggerFactory.getLogger(OperatorUtils.class);
 
     private static final String NAMESPACES_SPLITTER_KEY = ",";
 
@@ -100,18 +105,34 @@ public class OperatorUtils {
         return context.getSecondaryResource(FlinkDeployment.class, identifier);
     }
 
+    @SneakyThrows
     public static <S, T extends CustomResource<?, S>> void patchAndCacheStatus(
             KubernetesClient client,
             T resource,
             ConcurrentHashMap<Tuple2<String, String>, S> statusCache) {
+
         Class<T> resourceClass = (Class<T>) resource.getClass();
         String namespace = resource.getMetadata().getNamespace();
         String name = resource.getMetadata().getName();
 
-        client.resources(resourceClass).inNamespace(namespace).withName(name).patchStatus(resource);
-
-        statusCache.put(
-                Tuple2.of(namespace, name), ReconciliationUtils.clone(resource.getStatus()));
+        Exception err = null;
+        for (int i = 0; i < 3; i++) {
+            try {
+                client.resources(resourceClass)
+                        .inNamespace(namespace)
+                        .withName(name)
+                        .patchStatus(resource);
+                statusCache.put(
+                        Tuple2.of(namespace, name),
+                        ReconciliationUtils.clone(resource.getStatus()));
+                return;
+            } catch (Exception e) {
+                LOG.error("Error while patching status, retrying {}/3...", (i + 1), e);
+                Thread.sleep(1000);
+                err = e;
+            }
+        }
+        throw err;
     }
 
     public static <S, T extends CustomResource<?, S>> void updateStatusFromCache(
