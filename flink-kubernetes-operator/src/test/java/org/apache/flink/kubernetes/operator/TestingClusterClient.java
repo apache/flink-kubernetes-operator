@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
@@ -165,19 +166,22 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
 
     @Override
     public CompletableFuture<String> cancelWithSavepoint(
-            JobID jobId, @Nullable String savepointDirectory) {
+            JobID jobId, @Nullable String savepointDirectory, SavepointFormatType formatType) {
         throw new UnsupportedOperationException();
     }
 
     @Override
     public CompletableFuture<String> stopWithSavepoint(
-            JobID jobId, boolean advanceToEndOfEventTime, @Nullable String savepointDirectory) {
-        return stopWithSavepointFunction.apply(jobId, advanceToEndOfEventTime, savepointDirectory);
+            JobID jobId,
+            boolean advanceToEndOfTime,
+            @Nullable String savepointDirectory,
+            SavepointFormatType formatType) {
+        return stopWithSavepointFunction.apply(jobId, advanceToEndOfTime, savepointDirectory);
     }
 
     @Override
     public CompletableFuture<String> triggerSavepoint(
-            JobID jobId, @Nullable String savepointDirectory) {
+            JobID jobId, @Nullable String savepointDirectory, SavepointFormatType formatType) {
         throw new UnsupportedOperationException();
     }
 

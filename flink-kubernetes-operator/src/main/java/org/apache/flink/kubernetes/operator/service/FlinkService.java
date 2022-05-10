@@ -32,12 +32,14 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
@@ -48,6 +50,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.runtime.jobgraph.RestoreMode;
 import org.apache.flink.runtime.rest.FileUpload;
 import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
@@ -101,6 +104,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 
 /** Service for submitting and interacting with Flink clusters and jobs. */
 public class FlinkService {
@@ -192,7 +197,10 @@ public class FlinkService {
                             job.getParallelism() > 0 ? job.getParallelism() : null,
                             jobID,
                             job.getAllowNonRestoredState(),
-                            savepoint);
+                            savepoint,
+                            conf.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_14)
+                                    ? RestoreMode.DEFAULT
+                                    : null);
             LOG.info("Submitting job: {} to session cluster.", jobID.toHexString());
             return clusterClient
                     .sendRequest(headers, parameters, runRequestBody)
@@ -349,7 +357,12 @@ public class FlinkService {
                                             .stopWithSavepoint(
                                                     Preconditions.checkNotNull(jobId),
                                                     false,
-                                                    savepointDirectory)
+                                                    savepointDirectory,
+                                                    conf.get(FLINK_VERSION)
+                                                                    .isNewerVersionThan(
+                                                                            FlinkVersion.v1_14)
+                                                            ? SavepointFormatType.DEFAULT
+                                                            : null)
                                             .get(timeout, TimeUnit.SECONDS);
                             savepointOpt = Optional.of(savepoint);
                         } else if (ReconciliationUtils.isJobInTerminalState(deploymentStatus)) {
@@ -447,7 +460,15 @@ public class FlinkService {
                     try {
                         String savepoint =
                                 clusterClient
-                                        .stopWithSavepoint(jobID, false, savepointDirectory)
+                                        .stopWithSavepoint(
+                                                jobID,
+                                                false,
+                                                savepointDirectory,
+                                                conf.get(FLINK_VERSION)
+                                                                .isNewerVersionThan(
+                                                                        FlinkVersion.v1_14)
+                                                        ? SavepointFormatType.DEFAULT
+                                                        : null)
                                         .get(timeout, TimeUnit.SECONDS);
                         savepointOpt = Optional.of(savepoint);
                     } catch (TimeoutException exception) {
@@ -491,7 +512,14 @@ public class FlinkService {
                             .sendRequest(
                                     savepointTriggerHeaders,
                                     savepointTriggerMessageParameters,
-                                    new SavepointTriggerRequestBody(savepointDirectory, false))
+                                    new SavepointTriggerRequestBody(
+                                            savepointDirectory,
+                                            false,
+                                            conf.get(FLINK_VERSION)
+                                                            .isNewerVersionThan(FlinkVersion.v1_14)
+                                                    ? SavepointFormatType.DEFAULT
+                                                    : null,
+                                            null))
                             .get(timeout, TimeUnit.SECONDS);
             LOG.info("Savepoint successfully triggered: " + response.getTriggerId().toHexString());
 
