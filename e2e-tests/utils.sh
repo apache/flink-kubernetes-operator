@@ -25,7 +25,7 @@ function wait_for_logs {
   # wait or timeout until the log shows up
   echo "Waiting for log \"$2\"..."
   for i in $(seq 1 ${timeout}); do
-    if kubectl logs $jm_pod_name | grep -E "${successful_response_regex}" >/dev/null; then
+    if kubectl logs $jm_pod_name -c flink-main-container | grep -E "${successful_response_regex}" >/dev/null; then
       echo "Log \"$2\" shows up."
       return
     fi

@@ -34,11 +34,11 @@ wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || e
 wait_for_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
 wait_for_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 
-job_id=$(kubectl logs $jm_pod_name | grep -E -o 'Job [a-z0-9]+ is submitted' | awk '{print $2}')
+job_id=$(kubectl logs $jm_pod_name -c flink-main-container | grep -E -o 'Job [a-z0-9]+ is submitted' | awk '{print $2}')
 
 # Kill the JobManager
 echo "Kill the $jm_pod_name"
-kubectl exec $jm_pod_name -- /bin/sh -c "kill 1"
+kubectl exec $jm_pod_name -c flink-main-container -- /bin/sh -c "kill 1"
 
 # Check the new JobManager recovering from latest successful checkpoint
 wait_for_logs $jm_pod_name "Restoring job $job_id from Checkpoint" ${TIMEOUT} || exit 1
