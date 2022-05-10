@@ -114,6 +114,7 @@ public class OperatorUtils {
         Class<T> resourceClass = (Class<T>) resource.getClass();
         String namespace = resource.getMetadata().getNamespace();
         String name = resource.getMetadata().getName();
+        resource.getMetadata().setResourceVersion(null);
 
         Exception err = null;
         for (int i = 0; i < 3; i++) {
