@@ -21,8 +21,8 @@ kind: FlinkDeployment
 metadata:
   name: basic-session-cluster
 spec:
-  image: flink:1.14
-  flinkVersion: v1_14
+  image: flink:1.15
+  flinkVersion: v1_15
   jobManager:
     resource:
       memory: "2048m"
@@ -40,7 +40,7 @@ metadata:
 spec:
   deploymentName: basic-session-cluster
   job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4-TopSpeedWindowing.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.0/flink-examples-streaming_2.12-1.15.0-TopSpeedWindowing.jar
     parallelism: 4
     upgradeMode: stateless
 
@@ -52,7 +52,7 @@ metadata:
 spec:
   deploymentName: basic-session-cluster
   job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.0/flink-examples-streaming_2.12-1.15.0.jar
     parallelism: 2
     upgradeMode: stateless
     entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample

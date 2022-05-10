@@ -53,6 +53,8 @@ import java.nio.file.Files;
 import java.time.Duration;
 import java.util.Collections;
 
+import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
+import static org.apache.flink.configuration.DeploymentOptions.SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR;
 import static org.apache.flink.configuration.DeploymentOptionsInternal.CONF_DIR;
 import static org.apache.flink.configuration.WebOptions.CANCEL_ENABLE;
 import static org.apache.flink.kubernetes.configuration.KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE;
@@ -64,18 +66,6 @@ import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOGBACK_NA
 public class FlinkConfigBuilder {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkConfigBuilder.class);
-
-    // Flink 1.15+ specific config options, should be removed once the Flink base dependency is
-    // bumped
-    private static final ConfigOption<Boolean> SHUTDOWN_ON_APPLICATION_FINISH =
-            ConfigOptions.key("execution.shutdown-on-application-finish")
-                    .booleanType()
-                    .noDefaultValue();
-
-    public static final ConfigOption<Boolean> SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR =
-            ConfigOptions.key("execution.submit-failed-job-on-application-error")
-                    .booleanType()
-                    .noDefaultValue();
 
     public static final ConfigOption<FlinkVersion> FLINK_VERSION =
             ConfigOptions.key("$internal.flink.version")

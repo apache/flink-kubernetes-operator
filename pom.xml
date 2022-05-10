@@ -70,8 +70,7 @@ under the License.
         <fabric8.version>5.12.1</fabric8.version>
         <lombok.version>1.18.22</lombok.version>
 
-        <scala.version>2.12</scala.version>
-        <flink.version>1.14.4</flink.version>
+        <flink.version>1.15.0</flink.version>
         <flink.shaded.version>15.0</flink.shaded.version>
 
         <slf4j.version>1.7.36</slf4j.version>

@@ -98,7 +98,7 @@ should copy into their pom.xml file. It will render out to:
 ```xml
 <dependency>
     <groupdId>org.apache.flink</groupId>
-    <artifactId>flink-streaming-java_2.12</artifactId>
+    <artifactId>flink-streaming-java</artifactId>
     <version><!-- current flink version --></version>
 </dependency>
 ```

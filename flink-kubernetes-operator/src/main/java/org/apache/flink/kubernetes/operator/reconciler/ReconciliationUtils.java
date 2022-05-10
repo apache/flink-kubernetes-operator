@@ -274,9 +274,7 @@ public class ReconciliationUtils {
                         KubernetesOperatorConfigOptions.OPERATOR_RECOVER_JM_DEPLOYMENT_ENABLED)
                 .orElse(
                         conf.get(FlinkConfigBuilder.FLINK_VERSION)
-                                        .isNewerVersionThan(FlinkVersion.v1_14)
-                                ? true
-                                : false);
+                                .isNewerVersionThan(FlinkVersion.v1_14));
     }
 
     public static boolean jmMissingForRunningDeployment(FlinkDeploymentStatus status) {

@@ -50,7 +50,7 @@ public class FlinkOperatorITCase {
     private static final String TEST_NAMESPACE = "flink-operator-test";
     private static final String SERVICE_ACCOUNT = "flink-operator";
     private static final String CLUSTER_ROLE_BINDING = "flink-operator-cluster-role-binding";
-    private static final String FLINK_VERSION = "1.14.4";
+    private static final String FLINK_VERSION = "1.15.0";
     private static final String IMAGE = String.format("flink:%s", FLINK_VERSION);
     private static final Logger LOG = LoggerFactory.getLogger(FlinkOperatorITCase.class);
     private KubernetesClient client;
@@ -107,7 +107,7 @@ public class FlinkOperatorITCase {
                         .build());
         FlinkDeploymentSpec spec = new FlinkDeploymentSpec();
         spec.setImage(IMAGE);
-        spec.setFlinkVersion(FlinkVersion.v1_14);
+        spec.setFlinkVersion(FlinkVersion.v1_15);
         spec.setServiceAccount(SERVICE_ACCOUNT);
         Resource resource = new Resource();
         resource.setMemory("2048m");

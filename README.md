@@ -30,7 +30,7 @@ If you are currently using the v1alpha1 version of the APIs in your manifests, p
 
 | Operator Version | API Version | Flink Release  | Operator Image Tag | Helm Chart Version |
 | ------------- | ------------- | ------------- | ------------- | ------------- |
-| `latest` (main HEAD) | `v1beta1` | 1.14 |  |  |
+| `latest` (main HEAD) | `v1beta1` | 1.15 |  |  |
 | `release-0.1.0` | `v1alpha1` | 1.14 | `2c166e3` | 0.1.0 |
 
 ## Support
