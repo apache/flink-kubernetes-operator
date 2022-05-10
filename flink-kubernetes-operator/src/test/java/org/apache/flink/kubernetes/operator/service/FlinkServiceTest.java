@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingClusterClient;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
@@ -47,6 +48,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;
 
+import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -63,6 +65,7 @@ public class FlinkServiceTest {
     public void setup() {
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
+        configuration.set(FLINK_VERSION, FlinkVersion.v1_15);
     }
 
     @Test
@@ -176,7 +179,8 @@ public class FlinkServiceTest {
                                     ((SavepointTriggerMessageParameters) parameters)
                                             .jobID.getValue(),
                                     ((SavepointTriggerRequestBody) requestBody)
-                                            .getTargetDirectory(),
+                                            .getTargetDirectory()
+                                            .get(),
                                     ((SavepointTriggerRequestBody) requestBody).isCancelJob()));
                     return CompletableFuture.completedFuture(new TriggerResponse(new TriggerId()));
                 });

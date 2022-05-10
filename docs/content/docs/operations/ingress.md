@@ -35,8 +35,8 @@ metadata:
   namespace: default
   name: advanced-ingress
 spec:
-  image: flink:1.14
-  flinkVersion: v1_14
+  image: flink:1.15
+  flinkVersion: v1_15
   ingress:
     template: "flink.k8s.io/{{namespace}}/{{name}}(/|$)(.*)"
     className: "nginx"

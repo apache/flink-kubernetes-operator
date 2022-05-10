@@ -21,8 +21,8 @@ kind: FlinkDeployment
 metadata:
   name: custom-logging-example
 spec:
-  image: flink:1.14
-  flinkVersion: v1_14
+  image: flink:1.15
+  flinkVersion: v1_15
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
   serviceAccount: flink
