@@ -141,6 +141,8 @@ public class ReconciliationUtils {
 
         STATUS status = current.getStatus();
 
+        // Status update is handled manually independently, we only use UpdateControl to reschedule
+        // reconciliation
         UpdateControl<R> updateControl = UpdateControl.noUpdate();
 
         if (!reschedule) {
@@ -355,6 +357,18 @@ public class ReconciliationUtils {
         }
     }
 
+    /**
+     * Update the resource error status and metrics when the operator encountered an exception
+     * during reconciliation.
+     *
+     * @param client Kubernetes Client used for status updates
+     * @param resource Flink Resource to be updated
+     * @param retryInfo Current RetryInformation
+     * @param e Exception that caused the retry
+     * @param metricManager Metric manager to be updated
+     * @param statusCache Cache containing the latest status updates for this resource type
+     * @return This always returns Empty optional currently, due to the status update logic
+     */
     public static <
                     SPEC extends AbstractFlinkSpec,
                     STATUS extends CommonStatus<SPEC>,
@@ -376,6 +390,8 @@ public class ReconciliationUtils {
                 (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
         metricManager.onUpdate(resource);
         OperatorUtils.patchAndCacheStatus(client, resource, statusCache);
+
+        // Status was updated already, no need to return anything
         return Optional.empty();
     }
 }

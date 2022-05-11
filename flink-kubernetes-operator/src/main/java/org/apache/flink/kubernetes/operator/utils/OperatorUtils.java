@@ -105,6 +105,16 @@ public class OperatorUtils {
         return context.getSecondaryResource(FlinkDeployment.class, identifier);
     }
 
+    /**
+     * Update the status of the provided kubernetes resource on the k8s cluster. We use patch
+     * together with null resourceVersion to try to guarantee that the status update succeeds even
+     * if the underlying resource spec was update in the meantime. This is necessary for the correct
+     * operator behavior.
+     *
+     * @param client Kubernetes Client used for the status patch
+     * @param resource Resource for which status update should be performed
+     * @param statusCache Cache containing the latest status updates for this resource type
+     */
     @SneakyThrows
     public static <S, T extends CustomResource<?, S>> void patchAndCacheStatus(
             KubernetesClient client,
@@ -114,10 +124,15 @@ public class OperatorUtils {
         Class<T> resourceClass = (Class<T>) resource.getClass();
         String namespace = resource.getMetadata().getNamespace();
         String name = resource.getMetadata().getName();
+
+        // This is necessary so the client wouldn't fail of the underlying resource spec was updated
+        // in the meantime
         resource.getMetadata().setResourceVersion(null);
 
         Exception err = null;
         for (int i = 0; i < 3; i++) {
+            // In any case we retry the status update 3 times to avoid some intermittent
+            // connectivity errors if any
             try {
                 client.resources(resourceClass)
                         .inNamespace(namespace)
@@ -136,6 +151,17 @@ public class OperatorUtils {
         throw err;
     }
 
+    /**
+     * Update the custom resource status based on the in-memory cached to ensure that any status
+     * updates that we made previously are always visible in the reconciliation loop. This is
+     * required due to our custom status patching logic.
+     *
+     * <p>If the cache doesn't have a status stored, we do no update. This happens when the operator
+     * reconciles a resource for the first time after a restart.
+     *
+     * @param resource Resource for which the status should be updated from the cache
+     * @param statusCache Cache containing the latest status updates for this resource type
+     */
     public static <S, T extends CustomResource<?, S>> void updateStatusFromCache(
             T resource, ConcurrentHashMap<Tuple2<String, String>, S> statusCache) {
         String namespace = resource.getMetadata().getNamespace();
