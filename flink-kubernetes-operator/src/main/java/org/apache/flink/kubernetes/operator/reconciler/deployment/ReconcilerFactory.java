@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
@@ -35,15 +36,18 @@ public class ReconcilerFactory {
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
     private final Map<Mode, Reconciler<FlinkDeployment>> reconcilerMap;
+    private final InformerManager informerManager;
 
     public ReconcilerFactory(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkConfigManager configManager) {
+            FlinkConfigManager configManager,
+            InformerManager informerManager) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.configManager = configManager;
         this.reconcilerMap = new ConcurrentHashMap<>();
+        this.informerManager = informerManager;
     }
 
     public Reconciler<FlinkDeployment> getOrCreate(FlinkDeployment flinkApp) {
@@ -53,7 +57,7 @@ public class ReconcilerFactory {
                     switch (mode) {
                         case SESSION:
                             return new SessionReconciler(
-                                    kubernetesClient, flinkService, configManager);
+                                    kubernetesClient, flinkService, configManager, informerManager);
                         case APPLICATION:
                             return new ApplicationReconciler(
                                     kubernetesClient, flinkService, configManager);

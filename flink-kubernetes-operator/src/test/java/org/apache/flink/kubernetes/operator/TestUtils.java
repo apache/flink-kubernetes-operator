@@ -22,7 +22,6 @@ import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
@@ -39,6 +38,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
@@ -71,6 +71,7 @@ import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -366,19 +367,18 @@ public class TestUtils {
             TestingFlinkService flinkService) {
 
         var statusHelper = new StatusHelper<FlinkDeploymentStatus>(kubernetesClient);
-        var controller =
-                new FlinkDeploymentController(
-                        configManager,
+        return new FlinkDeploymentController(
+                configManager,
+                kubernetesClient,
+                ValidatorUtils.discoverValidators(configManager),
+                new ReconcilerFactory(
                         kubernetesClient,
-                        ValidatorUtils.discoverValidators(configManager),
-                        new ReconcilerFactory(kubernetesClient, flinkService, configManager),
-                        new ObserverFactory(
-                                kubernetesClient, flinkService, configManager, statusHelper),
-                        new MetricManager<>(new MetricListener().getMetricGroup()),
-                        statusHelper);
-        controller.setControllerConfig(
-                new FlinkControllerConfig(controller, Collections.emptySet()));
-        return controller;
+                        flinkService,
+                        configManager,
+                        new InformerManager(new HashSet<>(), kubernetesClient)),
+                new ObserverFactory(kubernetesClient, flinkService, configManager, statusHelper),
+                new MetricManager<>(new MetricListener().getMetricGroup()),
+                statusHelper);
     }
 
     /** Testing ResponseProvider. */

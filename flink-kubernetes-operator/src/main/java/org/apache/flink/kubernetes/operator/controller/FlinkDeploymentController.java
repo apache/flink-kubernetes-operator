@@ -17,7 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
@@ -31,7 +33,6 @@ import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFact
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
-import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -51,6 +52,7 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /** Controller that runs the main reconcile loop for Flink deployments. */
@@ -68,8 +70,10 @@ public class FlinkDeploymentController
     private final ReconcilerFactory reconcilerFactory;
     private final ObserverFactory observerFactory;
     private final MetricManager<FlinkDeployment> metricManager;
-    private FlinkControllerConfig<FlinkDeployment> controllerConfig;
     private final StatusHelper<FlinkDeploymentStatus> statusHelper;
+    private Set<String> effectiveNamespaces;
+    private final ConcurrentHashMap<Tuple2<String, String>, FlinkDeploymentStatus> statusCache =
+            new ConcurrentHashMap<>();
 
     public FlinkDeploymentController(
             FlinkConfigManager configManager,
@@ -86,6 +90,7 @@ public class FlinkDeploymentController
         this.observerFactory = observerFactory;
         this.metricManager = metricManager;
         this.statusHelper = statusHelper;
+        this.effectiveNamespaces = configManager.getOperatorConfiguration().getWatchedNamespaces();
     }
 
     @Override
@@ -145,8 +150,6 @@ public class FlinkDeploymentController
 
     @Override
     public List<EventSource> prepareEventSources(EventSourceContext<FlinkDeployment> ctx) {
-        Preconditions.checkNotNull(controllerConfig, "Controller config cannot be null");
-        Set<String> effectiveNamespaces = controllerConfig.getEffectiveNamespaces();
         if (effectiveNamespaces.isEmpty()) {
             return List.of(OperatorUtils.createJmDepInformerEventSource(kubernetesClient));
         } else {
@@ -156,15 +159,16 @@ public class FlinkDeploymentController
         }
     }
 
+    @VisibleForTesting
+    public void setEffectiveNamespaces(Set<String> effectiveNamespaces) {
+        this.effectiveNamespaces = effectiveNamespaces;
+    }
+
     @Override
     public Optional<FlinkDeployment> updateErrorStatus(
             FlinkDeployment flinkApp, RetryInfo retryInfo, RuntimeException e) {
         return ReconciliationUtils.updateErrorStatus(
                 flinkApp, retryInfo, e, metricManager, statusHelper);
-    }
-
-    public void setControllerConfig(FlinkControllerConfig<FlinkDeployment> config) {
-        this.controllerConfig = config;
     }
 
     private boolean validateDeployment(FlinkDeployment deployment) {

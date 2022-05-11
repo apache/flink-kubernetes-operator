@@ -37,4 +37,9 @@ public class FlinkControllerConfig<CR extends HasMetadata> extends AnnotationCon
     public Set<String> getNamespaces() {
         return watchedNamespaces;
     }
+
+    @Override
+    public Set<String> getEffectiveNamespaces() {
+        return watchedNamespaces;
+    }
 }

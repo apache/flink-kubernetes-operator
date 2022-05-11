@@ -25,15 +25,20 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.stream.Collectors;
 
 /**
  * Reconciler responsible for handling the session cluster lifecycle according to the desired and
@@ -42,12 +47,15 @@ import org.slf4j.LoggerFactory;
 public class SessionReconciler extends AbstractDeploymentReconciler {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
+    private final InformerManager informerManager;
 
     public SessionReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkConfigManager configManager) {
+            FlinkConfigManager configManager,
+            InformerManager informerManager) {
         super(kubernetesClient, flinkService, configManager);
+        this.informerManager = informerManager;
     }
 
     @Override
@@ -133,5 +141,32 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
         LOG.info("Stopping session cluster");
         flinkService.deleteClusterDeployment(
                 deployment.getMetadata(), deployment.getStatus(), true);
+    }
+
+    @Override
+    public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
+        var sessionJobs =
+                informerManager
+                        .getSessionJobInformer(flinkApp.getMetadata().getNamespace())
+                        .getIndexer()
+                        .byIndex(OperatorUtils.CLUSTER_ID_INDEX, flinkApp.getMetadata().getName());
+        if (!sessionJobs.isEmpty()) {
+            var error =
+                    String.format(
+                            "The session jobs %s should be deleted first",
+                            sessionJobs.stream()
+                                    .map(job -> job.getMetadata().getName())
+                                    .collect(Collectors.toList()));
+            // TODO generate error events for this
+            LOG.warn(error);
+            return DeleteControl.noFinalizerRemoval()
+                    .rescheduleAfter(
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getReconcileInterval()
+                                    .toMillis());
+        } else {
+            return super.cleanup(flinkApp, context);
+        }
     }
 }
