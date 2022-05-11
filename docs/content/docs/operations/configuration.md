@@ -53,3 +53,10 @@ To learn more about metrics and logging configuration please refer to the dedica
 ## Operator Configuration Reference
 
 {{< generated/kubernetes_operator_config_configuration >}}
+
+## Session Job Configurations
+You can add configuration key-value pairs in session job spec `sessionJobFlinkConfiguration` field.
+
+| Parameter | Default | Type | Description |
+| ----------| ---- | ---- | ------------|
+| kubernetes.operator.user.artifacts.http.header | (None) | Map | Custom HTTP header for the session job. headerKey1:headerValue1,headerKey2:headerValue2. |
