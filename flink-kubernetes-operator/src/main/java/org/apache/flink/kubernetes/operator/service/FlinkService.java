@@ -32,6 +32,7 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
@@ -357,7 +358,11 @@ public class FlinkService {
                                                     Preconditions.checkNotNull(jobId),
                                                     false,
                                                     savepointDirectory,
-                                                    null)
+                                                    conf.get(FLINK_VERSION)
+                                                                    .isNewerVersionThan(
+                                                                            FlinkVersion.v1_14)
+                                                            ? SavepointFormatType.DEFAULT
+                                                            : null)
                                             .get(timeout, TimeUnit.SECONDS);
                             savepointOpt = Optional.of(savepoint);
                         } else if (ReconciliationUtils.isJobInTerminalState(deploymentStatus)) {
@@ -455,7 +460,15 @@ public class FlinkService {
                     try {
                         String savepoint =
                                 clusterClient
-                                        .stopWithSavepoint(jobID, false, savepointDirectory, null)
+                                        .stopWithSavepoint(
+                                                jobID,
+                                                false,
+                                                savepointDirectory,
+                                                conf.get(FLINK_VERSION)
+                                                                .isNewerVersionThan(
+                                                                        FlinkVersion.v1_14)
+                                                        ? SavepointFormatType.DEFAULT
+                                                        : null)
                                         .get(timeout, TimeUnit.SECONDS);
                         savepointOpt = Optional.of(savepoint);
                     } catch (TimeoutException exception) {
@@ -500,7 +513,13 @@ public class FlinkService {
                                     savepointTriggerHeaders,
                                     savepointTriggerMessageParameters,
                                     new SavepointTriggerRequestBody(
-                                            savepointDirectory, false, null, null))
+                                            savepointDirectory,
+                                            false,
+                                            conf.get(FLINK_VERSION)
+                                                            .isNewerVersionThan(FlinkVersion.v1_14)
+                                                    ? SavepointFormatType.DEFAULT
+                                                    : null,
+                                            null))
                             .get(timeout, TimeUnit.SECONDS);
             LOG.info("Savepoint successfully triggered: " + response.getTriggerId().toHexString());
 
