@@ -17,9 +17,11 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.Observer;
@@ -54,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -77,6 +80,9 @@ public class FlinkSessionJobController
     private final MetricManager<FlinkSessionJob> metricManager;
     private Map<String, SharedIndexInformer<FlinkSessionJob>> informers;
     private FlinkControllerConfig<FlinkSessionJob> controllerConfig;
+
+    private final ConcurrentHashMap<Tuple2<String, String>, FlinkSessionJobStatus> statusCache =
+            new ConcurrentHashMap<>();
 
     public FlinkSessionJobController(
             FlinkConfigManager configManager,
@@ -102,11 +108,13 @@ public class FlinkSessionJobController
     public UpdateControl<FlinkSessionJob> reconcile(
             FlinkSessionJob flinkSessionJob, Context context) {
         LOG.info("Starting reconciliation");
-        FlinkSessionJob originalCopy = ReconciliationUtils.clone(flinkSessionJob);
+        OperatorUtils.updateStatusFromCache(flinkSessionJob, statusCache);
         observer.observe(flinkSessionJob, context);
         if (!validateSessionJob(flinkSessionJob, context)) {
             metricManager.onUpdate(flinkSessionJob);
-            return ReconciliationUtils.toUpdateControl(flinkSessionJob, flinkSessionJob);
+            OperatorUtils.patchAndCacheStatus(kubernetesClient, flinkSessionJob, statusCache);
+            return ReconciliationUtils.toUpdateControl(
+                    configManager.getOperatorConfiguration(), flinkSessionJob, false);
         }
 
         try {
@@ -116,31 +124,27 @@ public class FlinkSessionJobController
             throw new ReconciliationException(e);
         }
         metricManager.onUpdate(flinkSessionJob);
-        return ReconciliationUtils.toUpdateControl(originalCopy, flinkSessionJob)
-                .rescheduleAfter(
-                        configManager.getOperatorConfiguration().getReconcileInterval().toMillis());
+        OperatorUtils.patchAndCacheStatus(kubernetesClient, flinkSessionJob, statusCache);
+        return ReconciliationUtils.toUpdateControl(
+                configManager.getOperatorConfiguration(), flinkSessionJob, true);
     }
 
     @Override
     public DeleteControl cleanup(FlinkSessionJob sessionJob, Context context) {
         LOG.info("Deleting FlinkSessionJob");
         metricManager.onRemove(sessionJob);
+        statusCache.remove(
+                Tuple2.of(
+                        sessionJob.getMetadata().getNamespace(),
+                        sessionJob.getMetadata().getName()));
         return reconciler.cleanup(sessionJob, context);
     }
 
     @Override
     public Optional<FlinkSessionJob> updateErrorStatus(
             FlinkSessionJob flinkSessionJob, RetryInfo retryInfo, RuntimeException e) {
-        LOG.warn(
-                "Attempt count: {}, last attempt: {}",
-                retryInfo.getAttemptCount(),
-                retryInfo.isLastAttempt());
-
-        ReconciliationUtils.updateForReconciliationError(
-                flinkSessionJob,
-                (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
-        metricManager.onUpdate(flinkSessionJob);
-        return Optional.of(flinkSessionJob);
+        return ReconciliationUtils.updateErrorStatus(
+                kubernetesClient, flinkSessionJob, retryInfo, e, metricManager, statusCache);
     }
 
     @Override
