@@ -26,6 +26,8 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
+import java.util.Map;
+
 /** Spec that describes a Flink session job. */
 @Experimental
 @Data
@@ -38,4 +40,7 @@ public class FlinkSessionJobSpec extends AbstractFlinkSpec {
 
     /** The name of the target session cluster deployment. */
     private String deploymentName;
+
+    /** Session job specific configuration */
+    private Map<String, String> sessionJobFlinkConfiguration;
 }

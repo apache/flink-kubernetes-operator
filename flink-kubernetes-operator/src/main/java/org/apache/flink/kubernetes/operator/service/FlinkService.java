@@ -225,7 +225,8 @@ public class FlinkService {
     private JarUploadResponseBody uploadJar(FlinkSessionJob sessionJob, Configuration conf)
             throws Exception {
         String targetDir = artifactManager.generateJarDir(sessionJob);
-        File jarFile = artifactManager.fetch(sessionJob.getSpec().getJob().getJarURI(), targetDir);
+        File jarFile = artifactManager.fetch(sessionJob.getSpec().getJob().getJarURI(),
+                sessionJob.getSpec().getSessionJobFlinkConfiguration(), targetDir);
         Preconditions.checkArgument(
                 jarFile.exists(),
                 String.format("The jar file %s not exists", jarFile.getAbsolutePath()));

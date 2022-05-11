@@ -21,6 +21,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorSessionJobConfigOptions;
 import org.apache.flink.util.Preconditions;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -42,6 +43,8 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 /** Test for {@link ArtifactManager}. */
 public class ArtifactManagerTest {
@@ -79,6 +82,7 @@ public class ArtifactManagerTest {
         File file =
                 artifactManager.fetch(
                         String.format("file://%s", sourceFile.getAbsolutePath()),
+                        new HashMap<>(),
                         tempDir.toString());
         Assertions.assertTrue(file.exists());
         Assertions.assertEquals(tempDir.toString(), file.getParentFile().toString());
@@ -91,11 +95,17 @@ public class ArtifactManagerTest {
             httpServer = startHttpServer();
             var sourceFile = mockTheJarFile();
             httpServer.createContext("/download", new DownloadFileHttpHandler(sourceFile));
+            Map<String, String> sessionFlinkConfig = new HashMap<>();
+
+            sessionFlinkConfig.put(KubernetesOperatorSessionJobConfigOptions
+                    .SESSION_JOB_HTTP_JAR_HEADERS.getSessionJobConfigKey(), "k1:v1,k2:v2");
+
             var file =
                     artifactManager.fetch(
                             String.format(
                                     "http://127.0.0.1:%d/download?file=1",
                                     httpServer.getAddress().getPort()),
+                            sessionFlinkConfig,
                             tempDir.toString());
             Assertions.assertTrue(file.exists());
             Assertions.assertEquals(tempDir.toString(), file.getParent());

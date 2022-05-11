@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.util.Map;
 
 /** Leverage the flink filesystem plugin to fetch the artifact. */
 public class FileSystemBasedArtifactFetcher implements ArtifactFetcher {
@@ -33,7 +34,7 @@ public class FileSystemBasedArtifactFetcher implements ArtifactFetcher {
             new FileSystemBasedArtifactFetcher();
 
     @Override
-    public File fetch(String uri, File targetDir) throws Exception {
+    public File fetch(String uri, Map<String, String> sessionJobFlinkConfiguration, File targetDir) throws Exception {
         org.apache.flink.core.fs.Path source = new org.apache.flink.core.fs.Path(uri);
         var start = System.currentTimeMillis();
         FileSystem fileSystem = source.getFileSystem();

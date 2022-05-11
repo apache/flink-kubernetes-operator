@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.artifact;
 
 import java.io.File;
+import java.util.Map;
 
 /** The artifact fetcher. */
 public interface ArtifactFetcher {
@@ -26,9 +27,10 @@ public interface ArtifactFetcher {
      * Fetch the resource from the uri to the targetDir.
      *
      * @param uri The artifact to be fetched.
+     * @param sessionJobFlinkConfiguration Session job specific Flink configurations
      * @param targetDir The target dir to put the artifact.
      * @return The path of the fetched artifact.
      * @throws Exception
      */
-    File fetch(String uri, File targetDir) throws Exception;
+    File fetch(String uri, Map<String, String> sessionJobFlinkConfiguration, File targetDir) throws Exception;
 }
