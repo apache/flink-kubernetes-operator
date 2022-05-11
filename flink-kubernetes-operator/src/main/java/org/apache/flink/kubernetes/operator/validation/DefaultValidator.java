@@ -81,7 +81,8 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateJobSpec(spec.getJob(), effectiveConfig),
                 validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager()),
-                validateSpecChange(deployment, effectiveConfig));
+                validateSpecChange(deployment, effectiveConfig),
+                validateServiceAccount(spec.getServiceAccount()));
     }
 
     private static Optional<String> firstPresent(Optional<String>... errOpts) {
@@ -383,6 +384,14 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of("Cannot perform savepoint restore without a valid savepoint");
         }
 
+        return Optional.empty();
+    }
+
+    private Optional<String> validateServiceAccount(String serviceAccount) {
+        if (serviceAccount == null) {
+            return Optional.of(
+                    "spec.serviceAccount must be defined. If you use helm, its value should be the same with the name of jobServiceAccount.");
+        }
         return Optional.empty();
     }
 }

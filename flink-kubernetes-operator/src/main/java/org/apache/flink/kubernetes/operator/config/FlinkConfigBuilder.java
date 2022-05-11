@@ -290,8 +290,12 @@ public class FlinkConfigBuilder {
                     isJM
                             ? KubernetesConfigOptions.JOB_MANAGER_CPU
                             : KubernetesConfigOptions.TASK_MANAGER_CPU;
-            effectiveConfig.setString(memoryConfigOption.key(), resource.getMemory());
-            effectiveConfig.setDouble(cpuConfigOption.key(), resource.getCpu());
+            if (resource.getMemory() != null) {
+                effectiveConfig.setString(memoryConfigOption.key(), resource.getMemory());
+            }
+            if (resource.getCpu() != null) {
+                effectiveConfig.setDouble(cpuConfigOption.key(), resource.getCpu());
+            }
         }
     }
 

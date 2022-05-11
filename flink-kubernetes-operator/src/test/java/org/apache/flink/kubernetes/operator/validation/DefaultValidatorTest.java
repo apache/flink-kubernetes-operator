@@ -285,6 +285,12 @@ public class DefaultValidatorTest {
         testError(dep -> dep.getSpec().setFlinkVersion(null), "Flink Version must be defined.");
 
         testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_15));
+
+        testError(
+                dep -> dep.getSpec().setServiceAccount(null),
+                "spec.serviceAccount must be defined. If you use helm, its value should be the same with the name of jobServiceAccount.");
+
+        testSuccess(dep -> dep.getSpec().setServiceAccount("flink"));
     }
 
     @Test

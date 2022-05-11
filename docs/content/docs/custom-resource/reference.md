@@ -137,7 +137,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| cpu | double | Amount of CPU allocated to the pod. |
+| cpu | java.lang.Double | Amount of CPU allocated to the pod. |
 | memory | java.lang.String | Amount of memory allocated to the pod. Example: 1024m, 1g |
 
 ### TaskManagerSpec

@@ -110,7 +110,6 @@ spec:
     high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
     high-availability.storageDir: file:///flink-data/ha
   jobManager:
-    replicas: 1
     resource:
       memory: "2048m"
       cpu: 1

@@ -24,7 +24,6 @@ spec:
   image: flink:1.14
   flinkVersion: v1_14
   jobManager:
-    replicas: 1
     resource:
       memory: "2048m"
       cpu: 1

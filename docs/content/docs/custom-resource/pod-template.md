@@ -77,7 +77,6 @@ spec:
         - name: flink-logs
           emptyDir: { }
   jobManager:
-    replicas: 1
     resource:
       memory: "2048m"
       cpu: 1

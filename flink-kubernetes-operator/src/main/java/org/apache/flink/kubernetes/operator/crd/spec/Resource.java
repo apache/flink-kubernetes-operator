@@ -30,7 +30,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class Resource {
     /** Amount of CPU allocated to the pod. */
-    private double cpu;
+    private Double cpu;
 
     /** Amount of memory allocated to the pod. Example: 1024m, 1g */
     private String memory;

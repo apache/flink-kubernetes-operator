@@ -34,7 +34,7 @@ public class JobManagerSpec {
     private Resource resource;
 
     /** Number of JobManager replicas. Must be 1 for non-HA deployments. */
-    private int replicas;
+    private int replicas = 1;
 
     /** JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
     private Pod podTemplate;

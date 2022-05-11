@@ -58,7 +58,6 @@ spec:
           persistentVolumeClaim:
             claimName: session-cluster-1-pvc
   jobManager:
-    replicas: 1
     resource:
       memory: "1024m"
       cpu: 0.5
