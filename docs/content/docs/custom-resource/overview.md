@@ -24,13 +24,20 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# FlinkDeployment Overview
+# Overview
 
-The core user facing API of the Flink Kubernetes Operator is the FlinkDeployment Custom Resource (CR).
+The core user facing API of the Flink Kubernetes Operator is the FlinkDeployment and FlinkSessionJob Custom Resources (CR).
 
-Custom Resources are extensions of the Kubernetes API and define new object types. In our case the FlinkDeployment CR defines Flink Application and Session cluster deployments.
+Custom Resources are extensions of the Kubernetes API and define new object types. In our case the FlinkDeployment CR defines Flink Application and Session cluster deployments. The FlinkSessionJob CR defines the session job on the Session cluster and each Session cluster can run multiple FlinkSessionJob.
 
-Once the Flink Kubernetes Operator is installed and running in your Kubernetes environment, it will continuously watch FlinkDeployment objects submitted by the user to detect new deployments and changes to existing ones. In case you haven't deployed the operator yet, please check out the [quickstart]({{< ref "docs/try-flink-kubernetes-operator/quick-start" >}}) for detailed instructions on how to get started.
+Once the Flink Kubernetes Operator is installed and running in your Kubernetes environment, it will continuously watch FlinkDeployment and FlinkSessionJob objects submitted by the user to detect new CR and changes to existing ones. In case you haven't deployed the operator yet, please check out the [quickstart]({{< ref "docs/try-flink-kubernetes-operator/quick-start" >}}) for detailed instructions on how to get started.
+
+With these two Custom Resources, we can support two different operational models:
+
+- Flink application managed by the `FlinkDeployment`
+- Empty Flink session managed by the `FlinkDeployment` + multiple jobs managed by the `FlinkSessionJobs`. The operations on the session jobs are independent of each other.
+
+## FlinkDeployment
 
 FlinkDeployment objects are defined in YAML format by the user and must contain the following required fields:
 
@@ -146,9 +153,51 @@ For Session clusters the operator only provides very basic management and monito
  - Monitor overall cluster health
  - Stop / Delete Session clsuter
 
+## FlinkSessionJob
+
+The FlinkSessionJob have a similar structure to FlinkDeployment with the following required fields:
+
+```
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkSessionJob
+metadata:
+  name: basic-session-job-example
+spec:
+  deploymentName: basic-session-cluster
+  job:
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.0/flink-examples-streaming_2.12-1.15.0-TopSpeedWindowing.jar
+    parallelism: 4
+    upgradeMode: stateless
+```
+
+### FlinkSessionJob spec overview
+
+The spec contains the information to submit a session job to the session cluster. Mostly, it will define at least the following fields:
+
+ - deploymentName: The name of the target session cluster's CR
+ - job: The specification for the Session Job
+
+The job specification has the same structure in FlinkSessionJobs and FlinkDeployments, but in FlinkSessionJobs the jarUri can contain remote sources too.
+It leverages the [Flink filesystem](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/overview/) mechanism to download the jar and submit to the session cluster.
+So the FlinkSessionJob must be run with an existing session cluster managed by the FlinkDeployment.
+
+To support jar from different filesystems, you should extend the base docker image as below, and put the related filesystem jar to the plugin dir and deploy the operator.
+For example, to support the hadoop fs resource:
+
+```shell script
+FROM apache/flink-kubernetes-operator
+ENV FLINK_PLUGINS_DIR=/opt/flink/plugins
+COPY flink-hadoop-fs-1.15-SNAPSHOT.jar $FLINK_PLUGINS_DIR/hadoop-fs/
+```
+
+### Limitations
+
+- The LastState UpgradeMode have not been supported.
+
 ## Further information
 
  - [Job Management and Stateful upgrades]({{< ref "docs/custom-resource/job-management" >}})
- - [Deployment customoziation and pod templates]({{< ref "docs/custom-resource/pod-template" >}})
+ - [Deployment customization and pod templates]({{< ref "docs/custom-resource/pod-template" >}})
  - [Full Reference]({{< ref "docs/custom-resource/reference" >}})
  - [Examples](https://github.com/apache/flink-kubernetes-operator/tree/main/examples)
+
