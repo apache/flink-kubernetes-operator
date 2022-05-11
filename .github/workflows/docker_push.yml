@@ -24,7 +24,7 @@ on:
       - main
       - 'release-*'
     tags:
-      - 'release-*'
+      - 'release-*-rc*'
   pull_request:
     branches:
       - main
