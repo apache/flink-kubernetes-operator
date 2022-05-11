@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.Observer;
@@ -72,6 +73,7 @@ public class FlinkOperator {
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
     private final MetricGroup metricGroup;
+    private final InformerManager informerManager;
 
     public FlinkOperator(@Nullable Configuration conf) {
         this.client = new DefaultKubernetesClient();
@@ -83,6 +85,9 @@ public class FlinkOperator {
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.metricGroup =
                 OperatorMetricUtils.initOperatorMetrics(configManager.getDefaultConfig());
+        Set<String> watchedNamespaces =
+                configManager.getOperatorConfiguration().getWatchedNamespaces();
+        this.informerManager = new InformerManager(watchedNamespaces, client);
         PluginManager pluginManager =
                 PluginUtils.createPluginManagerFromRootFolder(configManager.getDefaultConfig());
         FileSystem.initialize(configManager.getDefaultConfig(), pluginManager);
@@ -91,7 +96,7 @@ public class FlinkOperator {
     private void registerDeploymentController() {
         StatusHelper<FlinkDeploymentStatus> statusHelper = new StatusHelper<>(client);
         ReconcilerFactory reconcilerFactory =
-                new ReconcilerFactory(client, flinkService, configManager);
+                new ReconcilerFactory(client, flinkService, configManager, informerManager);
         ObserverFactory observerFactory =
                 new ObserverFactory(client, flinkService, configManager, statusHelper);
 
@@ -109,7 +114,6 @@ public class FlinkOperator {
                 new FlinkControllerConfig<>(
                         controller,
                         configManager.getOperatorConfiguration().getWatchedNamespaces());
-        controller.setControllerConfig(controllerConfig);
         controllerConfig.setConfigurationService(configurationService);
         operator.register(controller, controllerConfig);
     }
@@ -128,7 +132,8 @@ public class FlinkOperator {
                         reconciler,
                         observer,
                         new MetricManager<>(metricGroup),
-                        statusHelper);
+                        statusHelper,
+                        informerManager);
 
         FlinkControllerConfig<FlinkSessionJob> controllerConfig =
                 new FlinkControllerConfig<>(
@@ -136,7 +141,6 @@ public class FlinkOperator {
                         configManager.getOperatorConfiguration().getWatchedNamespaces());
 
         controllerConfig.setConfigurationService(configurationService);
-        controller.init(controllerConfig);
         operator.register(controller, controllerConfig);
     }
 

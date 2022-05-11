@@ -629,15 +629,14 @@ public class FlinkDeploymentControllerTest {
     @Test
     public void testPrepareEventSource() {
         // Test watch all
-        testController.setControllerConfig(
-                new FlinkControllerConfig(testController, Collections.emptySet()));
+        testController.setEffectiveNamespaces(Collections.emptySet());
         List<EventSource> eventSources = testController.prepareEventSources(null);
         assertEquals(1, eventSources.size());
         assertEquals("all", eventSources.get(0).name());
 
         // Test watch namespaces
         Set<String> namespaces = Set.of("ns1", "ns2", "ns3");
-        testController.setControllerConfig(new FlinkControllerConfig(testController, namespaces));
+        testController.setEffectiveNamespaces(namespaces);
         eventSources = testController.prepareEventSources(null);
         assertEquals(3, eventSources.size());
         assertEquals(

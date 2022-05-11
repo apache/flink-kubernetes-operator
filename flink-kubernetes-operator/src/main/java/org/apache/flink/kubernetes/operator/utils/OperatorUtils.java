@@ -38,9 +38,13 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /** Operator SDK related utility functions. */
 public class OperatorUtils {
@@ -48,6 +52,8 @@ public class OperatorUtils {
     private static final Logger LOG = LoggerFactory.getLogger(OperatorUtils.class);
 
     private static final String NAMESPACES_SPLITTER_KEY = ",";
+    public static final String CLUSTER_ID_INDEX = "clusterId_index";
+    public static final String ALL_NAMESPACE = "allNamespace";
 
     public static InformerEventSource<Deployment, HasMetadata> createJmDepInformerEventSource(
             KubernetesClient kubernetesClient, String namespace) {
@@ -98,5 +104,42 @@ public class OperatorUtils {
                         ? sessionJob.getMetadata().getNamespace()
                         : null;
         return context.getSecondaryResource(FlinkDeployment.class, identifier);
+    }
+
+    /**
+     * Create informers for session job to build indexer for cluster to session job relations.
+     *
+     * @return The different namespace's index informer.
+     */
+    public static Map<String, SharedIndexInformer<FlinkSessionJob>>
+            createSessionJobInformersWithIndexer(
+                    Set<String> effectiveNamespaces, KubernetesClient kubernetesClient) {
+        if (effectiveNamespaces.isEmpty()) {
+            return Map.of(
+                    ALL_NAMESPACE,
+                    kubernetesClient
+                            .resources(FlinkSessionJob.class)
+                            .inAnyNamespace()
+                            .withIndexers(clusterToSessionJobIndexer())
+                            .inform());
+        } else {
+            var informers = new HashMap<String, SharedIndexInformer<FlinkSessionJob>>();
+            for (String effectiveNamespace : effectiveNamespaces) {
+                informers.put(
+                        effectiveNamespace,
+                        kubernetesClient
+                                .resources(FlinkSessionJob.class)
+                                .inNamespace(effectiveNamespace)
+                                .withIndexers(clusterToSessionJobIndexer())
+                                .inform());
+            }
+            return informers;
+        }
+    }
+
+    private static Map<String, Function<FlinkSessionJob, List<String>>>
+            clusterToSessionJobIndexer() {
+        return Map.of(
+                CLUSTER_ID_INDEX, sessionJob -> List.of(sessionJob.getSpec().getDeploymentName()));
     }
 }
