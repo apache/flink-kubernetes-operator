@@ -114,7 +114,6 @@ public class FlinkConfigBuilderTest {
         Assertions.assertEquals(
                 KubernetesConfigOptions.ServiceExposedType.ClusterIP,
                 configuration.get(KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE));
-        Assertions.assertEquals(false, configuration.get(WebOptions.SUBMIT_ENABLE));
         Assertions.assertEquals(false, configuration.get(WebOptions.CANCEL_ENABLE));
 
         FlinkDeployment deployment = ReconciliationUtils.clone(flinkDeployment);
@@ -153,7 +152,6 @@ public class FlinkConfigBuilderTest {
                 new FlinkConfigBuilder(deployment, new Configuration())
                         .applyFlinkConfiguration()
                         .build();
-        Assertions.assertEquals(false, configuration.get(WebOptions.SUBMIT_ENABLE));
         Assertions.assertEquals(false, configuration.get(WebOptions.CANCEL_ENABLE));
     }
 

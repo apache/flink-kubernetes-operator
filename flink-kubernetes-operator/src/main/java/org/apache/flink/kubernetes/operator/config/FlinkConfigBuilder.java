@@ -55,7 +55,6 @@ import java.util.Collections;
 
 import static org.apache.flink.configuration.DeploymentOptionsInternal.CONF_DIR;
 import static org.apache.flink.configuration.WebOptions.CANCEL_ENABLE;
-import static org.apache.flink.configuration.WebOptions.SUBMIT_ENABLE;
 import static org.apache.flink.kubernetes.configuration.KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE;
 import static org.apache.flink.kubernetes.operator.utils.FlinkUtils.mergePodTemplates;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
@@ -135,10 +134,6 @@ public class FlinkConfigBuilder {
         // Adapt default rest service type from 1.15+
         setDefaultConf(
                 REST_SERVICE_EXPOSED_TYPE, KubernetesConfigOptions.ServiceExposedType.ClusterIP);
-
-        // Set 'web.submit.enable' to false to disable the web submission.
-        setDefaultConf(SUBMIT_ENABLE, false);
-
         // Set 'web.cancel.enable' to false to avoid users accidentally cancelling jobs.
         setDefaultConf(CANCEL_ENABLE, false);
 
