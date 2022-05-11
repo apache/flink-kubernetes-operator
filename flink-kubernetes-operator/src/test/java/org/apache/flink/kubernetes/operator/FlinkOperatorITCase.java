@@ -111,7 +111,7 @@ public class FlinkOperatorITCase {
         spec.setServiceAccount(SERVICE_ACCOUNT);
         Resource resource = new Resource();
         resource.setMemory("2048m");
-        resource.setCpu(1);
+        resource.setCpu(1.0);
         JobManagerSpec jm = new JobManagerSpec();
         jm.setResource(resource);
         jm.setReplicas(1);
