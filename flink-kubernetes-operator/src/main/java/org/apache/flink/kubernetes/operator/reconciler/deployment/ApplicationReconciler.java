@@ -17,7 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -37,6 +40,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -46,6 +50,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Reconciler responsible for handling the job lifecycle according to the desired and current
@@ -208,7 +213,8 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                 || ReconciliationUtils.isJobRunning(status);
     }
 
-    private void deployFlinkJob(
+    @VisibleForTesting
+    protected void deployFlinkJob(
             ObjectMeta meta,
             JobSpec jobSpec,
             FlinkDeploymentStatus status,
@@ -220,6 +226,9 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
         } else {
             effectiveConfig.removeConfig(SavepointConfigOptions.SAVEPOINT_PATH);
         }
+
+        setRandomJobResultStorePath(effectiveConfig);
+
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.MISSING) {
             if (!ReconciliationUtils.isJobInTerminalState(status)) {
                 throw new RuntimeException("This indicates a bug...");
@@ -251,6 +260,24 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                         .flatMap(s -> Optional.ofNullable(s.getLocation()));
 
         deployFlinkJob(meta, jobSpec, status, effectiveConfig, savepointOpt);
+    }
+
+    // Workaround for https://issues.apache.org/jira/browse/FLINK-27569
+    public static void setRandomJobResultStorePath(Configuration effectiveConfig) {
+        if (effectiveConfig.contains(HighAvailabilityOptions.HA_STORAGE_PATH)) {
+
+            if (!effectiveConfig.contains(JobResultStoreOptions.DELETE_ON_COMMIT)) {
+                effectiveConfig.set(JobResultStoreOptions.DELETE_ON_COMMIT, false);
+            }
+
+            effectiveConfig.set(
+                    JobResultStoreOptions.STORAGE_PATH,
+                    effectiveConfig.getString(HighAvailabilityOptions.HA_STORAGE_PATH)
+                            + "/job-result-store/"
+                            + effectiveConfig.getString(KubernetesConfigOptions.CLUSTER_ID)
+                            + "/"
+                            + UUID.randomUUID());
+        }
     }
 
     private void printCancelLogs(UpgradeMode upgradeMode) {
