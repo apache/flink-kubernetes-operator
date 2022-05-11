@@ -25,22 +25,29 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -395,5 +402,38 @@ public class ApplicationReconcilerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.FINISHED.name(),
                 spDeployment.getStatus().getJobStatus().getState());
+    }
+
+    @Test
+    public void testRandomJobResultStorePath() throws Exception {
+
+        TestingFlinkService flinkService = new TestingFlinkService();
+        ApplicationReconciler reconciler =
+                new ApplicationReconciler(kubernetesClient, flinkService, configManager);
+        FlinkDeployment flinkApp = TestUtils.buildApplicationCluster();
+        final String haStoragePath = "file:///flink-data/ha";
+        flinkApp.getSpec()
+                .getFlinkConfiguration()
+                .put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), haStoragePath);
+
+        ObjectMeta deployMeta = flinkApp.getMetadata();
+        FlinkDeploymentStatus status = flinkApp.getStatus();
+        FlinkDeploymentSpec spec = flinkApp.getSpec();
+        JobSpec jobSpec = spec.getJob();
+        Configuration deployConfig = configManager.getDeployConfig(deployMeta, spec);
+
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        reconciler.deployFlinkJob(deployMeta, jobSpec, status, deployConfig, Optional.empty());
+
+        String path1 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
+        Assertions.assertTrue(path1.startsWith(haStoragePath));
+
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        reconciler.deployFlinkJob(deployMeta, jobSpec, status, deployConfig, Optional.empty());
+        String path2 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
+        Assertions.assertTrue(path2.startsWith(haStoragePath));
+        assertNotEquals(path1, path2);
     }
 }

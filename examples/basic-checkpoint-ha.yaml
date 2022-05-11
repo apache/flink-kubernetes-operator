@@ -28,6 +28,7 @@ spec:
     state.savepoints.dir: file:///flink-data/savepoints
     high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
     high-availability.storageDir: file:///flink-data/ha
+  serviceAccount: flink
   jobManager:
     resource:
       memory: "2048m"

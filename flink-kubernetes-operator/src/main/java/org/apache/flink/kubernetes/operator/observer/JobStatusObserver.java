@@ -55,10 +55,10 @@ public abstract class JobStatusObserver<CTX> {
             clusterJobStatuses = new ArrayList<>(flinkService.listJobs(deployedConfig));
         } catch (Exception e) {
             LOG.error("Exception while listing jobs", e);
-            jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
             if (e instanceof TimeoutException) {
                 onTimeout(ctx);
             }
+            ifRunningMoveToReconciling(jobStatus, previousJobStatus);
             return false;
         }
 
@@ -79,9 +79,14 @@ public abstract class JobStatusObserver<CTX> {
             }
             return true;
         } else {
-            jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
-            LOG.info("No job found on cluster yet");
+            ifRunningMoveToReconciling(jobStatus, previousJobStatus);
             return false;
+        }
+    }
+
+    private void ifRunningMoveToReconciling(JobStatus jobStatus, String previousJobStatus) {
+        if (org.apache.flink.api.common.JobStatus.RUNNING.name().equals(previousJobStatus)) {
+            jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
         }
     }
 
