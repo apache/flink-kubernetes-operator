@@ -134,12 +134,10 @@ public class FlinkConfigBuilder {
         // Adapt default rest service type from 1.15+
         setDefaultConf(
                 REST_SERVICE_EXPOSED_TYPE, KubernetesConfigOptions.ServiceExposedType.ClusterIP);
+        // Set 'web.cancel.enable' to false to avoid users accidentally cancelling jobs.
+        setDefaultConf(CANCEL_ENABLE, false);
 
         if (spec.getJob() != null) {
-            // Set 'web.cancel.enable' to false for application deployments to avoid users
-            // accidentally cancelling jobs.
-            setDefaultConf(CANCEL_ENABLE, false);
-
             // With last-state upgrade mode, set the default value of
             // 'execution.checkpointing.interval'
             // to 5 minutes when HA is enabled.
