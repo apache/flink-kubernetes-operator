@@ -24,6 +24,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 
+import java.util.Map;
+
 /** The common spec. */
 @Experimental
 @Data
@@ -40,4 +42,7 @@ public abstract class AbstractFlinkSpec {
      * restart, change the number to anything other than the current value.
      */
     private Long restartNonce;
+
+    /** Job specific configuration, this will override cluster level operator configurations. */
+    private Map<String, String> flinkConfiguration;
 }

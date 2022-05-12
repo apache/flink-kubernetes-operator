@@ -21,7 +21,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorSessionJobConfigOptions;
 import org.apache.flink.util.Preconditions;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -82,6 +81,7 @@ public class ArtifactManagerTest {
         File file =
                 artifactManager.fetch(
                         String.format("file://%s", sourceFile.getAbsolutePath()),
+                        new Configuration(),
                         new HashMap<>(),
                         tempDir.toString());
         Assertions.assertTrue(file.exists());
@@ -97,14 +97,15 @@ public class ArtifactManagerTest {
             httpServer.createContext("/download", new DownloadFileHttpHandler(sourceFile));
             Map<String, String> sessionFlinkConfig = new HashMap<>();
 
-            sessionFlinkConfig.put(KubernetesOperatorSessionJobConfigOptions
-                    .SESSION_JOB_HTTP_JAR_HEADERS.getSessionJobConfigKey(), "k1:v1,k2:v2");
+            sessionFlinkConfig.put(
+                    KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(), "k1:v1,k2:v2");
 
             var file =
                     artifactManager.fetch(
                             String.format(
                                     "http://127.0.0.1:%d/download?file=1",
                                     httpServer.getAddress().getPort()),
+                            new Configuration(),
                             sessionFlinkConfig,
                             tempDir.toString());
             Assertions.assertTrue(file.exists());

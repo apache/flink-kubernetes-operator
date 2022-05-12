@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.artifact;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.FileSystem;
 
 import org.apache.commons.io.FileUtils;
@@ -34,7 +35,12 @@ public class FileSystemBasedArtifactFetcher implements ArtifactFetcher {
             new FileSystemBasedArtifactFetcher();
 
     @Override
-    public File fetch(String uri, Map<String, String> sessionJobFlinkConfiguration, File targetDir) throws Exception {
+    public File fetch(
+            String uri,
+            Configuration clusterLevelConfiguration,
+            Map<String, String> flinkConfiguration,
+            File targetDir)
+            throws Exception {
         org.apache.flink.core.fs.Path source = new org.apache.flink.core.fs.Path(uri);
         var start = System.currentTimeMillis();
         FileSystem fileSystem = source.getFileSystem();

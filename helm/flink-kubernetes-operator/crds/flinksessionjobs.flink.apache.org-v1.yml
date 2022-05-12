@@ -53,6 +53,10 @@ spec:
                 type: object
               restartNonce:
                 type: integer
+              flinkConfiguration:
+                additionalProperties:
+                  type: string
+                type: object
             type: object
           status:
             properties:

@@ -24,6 +24,7 @@ import org.apache.flink.configuration.ConfigOptions;
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
 
 import java.time.Duration;
+import java.util.Map;
 
 /** This class holds configuration constants used by flink operator. */
 public class KubernetesOperatorConfigOptions {
@@ -141,4 +142,14 @@ public class KubernetesOperatorConfigOptions {
                     .noDefaultValue()
                     .withDescription(
                             "Whether to enable recovery of missing/deleted jobmanager deployments. False by default for Flink 1.14, true for newer Flink version.");
+
+    public static final ConfigOption<Map<String, String>> JAR_ARTIFACT_HTTP_HEADER =
+            ConfigOptions.key("kubernetes.operator.user.artifacts.http.header")
+                    .mapType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Custom HTTP header for the Flink job. If configured in cluster level (spec.flinkConfiguration), headers will be applied to all jobs within"
+                                    + " the cluster. This field can also be configured under spec.job.flinkConfiguration for a specific job with a session cluster."
+                                    + " If configured at job level, it will override the cluster level configuration."
+                                    + " headerKey1:headerValue1,headerKey2:headerValue2.");
 }

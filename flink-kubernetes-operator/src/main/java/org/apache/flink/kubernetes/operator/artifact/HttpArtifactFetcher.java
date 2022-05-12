@@ -17,16 +17,18 @@
 
 package org.apache.flink.kubernetes.operator.artifact;
 
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorSessionJobConfigOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.HashMap;
 import java.util.Map;
 
 /** Download the jar from the http resource. */
@@ -36,17 +38,29 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
     public static final HttpArtifactFetcher INSTANCE = new HttpArtifactFetcher();
 
     @Override
-    public File fetch(String uri, Map<String, String> sessionJobFlinkConfiguration, File targetDir) throws Exception {
+    public File fetch(
+            String uri,
+            Configuration clusterLevelConfiguration,
+            Map<String, String> flinkConfiguration,
+            File targetDir)
+            throws Exception {
         var start = System.currentTimeMillis();
         URL url = new URL(uri);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        if (sessionJobFlinkConfiguration != null && sessionJobFlinkConfiguration.containsKey(
-                KubernetesOperatorSessionJobConfigOptions
-                        .SESSION_JOB_HTTP_JAR_HEADERS.getSessionJobConfigKey())) {
-            Map<String, String> headers = KubernetesOperatorSessionJobConfigOptions.parseKeyValuePair(
-                    KubernetesOperatorSessionJobConfigOptions.SESSION_JOB_HTTP_JAR_HEADERS.getSessionJobConfigKey()
-            );
-            headers.forEach(conn::setRequestProperty);
+
+        Map<String, String> clusterLevelHeader =
+                clusterLevelConfiguration.get(
+                        KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER);
+        Map<String, String> jobLevelHeader =
+                parseKeyValuePair(
+                        flinkConfiguration.get(
+                                KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key()));
+
+        // jobLevelHeader will take precedence
+        if (jobLevelHeader.size() > 0) {
+            jobLevelHeader.forEach(conn::setRequestProperty);
+        } else if (clusterLevelHeader != null && clusterLevelHeader.size() > 0) {
+            clusterLevelHeader.forEach(conn::setRequestProperty);
         }
 
         conn.setRequestMethod("GET");
@@ -62,5 +76,26 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
                 targetFile,
                 System.currentTimeMillis() - start);
         return targetFile;
+    }
+
+    /** Parse key value k1:v1,k2,v2 comma separated key/value string into Map. */
+    private Map<String, String> parseKeyValuePair(String keyValuePairs) {
+        Map<String, String> map = new HashMap<>();
+
+        if (keyValuePairs == null || keyValuePairs.isEmpty()) {
+            return map;
+        }
+
+        String[] keyValuePairArray = keyValuePairs.trim().split(",");
+        for (String s : keyValuePairArray) {
+            String[] keyValuePair = s.split(":");
+            if (keyValuePair.length == 2) {
+                map.put(keyValuePair[0].trim(), keyValuePair[1].trim());
+            } else {
+                throw new IllegalArgumentException(
+                        "Invalid KV pairs: " + keyValuePairs + ". Expect format: k1:v1,k2:v2 .");
+            }
+        }
+        return map;
     }
 }

@@ -54,9 +54,12 @@ To learn more about metrics and logging configuration please refer to the dedica
 
 {{< generated/kubernetes_operator_config_configuration >}}
 
-## Session Job Configurations
-You can add configuration key-value pairs in session job spec `sessionJobFlinkConfiguration` field.
+## Job Specific Configuration Reference
+Job specific configuration can be configured under `spec.job.flinkConfiguration` and it will only be used within the configured specific job.
+For example, for session clusters, it may contain multiple different jobs. With the help of this `flinkConfiguration` field, you can define different headers
+for different jobs through `kubernetes.operator.user.artifacts.http.header`.
+This job specific flinkConfiguration will override the cluster level configurations defined 
+in `flink-conf.yaml` or `spec.flinkConfiguration` in `FlinkDeployment` CustomResource.
 
-| Parameter | Default | Type | Description |
-| ----------| ---- | ---- | ------------|
-| kubernetes.operator.user.artifacts.http.header | (None) | Map | Custom HTTP header for the session job. headerKey1:headerValue1,headerKey2:headerValue2. |
+### Current supported configurations
+- `kubernetes.operator.user.artifacts.http.header`
