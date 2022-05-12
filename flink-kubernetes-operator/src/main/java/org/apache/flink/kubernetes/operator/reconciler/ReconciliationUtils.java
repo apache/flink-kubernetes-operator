@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -27,7 +26,6 @@ import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
@@ -37,6 +35,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.util.Preconditions;
@@ -134,6 +133,7 @@ public class ReconciliationUtils {
             UpdateControl<R> toUpdateControl(
                     FlinkOperatorConfiguration operatorConfiguration,
                     R current,
+                    R previous,
                     boolean reschedule) {
 
         STATUS status = current.getStatus();
@@ -146,7 +146,9 @@ public class ReconciliationUtils {
             return updateControl;
         }
 
-        if (isJobUpgradeInProgress(current.getSpec(), status)) {
+        if (upgradeStarted(
+                status.getReconciliationStatus().getState(),
+                previous.getStatus().getReconciliationStatus().getState())) {
             return updateControl.rescheduleAfter(0);
         }
 
@@ -177,12 +179,10 @@ public class ReconciliationUtils {
     public static FlinkDeploymentSpec getDeployedSpec(FlinkDeployment deployment) {
         var reconciliationStatus = deployment.getStatus().getReconciliationStatus();
         var reconciliationState = reconciliationStatus.getState();
-        if (reconciliationState == ReconciliationState.DEPLOYED
-                || reconciliationState == ReconciliationState.UPGRADING) {
+        if (reconciliationState != ReconciliationState.ROLLED_BACK) {
             var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
             if (lastReconciledSpec == null) {
-                // No deployment submitted, use the provided one
-                return deployment.getSpec();
+                return null;
             } else {
                 return lastReconciledSpec;
             }
@@ -191,25 +191,13 @@ public class ReconciliationUtils {
         }
     }
 
-    private static boolean isJobUpgradeInProgress(AbstractFlinkSpec spec, CommonStatus<?> status) {
-        var reconciliationStatus = status.getReconciliationStatus();
-
-        if (reconciliationStatus == null) {
+    private static boolean upgradeStarted(
+            ReconciliationState currentReconState, ReconciliationState previousReconState) {
+        if (currentReconState == previousReconState) {
             return false;
         }
-
-        if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
-            return true;
-        }
-
-        if (spec.getJob() == null || reconciliationStatus.getLastReconciledSpec() == null) {
-            return false;
-        }
-
-        return spec.getJob().getState() == JobState.RUNNING
-                && status.getError() == null
-                && reconciliationStatus.deserializeLastReconciledSpec().getJob().getState()
-                        == JobState.SUSPENDED;
+        return currentReconState == ReconciliationState.ROLLING_BACK
+                || currentReconState == ReconciliationState.UPGRADING;
     }
 
     public static <T> T deserializedSpecWithVersion(
@@ -238,6 +226,7 @@ public class ReconciliationUtils {
     }
 
     public static boolean shouldRollBack(
+            FlinkService flinkService,
             ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus,
             Configuration configuration) {
 
@@ -261,45 +250,44 @@ public class ReconciliationUtils {
 
         Duration readinessTimeout =
                 configuration.get(KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT);
-        return Instant.now()
+        if (!Instant.now()
                 .minus(readinessTimeout)
-                .isAfter(Instant.ofEpochMilli(reconciliationStatus.getReconciliationTimestamp()));
+                .isAfter(Instant.ofEpochMilli(reconciliationStatus.getReconciliationTimestamp()))) {
+            return false;
+        }
+
+        var haDataAvailable = flinkService.isHaMetadataAvailable(configuration);
+        if (!haDataAvailable) {
+            LOG.warn("Rollback is not possible due to missing HA metadata");
+        }
+        return haDataAvailable;
     }
 
-    public static boolean deploymentRecoveryEnabled(Configuration conf) {
-        return conf.getOptional(
-                        KubernetesOperatorConfigOptions.OPERATOR_RECOVER_JM_DEPLOYMENT_ENABLED)
-                .orElse(
-                        conf.get(FlinkConfigBuilder.FLINK_VERSION)
-                                .isNewerVersionThan(FlinkVersion.v1_14));
+    public static boolean shouldRecoverDeployment(Configuration conf, FlinkDeployment deployment) {
+
+        if (!ReconciliationUtils.jmMissingForRunningDeployment(deployment)
+                || !conf.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_RECOVER_JM_DEPLOYMENT_ENABLED)) {
+            return false;
+        }
+
+        if (!FlinkUtils.isKubernetesHAActivated(conf)) {
+            LOG.warn("Could not recover lost deployment without HA enabled");
+            return false;
+        }
+        return true;
     }
 
-    public static boolean jmMissingForRunningDeployment(FlinkDeploymentStatus status) {
-        return status.getReconciliationStatus().deserializeLastReconciledSpec().getJob().getState()
-                        == JobState.RUNNING
-                && (status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING);
-    }
-
-    public static boolean jmMissingOrErrorForRunningDep(FlinkDeploymentStatus status) {
-        return status.getReconciliationStatus().deserializeLastReconciledSpec().getJob().getState()
-                        == JobState.RUNNING
-                && (status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING
-                        || status.getJobManagerDeploymentStatus()
-                                == JobManagerDeploymentStatus.ERROR);
+    private static boolean jmMissingForRunningDeployment(FlinkDeployment deployment) {
+        var deployedJob = getDeployedSpec(deployment).getJob();
+        return (deployedJob == null || deployedJob.getState() == JobState.RUNNING)
+                && (deployment.getStatus().getJobManagerDeploymentStatus()
+                        == JobManagerDeploymentStatus.MISSING);
     }
 
     public static boolean isJobInTerminalState(FlinkDeploymentStatus status) {
-        JobManagerDeploymentStatus deploymentStatus = status.getJobManagerDeploymentStatus();
-        if (deploymentStatus == JobManagerDeploymentStatus.MISSING
-                || deploymentStatus == JobManagerDeploymentStatus.ERROR) {
-            return true;
-        }
-
-        String jobState = status.getJobStatus().getState();
-
-        return deploymentStatus == JobManagerDeploymentStatus.READY
-                && org.apache.flink.api.common.JobStatus.valueOf(jobState)
-                        .isGloballyTerminalState();
+        var jobState = status.getJobStatus().getState();
+        return org.apache.flink.api.common.JobStatus.valueOf(jobState).isGloballyTerminalState();
     }
 
     public static boolean isJobRunning(FlinkDeploymentStatus status) {

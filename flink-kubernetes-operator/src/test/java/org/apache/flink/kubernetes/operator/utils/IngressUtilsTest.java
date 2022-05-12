@@ -51,7 +51,8 @@ public class IngressUtilsTest {
     public void testIngress() {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         Configuration config =
-                new FlinkConfigManager(new Configuration()).getObserveConfig(appCluster);
+                new FlinkConfigManager(new Configuration())
+                        .getDeployConfig(appCluster.getMetadata(), appCluster.getSpec());
 
         // no ingress when ingressDomain is empty
         IngressUtils.updateIngressRules(

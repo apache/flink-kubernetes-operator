@@ -65,7 +65,7 @@ public class ApplicationObserverTest {
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(deployment.getSpec());
         deployment.getStatus().setJobStatus(new JobStatus());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
 
         // Validate port check logic
         flinkService.setPortReady(false);
@@ -159,7 +159,7 @@ public class ApplicationObserverTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
         bringToReadyStatus(deployment);
         observer.observe(deployment, readyContext);
         assertEquals(
@@ -217,6 +217,8 @@ public class ApplicationObserverTest {
                         jobTuple.f1.getJobName(),
                         org.apache.flink.api.common.JobStatus.FAILED,
                         jobTuple.f1.getStartTime());
+        deployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId("test");
+        deployment.getStatus().getJobStatus().getSavepointInfo().setTriggerTimestamp(123L);
 
         observer.observe(deployment, readyContext);
         assertEquals(
@@ -230,6 +232,8 @@ public class ApplicationObserverTest {
                         .getSavepointInfo()
                         .getLastSavepoint()
                         .getLocation());
+        assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerTimestamp());
+        assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
     }
 
     private void bringToReadyStatus(FlinkDeployment deployment) {

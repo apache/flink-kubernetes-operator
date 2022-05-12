@@ -46,6 +46,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -313,6 +314,26 @@ public class RollbackTest {
                 ReconciliationState.DEPLOYED,
                 deployment.getStatus().getReconciliationStatus().getState());
         assertNull(deployment.getStatus().getError());
+
+        deployment.getSpec().setRestartNonce(456L);
+        triggerRollback.run();
+        testController.reconcile(deployment, context);
+        assertEquals(
+                ReconciliationState.ROLLED_BACK,
+                deployment.getStatus().getReconciliationStatus().getState());
+        assertNotEquals(
+                deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec(),
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
+
+        deployment.setSpec(
+                deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec());
+        testController.reconcile(deployment, context);
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
+        assertEquals(
+                deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec(),
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
 
         if (deployment.getSpec().getJob() != null) {
             deployment.getSpec().getJob().setState(JobState.SUSPENDED);

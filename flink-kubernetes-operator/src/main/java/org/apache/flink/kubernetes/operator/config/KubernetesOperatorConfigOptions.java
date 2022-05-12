@@ -139,9 +139,9 @@ public class KubernetesOperatorConfigOptions {
     public static final ConfigOption<Boolean> OPERATOR_RECOVER_JM_DEPLOYMENT_ENABLED =
             ConfigOptions.key("kubernetes.operator.reconciler.jm-deployment-recovery.enabled")
                     .booleanType()
-                    .noDefaultValue()
+                    .defaultValue(true)
                     .withDescription(
-                            "Whether to enable recovery of missing/deleted jobmanager deployments. False by default for Flink 1.14, true for newer Flink version.");
+                            "Whether to enable recovery of missing/deleted jobmanager deployments.");
 
     public static final ConfigOption<Map<String, String>> JAR_ARTIFACT_HTTP_HEADER =
             ConfigOptions.key("kubernetes.operator.user.artifacts.http.header")

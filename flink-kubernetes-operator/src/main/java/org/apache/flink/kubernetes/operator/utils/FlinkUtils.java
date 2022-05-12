@@ -46,6 +46,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.function.Predicate;
 
 import static org.apache.flink.kubernetes.utils.Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY;
 
@@ -241,6 +242,26 @@ public class FlinkUtils {
         if (shouldUpdate) {
             kubernetesClient.resourceList(configMaps).inNamespace(namespace).createOrReplace();
         }
+    }
+
+    public static boolean isHaMetadataAvailable(
+            Configuration conf, KubernetesClient kubernetesClient) {
+        String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
+        String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
+
+        var haConfigMapLabels =
+                KubernetesUtils.getConfigMapLabels(
+                        clusterId, Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY);
+
+        var configMaps =
+                kubernetesClient
+                        .configMaps()
+                        .inNamespace(namespace)
+                        .withLabels(haConfigMapLabels)
+                        .list()
+                        .getItems();
+
+        return configMaps.stream().anyMatch(Predicate.not(ConfigMap::isMarkedForDeletion));
     }
 
     private static boolean isJobGraphKey(Map.Entry<String, String> entry) {

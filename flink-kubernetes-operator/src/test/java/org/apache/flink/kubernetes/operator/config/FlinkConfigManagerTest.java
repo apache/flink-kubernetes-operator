@@ -24,8 +24,10 @@ import org.apache.flink.configuration.DeploymentOptionsInternal;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
 import io.fabric8.kubernetes.api.model.Pod;
@@ -99,6 +101,8 @@ public class FlinkConfigManagerTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getSpec().setLogConfiguration(Map.of(Constants.CONFIG_FILE_LOG4J_NAME, "test"));
         deployment.getSpec().setPodTemplate(new Pod());
+
+        ReconciliationUtils.updateForSpecReconciliationSuccess(deployment, JobState.RUNNING);
         Configuration deployConfig = configManager.getObserveConfig(deployment);
         assertFalse(
                 deployConfig.contains(

@@ -36,6 +36,7 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /** Test for {@link org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils}. */
 public class ReconciliationUtilsTest {
@@ -48,6 +49,7 @@ public class ReconciliationUtilsTest {
     public void testRescheduleUpgradeImmediately() {
         FlinkDeployment app = TestUtils.buildApplicationCluster();
         app.getSpec().getJob().setState(JobState.RUNNING);
+        FlinkDeployment previous = ReconciliationUtils.clone(app);
         FlinkDeployment current = ReconciliationUtils.clone(app);
         current.getStatus()
                 .getReconciliationStatus()
@@ -55,11 +57,18 @@ public class ReconciliationUtilsTest {
         ReconciliationUtils.updateForSpecReconciliationSuccess(current, JobState.SUSPENDED);
 
         UpdateControl<FlinkDeployment> updateControl =
-                ReconciliationUtils.toUpdateControl(operatorConfiguration, current, true);
+                ReconciliationUtils.toUpdateControl(operatorConfiguration, current, previous, true);
 
         assertFalse(updateControl.isUpdateResource());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(0, updateControl.getScheduleDelay().get());
+
+        updateControl =
+                ReconciliationUtils.toUpdateControl(operatorConfiguration, current, current, true);
+
+        assertFalse(updateControl.isUpdateResource());
+        assertFalse(updateControl.isUpdateStatus());
+        assertNotEquals(0, updateControl.getScheduleDelay().get());
     }
 
     @Test

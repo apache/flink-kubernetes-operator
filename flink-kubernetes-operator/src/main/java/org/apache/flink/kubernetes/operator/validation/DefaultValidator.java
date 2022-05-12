@@ -131,6 +131,12 @@ public class DefaultValidator implements FlinkResourceValidator {
                 return Optional.of("Forbidden Flink config key: " + key);
             }
         }
+
+        if (conf.get(KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED)
+                && !FlinkUtils.isKubernetesHAActivated(conf)) {
+            return Optional.of("Kubernetes HA must be enabled for rollback support.");
+        }
+
         return Optional.empty();
     }
 

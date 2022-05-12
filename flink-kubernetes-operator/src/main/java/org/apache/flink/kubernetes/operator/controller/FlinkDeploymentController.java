@@ -111,13 +111,17 @@ public class FlinkDeploymentController
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context) {
         LOG.info("Starting reconciliation");
         statusHelper.updateStatusFromCache(flinkApp);
+        FlinkDeployment previousDeployment = ReconciliationUtils.clone(flinkApp);
         try {
             observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);
             if (!validateDeployment(flinkApp)) {
                 metricManager.onUpdate(flinkApp);
                 statusHelper.patchAndCacheStatus(flinkApp);
                 return ReconciliationUtils.toUpdateControl(
-                        configManager.getOperatorConfiguration(), flinkApp, false);
+                        configManager.getOperatorConfiguration(),
+                        flinkApp,
+                        previousDeployment,
+                        false);
             }
             reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context);
         } catch (DeploymentFailedException dfe) {
@@ -130,13 +134,13 @@ public class FlinkDeploymentController
         metricManager.onUpdate(flinkApp);
         statusHelper.patchAndCacheStatus(flinkApp);
         return ReconciliationUtils.toUpdateControl(
-                configManager.getOperatorConfiguration(), flinkApp, true);
+                configManager.getOperatorConfiguration(), flinkApp, previousDeployment, true);
     }
 
     private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
         LOG.error("Flink Deployment failed", dfe);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-        flinkApp.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
+        flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
         ReconciliationUtils.updateForReconciliationError(flinkApp, dfe.getMessage());
 
         // TODO: avoid repeated event

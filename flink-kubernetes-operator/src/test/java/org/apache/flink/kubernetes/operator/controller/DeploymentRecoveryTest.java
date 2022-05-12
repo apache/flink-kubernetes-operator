@@ -22,7 +22,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
@@ -34,6 +33,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
@@ -66,19 +66,9 @@ public class DeploymentRecoveryTest {
 
     @ParameterizedTest
     @MethodSource("applicationTestParams")
-    public void verifyApplicationJmRecovery(
-            FlinkVersion flinkVersion, UpgradeMode upgradeMode, boolean enabled) {
+    public void verifyApplicationJmRecovery(FlinkVersion flinkVersion, UpgradeMode upgradeMode) {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(upgradeMode);
-        if (enabled) {
-            appCluster
-                    .getSpec()
-                    .getFlinkConfiguration()
-                    .put(
-                            KubernetesOperatorConfigOptions.OPERATOR_RECOVER_JM_DEPLOYMENT_ENABLED
-                                    .key(),
-                            "true");
-        }
 
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
@@ -102,37 +92,26 @@ public class DeploymentRecoveryTest {
                 appCluster.getStatus().getJobManagerDeploymentStatus());
 
         testController.reconcile(appCluster, context);
-        if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_14) || enabled) {
-            assertEquals(
-                    JobManagerDeploymentStatus.DEPLOYING,
-                    appCluster.getStatus().getJobManagerDeploymentStatus());
-        } else {
-            assertEquals(
-                    JobManagerDeploymentStatus.MISSING,
-                    appCluster.getStatus().getJobManagerDeploymentStatus());
-        }
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
         flinkService.setPortReady(true);
 
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
-        if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_14) || enabled) {
-            assertEquals(
-                    JobManagerDeploymentStatus.READY,
-                    appCluster.getStatus().getJobManagerDeploymentStatus());
-            assertEquals(
-                    JobStatus.RUNNING.name(), appCluster.getStatus().getJobStatus().getState());
-        } else {
-            assertEquals(
-                    JobManagerDeploymentStatus.MISSING,
-                    appCluster.getStatus().getJobManagerDeploymentStatus());
-            assertEquals(JobStatus.FAILED.name(), appCluster.getStatus().getJobStatus().getState());
-        }
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(JobStatus.RUNNING.name(), appCluster.getStatus().getJobStatus().getState());
 
         // Remove deployment
         flinkService.setPortReady(false);
         flinkService.clear();
         // Trigger update
         appCluster.getSpec().setRestartNonce(123L);
+        if (upgradeMode == UpgradeMode.SAVEPOINT) {
+            flinkService.setHaDataAvailable(false);
+        }
 
         testController.reconcile(appCluster, context);
         if (upgradeMode == UpgradeMode.SAVEPOINT) {
@@ -160,18 +139,9 @@ public class DeploymentRecoveryTest {
     }
 
     @ParameterizedTest
-    @MethodSource("sessionTestParams")
-    public void verifySessionJmRecovery(FlinkVersion flinkVersion, boolean enabled) {
+    @EnumSource(FlinkVersion.class)
+    public void verifySessionJmRecovery(FlinkVersion flinkVersion) {
         FlinkDeployment appCluster = TestUtils.buildSessionCluster(flinkVersion);
-        if (enabled) {
-            appCluster
-                    .getSpec()
-                    .getFlinkConfiguration()
-                    .put(
-                            KubernetesOperatorConfigOptions.OPERATOR_RECOVER_JM_DEPLOYMENT_ENABLED
-                                    .key(),
-                            "true");
-        }
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
@@ -186,42 +156,22 @@ public class DeploymentRecoveryTest {
         testController.reconcile(appCluster, context);
         flinkService.setPortReady(true);
 
-        if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_14) || enabled) {
-            assertEquals(
-                    JobManagerDeploymentStatus.DEPLOYING,
-                    appCluster.getStatus().getJobManagerDeploymentStatus());
-            testController.reconcile(appCluster, context);
-            testController.reconcile(appCluster, context);
-            assertEquals(
-                    JobManagerDeploymentStatus.READY,
-                    appCluster.getStatus().getJobManagerDeploymentStatus());
-        } else {
-            assertEquals(
-                    JobManagerDeploymentStatus.MISSING,
-                    appCluster.getStatus().getJobManagerDeploymentStatus());
-            testController.reconcile(appCluster, context);
-            assertEquals(
-                    JobManagerDeploymentStatus.MISSING,
-                    appCluster.getStatus().getJobManagerDeploymentStatus());
-        }
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
     }
 
     private static Stream<Arguments> applicationTestParams() {
         List<Arguments> args = new ArrayList<>();
         for (FlinkVersion version : FlinkVersion.values()) {
             for (UpgradeMode upgradeMode : UpgradeMode.values()) {
-                args.add(arguments(version, upgradeMode, true));
-                args.add(arguments(version, upgradeMode, false));
+                args.add(arguments(version, upgradeMode));
             }
-        }
-        return args.stream();
-    }
-
-    private static Stream<Arguments> sessionTestParams() {
-        List<Arguments> args = new ArrayList<>();
-        for (FlinkVersion version : FlinkVersion.values()) {
-            args.add(arguments(version, true));
-            args.add(arguments(version, false));
         }
         return args.stream();
     }

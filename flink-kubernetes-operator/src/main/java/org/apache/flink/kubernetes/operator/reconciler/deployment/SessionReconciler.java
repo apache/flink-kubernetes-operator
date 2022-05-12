@@ -81,15 +81,19 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
         Configuration observeConfig = configManager.getObserveConfig(flinkApp);
         boolean specChanged = !currentDeploySpec.equals(lastReconciledSpec);
         if (specChanged) {
+            if (newSpecIsAlreadyDeployed(flinkApp)) {
+                return;
+            }
+            LOG.debug("Detected spec change, starting upgrade process.");
             upgradeSessionCluster(
                     flinkApp,
                     currentDeploySpec,
                     configManager.getDeployConfig(flinkApp.getMetadata(), currentDeploySpec));
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null);
-        } else if (ReconciliationUtils.shouldRollBack(reconciliationStatus, observeConfig)) {
+        } else if (ReconciliationUtils.shouldRollBack(
+                flinkService, reconciliationStatus, observeConfig)) {
             rollbackSessionCluster(flinkApp);
-        } else if (ReconciliationUtils.deploymentRecoveryEnabled(observeConfig)
-                && status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING) {
+        } else if (ReconciliationUtils.shouldRecoverDeployment(observeConfig, flinkApp)) {
             recoverSession(flinkApp, observeConfig);
         }
     }

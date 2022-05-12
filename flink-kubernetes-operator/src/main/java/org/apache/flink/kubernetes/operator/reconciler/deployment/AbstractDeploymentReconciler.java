@@ -19,10 +19,12 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -64,6 +66,19 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
                         "Deployment is not ready within the configured timeout, rolling back.");
             }
             reconciliationStatus.setState(ReconciliationState.ROLLING_BACK);
+            return true;
+        }
+        return false;
+    }
+
+    protected boolean newSpecIsAlreadyDeployed(FlinkDeployment flinkApp) {
+        FlinkDeploymentSpec deployedSpec = ReconciliationUtils.getDeployedSpec(flinkApp);
+        if (flinkApp.getSpec().equals(deployedSpec)) {
+            LOG.info(
+                    "The new spec matches the currently deployed last stable spec. No upgrade needed.");
+            ReconciliationUtils.updateForSpecReconciliationSuccess(
+                    flinkApp,
+                    deployedSpec.getJob() != null ? deployedSpec.getJob().getState() : null);
             return true;
         }
         return false;

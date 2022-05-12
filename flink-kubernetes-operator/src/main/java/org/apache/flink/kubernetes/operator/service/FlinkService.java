@@ -45,6 +45,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -130,7 +131,11 @@ public class FlinkService {
                         4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
     }
 
-    public void submitApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
+    public void submitApplicationCluster(
+            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
+        LOG.info(
+                "Deploying application cluster{}",
+                requireHaMetadata ? " requiring last-state from HA metadata" : "");
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
             final String clusterId =
                     Preconditions.checkNotNull(conf.get(KubernetesConfigOptions.CLUSTER_ID));
@@ -140,7 +145,9 @@ public class FlinkService {
             // parallelism) could take effect
             FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
         }
-        LOG.info("Deploying application cluster");
+        if (requireHaMetadata) {
+            validateHaMetadataExists(conf);
+        }
         final ClusterClientServiceLoader clusterClientServiceLoader =
                 new DefaultClusterClientServiceLoader();
         final ApplicationDeployer deployer =
@@ -153,6 +160,22 @@ public class FlinkService {
 
         deployer.run(conf, applicationConfiguration);
         LOG.info("Application cluster successfully deployed");
+    }
+
+    public boolean isHaMetadataAvailable(Configuration conf) {
+        return FlinkUtils.isHaMetadataAvailable(conf, kubernetesClient);
+    }
+
+    private void validateHaMetadataExists(Configuration conf) {
+        if (!isHaMetadataAvailable(conf)) {
+            throw new DeploymentFailedException(
+                    "HA metadata not available to restore from last state. "
+                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
+                            + "Manual restore required.",
+                    DeploymentFailedException.COMPONENT_JOBMANAGER,
+                    "Error",
+                    "RestoreFailed");
+        }
     }
 
     public void submitSessionCluster(Configuration conf) throws Exception {
@@ -339,16 +362,23 @@ public class FlinkService {
             var clusterId = clusterClient.getClusterId();
             switch (upgradeMode) {
                 case STATELESS:
-                    LOG.info("Cancelling job.");
-                    clusterClient
-                            .cancel(Preconditions.checkNotNull(jobId))
-                            .get(
-                                    configManager
-                                            .getOperatorConfiguration()
-                                            .getFlinkCancelJobTimeout()
-                                            .toSeconds(),
-                                    TimeUnit.SECONDS);
-                    LOG.info("Job successfully cancelled.");
+                    if (ReconciliationUtils.isJobRunning(deployment.getStatus())) {
+                        LOG.info("Job is running, cancelling job.");
+                        try {
+                            clusterClient
+                                    .cancel(Preconditions.checkNotNull(jobId))
+                                    .get(
+                                            configManager
+                                                    .getOperatorConfiguration()
+                                                    .getFlinkCancelJobTimeout()
+                                                    .toSeconds(),
+                                            TimeUnit.SECONDS);
+                            LOG.info("Job successfully cancelled.");
+                        } catch (Exception e) {
+                            LOG.error("Could not shut down cluster gracefully, deleting...", e);
+                        }
+                    }
+                    deleteClusterDeployment(deployment.getMetadata(), deploymentStatus, true);
                     break;
                 case SAVEPOINT:
                     final String savepointDirectory =
