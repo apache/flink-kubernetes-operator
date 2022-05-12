@@ -53,14 +53,6 @@ jobs:
           echo "<password>$ASF_PASSWORD</password>" >> $tmp_settings
           echo "</server></servers></settings>" >> $tmp_settings
           
-          set -o pipefail; mvn clean deploy -Dgpg.skip -DskipTests -Papache-release | tee ./mvn.log; set +o pipefail
-          if [[ $(grep -c "overlapping classes" ./mvn.log) -gt 0 ]];then
-            echo "Found overlapping classes, please fix"
-            exit 1
-          fi
-          if [[ $(git diff HEAD | wc -l) -gt 0 ]];then
-            echo "Please generate the java doc via 'mvn clean install -DskipTests -Pgenerate-docs' again"
-            exit 1
-          fi
+          mvn clean deploy -Dgpg.skip -DskipTests -Papache-release
           
           rm $tmp_settings
