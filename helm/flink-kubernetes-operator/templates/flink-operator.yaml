@@ -36,7 +36,7 @@ spec:
         kubectl.kubernetes.io/default-container: {{ .Chart.Name }}
     spec:
       securityContext:
-        {{- toYaml .Values.operatorSecurityContext | nindent 8 }}
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -68,6 +68,8 @@ spec:
               value: {{ .Values.jvmArgs.operator }}
             - name: FLINK_OPERATOR_WATCH_NAMESPACES
               value: {{ join "," .Values.watchNamespaces  }}
+          securityContext:
+            {{- toYaml .Values.operatorSecurityContext | nindent 12 }}
           volumeMounts:
             - name: flink-operator-config-volume
               mountPath: /opt/flink/conf
@@ -107,6 +109,8 @@ spec:
               value: /opt/flink/plugins
             - name: OPERATOR_NAMESPACE
               value: {{ .Release.Namespace }}
+          securityContext:
+            {{- toYaml .Values.webhookSecurityContext | nindent 12 }}
           volumeMounts:
           - name: keystore
             mountPath: "/certs"
