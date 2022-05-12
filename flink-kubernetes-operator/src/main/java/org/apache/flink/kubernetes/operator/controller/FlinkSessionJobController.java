@@ -101,12 +101,14 @@ public class FlinkSessionJobController
             FlinkSessionJob flinkSessionJob, Context context) {
         LOG.info("Starting reconciliation");
         statusHelper.updateStatusFromCache(flinkSessionJob);
+        FlinkSessionJob previousJob = ReconciliationUtils.clone(flinkSessionJob);
+
         observer.observe(flinkSessionJob, context);
         if (!validateSessionJob(flinkSessionJob, context)) {
             metricManager.onUpdate(flinkSessionJob);
             statusHelper.patchAndCacheStatus(flinkSessionJob);
             return ReconciliationUtils.toUpdateControl(
-                    configManager.getOperatorConfiguration(), flinkSessionJob, false);
+                    configManager.getOperatorConfiguration(), flinkSessionJob, previousJob, false);
         }
 
         try {
@@ -117,7 +119,7 @@ public class FlinkSessionJobController
         metricManager.onUpdate(flinkSessionJob);
         statusHelper.patchAndCacheStatus(flinkSessionJob);
         return ReconciliationUtils.toUpdateControl(
-                configManager.getOperatorConfiguration(), flinkSessionJob, true);
+                configManager.getOperatorConfiguration(), flinkSessionJob, previousJob, true);
     }
 
     @Override

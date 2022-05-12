@@ -89,6 +89,8 @@ defaultConfiguration:
   log4j-operator.properties: |+
     # Flink Operator Logging Overrides
     # rootLogger.level = DEBUG
+    # logger.operator.name= org.apache.flink.kubernetes.operator
+    # logger.operator.level = DEBUG
   log4j-console.properties: |+
     # Flink Deployment Logging Overrides
     # rootLogger.level = DEBUG

@@ -22,17 +22,17 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
-import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingClusterClient;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.TriggerId;
@@ -88,7 +88,10 @@ public class FlinkServiceTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
+        ReconciliationUtils.updateForSpecReconciliationSuccess(deployment, JobState.RUNNING);
 
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        deployment.getStatus().getJobStatus().setState("RUNNING");
         flinkService.cancelJob(deployment, UpgradeMode.STATELESS);
         assertTrue(cancelFuture.isDone());
         assertEquals(jobID, cancelFuture.get());
@@ -122,6 +125,7 @@ public class FlinkServiceTest {
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
         jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        ReconciliationUtils.updateForSpecReconciliationSuccess(deployment, JobState.RUNNING);
 
         flinkService.cancelJob(deployment, UpgradeMode.SAVEPOINT);
         assertTrue(stopWithSavepointFuture.isDone());
@@ -134,10 +138,7 @@ public class FlinkServiceTest {
     @Test
     public void testCancelJobWithLastStateUpgradeMode() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        configuration.set(
-                HighAvailabilityOptions.HA_MODE,
-                KubernetesHaServicesFactory.class.getCanonicalName());
-        configuration.set(HighAvailabilityOptions.HA_STORAGE_PATH, "file:///path/of/ha");
+        ReconciliationUtils.updateForSpecReconciliationSuccess(deployment, JobState.RUNNING);
         final TestingClusterClient<String> testingClusterClient =
                 new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final FlinkService flinkService = createFlinkService(testingClusterClient);
@@ -192,6 +193,7 @@ public class FlinkServiceTest {
 
         final JobID jobID = JobID.generate();
         final FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        ReconciliationUtils.updateForSpecReconciliationSuccess(flinkDeployment, JobState.RUNNING);
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobId(jobID.toString());
         flinkDeployment.getStatus().setJobStatus(jobStatus);

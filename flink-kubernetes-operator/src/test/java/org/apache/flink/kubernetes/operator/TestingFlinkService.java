@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -71,6 +72,8 @@ public class TestingFlinkService extends FlinkService {
     private final Map<JobID, SubmittedJobInfo> sessionJobs = new HashMap<>();
     private final Set<String> sessions = new HashSet<>();
     private boolean isPortReady = true;
+    private boolean haDataAvailable = true;
+    private boolean deployFailure = false;
     private PodList podList = new PodList();
     private Consumer<Configuration> listJobConsumer = conf -> {};
 
@@ -102,7 +105,11 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public void submitApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
+    public void submitApplicationCluster(
+            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
+        if (deployFailure) {
+            throw new DeploymentFailedException("Deployment failure", "test", "test", "test");
+        }
         if (!jobs.isEmpty()) {
             throw new Exception("Cannot submit 2 application clusters at the same time");
         }
@@ -115,6 +122,19 @@ public class TestingFlinkService extends FlinkService {
                         System.currentTimeMillis());
 
         jobs.add(Tuple2.of(conf.get(SavepointConfigOptions.SAVEPOINT_PATH), jobStatusMessage));
+    }
+
+    @Override
+    public boolean isHaMetadataAvailable(Configuration conf) {
+        return haDataAvailable;
+    }
+
+    public void setHaDataAvailable(boolean haDataAvailable) {
+        this.haDataAvailable = haDataAvailable;
+    }
+
+    public void setDeployFailure(boolean deployFailure) {
+        this.deployFailure = deployFailure;
     }
 
     @Override

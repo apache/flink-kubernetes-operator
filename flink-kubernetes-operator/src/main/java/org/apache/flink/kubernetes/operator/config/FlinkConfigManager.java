@@ -132,7 +132,12 @@ public class FlinkConfigManager {
     }
 
     public Configuration getObserveConfig(FlinkDeployment deployment) {
-        return getConfig(deployment.getMetadata(), ReconciliationUtils.getDeployedSpec(deployment));
+        var deployedSpec = ReconciliationUtils.getDeployedSpec(deployment);
+        if (deployedSpec == null) {
+            throw new RuntimeException(
+                    "Cannot create observe config before first deployment, this indicates a bug.");
+        }
+        return getConfig(deployment.getMetadata(), deployedSpec);
     }
 
     public Configuration getSessionJobConfig(

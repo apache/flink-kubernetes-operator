@@ -139,7 +139,7 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
         try {
             flinkService
                     .getLastCheckpoint(JobID.fromHexString(jobID), deployedConfig)
-                    .ifPresent(savepointInfo::setLastSavepoint);
+                    .ifPresent(savepointInfo::updateLastSavepoint);
         } catch (Exception e) {
             LOG.error("Could not observe latest savepoint information.", e);
             throw new ReconciliationException(e);
