@@ -25,6 +25,7 @@ on:
   workflow_dispatch:
 jobs:
   publish-snapshot:
+    if: github.repository == 'apache/flink-kubernetes-operator'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -53,6 +54,6 @@ jobs:
           echo "<password>$ASF_PASSWORD</password>" >> $tmp_settings
           echo "</server></servers></settings>" >> $tmp_settings
           
-          mvn clean deploy -Dgpg.skip -DskipTests -Papache-release
+          mvn clean deploy -Dgpg.skip -Drat.skip -DskipTests -Papache-release
           
           rm $tmp_settings
