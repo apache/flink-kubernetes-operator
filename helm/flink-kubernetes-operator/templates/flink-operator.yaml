@@ -36,8 +36,7 @@ spec:
         kubectl.kubernetes.io/default-container: {{ .Chart.Name }}
     spec:
       securityContext:
-        runAsUser: 9999
-        runAsGroup: 9999
+        {{- toYaml .Values.operatorSecurityContext | nindent 8 }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
