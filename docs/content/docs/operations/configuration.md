@@ -58,7 +58,6 @@ To learn more about metrics and logging configuration please refer to the dedica
 Job specific configuration can be configured under `spec.job.flinkConfiguration` and it will override flink configurations defined in `flink-conf.yaml`.
 
 - For application clusters, `spec.job.flinkConfiguration` will be located in `FlinkDeployment` CustomResource.
-- For session clusters, `spec.job.flinkConfiguration` will be located in `FlinkSessionJob` CustomResource.
-
-For a session clusters, it may contain multiple different jobs. With the help of this `flinkConfiguration` field, you can define custom configurations
-for a specific session job.
+- For session clusters, configuring `spec.job.flinkConfiguration` in parent `FlinkDeployment` will be applied to all session jobs within the session cluster.
+You can also configure `spec.job.flinkConfiguration` in `FlinkSessionJob` CustomResource for a specific session job. 
+The session job level configuration will override the parent session cluster's Flink configuration.
