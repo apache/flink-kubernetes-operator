@@ -43,11 +43,13 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
         URL url = new URL(uri);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
-        Map<String, String> clusterLevelHeader =
+        // merged session job level header and cluster level header, session job level header take
+        // precedence.
+        Map<String, String> headers =
                 flinkConfiguration.get(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER);
 
-        if (clusterLevelHeader != null && clusterLevelHeader.size() > 0) {
-            clusterLevelHeader.forEach(conn::setRequestProperty);
+        if (headers != null && headers.size() > 0) {
+            headers.forEach(conn::setRequestProperty);
         }
 
         conn.setRequestMethod("GET");

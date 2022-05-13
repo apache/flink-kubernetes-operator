@@ -111,7 +111,8 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
             return;
         }
 
-        var deployedConfig = configManager.getObserveConfig(flinkDepOpt.get());
+        var deployedConfig =
+                configManager.getSessionJobObserveConfig(flinkDepOpt.get(), flinkSessionJob);
         var jobFound =
                 jobStatusObserver.observe(
                         flinkSessionJob.getStatus().getJobStatus(),

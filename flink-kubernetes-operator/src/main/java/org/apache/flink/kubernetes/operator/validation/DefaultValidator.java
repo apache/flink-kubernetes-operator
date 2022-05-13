@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -54,6 +55,9 @@ public class DefaultValidator implements FlinkResourceValidator {
                 KubernetesConfigOptions.NAMESPACE.key(), KubernetesConfigOptions.CLUSTER_ID.key()
             };
 
+    private static final Set<String> ALLOWED_FLINK_SESSION_JOB_CONF_KEYS =
+            Set.of(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key());
+
     private static final Set<String> ALLOWED_LOG_CONF_KEYS =
             Set.of(Constants.CONFIG_FILE_LOG4J_NAME, Constants.CONFIG_FILE_LOGBACK_NAME);
 
@@ -72,7 +76,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         }
         return firstPresent(
                 validateFlinkVersion(spec.getFlinkVersion()),
-                validateFlinkConfig(effectiveConfig),
+                validateFlinkDeploymentConfig(effectiveConfig),
                 validateIngress(
                         spec.getIngress(),
                         deployment.getMetadata().getName(),
@@ -117,7 +121,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         return Optional.empty();
     }
 
-    private Optional<String> validateFlinkConfig(Map<String, String> confMap) {
+    private Optional<String> validateFlinkDeploymentConfig(Map<String, String> confMap) {
         if (confMap == null) {
             return Optional.empty();
         }
@@ -314,7 +318,8 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateJobNotEmpty(sessionJob),
                 validateNotLastStateUpgradeMode(sessionJob),
-                validateSpecChange(sessionJob));
+                validateSpecChange(sessionJob),
+                validateFlinkSessionJobConfig(sessionJob.getSpec().getFlinkConfiguration()));
     }
 
     private Optional<String> validateSessionJobWithCluster(
@@ -401,6 +406,23 @@ public class DefaultValidator implements FlinkResourceValidator {
         if (serviceAccount == null) {
             return Optional.of(
                     "spec.serviceAccount must be defined. If you use helm, its value should be the same with the name of jobServiceAccount.");
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateFlinkSessionJobConfig(
+            Map<String, String> flinkSessionJobConfig) {
+        if (flinkSessionJobConfig == null) {
+            return Optional.empty();
+        }
+
+        for (String key : flinkSessionJobConfig.keySet()) {
+            if (!ALLOWED_FLINK_SESSION_JOB_CONF_KEYS.contains(key)) {
+                return Optional.of(
+                        String.format(
+                                "Invalid session job flinkConfiguration key: %s. Allowed keys are %s",
+                                key, ALLOWED_FLINK_SESSION_JOB_CONF_KEYS));
+            }
         }
         return Optional.empty();
     }

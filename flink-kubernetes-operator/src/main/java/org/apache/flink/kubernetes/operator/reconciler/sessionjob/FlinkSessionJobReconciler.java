@@ -42,7 +42,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
-import java.util.Map;
 import java.util.Optional;
 
 /** The reconciler for the {@link FlinkSessionJob}. */
@@ -82,14 +81,8 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
             return;
         }
 
-        Configuration deployedConfig = configManager.getObserveConfig(flinkDepOptional.get());
-
-        // merge session job specific config
-        Map<String, String> sessionJobFlinkConfiguration =
-                flinkSessionJob.getSpec().getFlinkConfiguration();
-        if (sessionJobFlinkConfiguration != null && !sessionJobFlinkConfiguration.isEmpty()) {
-            sessionJobFlinkConfiguration.forEach(deployedConfig::setString);
-        }
+        Configuration deployedConfig =
+                configManager.getSessionJobObserveConfig(flinkDepOptional.get(), flinkSessionJob);
 
         if (lastReconciledSpec == null) {
             submitAndInitStatus(
@@ -154,7 +147,8 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                     flinkService.cancelSessionJob(
                             JobID.fromHexString(jobID),
                             UpgradeMode.STATELESS,
-                            configManager.getObserveConfig(flinkDepOptional.get()));
+                            configManager.getSessionJobObserveConfig(
+                                    flinkDepOptional.get(), sessionJob));
                 } catch (Exception e) {
                     LOG.error("Failed to cancel job.", e);
                 }

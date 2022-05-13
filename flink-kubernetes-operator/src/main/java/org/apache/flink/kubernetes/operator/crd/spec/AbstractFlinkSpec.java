@@ -43,6 +43,6 @@ public abstract class AbstractFlinkSpec {
      */
     private Long restartNonce;
 
-    /** Flink configuration overrides for the Flink deployment. */
+    /** Flink configuration overrides for the Flink deployment or Flink session job. */
     private Map<String, String> flinkConfiguration;
 }
