@@ -9084,6 +9084,10 @@ spec:
             type: object
           status:
             properties:
+              clusterInfo:
+                additionalProperties:
+                  type: string
+                type: object
               jobManagerDeploymentStatus:
                 enum:
                 - READY
