@@ -42,6 +42,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.util.Map;
 import java.util.Optional;
 
 /** The reconciler for the {@link FlinkSessionJob}. */
@@ -82,6 +83,13 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
         }
 
         Configuration deployedConfig = configManager.getObserveConfig(flinkDepOptional.get());
+
+        // merge session job specific config
+        Map<String, String> sessionJobFlinkConfiguration =
+                flinkSessionJob.getSpec().getFlinkConfiguration();
+        if (sessionJobFlinkConfiguration != null && !sessionJobFlinkConfiguration.isEmpty()) {
+            sessionJobFlinkConfiguration.forEach(deployedConfig::setString);
+        }
 
         if (lastReconciledSpec == null) {
             submitAndInitStatus(

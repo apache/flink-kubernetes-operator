@@ -28,7 +28,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.net.URI;
-import java.util.Map;
 
 /** Manage the user artifacts. */
 public class ArtifactManager {
@@ -52,21 +51,16 @@ public class ArtifactManager {
         }
     }
 
-    public File fetch(
-            String jarURI,
-            Configuration clusterLevelConfiguration,
-            Map<String, String> flinkConfiguration,
-            String targetDirStr)
+    public File fetch(String jarURI, Configuration flinkConfiguration, String targetDirStr)
             throws Exception {
         File targetDir = new File(targetDirStr);
         createIfNotExists(targetDir);
         URI uri = new URI(jarURI);
         if ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) {
-            return HttpArtifactFetcher.INSTANCE.fetch(
-                    jarURI, clusterLevelConfiguration, flinkConfiguration, targetDir);
+            return HttpArtifactFetcher.INSTANCE.fetch(jarURI, flinkConfiguration, targetDir);
         } else {
             return FileSystemBasedArtifactFetcher.INSTANCE.fetch(
-                    jarURI, clusterLevelConfiguration, flinkConfiguration, targetDir);
+                    jarURI, flinkConfiguration, targetDir);
         }
     }
 

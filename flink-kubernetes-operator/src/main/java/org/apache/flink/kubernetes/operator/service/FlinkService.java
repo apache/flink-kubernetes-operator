@@ -226,11 +226,7 @@ public class FlinkService {
             throws Exception {
         String targetDir = artifactManager.generateJarDir(sessionJob);
         File jarFile =
-                artifactManager.fetch(
-                        sessionJob.getSpec().getJob().getJarURI(),
-                        conf,
-                        sessionJob.getSpec().getFlinkConfiguration(),
-                        targetDir);
+                artifactManager.fetch(sessionJob.getSpec().getJob().getJarURI(), conf, targetDir);
         Preconditions.checkArgument(
                 jarFile.exists(),
                 String.format("The jar file %s not exists", jarFile.getAbsolutePath()));

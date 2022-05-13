@@ -55,11 +55,10 @@ To learn more about metrics and logging configuration please refer to the dedica
 {{< generated/kubernetes_operator_config_configuration >}}
 
 ## Job Specific Configuration Reference
-Job specific configuration can be configured under `spec.job.flinkConfiguration` and it will only be used within the configured specific job.
-For example, for session clusters, it may contain multiple different jobs. With the help of this `flinkConfiguration` field, you can define different headers
-for different jobs through `kubernetes.operator.user.artifacts.http.header`.
-This job specific flinkConfiguration will override the cluster level configurations defined 
-in `flink-conf.yaml` or `spec.flinkConfiguration` in `FlinkDeployment` CustomResource.
+Job specific configuration can be configured under `spec.job.flinkConfiguration` and it will override flink configurations defined in `flink-conf.yaml`.
 
-### Current supported configurations
-- `kubernetes.operator.user.artifacts.http.header`
+- For application clusters, `spec.job.flinkConfiguration` will be located in `FlinkDeployment` CustomResource.
+- For session clusters, `spec.job.flinkConfiguration` will be located in `FlinkSessionJob` CustomResource.
+
+For a session clusters, it may contain multiple different jobs. With the help of this `flinkConfiguration` field, you can define custom configurations
+for a specific session job.
