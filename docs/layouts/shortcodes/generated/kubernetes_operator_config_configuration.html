@@ -110,5 +110,11 @@
             <td>String</td>
             <td>The base dir to put the session job artifacts.</td>
         </tr>
+        <tr>
+            <td><h5>kubernetes.operator.user.artifacts.http.header</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>Map</td>
+            <td>Custom HTTP header for a Flink job. If configured in cluster level, headers will be applied to all jobs within the cluster. This field can also be configured under spec.job.flinkConfiguration for a specific session job within a session cluster. If configured at session job level, it will override the cluster level configuration. Expected format: headerKey1:headerValue1,headerKey2:headerValue2.</td>
+        </tr>
     </tbody>
 </table>
