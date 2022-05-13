@@ -58,6 +58,15 @@ operatorVolumes:
 #      persistentVolumeClaim:
 #        claimName: flink-artifacts
 
+podSecurityContext:
+  runAsUser: 9999
+  runAsGroup: 9999
+  # fsGroup: 9999
+
+operatorSecurityContext: {}
+
+webhookSecurityContext: {}
+
 webhook:
   create: true
   keystore:
