@@ -37,15 +37,14 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
     public static final HttpArtifactFetcher INSTANCE = new HttpArtifactFetcher();
 
     @Override
-    public File fetch(String uri, Configuration clusterLevelConfiguration, File targetDir)
+    public File fetch(String uri, Configuration flinkConfiguration, File targetDir)
             throws Exception {
         var start = System.currentTimeMillis();
         URL url = new URL(uri);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
         Map<String, String> clusterLevelHeader =
-                clusterLevelConfiguration.get(
-                        KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER);
+                flinkConfiguration.get(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER);
 
         if (clusterLevelHeader != null && clusterLevelHeader.size() > 0) {
             clusterLevelHeader.forEach(conn::setRequestProperty);
