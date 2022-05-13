@@ -27,6 +27,9 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /** Last observed status of the Flink deployment. */
 @Experimental
 @Data
@@ -36,6 +39,9 @@ import lombok.experimental.SuperBuilder;
 @ToString(callSuper = true)
 @SuperBuilder
 public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
+
+    /** Config information from running clusters. */
+    private Map<String, String> clusterInfo = new HashMap<>();
 
     /** Last observed status of the JobManager deployment. */
     private JobManagerDeploymentStatus jobManagerDeploymentStatus =

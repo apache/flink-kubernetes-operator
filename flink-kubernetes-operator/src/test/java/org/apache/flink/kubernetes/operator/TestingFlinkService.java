@@ -41,6 +41,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -64,6 +65,12 @@ import java.util.stream.Collectors;
 
 /** Flink service mock for tests. */
 public class TestingFlinkService extends FlinkService {
+
+    public static final Map<String, String> CLUSTER_INFO =
+            Map.of(
+                    DashboardConfiguration.FIELD_NAME_FLINK_VERSION, "15.0.0",
+                    DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
+                            "1234567 @ 1970-01-01T00:00:00+00:00");
 
     private int savepointCounter = 0;
     private int triggerCounter = 0;
@@ -355,5 +362,10 @@ public class TestingFlinkService extends FlinkService {
             this.jobStatusMessage = jobStatusMessage;
             this.effectiveConfig = effectiveConfig;
         }
+    }
+
+    @Override
+    public Map<String, String> getClusterInfo(Configuration conf) throws Exception {
+        return CLUSTER_INFO;
     }
 }

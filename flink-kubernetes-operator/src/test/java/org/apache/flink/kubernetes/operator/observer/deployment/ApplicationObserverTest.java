@@ -90,9 +90,11 @@ public class ApplicationObserverTest {
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
         assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
+        assertNull(deployment.getStatus().getClusterInfo());
 
         // Stable ready
         observer.observe(deployment, readyContext);
+        assertEquals(TestingFlinkService.CLUSTER_INFO, deployment.getStatus().getClusterInfo());
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
