@@ -48,7 +48,7 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
         Map<String, String> headers =
                 flinkConfiguration.get(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER);
 
-        if (headers != null && headers.size() > 0) {
+        if (headers != null) {
             headers.forEach(conn::setRequestProperty);
         }
 

@@ -148,9 +148,5 @@ public class KubernetesOperatorConfigOptions {
                     .mapType()
                     .noDefaultValue()
                     .withDescription(
-                            "Custom HTTP header for a Flink job. If configured in cluster level, headers will be applied to all jobs within"
-                                    + " the cluster. This field can also be configured under spec.job.flinkConfiguration"
-                                    + " for a specific session job within a session cluster."
-                                    + " If configured at session job level, it will override the cluster level configuration."
-                                    + " Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
+                            "Custom HTTP header for a Flink job. Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
 }

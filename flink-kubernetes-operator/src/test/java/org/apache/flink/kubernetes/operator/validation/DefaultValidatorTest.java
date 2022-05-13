@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -386,6 +387,34 @@ public class DefaultValidatorTest {
                 },
                 flinkDeployment -> {},
                 "Job must start in running state");
+
+        testSessionJobValidateWithModifier(
+                sessionJob -> {
+                    sessionJob
+                            .getSpec()
+                            .setFlinkConfiguration(
+                                    Map.of(
+                                            KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER
+                                                    .key(),
+                                            "headerKey1:headerValue1,headerKey2:headerValue2"));
+                },
+                flinkDeployment -> {},
+                null);
+
+        testSessionJobValidateWithModifier(
+                sessionJob -> {
+                    sessionJob
+                            .getSpec()
+                            .setFlinkConfiguration(
+                                    Map.of(
+                                            KubernetesOperatorConfigOptions
+                                                    .OPERATOR_RECONCILER_RESCHEDULE_INTERVAL
+                                                    .key(),
+                                            "60"));
+                },
+                flinkDeployment -> {},
+                "Invalid session job flinkConfiguration key: kubernetes.operator.reconciler.reschedule.interval."
+                        + " Allowed keys are [kubernetes.operator.user.artifacts.http.header]");
     }
 
     private void testSessionJobValidateWithModifier(

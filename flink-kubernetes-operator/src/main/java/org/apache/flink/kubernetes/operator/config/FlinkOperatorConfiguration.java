@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import lombok.Value;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.Set;
 
 /** Configuration class for operator. */
@@ -42,7 +41,6 @@ public class FlinkOperatorConfiguration {
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
     String artifactsBaseDir;
-    Map<String, String> artifactHttpHeader;
 
     public static FlinkOperatorConfiguration fromConfiguration(
             Configuration operatorConfig, Set<String> watchedNamespaces) {
@@ -85,9 +83,6 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR);
 
-        Map<String, String> artifactHttpHeader =
-                operatorConfig.get(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER);
-
         String flinkServiceHostOverride = null;
         if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {
             // not running in k8s, simplify local development
@@ -105,7 +100,6 @@ public class FlinkOperatorConfiguration {
                 watchedNamespaces,
                 flinkCancelJobTimeout,
                 flinkShutdownClusterTimeout,
-                artifactsBaseDir,
-                artifactHttpHeader);
+                artifactsBaseDir);
     }
 }

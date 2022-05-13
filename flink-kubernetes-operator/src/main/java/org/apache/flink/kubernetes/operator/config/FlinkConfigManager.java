@@ -135,14 +135,14 @@ public class FlinkConfigManager {
         return getConfig(deployment.getMetadata(), ReconciliationUtils.getDeployedSpec(deployment));
     }
 
-    public Configuration getSessionJobObserveConfig(
+    public Configuration getSessionJobConfig(
             FlinkDeployment deployment, FlinkSessionJob flinkSessionJob) {
         Configuration sessionJobConfig = getObserveConfig(deployment);
 
         // merge session job specific config
         Map<String, String> sessionJobFlinkConfiguration =
                 flinkSessionJob.getSpec().getFlinkConfiguration();
-        if (sessionJobFlinkConfiguration != null && !sessionJobFlinkConfiguration.isEmpty()) {
+        if (sessionJobFlinkConfiguration != null) {
             sessionJobFlinkConfiguration.forEach(sessionJobConfig::setString);
         }
         return sessionJobConfig;
