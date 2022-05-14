@@ -52,7 +52,8 @@ public class AdmissionHandlerTest {
     private final AdmissionHandler admissionHandler =
             new AdmissionHandler(
                     new FlinkValidator(
-                            ValidatorUtils.discoverValidators(new FlinkConfigManager())));
+                            ValidatorUtils.discoverValidators(new FlinkConfigManager()),
+                            new FlinkConfigManager()));
 
     @Test
     public void testHandleIllegalRequest() {
