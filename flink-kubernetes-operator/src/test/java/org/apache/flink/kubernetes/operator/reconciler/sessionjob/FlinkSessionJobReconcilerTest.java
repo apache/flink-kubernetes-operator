@@ -23,12 +23,16 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -43,9 +47,12 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link FlinkSessionJobReconciler}. */
+@EnableKubernetesMockClient(crud = true)
 public class FlinkSessionJobReconcilerTest {
 
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+    private KubernetesMockServer mockServer;
+    private KubernetesClient kubernetesClient;
 
     @Test
     public void testSubmitAndCleanUp() throws Exception {
@@ -419,5 +426,34 @@ public class FlinkSessionJobReconcilerTest {
                 "trigger_0",
                 spSessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         assertEquals(JobState.SUSPENDED.name(), spSessionJob.getStatus().getJobStatus().getState());
+    }
+
+    @Test
+    public void testSetSessionLabel() throws Exception {
+        TestingFlinkService flinkService = new TestingFlinkService();
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        sessionJob.getMetadata().getLabels().clear();
+
+        FlinkSessionJobReconciler reconciler =
+                new FlinkSessionJobReconciler(kubernetesClient, flinkService, configManager);
+
+        var path =
+                String.format(
+                        "/apis/%s/%s/namespaces/%s/%s/%s",
+                        CrdConstants.API_GROUP,
+                        CrdConstants.API_VERSION,
+                        sessionJob.getMetadata().getNamespace(),
+                        sessionJob.getPlural(),
+                        sessionJob.getMetadata().getName());
+
+        mockServer.expect().get().withPath(path).andReturn(200, sessionJob).once();
+        mockServer.expect().patch().withPath(path).andReturn(200, sessionJob).once();
+        reconciler.reconcile(sessionJob, TestUtils.createEmptyContext());
+        Assertions.assertEquals(
+                TestUtils.TEST_DEPLOYMENT_NAME,
+                sessionJob
+                        .getMetadata()
+                        .getLabels()
+                        .get(FlinkSessionJobReconciler.LABEL_SESSION_CLUSTER));
     }
 }

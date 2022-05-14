@@ -42,12 +42,14 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.util.HashMap;
 import java.util.Optional;
 
 /** The reconciler for the {@link FlinkSessionJob}. */
 public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSessionJobReconciler.class);
+    public static final String LABEL_SESSION_CLUSTER = "target.session.name";
 
     private final FlinkConfigManager configManager;
     private final KubernetesClient kubernetesClient;
@@ -75,6 +77,24 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
         Optional<FlinkDeployment> flinkDepOptional =
                 OperatorUtils.getSecondaryResource(
                         flinkSessionJob, context, configManager.getOperatorConfiguration());
+
+        var labels = flinkSessionJob.getMetadata().getLabels();
+        if (labels == null) {
+            labels = new HashMap<>();
+        }
+        if (!flinkSessionJob
+                .getSpec()
+                .getDeploymentName()
+                .equals(labels.get(LABEL_SESSION_CLUSTER))) {
+            labels.put(LABEL_SESSION_CLUSTER, flinkSessionJob.getSpec().getDeploymentName());
+            flinkSessionJob.getMetadata().setLabels(labels);
+            kubernetesClient
+                    .resources(FlinkSessionJob.class)
+                    .inNamespace(flinkSessionJob.getMetadata().getNamespace())
+                    .withName(flinkSessionJob.getMetadata().getName())
+                    .patch(flinkSessionJob);
+            return;
+        }
 
         // if session cluster is not ready, we can't do reconcile for the job.
         if (!helper.sessionClusterReady(flinkDepOptional)) {

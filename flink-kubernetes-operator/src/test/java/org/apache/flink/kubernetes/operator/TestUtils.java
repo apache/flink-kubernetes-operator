@@ -42,6 +42,7 @@ import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.metrics.testutils.MetricListener;
@@ -131,6 +132,10 @@ public class TestUtils {
                 new ObjectMetaBuilder()
                         .withName(TEST_SESSION_JOB_NAME)
                         .withNamespace(TEST_NAMESPACE)
+                        .withLabels(
+                                Map.of(
+                                        FlinkSessionJobReconciler.LABEL_SESSION_CLUSTER,
+                                        TEST_DEPLOYMENT_NAME))
                         .build());
         sessionJob.setSpec(
                 FlinkSessionJobSpec.builder()
