@@ -60,7 +60,8 @@ public class FlinkOperatorWebhook {
         EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
         FlinkConfigManager configManager = new FlinkConfigManager();
         Set<FlinkResourceValidator> validators = ValidatorUtils.discoverValidators(configManager);
-        AdmissionHandler endpoint = new AdmissionHandler(new FlinkValidator(validators));
+        AdmissionHandler endpoint =
+                new AdmissionHandler(new FlinkValidator(validators, configManager));
         ChannelInitializer<SocketChannel> initializer = createChannelInitializer(endpoint);
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();

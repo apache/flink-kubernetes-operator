@@ -109,6 +109,8 @@ spec:
               value: /opt/flink/plugins
             - name: OPERATOR_NAMESPACE
               value: {{ .Release.Namespace }}
+            - name: FLINK_OPERATOR_WATCH_NAMESPACES
+              value: {{ join "," .Values.watchNamespaces  }}
           securityContext:
             {{- toYaml .Values.webhookSecurityContext | nindent 12 }}
           volumeMounts:

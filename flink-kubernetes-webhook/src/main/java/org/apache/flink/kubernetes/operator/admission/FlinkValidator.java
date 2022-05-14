@@ -20,16 +20,18 @@ package org.apache.flink.kubernetes.operator.admission;
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.NotAllowedException;
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation;
 import org.apache.flink.kubernetes.operator.admission.admissioncontroller.validation.Validator;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.GroupVersionKind;
 import io.fabric8.kubernetes.api.model.KubernetesResource;
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
-import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.informers.cache.Cache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,11 +44,15 @@ public class FlinkValidator implements Validator<KubernetesResource> {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private final Set<FlinkResourceValidator> validators;
-    private final KubernetesClient client;
+    private final InformerManager informerManager;
 
-    public FlinkValidator(Set<FlinkResourceValidator> validators) {
+    public FlinkValidator(
+            Set<FlinkResourceValidator> validators, FlinkConfigManager configManager) {
         this.validators = validators;
-        this.client = new DefaultKubernetesClient();
+        this.informerManager =
+                new InformerManager(
+                        configManager.getOperatorConfiguration().getWatchedNamespaces(),
+                        new DefaultKubernetesClient());
     }
 
     @Override
@@ -76,11 +82,11 @@ public class FlinkValidator implements Validator<KubernetesResource> {
 
     private void validateSessionJob(KubernetesResource resource) {
         FlinkSessionJob sessionJob = objectMapper.convertValue(resource, FlinkSessionJob.class);
-        var deployment =
-                client.resources(FlinkDeployment.class)
-                        .inNamespace(sessionJob.getMetadata().getNamespace())
-                        .withName(sessionJob.getSpec().getDeploymentName())
-                        .get();
+        var namespace = sessionJob.getMetadata().getNamespace();
+        var deploymentName = sessionJob.getSpec().getDeploymentName();
+
+        var key = Cache.namespaceKeyFunc(namespace, deploymentName);
+        var deployment = informerManager.getFlinkDepInformer(namespace).getStore().getByKey(key);
 
         for (FlinkResourceValidator validator : validators) {
             Optional<String> validationError =

@@ -67,7 +67,7 @@ jobs:
           docker images
       - name: Start the operator
         run: |
-          helm install flink-kubernetes-operator helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest
+          helm --debug install flink-kubernetes-operator helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest
           kubectl wait --for=condition=Available --timeout=120s deploy/flink-kubernetes-operator
           kubectl get pods
       - name: Tests in flink-kubernetes-operator
@@ -145,7 +145,7 @@ jobs:
           docker images
       - name: Start the operator
         run: |
-          helm install flink-kubernetes-operator -n ${{ matrix.config.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.config.extraArgs }}
+          helm --debug install flink-kubernetes-operator -n ${{ matrix.config.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.config.extraArgs }}
           kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.config.namespace }} deploy/flink-kubernetes-operator
           kubectl get pods
       - name: Run Flink e2e tests
