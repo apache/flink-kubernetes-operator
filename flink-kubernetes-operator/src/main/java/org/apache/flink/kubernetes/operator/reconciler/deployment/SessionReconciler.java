@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
@@ -157,8 +158,15 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
                             sessionJobs.stream()
                                     .map(job -> job.getMetadata().getName())
                                     .collect(Collectors.toList()));
-            // TODO generate error events for this
-            LOG.warn(error);
+            if (EventUtils.createOrUpdateEvent(
+                    kubernetesClient,
+                    flinkApp,
+                    EventUtils.Type.Warning.name(),
+                    "Cleanup",
+                    error,
+                    EventUtils.Component.Operator.name())) {
+                LOG.warn(error);
+            }
             return DeleteControl.noFinalizerRemoval()
                     .rescheduleAfter(
                             configManager
