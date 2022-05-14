@@ -281,11 +281,13 @@ public class FlinkService {
                                     .toSeconds(),
                             TimeUnit.SECONDS);
         } finally {
+            LOG.debug("Deleting the jar file {}", jarFile);
             FileUtils.deleteFileOrDirectory(jarFile);
         }
     }
 
     private void deleteJar(Configuration conf, String jarId) {
+        LOG.debug("Deleting the jar: {}", jarId);
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
             JarDeleteHeaders headers = JarDeleteHeaders.getInstance();
