@@ -148,5 +148,6 @@ public class KubernetesOperatorConfigOptions {
                     .mapType()
                     .noDefaultValue()
                     .withDescription(
-                            "Custom HTTP header for a Flink job. Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
+                            "Custom HTTP header for HttpArtifactFetcher. The header will be applied when getting the session job artifacts. "
+                                    + "Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
 }
