@@ -17,13 +17,18 @@
 
 package org.apache.flink.kubernetes.operator.artifact;
 
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Map;
 
 /** Download the jar from the http resource. */
 public class HttpArtifactFetcher implements ArtifactFetcher {
@@ -32,12 +37,26 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
     public static final HttpArtifactFetcher INSTANCE = new HttpArtifactFetcher();
 
     @Override
-    public File fetch(String uri, File targetDir) throws Exception {
+    public File fetch(String uri, Configuration flinkConfiguration, File targetDir)
+            throws Exception {
         var start = System.currentTimeMillis();
         URL url = new URL(uri);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+        // merged session job level header and cluster level header, session job level header take
+        // precedence.
+        Map<String, String> headers =
+                flinkConfiguration.get(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER);
+
+        if (headers != null) {
+            headers.forEach(conn::setRequestProperty);
+        }
+
+        conn.setRequestMethod("GET");
+
         String fileName = FilenameUtils.getName(url.getFile());
         File targetFile = new File(targetDir, fileName);
-        try (var inputStream = new URL(uri).openStream()) {
+        try (var inputStream = conn.getInputStream()) {
             FileUtils.copyToFile(inputStream, targetFile);
         }
         LOG.debug(

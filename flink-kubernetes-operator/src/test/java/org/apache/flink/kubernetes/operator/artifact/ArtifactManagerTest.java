@@ -42,6 +42,7 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.file.Path;
+import java.util.Map;
 
 /** Test for {@link ArtifactManager}. */
 public class ArtifactManagerTest {
@@ -79,6 +80,7 @@ public class ArtifactManagerTest {
         File file =
                 artifactManager.fetch(
                         String.format("file://%s", sourceFile.getAbsolutePath()),
+                        new Configuration(),
                         tempDir.toString());
         Assertions.assertTrue(file.exists());
         Assertions.assertEquals(tempDir.toString(), file.getParentFile().toString());
@@ -91,11 +93,17 @@ public class ArtifactManagerTest {
             httpServer = startHttpServer();
             var sourceFile = mockTheJarFile();
             httpServer.createContext("/download", new DownloadFileHttpHandler(sourceFile));
+
             var file =
                     artifactManager.fetch(
                             String.format(
                                     "http://127.0.0.1:%d/download?file=1",
                                     httpServer.getAddress().getPort()),
+                            new Configuration()
+                                    .set(
+                                            KubernetesOperatorConfigOptions
+                                                    .JAR_ARTIFACT_HTTP_HEADER,
+                                            Map.of("k1", "v1")),
                             tempDir.toString());
             Assertions.assertTrue(file.exists());
             Assertions.assertEquals(tempDir.toString(), file.getParent());

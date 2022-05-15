@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.artifact;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -50,14 +51,16 @@ public class ArtifactManager {
         }
     }
 
-    public File fetch(String jarURI, String targetDirStr) throws Exception {
+    public File fetch(String jarURI, Configuration flinkConfiguration, String targetDirStr)
+            throws Exception {
         File targetDir = new File(targetDirStr);
         createIfNotExists(targetDir);
         URI uri = new URI(jarURI);
         if ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) {
-            return HttpArtifactFetcher.INSTANCE.fetch(jarURI, targetDir);
+            return HttpArtifactFetcher.INSTANCE.fetch(jarURI, flinkConfiguration, targetDir);
         } else {
-            return FileSystemBasedArtifactFetcher.INSTANCE.fetch(jarURI, targetDir);
+            return FileSystemBasedArtifactFetcher.INSTANCE.fetch(
+                    jarURI, flinkConfiguration, targetDir);
         }
     }
 

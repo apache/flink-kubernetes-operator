@@ -81,7 +81,8 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
             return;
         }
 
-        Configuration deployedConfig = configManager.getObserveConfig(flinkDepOptional.get());
+        Configuration deployedConfig =
+                configManager.getSessionJobConfig(flinkDepOptional.get(), flinkSessionJob);
 
         if (lastReconciledSpec == null) {
             submitAndInitStatus(
@@ -146,7 +147,7 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                     flinkService.cancelSessionJob(
                             JobID.fromHexString(jobID),
                             UpgradeMode.STATELESS,
-                            configManager.getObserveConfig(flinkDepOptional.get()));
+                            configManager.getSessionJobConfig(flinkDepOptional.get(), sessionJob));
                 } catch (Exception e) {
                     LOG.error("Failed to cancel job.", e);
                 }

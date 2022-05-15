@@ -43,10 +43,6 @@ spec:
                       type: string
                     type: object
                 type: object
-              flinkConfiguration:
-                additionalProperties:
-                  type: string
-                type: object
               podTemplate:
                 properties:
                   apiVersion:
@@ -9081,6 +9077,10 @@ spec:
                 type: object
               restartNonce:
                 type: integer
+              flinkConfiguration:
+                additionalProperties:
+                  type: string
+                type: object
             type: object
           status:
             properties:

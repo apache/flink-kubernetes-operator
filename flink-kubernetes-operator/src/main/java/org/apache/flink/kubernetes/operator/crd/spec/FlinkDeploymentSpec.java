@@ -53,9 +53,6 @@ public class FlinkDeploymentSpec extends AbstractFlinkSpec {
     /** Ingress specs. */
     private IngressSpec ingress;
 
-    /** Flink configuration overrides for the Flink deployment. */
-    private Map<String, String> flinkConfiguration;
-
     /**
      * Base pod template for job and task manager pods. Can be overridden by the jobManager and
      * taskManager pod templates.
