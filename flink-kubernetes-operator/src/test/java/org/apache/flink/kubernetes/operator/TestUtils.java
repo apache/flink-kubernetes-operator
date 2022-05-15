@@ -134,7 +134,7 @@ public class TestUtils {
                         .withNamespace(TEST_NAMESPACE)
                         .withLabels(
                                 Map.of(
-                                        FlinkSessionJobReconciler.LABEL_SESSION_CLUSTER,
+                                        FlinkSessionJobReconciler.LABEL_TARGET_SESSION,
                                         TEST_DEPLOYMENT_NAME))
                         .build());
         sessionJob.setSpec(

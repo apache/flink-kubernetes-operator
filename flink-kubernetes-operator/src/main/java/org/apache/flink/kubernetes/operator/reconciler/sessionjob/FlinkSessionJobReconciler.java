@@ -49,7 +49,7 @@ import java.util.Optional;
 public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSessionJobReconciler.class);
-    public static final String LABEL_SESSION_CLUSTER = "target.session.name";
+    public static final String LABEL_TARGET_SESSION = "target.session";
 
     private final FlinkConfigManager configManager;
     private final KubernetesClient kubernetesClient;
@@ -78,23 +78,7 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                 OperatorUtils.getSecondaryResource(
                         flinkSessionJob, context, configManager.getOperatorConfiguration());
 
-        var labels = flinkSessionJob.getMetadata().getLabels();
-        if (labels == null) {
-            labels = new HashMap<>();
-        }
-        if (!flinkSessionJob
-                .getSpec()
-                .getDeploymentName()
-                .equals(labels.get(LABEL_SESSION_CLUSTER))) {
-            labels.put(LABEL_SESSION_CLUSTER, flinkSessionJob.getSpec().getDeploymentName());
-            flinkSessionJob.getMetadata().setLabels(labels);
-            kubernetesClient
-                    .resources(FlinkSessionJob.class)
-                    .inNamespace(flinkSessionJob.getMetadata().getNamespace())
-                    .withName(flinkSessionJob.getMetadata().getName())
-                    .patch(flinkSessionJob);
-            return;
-        }
+        patchInternalLabel(flinkSessionJob);
 
         // if session cluster is not ready, we can't do reconcile for the job.
         if (!helper.sessionClusterReady(flinkDepOptional)) {
@@ -230,5 +214,24 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                 sessionJob.getStatus().getJobStatus().getJobId(),
                 sessionJob.getStatus().getJobStatus().getSavepointInfo(),
                 effectiveConfig);
+    }
+
+    private void patchInternalLabel(FlinkSessionJob flinkSessionJob) {
+        var labels = flinkSessionJob.getMetadata().getLabels();
+        if (labels == null) {
+            labels = new HashMap<>();
+        }
+        if (!flinkSessionJob
+                .getSpec()
+                .getDeploymentName()
+                .equals(labels.get(LABEL_TARGET_SESSION))) {
+            labels.put(LABEL_TARGET_SESSION, flinkSessionJob.getSpec().getDeploymentName());
+            flinkSessionJob.getMetadata().setLabels(labels);
+            kubernetesClient
+                    .resources(FlinkSessionJob.class)
+                    .inNamespace(flinkSessionJob.getMetadata().getNamespace())
+                    .withName(flinkSessionJob.getMetadata().getName())
+                    .patch(flinkSessionJob);
+        }
     }
 }

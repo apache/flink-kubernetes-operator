@@ -454,6 +454,6 @@ public class FlinkSessionJobReconcilerTest {
                 sessionJob
                         .getMetadata()
                         .getLabels()
-                        .get(FlinkSessionJobReconciler.LABEL_SESSION_CLUSTER));
+                        .get(FlinkSessionJobReconciler.LABEL_TARGET_SESSION));
     }
 }
