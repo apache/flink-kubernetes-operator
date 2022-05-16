@@ -24,6 +24,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /** Stores savepoint related information. */
 @Experimental
 @Data
@@ -40,6 +43,9 @@ public class SavepointInfo {
     /** Trigger timestamp of a pending savepoint operation. */
     private Long triggerTimestamp;
 
+    /** List of recent savepoints. */
+    private List<Savepoint> savepointHistory;
+
     public void setTrigger(String triggerId) {
         this.triggerId = triggerId;
         this.triggerTimestamp = System.currentTimeMillis();
@@ -53,5 +59,23 @@ public class SavepointInfo {
     public void updateLastSavepoint(Savepoint savepoint) {
         lastSavepoint = savepoint;
         resetTrigger();
+    }
+
+    /**
+     * Add the savepoint to the history if it isn't already the most recent savepoint.
+     *
+     * @param newSavepoint
+     */
+    public void addSavepointToHistory(Savepoint newSavepoint) {
+        if (savepointHistory == null) {
+            savepointHistory = new ArrayList<>();
+        }
+        if (!savepointHistory.isEmpty()) {
+            Savepoint recentSp = savepointHistory.get(savepointHistory.size() - 1);
+            if (recentSp.getLocation().equals(newSavepoint.getLocation())) {
+                return;
+            }
+        }
+        savepointHistory.add(newSavepoint);
     }
 }

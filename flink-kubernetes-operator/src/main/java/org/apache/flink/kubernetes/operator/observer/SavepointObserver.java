@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
@@ -34,6 +35,9 @@ import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Optional;
 
 /** An observer of savepoint progress. */
@@ -131,7 +135,47 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
 
         LOG.info("Savepoint status updated with latest completed savepoint info");
         currentSavepointInfo.updateLastSavepoint(savepointFetchResult.getSavepoint());
+        updateSavepointHistory(
+                currentSavepointInfo, savepointFetchResult.getSavepoint(), deployedConfig);
         return Optional.empty();
+    }
+
+    @VisibleForTesting
+    void updateSavepointHistory(
+            SavepointInfo currentSavepointInfo,
+            Savepoint newSavepoint,
+            Configuration deployedConfig) {
+
+        currentSavepointInfo.addSavepointToHistory(newSavepoint);
+
+        // maintain history
+        List<Savepoint> savepointHistory = currentSavepointInfo.getSavepointHistory();
+        int maxCount = configManager.getOperatorConfiguration().getSavepointHistoryMaxCount();
+        while (savepointHistory.size() > maxCount) {
+            // remove oldest entries
+            disposeSavepointQuietly(savepointHistory.remove(0), deployedConfig);
+        }
+
+        Duration maxAge = configManager.getOperatorConfiguration().getSavepointHistoryMaxAge();
+        long maxTms = System.currentTimeMillis() - maxAge.toMillis();
+        Iterator<Savepoint> it = savepointHistory.iterator();
+        while (it.hasNext()) {
+            Savepoint sp = it.next();
+            if (sp.getTimeStamp() < maxTms && sp != newSavepoint) {
+                it.remove();
+                disposeSavepointQuietly(sp, deployedConfig);
+            }
+        }
+    }
+
+    private void disposeSavepointQuietly(Savepoint sp, Configuration conf) {
+        try {
+            LOG.info("Disposing savepoint {}", sp);
+            flinkService.disposeSavepoint(sp.getLocation(), conf);
+        } catch (Exception e) {
+            // savepoint dispose error should not affect the deployment
+            LOG.error("Exception while disposing savepoint {}", sp.getLocation(), e);
+        }
     }
 
     private void observeLatestSavepoint(
@@ -139,7 +183,11 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
         try {
             flinkService
                     .getLastCheckpoint(JobID.fromHexString(jobID), deployedConfig)
-                    .ifPresent(savepointInfo::updateLastSavepoint);
+                    .ifPresent(
+                            sp -> {
+                                savepointInfo.updateLastSavepoint(sp);
+                                savepointInfo.addSavepointToHistory(sp);
+                            });
         } catch (Exception e) {
             LOG.error("Could not observe latest savepoint information.", e);
             throw new ReconciliationException(e);

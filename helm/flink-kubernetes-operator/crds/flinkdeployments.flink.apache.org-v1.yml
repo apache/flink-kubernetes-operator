@@ -9133,6 +9133,15 @@ spec:
                         type: string
                       triggerTimestamp:
                         type: integer
+                      savepointHistory:
+                        items:
+                          properties:
+                            timeStamp:
+                              type: integer
+                            location:
+                              type: string
+                          type: object
+                        type: array
                     type: object
                 type: object
               error:

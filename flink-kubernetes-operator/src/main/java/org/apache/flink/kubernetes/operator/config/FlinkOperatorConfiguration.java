@@ -41,6 +41,8 @@ public class FlinkOperatorConfiguration {
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
     String artifactsBaseDir;
+    int savepointHistoryMaxCount;
+    Duration savepointHistoryMaxAge;
 
     public static FlinkOperatorConfiguration fromConfiguration(
             Configuration operatorConfig, Set<String> watchedNamespaces) {
@@ -83,6 +85,13 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR);
 
+        int savepointHistoryMaxCount =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT);
+        Duration savepointHistoryMaxAge =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE);
+
         String flinkServiceHostOverride = null;
         if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {
             // not running in k8s, simplify local development
@@ -100,6 +109,8 @@ public class FlinkOperatorConfiguration {
                 watchedNamespaces,
                 flinkCancelJobTimeout,
                 flinkShutdownClusterTimeout,
-                artifactsBaseDir);
+                artifactsBaseDir,
+                savepointHistoryMaxCount,
+                savepointHistoryMaxAge);
     }
 }

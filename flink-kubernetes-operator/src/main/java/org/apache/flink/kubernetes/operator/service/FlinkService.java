@@ -431,11 +431,12 @@ public class FlinkService {
         }
         deploymentStatus.getJobStatus().setState(JobStatus.FINISHED.name());
         savepointOpt.ifPresent(
-                location ->
-                        deploymentStatus
-                                .getJobStatus()
-                                .getSavepointInfo()
-                                .setLastSavepoint(Savepoint.of(location)));
+                location -> {
+                    Savepoint sp = Savepoint.of(location);
+                    deploymentStatus.getJobStatus().getSavepointInfo().setLastSavepoint(sp);
+                    // this is required for Flink < 1.15
+                    deploymentStatus.getJobStatus().getSavepointInfo().addSavepointToHistory(sp);
+                });
 
         var shutdownDisabled =
                 upgradeMode != UpgradeMode.LAST_STATE
@@ -670,6 +671,13 @@ public class FlinkService {
                             System.currentTimeMillis(), response.get().resource().getLocation());
             LOG.info("Savepoint result: " + savepoint);
             return SavepointFetchResult.completed(savepoint);
+        }
+    }
+
+    public void disposeSavepoint(String savepointPath, Configuration conf) throws Exception {
+        try (RestClusterClient<String> clusterClient =
+                (RestClusterClient<String>) getClusterClient(conf)) {
+            clusterClient.disposeSavepoint(savepointPath);
         }
     }
 

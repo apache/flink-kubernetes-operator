@@ -76,6 +76,7 @@ public class TestingFlinkService extends FlinkService {
     private boolean deployFailure = false;
     private PodList podList = new PodList();
     private Consumer<Configuration> listJobConsumer = conf -> {};
+    private List<String> disposedSavepoints = new ArrayList<>();
 
     public TestingFlinkService() {
         super(null, new FlinkConfigManager(new Configuration()));
@@ -290,6 +291,15 @@ public class TestingFlinkService extends FlinkService {
     public SavepointFetchResult fetchSavepointInfo(
             String triggerId, String jobId, Configuration conf) {
         return SavepointFetchResult.completed(Savepoint.of("savepoint_" + savepointCounter++));
+    }
+
+    @Override
+    public void disposeSavepoint(String savepointPath, Configuration conf) {
+        disposedSavepoints.add(savepointPath);
+    }
+
+    public List<String> getDisposedSavepoints() {
+        return disposedSavepoints;
     }
 
     @Override

@@ -270,3 +270,4 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | lastSavepoint | org.apache.flink.kubernetes.operator.crd.status.Savepoint | Last completed savepoint by the operator. |
 | triggerId | java.lang.String | Trigger id of a pending savepoint operation. |
 | triggerTimestamp | java.lang.Long | Trigger timestamp of a pending savepoint operation. |
+| savepointHistory | java.util.List<org.apache.flink.kubernetes.operator.crd.status.Savepoint> | List of recent savepoints. |

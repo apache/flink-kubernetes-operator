@@ -201,7 +201,11 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
         JobState stateAfterReconcile = JobState.SUSPENDED;
         jobStatus.setState(stateAfterReconcile.name());
         savepointOpt.ifPresent(
-                location -> jobStatus.getSavepointInfo().setLastSavepoint(Savepoint.of(location)));
+                location -> {
+                    Savepoint sp = Savepoint.of(location);
+                    jobStatus.getSavepointInfo().setLastSavepoint(sp);
+                    jobStatus.getSavepointInfo().addSavepointToHistory(sp);
+                });
         return stateAfterReconcile;
     }
 
