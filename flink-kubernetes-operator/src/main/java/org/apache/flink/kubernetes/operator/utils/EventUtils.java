@@ -24,19 +24,19 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 
 import java.time.Instant;
 
-/** The util to generate an event for the target resource. */
+/**
+ * The util to generate an event for the target resource. It is copied from
+ * https://github.com/EnMasseProject/enmasse/blob/master/k8s-api/src/main/java/io/enmasse/k8s/api/KubeEventLogger.java
+ */
 public class EventUtils {
 
-    /** The type of the events. */
-    public enum Type {
-        Normal,
-        Warning
-    }
+    /** The types of the events. */
+    public static final String TYPE_NORMAL = "Normal";
 
-    /** The component of events. */
-    public enum Component {
-        Operator
-    }
+    public static final String TYPE_WARNING = "Warning";
+
+    /** The components of events. */
+    public static final String COMPONENT_OPERATOR = "Operator";
 
     public static String generateEventName(
             HasMetadata target, String type, String reason, String message, String componentName) {

@@ -40,18 +40,18 @@ public class EventUtilsTest {
         var eventName =
                 EventUtils.generateEventName(
                         flinkApp,
-                        EventUtils.Type.Warning.name(),
+                        EventUtils.TYPE_WARNING,
                         reason,
                         message,
-                        EventUtils.Component.Operator.name());
+                        EventUtils.COMPONENT_OPERATOR);
         Assertions.assertTrue(
                 EventUtils.createOrUpdateEvent(
                         kubernetesClient,
                         flinkApp,
-                        EventUtils.Type.Warning.name(),
+                        EventUtils.TYPE_WARNING,
                         reason,
                         message,
-                        EventUtils.Component.Operator.name()));
+                        EventUtils.COMPONENT_OPERATOR));
         var event =
                 kubernetesClient
                         .v1()
@@ -67,10 +67,10 @@ public class EventUtilsTest {
                 EventUtils.createOrUpdateEvent(
                         kubernetesClient,
                         flinkApp,
-                        EventUtils.Type.Warning.name(),
+                        EventUtils.TYPE_WARNING,
                         reason,
                         message,
-                        EventUtils.Component.Operator.name()));
+                        EventUtils.COMPONENT_OPERATOR));
         event =
                 kubernetesClient
                         .v1()
