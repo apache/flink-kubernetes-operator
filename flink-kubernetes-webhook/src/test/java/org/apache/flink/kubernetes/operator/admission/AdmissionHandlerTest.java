@@ -37,8 +37,8 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
+import static io.javaoperatorsdk.admissioncontroller.Operation.CREATE;
 import static org.apache.flink.kubernetes.operator.admission.AdmissionHandler.VALIDATE_REQUEST_PATH;
-import static org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation.CREATE;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpMethod.GET;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.OK;

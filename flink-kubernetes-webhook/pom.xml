@@ -21,10 +21,10 @@ under the License.
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-      <groupId>org.apache.flink</groupId>
-      <artifactId>flink-kubernetes-operator-parent</artifactId>
-      <version>1.1-SNAPSHOT</version>
-      <relativePath>..</relativePath>
+        <groupId>org.apache.flink</groupId>
+        <artifactId>flink-kubernetes-operator-parent</artifactId>
+        <version>1.1-SNAPSHOT</version>
+        <relativePath>..</relativePath>
     </parent>
 
     <artifactId>flink-kubernetes-webhook</artifactId>
@@ -36,6 +36,19 @@ under the License.
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-kubernetes-operator</artifactId>
             <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.javaoperatorsdk</groupId>
+            <artifactId>operator-framework-framework-core</artifactId>
+            <version>${operator.sdk.admission-controller.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Test -->
@@ -53,4 +66,37 @@ under the License.
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>shade-flink-webhook</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <artifactSet>
+                                <includes combine.children="append">
+                                    <include>io.javaoperatorsdk:operator-framework-framework-core</include>
+                                </includes>
+                            </artifactSet>
+                            <transformers combine.children="append">
+                                <transformer
+                                        implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>org.apache.flink.kubernetes.operator.admission.FlinkOperatorWebhook</mainClass>
+                                </transformer>
+                            </transformers>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>

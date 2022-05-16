@@ -17,9 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
-import org.apache.flink.kubernetes.operator.admission.admissioncontroller.AdmissionController;
-import org.apache.flink.kubernetes.operator.admission.admissioncontroller.validation.Validator;
-
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufInputStream;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
@@ -40,8 +37,10 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.LastHttpConten
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.QueryStringDecoder;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.fabric8.kubernetes.api.model.KubernetesResource;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
+import io.javaoperatorsdk.admissioncontroller.AdmissionController;
+import io.javaoperatorsdk.admissioncontroller.validation.Validator;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,9 +63,9 @@ public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
     private static final ObjectMapper objectMapper = new ObjectMapper();
     protected static final String VALIDATE_REQUEST_PATH = "/validate";
 
-    private final AdmissionController<KubernetesResource> validatingController;
+    private final AdmissionController<HasMetadata> validatingController;
 
-    public AdmissionHandler(Validator<KubernetesResource> validator) {
+    public AdmissionHandler(Validator<HasMetadata> validator) {
         this.validatingController = new AdmissionController<>(validator);
     }
 
