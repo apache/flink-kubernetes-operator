@@ -44,7 +44,7 @@ RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl !flink-kubern
 
 RUN cd /app/tools/license; mkdir jars; cd jars; \
     cp /app/flink-kubernetes-operator/target/flink-kubernetes-operator-*-shaded.jar . && \
-    cp /app/flink-kubernetes-webhook/target/flink-kubernetes-webhook-*.jar . && \
+    cp /app/flink-kubernetes-webhook/target/flink-kubernetes-webhook-*-shaded.jar . && \
     cp /app/flink-kubernetes-shaded/target/flink-kubernetes-shaded-*.jar . && \
     cp -r /app/flink-kubernetes-operator/target/plugins ./plugins && \
     cd ../ && ./collect_license_files.sh ./jars ./licenses-output
@@ -54,7 +54,7 @@ FROM openjdk:11-jre
 ENV FLINK_HOME=/opt/flink
 ENV OPERATOR_VERSION=1.1-SNAPSHOT
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
-ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION.jar
+ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION-shaded.jar
 ENV FLINK_KUBERNETES_SHADED_JAR=flink-kubernetes-shaded-$OPERATOR_VERSION.jar
 
 WORKDIR /flink-kubernetes-operator

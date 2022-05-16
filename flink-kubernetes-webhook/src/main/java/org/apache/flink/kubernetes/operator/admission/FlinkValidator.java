@@ -17,9 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
-import org.apache.flink.kubernetes.operator.admission.admissioncontroller.NotAllowedException;
-import org.apache.flink.kubernetes.operator.admission.admissioncontroller.Operation;
-import org.apache.flink.kubernetes.operator.admission.admissioncontroller.validation.Validator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -28,10 +25,13 @@ import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.fabric8.kubernetes.api.model.GroupVersionKind;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.KubernetesResource;
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.informers.cache.Cache;
+import io.javaoperatorsdk.admissioncontroller.NotAllowedException;
+import io.javaoperatorsdk.admissioncontroller.Operation;
+import io.javaoperatorsdk.admissioncontroller.validation.Validator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +39,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Validator for FlinkDeployment creation and updates. */
-public class FlinkValidator implements Validator<KubernetesResource> {
+public class FlinkValidator implements Validator<HasMetadata> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkValidator.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -56,16 +56,15 @@ public class FlinkValidator implements Validator<KubernetesResource> {
     }
 
     @Override
-    public void validate(KubernetesResource resource, Operation operation, GroupVersionKind kind)
-            throws NotAllowedException {
+    public void validate(HasMetadata resource, Operation operation) throws NotAllowedException {
         LOG.debug("Validating resource {}", resource);
 
-        if (CrdConstants.KIND_FLINK_DEPLOYMENT.equals(kind.getKind())) {
+        if (CrdConstants.KIND_FLINK_DEPLOYMENT.equals(resource.getKind())) {
             validateDeployment(resource);
-        } else if (CrdConstants.KIND_SESSION_JOB.equals(kind.getKind())) {
+        } else if (CrdConstants.KIND_SESSION_JOB.equals(resource.getKind())) {
             validateSessionJob(resource);
         } else {
-            throw new NotAllowedException("Unexpected resource: " + kind.getKind());
+            throw new NotAllowedException("Unexpected resource: " + resource.getKind());
         }
     }
 
