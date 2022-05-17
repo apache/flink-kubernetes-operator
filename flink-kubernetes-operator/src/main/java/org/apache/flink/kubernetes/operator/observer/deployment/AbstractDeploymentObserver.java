@@ -47,6 +47,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -101,7 +102,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
     }
 
     private boolean observeClusterInfo(FlinkDeployment flinkApp, Configuration configuration) {
-        if (flinkApp.getStatus().getClusterInfo() != null) {
+        if (!flinkApp.getStatus().getClusterInfo().isEmpty()) {
             return true;
         }
         try {
@@ -126,7 +127,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
             return;
         }
 
-        flinkApp.getStatus().setClusterInfo(null);
+        flinkApp.getStatus().setClusterInfo(new HashMap<>());
 
         logger.info(
                 "Observing JobManager deployment. Previous status: {}", previousJmStatus.name());

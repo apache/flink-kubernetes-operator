@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingStatusHelper;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -145,15 +146,17 @@ public class SessionJobObserverTest {
                 JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
 
         var savepointInfo = sessionJob.getStatus().getJobStatus().getSavepointInfo();
-        Assertions.assertNull(savepointInfo.getTriggerId());
-        Assertions.assertNull(savepointInfo.getTriggerTimestamp());
+        Assertions.assertFalse(
+                SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
         flinkService.triggerSavepoint(jobID, savepointInfo, new Configuration());
+        Assertions.assertTrue(
+                SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
         Assertions.assertEquals("trigger_0", savepointInfo.getTriggerId());
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals("savepoint_0", savepointInfo.getLastSavepoint().getLocation());
-        Assertions.assertNull(savepointInfo.getTriggerId());
-        Assertions.assertNull(savepointInfo.getTriggerTimestamp());
+        Assertions.assertFalse(
+                SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
     }
 }

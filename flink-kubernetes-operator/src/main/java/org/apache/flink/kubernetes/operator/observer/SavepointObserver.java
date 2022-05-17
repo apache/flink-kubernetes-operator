@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -101,7 +102,7 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
      */
     private Optional<String> observeTriggeredSavepointProgress(
             SavepointInfo currentSavepointInfo, String jobID, Configuration deployedConfig) {
-        if (currentSavepointInfo.getTriggerId() == null) {
+        if (StringUtils.isEmpty(currentSavepointInfo.getTriggerId())) {
             LOG.debug("Savepoint not in progress");
             return Optional.empty();
         }

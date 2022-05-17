@@ -38,10 +38,10 @@ public class SavepointInfo {
     private Savepoint lastSavepoint;
 
     /** Trigger id of a pending savepoint operation. */
-    private String triggerId;
+    private String triggerId = "";
 
     /** Trigger timestamp of a pending savepoint operation. */
-    private Long triggerTimestamp;
+    private Long triggerTimestamp = 0L;
 
     /** List of recent savepoints. */
     private List<Savepoint> savepointHistory = new ArrayList<>();
@@ -52,8 +52,8 @@ public class SavepointInfo {
     }
 
     public void resetTrigger() {
-        this.triggerId = null;
-        this.triggerTimestamp = null;
+        this.triggerId = "";
+        this.triggerTimestamp = 0L;
     }
 
     public void updateLastSavepoint(Savepoint savepoint) {

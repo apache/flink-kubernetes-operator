@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import org.slf4j.Logger;
 
@@ -42,7 +43,7 @@ public class SessionJobHelper {
     }
 
     public boolean savepointInProgress() {
-        return sessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId() != null;
+        return SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus());
     }
 
     public boolean shouldTriggerSavepoint() {

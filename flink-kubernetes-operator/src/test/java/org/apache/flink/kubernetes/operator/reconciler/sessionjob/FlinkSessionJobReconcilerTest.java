@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Assertions;
@@ -38,8 +39,8 @@ import javax.annotation.Nullable;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link FlinkSessionJobReconciler}. */
@@ -228,7 +229,7 @@ public class FlinkSessionJobReconcilerTest {
     public void testTriggerSavepoint() throws Exception {
         TestingFlinkService flinkService = new TestingFlinkService();
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
-        assertNull(sessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertFalse(SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
         FlinkSessionJobReconciler reconciler =
@@ -241,14 +242,14 @@ public class FlinkSessionJobReconcilerTest {
                 null,
                 flinkService.listSessionJobs());
 
-        assertNull(sessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertFalse(SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
         // trigger savepoint
         var sp1SessionJob = ReconciliationUtils.clone(sessionJob);
 
         // do not trigger savepoint if nonce is null
         reconciler.reconcile(sp1SessionJob, readyContext);
-        assertNull(sessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertFalse(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
 
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(2L);
         sp1SessionJob
@@ -257,7 +258,7 @@ public class FlinkSessionJobReconcilerTest {
                 .setState(org.apache.flink.api.common.JobStatus.CREATED.name());
         reconciler.reconcile(sp1SessionJob, readyContext);
         // do not trigger savepoint if job is not running
-        assertNull(sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertFalse(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
 
         sp1SessionJob
                 .getStatus()
@@ -265,9 +266,7 @@ public class FlinkSessionJobReconcilerTest {
                 .setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
 
         reconciler.reconcile(sp1SessionJob, readyContext);
-        assertEquals(
-                "trigger_0",
-                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertTrue(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
 
         // the last reconcile nonce updated
         assertEquals(
@@ -338,7 +337,7 @@ public class FlinkSessionJobReconcilerTest {
         // don't trigger when nonce is the same
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(2L);
         reconciler.reconcile(sp1SessionJob, readyContext);
-        assertNull(sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertFalse(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
 
         // trigger when new nonce is defined
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(3L);
@@ -352,7 +351,7 @@ public class FlinkSessionJobReconcilerTest {
         // don't trigger when nonce is cleared
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(null);
         reconciler.reconcile(sp1SessionJob, readyContext);
-        assertNull(sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertFalse(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
     }
 
     private TestingFlinkService.SubmittedJobInfo verifyAndReturnTheSubmittedJob(
