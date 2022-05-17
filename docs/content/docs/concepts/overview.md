@@ -30,50 +30,56 @@ Flink Kubernetes Operator acts as a control plane to manage the complete deploym
 Flink Kubernetes Operator aims to capture the responsibilities of a human operator who is managing Flink deployments. Human operators have deep knowledge of how Flink deployments ought to behave, how to start clusters, how to deploy jobs, how to upgrade them and how to react if there are problems. The main goal of the operator is the automation of these activities, which cannot be achieved through the Flink native integration alone.
 
 # Features
+## Core
+- Fully-automated [Job Lifecycle Management](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/custom-resource/job-management/)
+  - Running, suspending and deleting applications
+  - Stateful and stateless application upgrades
+  - Triggering and managing savepoints
+  - Handling errors, rolling-back broken upgrades
+- Multiple Flink version support: v1.13, v1.14, v1.15
+- [Deployment Modes](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/custom-resource/overview/#application-deployments):
+  - Application cluster
+  - Session cluster
+  - Session job
+- Built-in [High Availability](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/kubernetes_ha/)   
+- Extensible validation framework
+  - Webhook and Operator based validation  
+  - [Custom validators](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/validator/)  
+- Advanced [Configuration](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/configuration/) management
+  - Default configurations with dynamic updates
+  - Per job configuration
+  - Environment variables
+- POD augmentation via [Pod Templates](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/custom-resource/pod-template/)
+  - Native Kubernetes POD definitions
+  - Layering (Base/JobManager/TaskManager overrides)
+## Operations
+- Operator [Metrics](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/metrics-logging/#metrics)
+  - Utilizes the well-established [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics)
+  - Pluggable metrics reporters
+- Fully-customizable [Logging](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/metrics-logging/#logging)
+  - Default log configuration  
+  - Per job log configuration
+  - Sidecar based log forwarders
+- Flink Web UI and REST Endpoint Access
+  - Fully supported Flink Native Kubernetes [service expose types](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#accessing-flinks-web-ui)
+  - Dynamic [Ingress templates](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/ingress/)
+- [Helm based installation](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/helm/)
+  - Automated [RBAC configuration](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/rbac/)
+  - Advanced customization techniques 
+- Up-to-date public repositories 
+  - Helm [https://downloads.apache.org/flink/flink-kubernetes-operator-1.0.0/](https://downloads.apache.org/flink/flink-kubernetes-operator-1.0.0)
+  - Docker [ghcr.io/apache/flink-kubernetes-operator](http://ghcr.io/apache/flink-kubernetes-operator)
 
-| Category               | Feature                        | Support | Comment                              |
-|------------------------|--------------------------------|---------|--------------------------------------|
-| Kubernetes integration | Flink Native                   | full    |                                      |
-|                        | Standalone                     | no      |                                      |
-| Deployment Mode        | Application Mode               | full    |                                      |
-|                        | Session Mode                   | limited | no job management                    |
-| Lifecycle Management   | Start Job                      | full    | empty state or from savepoint        |
-|                        | Upgrade Job                    | full    | stateless or last-state(chkp/svp)    |
-|                        | Delete Job                     | full    |                                      |
-|                        | Pause/Resume Job               | full    |                                      |
-|                        | Savepoint Management           | limited | manual savepoint triggering only     |
-|                        | HA                             | full    | via flink native k8s HA              |
-|                        | Validation                     | full    | webhook and operator based           |
-| Configuration          | Operator configuration         | full    | defaults and helm values override    |
-|                        | Native Flink properties        | full    | defaults and job level override      |
-|                        | Environment variables          | full    | via pod templates                    |
-|                        | Native Kubernetes POD settings | full    | via pod templates                    |
-| Operations             | Installation                   | limited | Helm based, no public repos used     |
-|                        | UI Access                      | limited | domain based routing only            |
-|                        | Operator Log Aggregation       | full    | k8s native and/or custom appender    |
-|                        | Operator Metric Aggregation    | limited | basic process metrics only           |
-|                        | Job Logs                       | full    | k8s native and/or custom appender    |
-|                        | Job Metrics                    | full    | k8s native and/or custom appender    |
-|                        | K8s Events                     | limited | deployment events only               |
-|                        | Error Handling and Recovery    | limited | non-configurable exponential backoff |
-| Pod Augment            | Pod Template                   | full    |                                      |
-|                        | Init containers                | full    |                                      |
-|                        | Sidecar containers             | full    |                                      |
-|                        | Layering                       | full    | jm/tm level override                 |
-| Job Type               | Jar job                        | full    |                                      |
-|                        | SQL Job                        | no      |                                      |
-|                        | Python Job                     | no      |                                      |
-| CI/CD                  | Continuous Integration         | full    | via github actions                   |
-|                        | Public Docker repository       | full    | ghcr.io / dockerhub                  |
-|                        | Public Helm repository         | full    | apache release repo                  |
+# Known Issues & Limitations
 
+## JobManager High-availability
+The Operator leverages [Kubernetes HA Services](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/kubernetes_ha/) for providing High-availability for Flink jobs. The HA solution can benefit form using additional [Standby replicas](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/overview/), it will result in a faster recovery time, but Flink jobs will still restart when the Leader JobManager goes down.
 
-# Known issues & limitations
+## Standalone Kubernetes Support
+The Operator does not support [Standalone Kubernetes](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/standalone/kubernetes/) deployments yet
 
-JobResultStore Resource Leak
-
+## JobResultStore Resource Leak
 To mitigate the impact of [FLINK-27569](https://issues.apache.org/jira/browse/FLINK-27569) the operator introduced a workaround [FLINK-27573](https://issues.apache.org/jira/browse/FLINK-27573) by setting `job-result-store.delete-on-commit=false` and a unique value for `job-result-store.storage-path` for every cluster launch. The storage path for older runs must be cleaned up manually, keeping the latest directory always:
-
 ```shell
 ls -lth /tmp/flink/ha/job-result-store/basic-checkpoint-ha-example/
 total 0
