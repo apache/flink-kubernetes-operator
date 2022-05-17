@@ -161,10 +161,10 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
             if (EventUtils.createOrUpdateEvent(
                     kubernetesClient,
                     flinkApp,
-                    EventUtils.TYPE_WARNING,
+                    EventUtils.Type.Warning,
                     "Cleanup",
                     error,
-                    EventUtils.COMPONENT_OPERATOR)) {
+                    EventUtils.Component.Operator)) {
                 LOG.warn(error);
             }
             return DeleteControl.noFinalizerRemoval()

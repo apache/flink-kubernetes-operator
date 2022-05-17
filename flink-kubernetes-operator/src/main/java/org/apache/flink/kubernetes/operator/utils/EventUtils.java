@@ -30,17 +30,20 @@ import java.time.Instant;
  */
 public class EventUtils {
 
-    /** The types of the events. */
-    public static final String TYPE_NORMAL = "Normal";
+    /** The type of the events. */
+    public enum Type {
+        Normal,
+        Warning
+    }
 
-    public static final String TYPE_WARNING = "Warning";
-
-    /** The components of events. */
-    public static final String COMPONENT_OPERATOR = "Operator";
+    /** The component of events. */
+    public enum Component {
+        Operator
+    }
 
     public static String generateEventName(
-            HasMetadata target, String type, String reason, String message, String componentName) {
-        return componentName
+            HasMetadata target, Type type, String reason, String message, Component component) {
+        return component
                 + "."
                 + ((reason + message + type + target.getKind() + target.getMetadata().getName())
                                 .hashCode()
@@ -50,11 +53,11 @@ public class EventUtils {
     public static boolean createOrUpdateEvent(
             KubernetesClient client,
             HasMetadata target,
-            String type,
+            Type type,
             String reason,
             String message,
-            String componentName) {
-        var eventName = generateEventName(target, type, reason, message, componentName);
+            Component component) {
+        var eventName = generateEventName(target, type, reason, message, component);
 
         var existing =
                 client.v1()
@@ -64,7 +67,7 @@ public class EventUtils {
                         .get();
 
         if (existing != null
-                && existing.getType().equals(type)
+                && existing.getType().equals(type.name())
                 && existing.getReason().equals(reason)
                 && existing.getInvolvedObject().getName().equals(target.getMetadata().getName())
                 && existing.getInvolvedObject().getKind().equals(target.getKind())) {
@@ -88,12 +91,12 @@ public class EventUtils {
                                             .withName(target.getMetadata().getName())
                                             .withNamespace(target.getMetadata().getNamespace())
                                             .build())
-                            .withType(type)
+                            .withType(type.name())
                             .withReason(reason)
                             .withFirstTimestamp(Instant.now().toString())
                             .withLastTimestamp(Instant.now().toString())
                             .withNewSource()
-                            .withComponent(componentName)
+                            .withComponent(component.name())
                             .endSource()
                             .withCount(1)
                             .withMessage(message)
