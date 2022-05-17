@@ -23,13 +23,15 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.time.Duration;
 
 /** Savepoint utilities. */
 public class SavepointUtils {
 
     public static boolean savepointInProgress(JobStatus jobStatus) {
-        return jobStatus.getSavepointInfo().getTriggerId() != null;
+        return StringUtils.isNotEmpty(jobStatus.getSavepointInfo().getTriggerId());
     }
 
     public static boolean shouldTriggerSavepoint(JobSpec jobSpec, FlinkDeploymentStatus status) {
