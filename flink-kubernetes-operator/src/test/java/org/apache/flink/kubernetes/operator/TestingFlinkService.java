@@ -116,7 +116,7 @@ public class TestingFlinkService extends FlinkService {
     public void submitApplicationCluster(
             JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
         if (deployFailure) {
-            throw new DeploymentFailedException("Deployment failure", "test", "test", "test");
+            throw new DeploymentFailedException("Deployment failure", "test");
         }
         if (!jobs.isEmpty()) {
             throw new Exception("Cannot submit 2 application clusters at the same time");
