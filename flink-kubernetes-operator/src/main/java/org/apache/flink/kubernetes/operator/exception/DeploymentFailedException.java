@@ -17,78 +17,34 @@
 
 package org.apache.flink.kubernetes.operator.exception;
 
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
-import io.fabric8.kubernetes.api.model.Event;
-import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
-
-import java.time.Instant;
 
 /** Exception to signal terminal deployment failure. */
 public class DeploymentFailedException extends RuntimeException {
-    public static final String COMPONENT_JOBMANAGER = "JobManagerDeployment";
+
     public static final String REASON_CRASH_LOOP_BACKOFF = "CrashLoopBackOff";
 
     private static final long serialVersionUID = -1070179896083579221L;
 
-    public final String component;
-    public final String type;
-    public final String reason;
-    public final String lastTransitionTime;
-    public final String lastUpdateTime;
+    private final String reason;
 
-    public DeploymentFailedException(String component, DeploymentCondition deployCondition) {
+    public DeploymentFailedException(DeploymentCondition deployCondition) {
         super(deployCondition.getMessage());
-        this.component = component;
-        this.type = deployCondition.getType();
         this.reason = deployCondition.getReason();
-        this.lastTransitionTime = deployCondition.getLastTransitionTime();
-        this.lastUpdateTime = deployCondition.getLastUpdateTime();
     }
 
-    public DeploymentFailedException(
-            String component, String type, ContainerStateWaiting stateWaiting) {
+    public DeploymentFailedException(ContainerStateWaiting stateWaiting) {
         super(stateWaiting.getMessage());
-        this.component = component;
-        this.type = type;
         this.reason = stateWaiting.getReason();
-        this.lastTransitionTime = null;
-        this.lastUpdateTime = null;
     }
 
-    public DeploymentFailedException(String message, String component, String type, String reason) {
+    public DeploymentFailedException(String message, String reason) {
         super(message);
-        this.component = component;
-        this.type = type;
         this.reason = reason;
-        this.lastTransitionTime = Instant.now().toString();
-        this.lastUpdateTime = lastTransitionTime;
     }
 
-    public static Event asEvent(DeploymentFailedException dfe, FlinkDeployment flinkApp) {
-        EventBuilder evtb =
-                new EventBuilder()
-                        .withApiVersion("v1")
-                        .withNewInvolvedObject()
-                        .withKind(flinkApp.getKind())
-                        .withName(flinkApp.getMetadata().getName())
-                        .withNamespace(flinkApp.getMetadata().getNamespace())
-                        .withUid(flinkApp.getMetadata().getUid())
-                        .endInvolvedObject()
-                        .withType(dfe.type)
-                        .withReason(dfe.reason)
-                        .withFirstTimestamp(dfe.lastTransitionTime)
-                        .withLastTimestamp(dfe.lastUpdateTime)
-                        .withMessage(dfe.getMessage())
-                        .withNewMetadata()
-                        .withGenerateName(flinkApp.getMetadata().getName())
-                        .withNamespace(flinkApp.getMetadata().getNamespace())
-                        .endMetadata()
-                        .withNewSource()
-                        .withComponent(dfe.component)
-                        .endSource();
-        return evtb.build();
+    public String getReason() {
+        return reason;
     }
 }

@@ -30,11 +30,11 @@ import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
-import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -142,14 +142,13 @@ public class FlinkDeploymentController
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
         flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
         ReconciliationUtils.updateForReconciliationError(flinkApp, dfe.getMessage());
-
-        // TODO: avoid repeated event
-        Event event = DeploymentFailedException.asEvent(dfe, flinkApp);
-        kubernetesClient
-                .v1()
-                .events()
-                .inNamespace(flinkApp.getMetadata().getNamespace())
-                .create(event);
+        EventUtils.createOrUpdateEvent(
+                kubernetesClient,
+                flinkApp,
+                EventUtils.Type.Warning,
+                dfe.getReason(),
+                dfe.getMessage(),
+                EventUtils.Component.JobManagerDeployment);
     }
 
     @Override
