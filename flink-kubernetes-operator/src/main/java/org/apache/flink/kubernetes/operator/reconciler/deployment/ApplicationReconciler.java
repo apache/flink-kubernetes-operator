@@ -232,8 +232,6 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                     "JobManager deployment is missing and HA data is not available to make stateful upgrades. "
                             + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
                             + "Manual restore required.",
-                    DeploymentFailedException.COMPONENT_JOBMANAGER,
-                    "Error",
                     "UpgradeFailed");
         } else {
             LOG.debug(

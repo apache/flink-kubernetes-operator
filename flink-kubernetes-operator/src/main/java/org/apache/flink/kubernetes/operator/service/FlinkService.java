@@ -175,8 +175,6 @@ public class FlinkService {
                     "HA metadata not available to restore from last state. "
                             + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
                             + "Manual restore required.",
-                    DeploymentFailedException.COMPONENT_JOBMANAGER,
-                    "Error",
                     "RestoreFailed");
         }
     }
