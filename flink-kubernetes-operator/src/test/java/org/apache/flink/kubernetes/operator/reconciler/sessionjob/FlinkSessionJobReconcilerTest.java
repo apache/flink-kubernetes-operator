@@ -168,6 +168,13 @@ public class FlinkSessionJobReconcilerTest {
         reconciler.reconcile(sessionJob, readyContext);
         // start the job
         assertEquals(1, flinkService.listSessionJobs().size());
+        assertTrue(
+                sessionJob
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getSavepointHistory()
+                        .isEmpty());
 
         // update job spec
         var statefulSessionJob = ReconciliationUtils.clone(sessionJob);
@@ -178,6 +185,14 @@ public class FlinkSessionJobReconcilerTest {
         // job suspended first
         assertTrue(flinkService.listSessionJobs().isEmpty());
         verifyJobState(statefulSessionJob, JobState.SUSPENDED, JobState.SUSPENDED.name());
+        assertEquals(
+                1,
+                statefulSessionJob
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getSavepointHistory()
+                        .size());
 
         // upgraded
         reconciler.reconcile(statefulSessionJob, readyContext);

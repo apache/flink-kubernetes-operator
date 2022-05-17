@@ -42,7 +42,7 @@ public class SavepointObserverTest {
         SavepointObserver observer =
                 new SavepointObserver(flinkService, configManager, new TestingStatusHelper<>());
         SavepointInfo spInfo = new SavepointInfo();
-        Assertions.assertNull(spInfo.getSavepointHistory());
+        Assertions.assertTrue(spInfo.getSavepointHistory().isEmpty());
 
         Savepoint sp = new Savepoint(1, "sp1");
         observer.updateSavepointHistory(spInfo, sp, configManager.getDefaultConfig());

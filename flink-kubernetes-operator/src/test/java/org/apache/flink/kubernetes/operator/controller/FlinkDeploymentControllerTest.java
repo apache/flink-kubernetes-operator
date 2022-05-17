@@ -302,6 +302,13 @@ public class FlinkDeploymentControllerTest {
         // Upgrade job
         appCluster.getSpec().getJob().setParallelism(100);
 
+        assertTrue(
+                appCluster
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getSavepointHistory()
+                        .isEmpty());
         assertEquals(0, testController.reconcile(appCluster, context).getScheduleDelay().get());
         assertEquals(
                 JobState.SUSPENDED,
@@ -311,6 +318,14 @@ public class FlinkDeploymentControllerTest {
                         .deserializeLastReconciledSpec()
                         .getJob()
                         .getState());
+        assertEquals(
+                1,
+                appCluster
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getSavepointHistory()
+                        .size());
 
         flinkService.setDeployFailure(true);
         assertNotEquals(0, testController.reconcile(appCluster, context).getScheduleDelay().get());
@@ -321,6 +336,14 @@ public class FlinkDeploymentControllerTest {
         assertEquals(1, jobs.size());
         assertEquals("savepoint_0", jobs.get(0).f0);
         testController.reconcile(appCluster, context);
+        assertEquals(
+                1,
+                appCluster
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getSavepointHistory()
+                        .size());
 
         // Suspend job
         appCluster.getSpec().getJob().setState(JobState.SUSPENDED);

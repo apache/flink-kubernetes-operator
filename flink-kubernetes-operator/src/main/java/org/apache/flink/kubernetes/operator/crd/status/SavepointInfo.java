@@ -44,7 +44,7 @@ public class SavepointInfo {
     private Long triggerTimestamp;
 
     /** List of recent savepoints. */
-    private List<Savepoint> savepointHistory;
+    private List<Savepoint> savepointHistory = new ArrayList<>();
 
     public void setTrigger(String triggerId) {
         this.triggerId = triggerId;
@@ -67,9 +67,6 @@ public class SavepointInfo {
      * @param newSavepoint
      */
     public void addSavepointToHistory(Savepoint newSavepoint) {
-        if (savepointHistory == null) {
-            savepointHistory = new ArrayList<>();
-        }
         if (!savepointHistory.isEmpty()) {
             Savepoint recentSp = savepointHistory.get(savepointHistory.size() - 1);
             if (recentSp.getLocation().equals(newSavepoint.getLocation())) {
