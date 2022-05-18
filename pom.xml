@@ -284,6 +284,7 @@ under the License.
                             <exclude>**/packaged_licenses/LICENSE.*.txt</exclude>
                             <exclude>**/licenses/LICENSE*</exclude>
                             <exclude>**/licenses-binary/LICENSE*</exclude>
+                            <exclude>tools/license/NOTICE-binary_PREAMBLE.txt</exclude>
                         </excludes>
                     </configuration>
                 </plugin>
