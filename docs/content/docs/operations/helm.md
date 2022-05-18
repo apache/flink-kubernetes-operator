@@ -55,6 +55,42 @@ You can also provide your custom values file by using the `-f` flag:
 helm install -f myvalues.yaml flink-kubernetes-operator helm/flink-kubernetes-operator
 ```
 
+The configurable parameters of the Helm chart and which default values as detailed in the following table:
+
+| Parameters | Description | Default Value |
+| ---------- | ----------- | ------------- |
+| watchNamespaces | List of kubernetes namespaces to watch for FlinkDeployment changes, empty means all namespaces. | |
+| image.repository | The image repository of flink-kubernetes-operator. | ghcr.io/apache/flink-kubernetes-operator |
+| image.pullPolicy | The image pull policy of flink-kubernetes-operator. | IfNotPresent |
+| image.tag | The image tag of flink-kubernetes-operator. | latest |
+| rbac.create | Whether to enable RBAC to create for said namespaces. | true |
+| operatorServiceAccount.create | Whether to enable operator service account to create for flink-kubernetes-operator. | true |
+| operatorServiceAccount.annotations | The annotations of operator service account. | |
+| operatorServiceAccount.name | The name of operator service account. | flink-operator |
+| jobServiceAccount.create | Whether to enable job service account to create for flink jobmanager/taskmanager pods. | true |
+| jobServiceAccount.annotations | The annotations of job service account. | "helm.sh/resource-policy": keep |
+| jobServiceAccount.name | The name of job service account. | flink |
+| operatorVolumeMounts.create | Whether to enable operator volume mounts to create for flink-kubernetes-operator. | false |
+| operatorVolumeMounts.data | List of mount paths of operator volume mounts.  | - name: flink-artifacts<br/>&nbsp;&nbsp;mountPath: /opt/flink/artifacts |
+| operatorVolumes.create | Whether to enable operator volumes to create for flink-kubernetes-operator. | false |
+| operatorVolumes.data | The ConfigMap of operator volumes. | - name: flink-artifacts<br/>&nbsp;&nbsp;hostPath:<br/>&nbsp;&nbsp;&nbsp;&nbsp;path: /tmp/flink/artifacts<br/>&nbsp;&nbsp;&nbsp;&nbsp;type: DirectoryOrCreate |
+| podSecurityContext | Defines privilege and access control settings for a pod or container for pod security context.  | runAsUser: 9999<br/>runAsGroup: 9999 |
+| operatorSecurityContext | Defines privilege and access control settings for a pod or container for operator security context.  | |
+| webhookSecurityContext | Defines privilege and access control settings for a pod or container for webhook security context. | |
+| webhook.create | Whether to enable webhook to create for flink-kubernetes-operator. | true |
+| webhook.keystore | The ConfigMap of webhook key store. | useDefaultPassword: true |
+| defaultConfiguration.create | Whether to enable default configuration to create for flink-kubernetes-operator. | true |
+| defaultConfiguration.append | Whether to append configuration files with configs.  | true |
+| defaultConfiguration.flink-conf.yaml | The default configuration of flink-conf.yaml. | &#124;+<br/>kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory<br/>kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE<br/>kubernetes.operator.reconciler.reschedule.interval: 15 s<br/>kubernetes.operator.observer.progress-check.interval: 5 s |
+| defaultConfiguration.log4j-operator.properties | The default configuration of log4j-operator.properties. | |
+| defaultConfiguration.log4j-console.properties | The default configuration of log4j-console.properties. | |
+| defaultConfiguration.metrics.port | The metrics port on the container for default configuration. | |
+| imagePullSecrets | The image pull secrets of flink-kubernetes-operator. | |
+| nameOverride | Overrides the name with the specified name. | |
+| fullnameOverride | Overrides the fullname with the specified full name. | |
+| jvmArgs.webhook | The JVM start up options for webhook. | |
+| jvmArgs.operator |  The JVM start up options for operator. | |
+
 For more information check the [Helm documentation](https://helm.sh/docs/helm/helm_install/).
 
 ## Validating webhook
