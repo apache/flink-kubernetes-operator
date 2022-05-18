@@ -81,7 +81,7 @@ The configurable parameters of the Helm chart and which default values as detail
 | webhook.keystore | The ConfigMap of webhook key store. | useDefaultPassword: true |
 | defaultConfiguration.create | Whether to enable default configuration to create for flink-kubernetes-operator. | true |
 | defaultConfiguration.append | Whether to append configuration files with configs.  | true |
-| defaultConfiguration.flink-conf.yaml | The default configuration of flink-conf.yaml. | &#124;+<br/>kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory<br/>kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE<br/>kubernetes.operator.reconciler.reschedule.interval: 15 s<br/>kubernetes.operator.observer.progress-check.interval: 5 s |
+| defaultConfiguration.flink-conf.yaml | The default configuration of flink-conf.yaml. | kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory<br/>kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE<br/>kubernetes.operator.reconciler.reschedule.interval: 15 s<br/>kubernetes.operator.observer.progress-check.interval: 5 s |
 | defaultConfiguration.log4j-operator.properties | The default configuration of log4j-operator.properties. | |
 | defaultConfiguration.log4j-console.properties | The default configuration of log4j-console.properties. | |
 | defaultConfiguration.metrics.port | The metrics port on the container for default configuration. | |
