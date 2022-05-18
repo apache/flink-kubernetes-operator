@@ -134,6 +134,10 @@ public class FlinkService {
                         4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
     }
 
+    public KubernetesClient getKubernetesClient() {
+        return kubernetesClient;
+    }
+
     public void submitApplicationCluster(
             JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
         LOG.info(
@@ -639,7 +643,7 @@ public class FlinkService {
     }
 
     public SavepointFetchResult fetchSavepointInfo(
-            String triggerId, String jobId, Configuration conf) throws Exception {
+            String triggerId, String jobId, Configuration conf) {
         LOG.info("Fetching savepoint result with triggerId: " + triggerId);
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
@@ -656,24 +660,28 @@ public class FlinkService {
                             EmptyRequestBody.getInstance());
 
             if (response.get() == null || response.get().resource() == null) {
-                return SavepointFetchResult.notTriggered();
+                return SavepointFetchResult.pending();
             }
 
             if (response.get().resource().getLocation() == null) {
                 if (response.get().resource().getFailureCause() != null) {
-                    LOG.error("Savepoint error", response.get().resource().getFailureCause());
+                    LOG.error(
+                            "Failure occurred while fetching the savepoint result",
+                            response.get().resource().getFailureCause());
                     return SavepointFetchResult.error(
-                            response.get().resource().getFailureCause().getMessage());
+                            response.get().resource().getFailureCause().toString());
                 } else {
                     return SavepointFetchResult.pending();
                 }
             }
-
             Savepoint savepoint =
                     new Savepoint(
                             System.currentTimeMillis(), response.get().resource().getLocation());
             LOG.info("Savepoint result: " + savepoint);
             return SavepointFetchResult.completed(savepoint);
+        } catch (Exception e) {
+            LOG.error("Exception while fetching the savepoint result", e);
+            return SavepointFetchResult.error(e.getMessage());
         }
     }
 
