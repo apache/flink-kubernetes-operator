@@ -25,12 +25,8 @@ import lombok.Value;
 @Value
 public class SavepointFetchResult {
     Savepoint savepoint;
-    boolean isTriggered;
+    boolean pending;
     String error;
-
-    public static SavepointFetchResult notTriggered() {
-        return new SavepointFetchResult(null, false, null);
-    }
 
     public static SavepointFetchResult error(String error) {
         return new SavepointFetchResult(null, false, error);
@@ -41,6 +37,6 @@ public class SavepointFetchResult {
     }
 
     public static SavepointFetchResult completed(Savepoint savepoint) {
-        return new SavepointFetchResult(savepoint, true, null);
+        return new SavepointFetchResult(savepoint, false, null);
     }
 }

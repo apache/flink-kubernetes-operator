@@ -98,6 +98,20 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
             }
         }
 
+        if (!ReconciliationUtils.isJobRunning(flinkApp.getStatus())) {
+            if (flinkApp.getStatus().getJobStatus().getSavepointInfo().resetTrigger()) {
+                logger.error("Job is not running, cancelling savepoint operation");
+                EventUtils.createOrUpdateEvent(
+                        flinkService.getKubernetesClient(),
+                        flinkApp,
+                        EventUtils.Type.Warning,
+                        "SavepointError",
+                        "Savepoint failed for savepointTriggerNonce: "
+                                + flinkApp.getSpec().getJob().getSavepointTriggerNonce(),
+                        EventUtils.Component.Operator);
+            }
+        }
+
         clearErrorsIfDeploymentIsHealthy(flinkApp);
     }
 

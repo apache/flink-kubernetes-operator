@@ -27,8 +27,8 @@ import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 
@@ -70,7 +70,18 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
                         .orElse(null);
 
         observeTriggeredSavepointProgress(savepointInfo, jobId, deployedConfig)
-                .ifPresent(err -> ReconciliationUtils.updateForReconciliationError(resource, err));
+                .ifPresent(
+                        err ->
+                                EventUtils.createOrUpdateEvent(
+                                        flinkService.getKubernetesClient(),
+                                        resource,
+                                        EventUtils.Type.Warning,
+                                        "SavepointError",
+                                        "Savepoint failed for savepointTriggerNonce: "
+                                                + resource.getSpec()
+                                                        .getJob()
+                                                        .getSavepointTriggerNonce(),
+                                        EventUtils.Component.Operator));
 
         // We only need to observe latest checkpoint/savepoint for terminal jobs
         if (JobStatus.valueOf(jobStatus.getState()).isGloballyTerminalState()) {
@@ -106,36 +117,36 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
             LOG.debug("Savepoint not in progress");
             return Optional.empty();
         }
-        LOG.info("Observing savepoint status");
-        SavepointFetchResult savepointFetchResult;
-        try {
-            savepointFetchResult =
-                    flinkService.fetchSavepointInfo(
-                            currentSavepointInfo.getTriggerId(), jobID, deployedConfig);
-        } catch (Exception e) {
-            LOG.error("Exception while fetching savepoint info", e);
-            return Optional.empty();
+        LOG.info("Observing savepoint status.");
+        SavepointFetchResult savepointFetchResult =
+                flinkService.fetchSavepointInfo(
+                        currentSavepointInfo.getTriggerId(), jobID, deployedConfig);
+
+        if (savepointFetchResult.isPending()) {
+            if (SavepointUtils.gracePeriodEnded(
+                    configManager.getOperatorConfiguration(), currentSavepointInfo)) {
+                String errorMsg =
+                        "Savepoint operation timed out after "
+                                + configManager
+                                        .getOperatorConfiguration()
+                                        .getSavepointTriggerGracePeriod();
+                currentSavepointInfo.resetTrigger();
+                LOG.error(errorMsg);
+                return Optional.of(errorMsg);
+            } else {
+                LOG.info("Savepoint operation not finished yet, waiting within grace period...");
+                return Optional.empty();
+            }
         }
 
-        if (!savepointFetchResult.isTriggered()) {
-            String error = savepointFetchResult.getError();
-            if (error != null
-                    || SavepointUtils.gracePeriodEnded(
-                            configManager.getOperatorConfiguration(), currentSavepointInfo)) {
-                String errorMsg = error != null ? error : "Savepoint status unknown";
-                LOG.error(errorMsg);
-                currentSavepointInfo.resetTrigger();
-                return Optional.of(errorMsg);
-            }
-            LOG.info("Savepoint operation not running, waiting within grace period...");
-        }
-        if (savepointFetchResult.getSavepoint() == null) {
-            LOG.info("Savepoint is still in progress...");
-            return Optional.empty();
+        if (savepointFetchResult.getError() != null) {
+            currentSavepointInfo.resetTrigger();
+            return Optional.of(savepointFetchResult.getError());
         }
 
         LOG.info("Savepoint status updated with latest completed savepoint info");
         currentSavepointInfo.updateLastSavepoint(savepointFetchResult.getSavepoint());
+
         updateSavepointHistory(
                 currentSavepointInfo, savepointFetchResult.getSavepoint(), deployedConfig);
         return Optional.empty();

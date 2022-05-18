@@ -46,6 +46,7 @@ import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 
@@ -69,9 +70,10 @@ public class TestingFlinkService extends FlinkService {
 
     public static final Map<String, String> CLUSTER_INFO =
             Map.of(
-                    DashboardConfiguration.FIELD_NAME_FLINK_VERSION, "15.0.0",
+                    DashboardConfiguration.FIELD_NAME_FLINK_VERSION,
+                    "15.0.0",
                     DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
-                            "1234567 @ 1970-01-01T00:00:00+00:00");
+                    "1234567 @ 1970-01-01T00:00:00+00:00");
 
     private int savepointCounter = 0;
     private int triggerCounter = 0;
@@ -85,9 +87,14 @@ public class TestingFlinkService extends FlinkService {
     private PodList podList = new PodList();
     private Consumer<Configuration> listJobConsumer = conf -> {};
     private List<String> disposedSavepoints = new ArrayList<>();
+    private SavepointFetchResult savepointFetchResult;
 
     public TestingFlinkService() {
         super(null, new FlinkConfigManager(new Configuration()));
+    }
+
+    public TestingFlinkService(KubernetesClient kubernetesClient) {
+        super(kubernetesClient, new FlinkConfigManager(new Configuration()));
     }
 
     public Context getContext() {
@@ -302,6 +309,17 @@ public class TestingFlinkService extends FlinkService {
     @Override
     public SavepointFetchResult fetchSavepointInfo(
             String triggerId, String jobId, Configuration conf) {
+
+        if (savepointFetchResult == null) {
+            savepointFetchResult = SavepointFetchResult.pending();
+            return savepointFetchResult;
+        }
+
+        if (savepointFetchResult.isPending()) {
+            savepointFetchResult = SavepointFetchResult.error("Failed");
+            return savepointFetchResult;
+        }
+
         return SavepointFetchResult.completed(Savepoint.of("savepoint_" + savepointCounter++));
     }
 

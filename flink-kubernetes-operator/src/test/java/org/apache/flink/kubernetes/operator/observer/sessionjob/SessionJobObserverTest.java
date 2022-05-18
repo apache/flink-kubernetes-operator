@@ -28,14 +28,17 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 /** Tests for {@link SessionJobObserver}. */
+@EnableKubernetesMockClient(crud = true)
 public class SessionJobObserverTest {
-
+    private KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     @Test
@@ -128,7 +131,7 @@ public class SessionJobObserverTest {
     @Test
     public void testObserveSavepoint() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
-        final var flinkService = new TestingFlinkService();
+        final var flinkService = new TestingFlinkService(kubernetesClient);
         final var reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
         final var observer =
                 new SessionJobObserver(flinkService, configManager, new TestingStatusHelper<>());
@@ -152,9 +155,18 @@ public class SessionJobObserverTest {
         flinkService.triggerSavepoint(jobID, savepointInfo, new Configuration());
         Assertions.assertTrue(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
-
         Assertions.assertEquals("trigger_0", savepointInfo.getTriggerId());
-        observer.observe(sessionJob, readyContext);
+        observer.observe(sessionJob, readyContext); // pending
+        observer.observe(sessionJob, readyContext); // error
+
+        flinkService.triggerSavepoint(jobID, savepointInfo, new Configuration());
+        Assertions.assertTrue(
+                SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
+        Assertions.assertEquals("trigger_1", savepointInfo.getTriggerId());
+        flinkService.triggerSavepoint(jobID, savepointInfo, new Configuration());
+        Assertions.assertTrue(
+                SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
+        observer.observe(sessionJob, readyContext); // success
         Assertions.assertEquals("savepoint_0", savepointInfo.getLastSavepoint().getLocation());
         Assertions.assertFalse(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));

@@ -29,9 +29,12 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
 
@@ -42,8 +45,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link ApplicationObserver} unit tests. */
+@EnableKubernetesMockClient(crud = true)
 public class ApplicationObserverTest {
-
+    private KubernetesClient kubernetesClient;
     private final Context readyContext = TestUtils.createContextWithReadyJobManagerDeployment();
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
@@ -156,7 +160,7 @@ public class ApplicationObserverTest {
 
     @Test
     public void observeSavepoint() throws Exception {
-        TestingFlinkService flinkService = new TestingFlinkService();
+        TestingFlinkService flinkService = new TestingFlinkService(kubernetesClient);
         ApplicationObserver observer =
                 new ApplicationObserver(
                         null, flinkService, configManager, new TestingStatusHelper<>());
@@ -165,19 +169,59 @@ public class ApplicationObserverTest {
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
         bringToReadyStatus(deployment);
-        observer.observe(deployment, readyContext);
-        assertEquals(
-                JobManagerDeploymentStatus.READY,
-                deployment.getStatus().getJobManagerDeploymentStatus());
+        assertTrue(ReconciliationUtils.isJobRunning(deployment.getStatus()));
 
         flinkService.triggerSavepoint(
                 deployment.getStatus().getJobStatus().getJobId(),
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
                 conf);
+        // pending savepoint
         assertEquals(
                 "trigger_0",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        observer.observe(deployment, readyContext);
+        assertTrue(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
+        // savepoint error
+        assertEquals(
+                0,
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .size());
+        observer.observe(deployment, readyContext);
+        assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
+        assertEquals(
+                1,
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .size());
+        assertEquals(
+                1,
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .get(0)
+                        .getCount());
+
+        // savepoint success
+        flinkService.triggerSavepoint(
+                deployment.getStatus().getJobStatus().getJobId(),
+                deployment.getStatus().getJobStatus().getSavepointInfo(),
+                conf);
+        assertEquals(
+                "trigger_1",
+                deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         observer.observe(deployment, readyContext);
         assertEquals(
                 "savepoint_0",
@@ -187,15 +231,15 @@ public class ApplicationObserverTest {
                         .getSavepointInfo()
                         .getLastSavepoint()
                         .getLocation());
-
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
+        // second attempt success
         flinkService.triggerSavepoint(
                 deployment.getStatus().getJobStatus().getJobId(),
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
                 conf);
         assertEquals(
-                "trigger_1",
+                "trigger_2",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         assertTrue(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
@@ -210,6 +254,49 @@ public class ApplicationObserverTest {
                         .getLocation());
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
+        // application failure after checkpoint trigger
+        flinkService.triggerSavepoint(
+                deployment.getStatus().getJobStatus().getJobId(),
+                deployment.getStatus().getJobStatus().getSavepointInfo(),
+                conf);
+        assertEquals(
+                "trigger_3",
+                deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertTrue(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
+        flinkService.setPortReady(false);
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                "savepoint_1",
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
+        assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
+
+        assertEquals(
+                1,
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .size());
+        assertEquals(
+                2,
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .get(0)
+                        .getCount());
+
+        flinkService.setPortReady(true);
+        observer.observe(deployment, readyContext);
         // Simulate Failed job
         Tuple2<String, JobStatusMessage> jobTuple = flinkService.listJobs().get(0);
         jobTuple.f0 = "last-SP";
