@@ -1,0 +1,10 @@
+flink-kubernetes-webhook
+Copyright 2014-2022 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+This project contains copied and modified source code that is licensed under the Apache Software License 2.0 (http://www.apache.org/licenses/LICENSE-2.0.txt) from the following projects:
+
+- admission-controller-framework (https://github.com/java-operator-sdk/admission-controller-framework)
+  The copied sources can be located under flink-kubernetes-webhook/src/main/java/org/apache/flink/kubernetes/operator/admission/admissioncontroller

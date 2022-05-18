@@ -41,6 +41,13 @@ COPY tools ./tools
 
 RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl !flink-kubernetes-docs -DskipTests=$SKIP_TESTS
 
+RUN cd /app/tools/license; mkdir jars; cd jars; \
+    cp /app/flink-kubernetes-operator/target/flink-kubernetes-operator-*-shaded.jar . && \
+    cp /app/flink-kubernetes-webhook/target/flink-kubernetes-webhook-*.jar . && \
+    cp /app/flink-kubernetes-shaded/target/flink-kubernetes-shaded-*.jar . && \
+    cp -r /app/flink-kubernetes-operator/target/plugins ./plugins && \
+    cd ../ && ./collect_license_files.sh ./jars ./licenses-output
+
 # stage
 FROM openjdk:11-jre
 ENV FLINK_HOME=/opt/flink
@@ -49,7 +56,7 @@ ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
 ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION.jar
 ENV FLINK_KUBERNETES_SHADED_JAR=flink-kubernetes-shaded-$OPERATOR_VERSION.jar
 
-WORKDIR /
+WORKDIR /flink-kubernetes-operator
 RUN groupadd --system --gid=9999 flink && \
     useradd --system --home-dir $FLINK_HOME --uid=9999 --gid=flink flink
 
@@ -57,13 +64,15 @@ COPY --from=build /app/flink-kubernetes-operator/target/$OPERATOR_JAR .
 COPY --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR .
 COPY --from=build /app/flink-kubernetes-shaded/target/$FLINK_KUBERNETES_SHADED_JAR .
 COPY --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
+COPY --from=build /app/tools/license/licenses-output/NOTICE .
+COPY --from=build /app/tools/license/licenses-output/licenses ./licenses
 COPY docker-entrypoint.sh /
 
 RUN chown -R flink:flink $FLINK_HOME && \
     chown flink:flink $OPERATOR_JAR && \
     chown flink:flink $WEBHOOK_JAR && \
     chown flink:flink $FLINK_KUBERNETES_SHADED_JAR && \
-    chown flink:flink docker-entrypoint.sh
+    chown flink:flink /docker-entrypoint.sh
 
 USER flink
 ENTRYPOINT ["/docker-entrypoint.sh"]

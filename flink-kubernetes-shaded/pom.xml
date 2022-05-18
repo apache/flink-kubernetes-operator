@@ -57,15 +57,12 @@ under the License.
                         <goals>
                             <goal>shade</goal>
                         </goals>
-                        <configuration combine.children="append">
+                        <configuration>
                             <artifactSet>
                                 <includes combine.children="append">
                                     <include>*:*</include>
                                 </includes>
                             </artifactSet>
-                            <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
-                            </transformers>
                             <relocations>
                                 <relocation>
                                     <pattern>io.fabric8</pattern>
