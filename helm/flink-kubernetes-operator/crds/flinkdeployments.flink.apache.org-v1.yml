@@ -6048,6 +6048,8 @@ spec:
                       memory:
                         type: string
                     type: object
+                  replicas:
+                    type: integer
                   podTemplate:
                     properties:
                       apiVersion:
@@ -9112,6 +9114,13 @@ spec:
                     - ROLLED_BACK
                     type: string
                 type: object
+              taskManager:
+                properties:
+                  labelSelector:
+                    type: string
+                  replicas:
+                    type: integer
+                type: object
               jobStatus:
                 properties:
                   jobName:
@@ -9178,4 +9187,8 @@ spec:
     served: true
     storage: true
     subresources:
+      scale:
+        labelSelectorPath: .status.taskManager.labelSelector
+        specReplicasPath: .spec.taskManager.replicas
+        statusReplicasPath: .status.taskManager.replicas
       status: {}

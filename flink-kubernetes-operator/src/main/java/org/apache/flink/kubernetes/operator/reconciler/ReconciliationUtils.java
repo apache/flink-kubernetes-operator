@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -67,12 +68,22 @@ public class ReconciliationUtils {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     public static <SPEC extends AbstractFlinkSpec> void updateForSpecReconciliationSuccess(
-            AbstractFlinkResource<SPEC, ?> target, JobState stateAfterReconcile) {
-        var commonStatus = target.getStatus();
+            AbstractFlinkResource<SPEC, ?> target,
+            JobState stateAfterReconcile,
+            Configuration conf) {
+        var status = target.getStatus();
         var spec = target.getSpec();
 
-        ReconciliationStatus<SPEC> reconciliationStatus = commonStatus.getReconciliationStatus();
-        commonStatus.setError(null);
+        ReconciliationStatus<SPEC> reconciliationStatus = status.getReconciliationStatus();
+        status.setError(null);
+
+        // For application deployments we update the taskmanager info
+        if (target instanceof FlinkDeployment && spec.getJob() != null) {
+            ((FlinkDeploymentStatus) status)
+                    .setTaskManager(
+                            getTaskManagerInfo(
+                                    target.getMetadata().getName(), conf, stateAfterReconcile));
+        }
 
         var clonedSpec = ReconciliationUtils.clone(spec);
         AbstractFlinkSpec lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
@@ -114,6 +125,16 @@ public class ReconciliationUtils {
                 .setSavepointTriggerNonce(spec.getJob().getSavepointTriggerNonce());
         reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec);
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
+    }
+
+    private static TaskManagerInfo getTaskManagerInfo(
+            String name, Configuration conf, JobState jobState) {
+        var labelSelector = "component=taskmanager,app=" + name;
+        if (jobState == JobState.RUNNING) {
+            return new TaskManagerInfo(labelSelector, FlinkUtils.getNumTaskManagers(conf));
+        } else {
+            return new TaskManagerInfo("", 0);
+        }
     }
 
     public static void updateForReconciliationError(

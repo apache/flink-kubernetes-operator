@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -293,7 +294,7 @@ public class FlinkConfigBuilderTest {
     @Test
     public void testApplyJobOrSessionSpec() throws Exception {
         flinkDeployment.getSpec().getJob().setAllowNonRestoredState(true);
-        final Configuration configuration =
+        var configuration =
                 new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyJobOrSessionSpec()
                         .build();
@@ -305,6 +306,18 @@ public class FlinkConfigBuilderTest {
         Assertions.assertEquals(SAMPLE_JAR, configuration.get(PipelineOptions.JARS).get(0));
         Assertions.assertEquals(
                 Integer.valueOf(2), configuration.get(CoreOptions.DEFAULT_PARALLELISM));
+
+        var dep = ReconciliationUtils.clone(flinkDeployment);
+        dep.getSpec().setTaskManager(new TaskManagerSpec());
+        dep.getSpec().getTaskManager().setReplicas(3);
+        dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "4");
+        configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyJobOrSessionSpec()
+                        .build();
+
+        Assertions.assertEquals(12, configuration.get(CoreOptions.DEFAULT_PARALLELISM));
     }
 
     @Test

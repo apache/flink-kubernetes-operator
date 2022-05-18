@@ -50,4 +50,7 @@ public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
     /** Status of the last reconcile operation. */
     private FlinkDeploymentReconciliationStatus reconciliationStatus =
             new FlinkDeploymentReconciliationStatus();
+
+    /** Information about the TaskManagers for the scale subresource. */
+    private TaskManagerInfo taskManager;
 }

@@ -15,28 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.spec;
+package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
 
-import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.model.annotation.SpecReplicas;
+import io.fabric8.kubernetes.model.annotation.LabelSelector;
+import io.fabric8.kubernetes.model.annotation.StatusReplicas;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** TaskManager spec. */
+/** Last observed status of the Flink job within an application deployment. */
 @Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class TaskManagerSpec {
-    /** Resource specification for the TaskManager pods. */
-    private Resource resource;
+@Builder(toBuilder = true)
+public class TaskManagerInfo {
+    /** TaskManager label selector. */
+    @LabelSelector private String labelSelector;
 
-    /** Number of TaskManager replicas. If defined, takes precedence over parallelism */
-    @SpecReplicas private Integer replicas;
-
-    /** TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
-    private Pod podTemplate;
+    /** Number of TaskManager replicas if defined in the spec. */
+    @StatusReplicas private int replicas = 0;
 }

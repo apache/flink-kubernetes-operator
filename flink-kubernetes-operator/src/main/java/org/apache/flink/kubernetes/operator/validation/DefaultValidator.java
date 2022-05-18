@@ -43,6 +43,8 @@ import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.util.StringUtils;
 
+import javax.annotation.Nullable;
+
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -82,7 +84,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                         deployment.getMetadata().getName(),
                         deployment.getMetadata().getNamespace()),
                 validateLogConfig(spec.getLogConfiguration()),
-                validateJobSpec(spec.getJob(), effectiveConfig),
+                validateJobSpec(spec.getJob(), spec.getTaskManager(), effectiveConfig),
                 validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager()),
                 validateSpecChange(deployment, effectiveConfig),
@@ -155,13 +157,10 @@ public class DefaultValidator implements FlinkResourceValidator {
         return Optional.empty();
     }
 
-    private Optional<String> validateJobSpec(JobSpec job, Map<String, String> confMap) {
+    private Optional<String> validateJobSpec(
+            JobSpec job, @Nullable TaskManagerSpec tm, Map<String, String> confMap) {
         if (job == null) {
             return Optional.empty();
-        }
-
-        if (job.getParallelism() < 1) {
-            return Optional.of("Job parallelism must be larger than 0");
         }
 
         if (job.getJarURI() == null) {
@@ -206,6 +205,14 @@ public class DefaultValidator implements FlinkResourceValidator {
             }
         }
 
+        var tmReplicasDefined = tm != null && tm.getReplicas() != null;
+
+        if (tmReplicasDefined && tm.getReplicas() < 1) {
+            return Optional.of("TaskManager replicas must be larger than 0");
+        } else if (!tmReplicasDefined && job.getParallelism() < 1) {
+            return Optional.of("Job parallelism must be larger than 0");
+        }
+
         return Optional.empty();
     }
 
@@ -233,6 +240,10 @@ public class DefaultValidator implements FlinkResourceValidator {
     private Optional<String> validateTmSpec(TaskManagerSpec tmSpec) {
         if (tmSpec == null) {
             return Optional.empty();
+        }
+
+        if (tmSpec.getReplicas() != null && tmSpec.getReplicas() < 1) {
+            return Optional.of("TaskManager replicas should not be configured less than one.");
         }
 
         return validateResources("TaskManager", tmSpec.getResource());
@@ -336,7 +347,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateNotApplicationCluster(sessionCluster),
                 validateSessionClusterId(sessionJob, sessionCluster),
-                validateJobSpec(sessionJob.getSpec().getJob(), effectiveConfig));
+                validateJobSpec(sessionJob.getSpec().getJob(), null, effectiveConfig));
     }
 
     private Optional<String> validateJobNotEmpty(FlinkSessionJob sessionJob) {

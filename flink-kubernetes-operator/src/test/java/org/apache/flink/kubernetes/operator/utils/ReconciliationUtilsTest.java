@@ -54,7 +54,8 @@ public class ReconciliationUtilsTest {
         current.getStatus()
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(ReconciliationUtils.clone(current.getSpec()));
-        ReconciliationUtils.updateForSpecReconciliationSuccess(current, JobState.SUSPENDED);
+        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                current, JobState.SUSPENDED, new Configuration());
 
         UpdateControl<FlinkDeployment> updateControl =
                 ReconciliationUtils.toUpdateControl(operatorConfiguration, current, previous, true);

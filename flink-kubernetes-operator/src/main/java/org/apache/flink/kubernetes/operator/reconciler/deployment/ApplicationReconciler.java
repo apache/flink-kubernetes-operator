@@ -89,7 +89,8 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                     false);
             IngressUtils.updateIngressRules(
                     deployMeta, currentDeploySpec, deployConfig, kubernetesClient);
-            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, JobState.RUNNING);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(
+                    flinkApp, JobState.RUNNING, deployConfig);
             return;
         }
 
@@ -103,7 +104,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
         Configuration observeConfig = configManager.getObserveConfig(flinkApp);
         boolean specChanged = !currentDeploySpec.equals(lastReconciledSpec);
         if (specChanged) {
-            if (newSpecIsAlreadyDeployed(flinkApp)) {
+            if (newSpecIsAlreadyDeployed(flinkApp, deployConfig)) {
                 return;
             }
             LOG.debug("Detected spec change, starting upgrade process.");
@@ -134,7 +135,8 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                         lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
                 stateAfterReconcile = JobState.RUNNING;
             }
-            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, stateAfterReconcile);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(
+                    flinkApp, stateAfterReconcile, deployConfig);
             IngressUtils.updateIngressRules(
                     deployMeta, currentDeploySpec, deployConfig, kubernetesClient);
         } else if (ReconciliationUtils.shouldRollBack(

@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
@@ -76,9 +77,21 @@ public class DefaultValidatorTest {
         testError(
                 dep -> dep.getSpec().getJob().setParallelism(0),
                 "Job parallelism must be larger than 0");
+
         testError(
-                dep -> dep.getSpec().getJob().setParallelism(-1),
-                "Job parallelism must be larger than 0");
+                dep -> {
+                    var tmSpec = new TaskManagerSpec();
+                    tmSpec.setReplicas(0);
+                    dep.getSpec().setTaskManager(tmSpec);
+                },
+                "TaskManager replicas must be larger than 0");
+
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getTaskManager().setReplicas(1);
+                    dep.getSpec().getJob().setParallelism(0);
+                });
+
         testError(
                 dep -> {
                     dep.getSpec().setFlinkConfiguration(new HashMap<>());
