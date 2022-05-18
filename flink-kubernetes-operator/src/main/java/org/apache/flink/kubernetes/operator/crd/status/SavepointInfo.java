@@ -23,6 +23,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,9 +52,11 @@ public class SavepointInfo {
         this.triggerTimestamp = System.currentTimeMillis();
     }
 
-    public void resetTrigger() {
+    public boolean resetTrigger() {
+        boolean reseted = StringUtils.isNotEmpty(this.triggerId);
         this.triggerId = "";
         this.triggerTimestamp = 0L;
+        return reseted;
     }
 
     public void updateLastSavepoint(Savepoint savepoint) {
