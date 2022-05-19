@@ -100,18 +100,13 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             return;
         }
 
+        Configuration observeConfig = configManager.getObserveConfig(flinkApp);
         boolean specChanged = !currentDeploySpec.equals(lastReconciledSpec);
         if (specChanged) {
             if (newSpecIsAlreadyDeployed(flinkApp)) {
                 return;
             }
             LOG.debug("Detected spec change, starting upgrade process.");
-            Optional<UpgradeMode> availableUpgradeMode = getAvailableUpgradeMode(flinkApp);
-            if (availableUpgradeMode.isEmpty()) {
-                return;
-            }
-            UpgradeMode upgradeMode = availableUpgradeMode.get();
-
             JobState currentJobState = lastReconciledSpec.getJob().getState();
             JobState desiredJobState = desiredJobSpec.getState();
             JobState stateAfterReconcile = currentJobState;
@@ -119,7 +114,14 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                 if (desiredJobState == JobState.RUNNING) {
                     LOG.info("Upgrading/Restarting running job, suspending first...");
                 }
-                flinkService.cancelJob(flinkApp, upgradeMode);
+                Optional<UpgradeMode> availableUpgradeMode =
+                        getAvailableUpgradeMode(flinkApp, deployConfig);
+                if (availableUpgradeMode.isEmpty()) {
+                    return;
+                }
+                // We must record the upgrade mode used to the status later
+                desiredJobSpec.setUpgradeMode(availableUpgradeMode.get());
+                flinkService.cancelJob(flinkApp, availableUpgradeMode.get());
                 stateAfterReconcile = JobState.SUSPENDED;
             }
             if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
@@ -128,18 +130,18 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                         desiredJobSpec,
                         status,
                         deployConfig,
-                        upgradeMode == UpgradeMode.LAST_STATE);
+                        // We decide to enforce HA based on how job was previously suspended
+                        lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
                 stateAfterReconcile = JobState.RUNNING;
             }
             ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, stateAfterReconcile);
             IngressUtils.updateIngressRules(
                     deployMeta, currentDeploySpec, deployConfig, kubernetesClient);
         } else if (ReconciliationUtils.shouldRollBack(
-                flinkService, reconciliationStatus, deployConfig)) {
+                flinkService, reconciliationStatus, observeConfig)) {
             rollbackApplication(flinkApp);
-        } else if (ReconciliationUtils.shouldRecoverDeployment(
-                configManager.getObserveConfig(flinkApp), flinkApp)) {
-            recoverJmDeployment(flinkApp);
+        } else if (ReconciliationUtils.shouldRecoverDeployment(observeConfig, flinkApp)) {
+            recoverJmDeployment(flinkApp, observeConfig);
         } else if (SavepointUtils.shouldTriggerSavepoint(desiredJobSpec, status)
                 && ReconciliationUtils.isJobRunning(status)) {
             triggerSavepoint(flinkApp);
@@ -181,18 +183,20 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                 flinkApp.getMetadata(), rollbackSpec, rollbackConfig, kubernetesClient);
     }
 
-    private void recoverJmDeployment(FlinkDeployment deployment) throws Exception {
+    private void recoverJmDeployment(FlinkDeployment deployment, Configuration observeConfig)
+            throws Exception {
         LOG.info("Missing Flink Cluster deployment, trying to recover...");
         FlinkDeploymentSpec specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
         restoreJob(
                 deployment.getMetadata(),
                 specToRecover.getJob(),
                 deployment.getStatus(),
-                configManager.getDeployConfig(deployment.getMetadata(), specToRecover),
+                observeConfig,
                 true);
     }
 
-    private Optional<UpgradeMode> getAvailableUpgradeMode(FlinkDeployment deployment) {
+    private Optional<UpgradeMode> getAvailableUpgradeMode(
+            FlinkDeployment deployment, Configuration deployConfig) {
         var status = deployment.getStatus();
         var upgradeMode = deployment.getSpec().getJob().getUpgradeMode();
         var changedToLastStateWithoutHa =
@@ -220,7 +224,9 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             }
         }
 
-        if (flinkService.isHaMetadataAvailable(configManager.getObserveConfig(deployment))) {
+        if (FlinkUtils.isKubernetesHAActivated(deployConfig)
+                && FlinkUtils.isKubernetesHAActivated(configManager.getObserveConfig(deployment))
+                && flinkService.isHaMetadataAvailable(deployConfig)) {
             LOG.debug(
                     "Job is not running but HA metadata is available for last state restore, ready for upgrade");
             return Optional.of(UpgradeMode.LAST_STATE);
@@ -247,18 +253,18 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             ObjectMeta meta,
             JobSpec jobSpec,
             FlinkDeploymentStatus status,
-            Configuration effectiveConfig,
+            Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
             throws Exception {
 
         if (savepoint.isPresent()) {
-            effectiveConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, savepoint.get());
+            deployConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, savepoint.get());
         } else {
-            effectiveConfig.removeConfig(SavepointConfigOptions.SAVEPOINT_PATH);
+            deployConfig.removeConfig(SavepointConfigOptions.SAVEPOINT_PATH);
         }
 
-        setRandomJobResultStorePath(effectiveConfig);
+        setRandomJobResultStorePath(deployConfig);
 
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.MISSING) {
             if (!ReconciliationUtils.isJobInTerminalState(status)) {
@@ -269,13 +275,13 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             flinkService.deleteClusterDeployment(meta, status, false);
             FlinkUtils.waitForClusterShutdown(
                     kubernetesClient,
-                    effectiveConfig,
+                    deployConfig,
                     configManager
                             .getOperatorConfiguration()
                             .getFlinkShutdownClusterTimeout()
                             .toSeconds());
         }
-        flinkService.submitApplicationCluster(jobSpec, effectiveConfig, requireHaMetadata);
+        flinkService.submitApplicationCluster(jobSpec, deployConfig, requireHaMetadata);
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
     }
@@ -284,7 +290,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             ObjectMeta meta,
             JobSpec jobSpec,
             FlinkDeploymentStatus status,
-            Configuration effectiveConfig,
+            Configuration deployConfig,
             boolean requireHaMetadata)
             throws Exception {
         Optional<String> savepointOpt = Optional.empty();
@@ -295,7 +301,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                             .flatMap(s -> Optional.ofNullable(s.getLocation()));
         }
 
-        deployFlinkJob(meta, jobSpec, status, effectiveConfig, savepointOpt, requireHaMetadata);
+        deployFlinkJob(meta, jobSpec, status, deployConfig, savepointOpt, requireHaMetadata);
     }
 
     // Workaround for https://issues.apache.org/jira/browse/FLINK-27569

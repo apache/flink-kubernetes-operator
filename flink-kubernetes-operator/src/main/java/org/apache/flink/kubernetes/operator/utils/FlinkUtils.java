@@ -246,6 +246,7 @@ public class FlinkUtils {
 
     public static boolean isHaMetadataAvailable(
             Configuration conf, KubernetesClient kubernetesClient) {
+
         String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
 
