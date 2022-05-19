@@ -633,6 +633,14 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.MISSING,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                UpgradeMode.LAST_STATE,
+                appCluster
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getUpgradeMode());
         flinkService.setPortReady(true);
 
         testController.reconcile(appCluster, context);

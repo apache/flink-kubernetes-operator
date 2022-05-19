@@ -38,6 +38,7 @@ import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.messages.Acknowledge;
@@ -115,6 +116,10 @@ public class TestingFlinkService extends FlinkService {
     @Override
     public void submitApplicationCluster(
             JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
+
+        if (requireHaMetadata) {
+            validateHaMetadataExists(conf);
+        }
         if (deployFailure) {
             throw new DeploymentFailedException("Deployment failure", "test");
         }
@@ -134,7 +139,7 @@ public class TestingFlinkService extends FlinkService {
 
     @Override
     public boolean isHaMetadataAvailable(Configuration conf) {
-        return haDataAvailable;
+        return FlinkUtils.isKubernetesHAActivated(conf) && haDataAvailable;
     }
 
     public void setHaDataAvailable(boolean haDataAvailable) {
