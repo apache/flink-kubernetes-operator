@@ -26,7 +26,24 @@ under the License.
 
 # Metrics
 
-The Flink Kubernetes Operator (Operator) extends the [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/) that allows gathering and exposing metrics to centralized monitoring solutions. The well known [Metric Reporters](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/metric_reporters) are shipped in the operator image and are ready to use.
+The Flink Kubernetes Operator (Operator) extends the [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/) that allows gathering and exposing metrics to centralized monitoring solutions. 
+
+
+## Deployment Metrics
+The Operator gathers aggregates metrics about managed resources.
+
+| Scope     | Metrics                        | Description                                                                                                                                                 | Type  |
+|-----------|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|
+| Namespace | FlinkDeployment.Count          | Number of managed FlinkDeployment instances per namespace                                                                                                   | Gauge |
+| Namespace | FlinkDeployment.<Status>.Count | Number of managed FlinkDeployment resources per <Status> per namespace. <Status> can take values from: READY, DEPLOYED_NOT_READY, DEPLOYING, MISSING, ERROR | Gauge |
+| Namespace | FlinkSessionJob.Count          | Number of managed FlinkSessionJob instances per namespace                                                                                                   | Gauge |
+
+## System Metrics
+The Operator gathers metrics about the JVM process and exposes it similarly to core Flink [System metrics](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/#system-metrics). The list of metrics are not repeated in this document. 
+
+## Metric Reporters
+
+The well known [Metric Reporters](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/metric_reporters) are shipped in the operator image and are ready to use.
 
 In order to specify metrics configuration for the operator, simply prefix them with `kubernetes.operator.`. This logic ensures that we can easily separate Flink job and operator metrics configuration.
 
