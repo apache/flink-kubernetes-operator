@@ -140,10 +140,8 @@ public class FlinkService {
                 "Deploying application cluster{}",
                 requireHaMetadata ? " requiring last-state from HA metadata" : "");
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
-            final String clusterId =
-                    Preconditions.checkNotNull(conf.get(KubernetesConfigOptions.CLUSTER_ID));
-            final String namespace =
-                    Preconditions.checkNotNull(conf.get(KubernetesConfigOptions.NAMESPACE));
+            final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
+            final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
             // Delete the job graph in the HA ConfigMaps so that the newly changed job config(e.g.
             // parallelism) could take effect
             FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
@@ -169,7 +167,7 @@ public class FlinkService {
         return FlinkUtils.isHaMetadataAvailable(conf, kubernetesClient);
     }
 
-    private void validateHaMetadataExists(Configuration conf) {
+    protected void validateHaMetadataExists(Configuration conf) {
         if (!isHaMetadataAvailable(conf)) {
             throw new DeploymentFailedException(
                     "HA metadata not available to restore from last state. "
