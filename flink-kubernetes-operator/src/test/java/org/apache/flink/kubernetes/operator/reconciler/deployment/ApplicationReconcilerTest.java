@@ -37,6 +37,7 @@ import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
@@ -46,6 +47,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -67,15 +69,22 @@ public class ApplicationReconcilerTest {
 
     private KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+    private TestingFlinkService flinkService = new TestingFlinkService();
+    private ApplicationReconciler reconciler;
+
+    @BeforeEach
+    public void before() {
+        var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
+        reconciler =
+                new ApplicationReconciler(
+                        kubernetesClient, flinkService, configManager, eventRecorder);
+    }
 
     @ParameterizedTest
     @EnumSource(FlinkVersion.class)
     public void testUpgrade(FlinkVersion flinkVersion) throws Exception {
-        TestingFlinkService flinkService = new TestingFlinkService();
         Context context = flinkService.getContext();
 
-        ApplicationReconciler reconciler =
-                new ApplicationReconciler(kubernetesClient, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster(flinkVersion);
 
         reconciler.reconcile(deployment, context);
@@ -168,11 +177,8 @@ public class ApplicationReconcilerTest {
     @Test
     public void testUpgradeModeChangeFromSavepointToLastState() throws Exception {
         final String expectedSavepointPath = "savepoint_0";
-        TestingFlinkService flinkService = new TestingFlinkService();
         Context context = flinkService.getContext();
 
-        final ApplicationReconciler reconciler =
-                new ApplicationReconciler(kubernetesClient, flinkService, configManager);
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
@@ -211,10 +217,7 @@ public class ApplicationReconcilerTest {
 
     @Test
     public void triggerSavepoint() throws Exception {
-        TestingFlinkService flinkService = new TestingFlinkService();
         Context context = flinkService.getContext();
-        ApplicationReconciler reconciler =
-                new ApplicationReconciler(kubernetesClient, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
@@ -303,12 +306,9 @@ public class ApplicationReconcilerTest {
     @Test
     public void testUpgradeModeChangedToLastStateShouldTriggerSavepointWhileHADisabled()
             throws Exception {
-        TestingFlinkService flinkService = new TestingFlinkService();
         flinkService.setHaDataAvailable(false);
         Context context = flinkService.getContext();
 
-        final ApplicationReconciler reconciler =
-                new ApplicationReconciler(kubernetesClient, flinkService, configManager);
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getSpec().getFlinkConfiguration().remove(HighAvailabilityOptions.HA_MODE.key());
 
@@ -352,11 +352,8 @@ public class ApplicationReconcilerTest {
     @Test
     public void testUpgradeModeChangedToLastStateShouldNotTriggerSavepointWhileHAEnabled()
             throws Exception {
-        TestingFlinkService flinkService = new TestingFlinkService();
         Context context = flinkService.getContext();
 
-        final ApplicationReconciler reconciler =
-                new ApplicationReconciler(kubernetesClient, flinkService, configManager);
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
@@ -389,11 +386,8 @@ public class ApplicationReconcilerTest {
 
     @Test
     public void triggerRestart() throws Exception {
-        TestingFlinkService flinkService = new TestingFlinkService();
         Context context = flinkService.getContext();
 
-        ApplicationReconciler reconciler =
-                new ApplicationReconciler(kubernetesClient, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
@@ -451,10 +445,7 @@ public class ApplicationReconcilerTest {
 
     @Test
     public void testJobUpgradeIgnorePendingSavepoint() throws Exception {
-        TestingFlinkService flinkService = new TestingFlinkService();
         Context context = flinkService.getContext();
-        ApplicationReconciler reconciler =
-                new ApplicationReconciler(kubernetesClient, flinkService, configManager);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         reconciler.reconcile(deployment, context);
         List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
@@ -489,10 +480,6 @@ public class ApplicationReconcilerTest {
 
     @Test
     public void testRandomJobResultStorePath() throws Exception {
-
-        TestingFlinkService flinkService = new TestingFlinkService();
-        ApplicationReconciler reconciler =
-                new ApplicationReconciler(kubernetesClient, flinkService, configManager);
         FlinkDeployment flinkApp = TestUtils.buildApplicationCluster();
         final String haStoragePath = "file:///flink-data/ha";
         flinkApp.getSpec()

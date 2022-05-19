@@ -29,6 +29,7 @@ under the License.
             <!-- the service impl -->
             <includes>
                 <include>org/apache/flink/kubernetes/operator/validation/TestValidator.class</include>
+                <include>org/apache/flink/kubernetes/operator/listener/TestingListener.class</include>
             </includes>
         </fileSet>
         <fileSet>

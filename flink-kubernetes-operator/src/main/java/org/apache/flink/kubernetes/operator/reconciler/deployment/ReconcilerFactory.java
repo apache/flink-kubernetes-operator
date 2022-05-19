@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 
@@ -34,15 +35,18 @@ public class ReconcilerFactory {
     private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
+    private final EventRecorder eventRecorder;
     private final Map<Mode, Reconciler<FlinkDeployment>> reconcilerMap;
 
     public ReconcilerFactory(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkConfigManager configManager) {
+            FlinkConfigManager configManager,
+            EventRecorder eventRecorder) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.configManager = configManager;
+        this.eventRecorder = eventRecorder;
         this.reconcilerMap = new ConcurrentHashMap<>();
     }
 
@@ -53,10 +57,10 @@ public class ReconcilerFactory {
                     switch (mode) {
                         case SESSION:
                             return new SessionReconciler(
-                                    kubernetesClient, flinkService, configManager);
+                                    kubernetesClient, flinkService, configManager, eventRecorder);
                         case APPLICATION:
                             return new ApplicationReconciler(
-                                    kubernetesClient, flinkService, configManager);
+                                    kubernetesClient, flinkService, configManager, eventRecorder);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

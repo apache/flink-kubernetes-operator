@@ -40,7 +40,7 @@ import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.utils.StatusHelper;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -372,7 +372,7 @@ public class ReconciliationUtils {
      * @param retryInfo Current RetryInformation
      * @param e Exception that caused the retry
      * @param metricManager Metric manager to be updated
-     * @param statusHelper StatusHelper object for patching status
+     * @param statusRecorder statusRecorder object for patching status
      * @return This always returns Empty optional currently, due to the status update logic
      */
     public static <STATUS extends CommonStatus<?>, R extends AbstractFlinkResource<?, STATUS>>
@@ -381,7 +381,7 @@ public class ReconciliationUtils {
                     Optional<RetryInfo> retryInfo,
                     Exception e,
                     MetricManager<R> metricManager,
-                    StatusHelper<STATUS> statusHelper) {
+                    StatusRecorder<STATUS> statusRecorder) {
 
         retryInfo.ifPresent(
                 r -> {
@@ -391,12 +391,12 @@ public class ReconciliationUtils {
                             r.isLastAttempt());
                 });
 
-        statusHelper.updateStatusFromCache(resource);
+        statusRecorder.updateStatusFromCache(resource);
         ReconciliationUtils.updateForReconciliationError(
                 resource,
                 (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
         metricManager.onUpdate(resource);
-        statusHelper.patchAndCacheStatus(resource);
+        statusRecorder.patchAndCacheStatus(resource);
 
         // Status was updated already, no need to return anything
         return ErrorStatusUpdateControl.noStatusUpdate();

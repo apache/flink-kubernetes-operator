@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
@@ -39,7 +40,8 @@ public class SessionObserverTest {
     public void observeSessionCluster() {
         TestingFlinkService flinkService = new TestingFlinkService();
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
-        SessionObserver observer = new SessionObserver(null, flinkService, configManager);
+        SessionObserver observer =
+                new SessionObserver(flinkService, configManager, new EventRecorder(null, null));
         deployment
                 .getStatus()
                 .getReconciliationStatus()

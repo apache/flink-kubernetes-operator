@@ -51,7 +51,8 @@ public class EventUtilsTest {
                         EventUtils.Type.Warning,
                         reason,
                         message,
-                        EventUtils.Component.Operator));
+                        EventUtils.Component.Operator,
+                        e -> {}));
         var event =
                 kubernetesClient
                         .v1()
@@ -70,7 +71,8 @@ public class EventUtilsTest {
                         EventUtils.Type.Warning,
                         reason,
                         message,
-                        EventUtils.Component.Operator));
+                        EventUtils.Component.Operator,
+                        e -> {}));
         event =
                 kubernetesClient
                         .v1()

@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
@@ -36,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class SessionReconcilerTest {
 
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+    private final EventRecorder eventRecorder = new EventRecorder(null, (r, e) -> {});
 
     @Test
     public void testStartSession() throws Exception {
@@ -50,7 +52,8 @@ public class SessionReconcilerTest {
                     }
                 };
 
-        SessionReconciler reconciler = new SessionReconciler(null, flinkService, configManager);
+        SessionReconciler reconciler =
+                new SessionReconciler(null, flinkService, configManager, eventRecorder);
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         reconciler.reconcile(deployment, context);
         assertEquals(1, count.get());

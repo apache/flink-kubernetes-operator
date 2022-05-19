@@ -24,20 +24,20 @@ import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
-import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
+import org.apache.flink.kubernetes.operator.listener.ListenerUtils;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
-import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.observer.sessionjob.SessionJobObserver;
-import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
-import org.apache.flink.kubernetes.operator.utils.StatusHelper;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 import org.apache.flink.metrics.MetricGroup;
@@ -53,6 +53,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -70,6 +71,7 @@ public class FlinkOperator {
     private final Set<FlinkResourceValidator> validators;
     private final Set<RegisteredController> registeredControllers = new HashSet<>();
     private final MetricGroup metricGroup;
+    private final Collection<FlinkResourceListener> listeners;
 
     public FlinkOperator(@Nullable Configuration conf) {
         this.client = new DefaultKubernetesClient();
@@ -80,6 +82,7 @@ public class FlinkOperator {
         this.operator = new Operator(client, this::overrideOperatorConfigs);
         this.flinkService = new FlinkService(client, configManager);
         this.validators = ValidatorUtils.discoverValidators(configManager);
+        this.listeners = ListenerUtils.discoverListeners(configManager);
         this.metricGroup =
                 OperatorMetricUtils.initOperatorMetrics(configManager.getDefaultConfig());
         PluginManager pluginManager =
@@ -109,13 +112,14 @@ public class FlinkOperator {
     }
 
     private void registerDeploymentController() {
-        StatusHelper<FlinkDeploymentStatus> statusHelper = new StatusHelper<>(client);
-        ReconcilerFactory reconcilerFactory =
-                new ReconcilerFactory(client, flinkService, configManager);
-        ObserverFactory observerFactory =
-                new ObserverFactory(client, flinkService, configManager, statusHelper);
+        var statusRecorder = StatusRecorder.<FlinkDeploymentStatus>create(client, listeners);
+        var eventRecorder = EventRecorder.create(client, listeners);
+        var reconcilerFactory =
+                new ReconcilerFactory(client, flinkService, configManager, eventRecorder);
+        var observerFactory =
+                new ObserverFactory(flinkService, configManager, statusRecorder, eventRecorder);
 
-        FlinkDeploymentController controller =
+        var controller =
                 new FlinkDeploymentController(
                         configManager,
                         client,
@@ -123,24 +127,25 @@ public class FlinkOperator {
                         reconcilerFactory,
                         observerFactory,
                         new MetricManager<>(metricGroup),
-                        statusHelper);
+                        statusRecorder,
+                        eventRecorder);
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 
     private void registerSessionJobController() {
-        Reconciler<FlinkSessionJob> reconciler =
-                new FlinkSessionJobReconciler(client, flinkService, configManager);
-        StatusHelper<FlinkSessionJobStatus> statusHelper = new StatusHelper<>(client);
-        Observer<FlinkSessionJob> observer =
-                new SessionJobObserver(flinkService, configManager, statusHelper);
-        FlinkSessionJobController controller =
+        var reconciler = new FlinkSessionJobReconciler(client, flinkService, configManager);
+        var eventRecorder = EventRecorder.create(client, listeners);
+        var statusRecorder = StatusRecorder.<FlinkSessionJobStatus>create(client, listeners);
+        var observer =
+                new SessionJobObserver(flinkService, configManager, statusRecorder, eventRecorder);
+        var controller =
                 new FlinkSessionJobController(
                         configManager,
                         validators,
                         reconciler,
                         observer,
                         new MetricManager<>(metricGroup),
-                        statusHelper);
+                        statusRecorder);
 
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }

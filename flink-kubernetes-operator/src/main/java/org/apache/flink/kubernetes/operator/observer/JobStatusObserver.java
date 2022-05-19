@@ -21,6 +21,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
@@ -38,9 +39,11 @@ public abstract class JobStatusObserver<CTX> {
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
     private static final int MAX_ERROR_STRING_LENGTH = 512;
     private final FlinkService flinkService;
+    private final EventRecorder eventRecorder;
 
-    public JobStatusObserver(FlinkService flinkService) {
+    public JobStatusObserver(FlinkService flinkService, EventRecorder eventRecorder) {
         this.flinkService = flinkService;
+        this.eventRecorder = eventRecorder;
     }
 
     /**
@@ -135,8 +138,7 @@ public abstract class JobStatusObserver<CTX> {
             LOG.info(message);
 
             setErrorIfPresent(resource, clusterJobStatus, deployedConfig);
-            EventUtils.createOrUpdateEvent(
-                    flinkService.getKubernetesClient(),
+            eventRecorder.triggerEvent(
                     resource,
                     EventUtils.Type.Normal,
                     "Status Changed",

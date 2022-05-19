@@ -23,9 +23,8 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.StatusHelper;
-
-import io.fabric8.kubernetes.client.KubernetesClient;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,21 +32,21 @@ import java.util.concurrent.ConcurrentHashMap;
 /** The factory to create the observer based ob the {@link FlinkDeployment} mode. */
 public class ObserverFactory {
 
-    private final KubernetesClient kubernetesClient;
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
-    private final StatusHelper<FlinkDeploymentStatus> statusHelper;
+    private final StatusRecorder<FlinkDeploymentStatus> statusRecorder;
+    private final EventRecorder eventRecorder;
     private final Map<Mode, Observer<FlinkDeployment>> observerMap;
 
     public ObserverFactory(
-            KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            StatusHelper<FlinkDeploymentStatus> statusHelper) {
-        this.kubernetesClient = kubernetesClient;
+            StatusRecorder<FlinkDeploymentStatus> statusRecorder,
+            EventRecorder eventRecorder) {
         this.flinkService = flinkService;
         this.configManager = configManager;
-        this.statusHelper = statusHelper;
+        this.statusRecorder = statusRecorder;
+        this.eventRecorder = eventRecorder;
         this.observerMap = new ConcurrentHashMap<>();
     }
 
@@ -57,11 +56,10 @@ public class ObserverFactory {
                 mode -> {
                     switch (mode) {
                         case SESSION:
-                            return new SessionObserver(
-                                    kubernetesClient, flinkService, configManager);
+                            return new SessionObserver(flinkService, configManager, eventRecorder);
                         case APPLICATION:
                             return new ApplicationObserver(
-                                    kubernetesClient, flinkService, configManager, statusHelper);
+                                    flinkService, configManager, statusRecorder, eventRecorder);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));
