@@ -277,16 +277,16 @@ under the License.
                 <artifactId>maven-assembly-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>create-test-validator-jar</id>
+                        <id>create-test-plugin-jar</id>
                         <phase>process-test-classes</phase>
                         <goals>
                             <goal>single</goal>
                         </goals>
                         <configuration>
-                            <finalName>test-validator</finalName>
+                            <finalName>test-plugins</finalName>
                             <attach>false</attach>
                             <descriptors>
-                                <descriptor>src/test/assembly/test-validator-assembly.xml</descriptor>
+                                <descriptor>src/test/assembly/test-plugins-assembly.xml</descriptor>
                             </descriptors>
                         </configuration>
                     </execution>

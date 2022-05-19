@@ -30,9 +30,10 @@ import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.ConfigOptionUtils;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
-import org.apache.flink.kubernetes.operator.utils.StatusHelper;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,15 +50,18 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
 
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
-    private final StatusHelper<STATUS> statusHelper;
+    private final StatusRecorder<STATUS> statusRecorder;
+    private final EventRecorder eventRecorder;
 
     public SavepointObserver(
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            StatusHelper<STATUS> statusHelper) {
+            StatusRecorder<STATUS> statusRecorder,
+            EventRecorder eventRecorder) {
         this.flinkService = flinkService;
         this.configManager = configManager;
-        this.statusHelper = statusHelper;
+        this.statusRecorder = statusRecorder;
+        this.eventRecorder = eventRecorder;
     }
 
     public void observeSavepointStatus(
@@ -114,8 +118,7 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
                                 + err);
                 ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                         savepointInfo, resource);
-                EventUtils.createOrUpdateEvent(
-                        flinkService.getKubernetesClient(),
+                eventRecorder.triggerEvent(
                         resource,
                         EventUtils.Type.Warning,
                         "SavepointError",
@@ -219,7 +222,7 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
             LOG.info(
                     "Updating resource status after observing new last savepoint {}",
                     currentLastSpPath);
-            statusHelper.patchAndCacheStatus(resource);
+            statusRecorder.patchAndCacheStatus(resource);
         }
     }
 }

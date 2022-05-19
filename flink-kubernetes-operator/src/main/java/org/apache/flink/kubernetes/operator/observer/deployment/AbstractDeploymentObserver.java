@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
@@ -43,7 +44,6 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,17 +58,17 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
 
     protected final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    protected final KubernetesClient kubernetesClient;
     protected final FlinkService flinkService;
     protected final FlinkConfigManager configManager;
+    protected final EventRecorder eventRecorder;
 
     public AbstractDeploymentObserver(
-            KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkConfigManager configManager) {
-        this.kubernetesClient = kubernetesClient;
+            FlinkConfigManager configManager,
+            EventRecorder eventRecorder) {
         this.flinkService = flinkService;
         this.configManager = configManager;
+        this.eventRecorder = eventRecorder;
     }
 
     @Override
@@ -101,7 +101,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
             observeClusterInfo(flinkApp, observeConfig);
         }
 
-        SavepointUtils.resetTriggerIfJobNotRunning(flinkService.getKubernetesClient(), flinkApp);
+        SavepointUtils.resetTriggerIfJobNotRunning(flinkApp, eventRecorder);
         clearErrorsIfDeploymentIsHealthy(flinkApp);
     }
 
@@ -244,8 +244,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         String err = "Missing JobManager deployment";
         logger.error(err);
         ReconciliationUtils.updateForReconciliationError(deployment, err);
-        EventUtils.createOrUpdateEvent(
-                kubernetesClient,
+        eventRecorder.triggerEvent(
                 deployment,
                 EventUtils.Type.Warning,
                 "Missing",

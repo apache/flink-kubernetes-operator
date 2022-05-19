@@ -19,7 +19,12 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -30,12 +35,14 @@ import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 
 /** Helper class for status management and updates. */
-public class StatusHelper<STATUS extends CommonStatus<?>> {
+public class StatusRecorder<STATUS extends CommonStatus<?>> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(StatusHelper.class);
+    private static final Logger LOG = LoggerFactory.getLogger(StatusRecorder.class);
 
     protected final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -43,9 +50,13 @@ public class StatusHelper<STATUS extends CommonStatus<?>> {
             new ConcurrentHashMap<>();
 
     private final KubernetesClient client;
+    private final BiConsumer<AbstractFlinkResource<?, STATUS>, STATUS> statusUpdateListener;
 
-    public StatusHelper(KubernetesClient client) {
+    public StatusRecorder(
+            KubernetesClient client,
+            BiConsumer<AbstractFlinkResource<?, STATUS>, STATUS> statusUpdateListener) {
         this.client = client;
+        this.statusUpdateListener = statusUpdateListener;
     }
 
     /**
@@ -57,8 +68,7 @@ public class StatusHelper<STATUS extends CommonStatus<?>> {
      * @param resource Resource for which status update should be performed
      */
     @SneakyThrows
-    public <T extends CustomResource<?, STATUS>> void patchAndCacheStatus(T resource) {
-
+    public <T extends AbstractFlinkResource<?, STATUS>> void patchAndCacheStatus(T resource) {
         Class<T> resourceClass = (Class<T>) resource.getClass();
         String namespace = resource.getMetadata().getNamespace();
         String name = resource.getMetadata().getName();
@@ -67,13 +77,20 @@ public class StatusHelper<STATUS extends CommonStatus<?>> {
         // in the meantime
         resource.getMetadata().setResourceVersion(null);
 
-        ObjectNode newStatus = objectMapper.convertValue(resource.getStatus(), ObjectNode.class);
-        ObjectNode previousStatus = statusCache.put(getKey(resource), newStatus);
+        ObjectNode newStatusNode =
+                objectMapper.convertValue(resource.getStatus(), ObjectNode.class);
+        ObjectNode previousStatusNode = statusCache.put(getKey(resource), newStatusNode);
 
-        if (newStatus.equals(previousStatus)) {
+        if (newStatusNode.equals(previousStatusNode)) {
             LOG.debug("No status change.");
             return;
         }
+
+        var statusClass =
+                (resource instanceof FlinkDeployment)
+                        ? FlinkDeploymentStatus.class
+                        : FlinkSessionJobStatus.class;
+        var prevStatus = (STATUS) objectMapper.convertValue(previousStatusNode, statusClass);
 
         Exception err = null;
         for (int i = 0; i < 3; i++) {
@@ -84,6 +101,7 @@ public class StatusHelper<STATUS extends CommonStatus<?>> {
                         .inNamespace(namespace)
                         .withName(name)
                         .patchStatus(resource);
+                statusUpdateListener.accept(resource, prevStatus);
                 return;
             } catch (Exception e) {
                 LOG.error("Error while patching status, retrying {}/3...", (i + 1), e);
@@ -105,12 +123,16 @@ public class StatusHelper<STATUS extends CommonStatus<?>> {
      * @param resource Resource for which the status should be updated from the cache
      */
     public <T extends CustomResource<?, STATUS>> void updateStatusFromCache(T resource) {
-        var cachedStatus = statusCache.get(getKey(resource));
+        var key = getKey(resource);
+        var cachedStatus = statusCache.get(key);
         if (cachedStatus != null) {
             resource.setStatus(
                     (STATUS)
                             objectMapper.convertValue(
                                     cachedStatus, resource.getStatus().getClass()));
+        } else {
+            // Initialize cache with current status copy
+            statusCache.put(key, objectMapper.convertValue(resource.getStatus(), ObjectNode.class));
         }
     }
 
@@ -121,5 +143,39 @@ public class StatusHelper<STATUS extends CommonStatus<?>> {
 
     protected static Tuple2<String, String> getKey(HasMetadata resource) {
         return Tuple2.of(resource.getMetadata().getNamespace(), resource.getMetadata().getName());
+    }
+
+    public static <S extends CommonStatus<?>> StatusRecorder<S> create(
+            KubernetesClient kubernetesClient, Collection<FlinkResourceListener> listeners) {
+        BiConsumer<AbstractFlinkResource<?, S>, S> consumer =
+                (resource, previousStatus) -> {
+                    var ctx =
+                            new FlinkResourceListener.StatusUpdateContext() {
+                                @Override
+                                public S getPreviousStatus() {
+                                    return previousStatus;
+                                }
+
+                                @Override
+                                public AbstractFlinkResource<?, S> getFlinkResource() {
+                                    return resource;
+                                }
+
+                                @Override
+                                public KubernetesClient getKubernetesClient() {
+                                    return kubernetesClient;
+                                }
+                            };
+
+                    listeners.forEach(
+                            listener -> {
+                                if (resource instanceof FlinkDeployment) {
+                                    listener.onDeploymentStatusUpdate(ctx);
+                                } else {
+                                    listener.onSessionJobStatusUpdate(ctx);
+                                }
+                            });
+                };
+        return new StatusRecorder<>(kubernetesClient, consumer);
     }
 }

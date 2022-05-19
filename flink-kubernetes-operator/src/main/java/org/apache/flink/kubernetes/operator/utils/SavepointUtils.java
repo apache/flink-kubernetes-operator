@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -140,7 +139,7 @@ public class SavepointUtils {
     }
 
     public static void resetTriggerIfJobNotRunning(
-            KubernetesClient client, AbstractFlinkResource<?, ?> resource) {
+            AbstractFlinkResource<?, ?> resource, EventRecorder eventRecorder) {
         var status = resource.getStatus();
         var jobStatus = status.getJobStatus();
         if (!ReconciliationUtils.isJobRunning(status)
@@ -149,8 +148,7 @@ public class SavepointUtils {
             ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(savepointInfo, resource);
             savepointInfo.resetTrigger();
             LOG.error("Job is not running, cancelling savepoint operation");
-            EventUtils.createOrUpdateEvent(
-                    client,
+            eventRecorder.triggerEvent(
                     resource,
                     EventUtils.Type.Warning,
                     "SavepointError",

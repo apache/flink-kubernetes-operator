@@ -28,16 +28,16 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Test for {@link StatusHelper}. */
+/** Test for {@link StatusRecorder}. */
 @EnableKubernetesMockClient(crud = true)
-public class StatusHelperTest {
+public class StatusRecorderTest {
 
     private KubernetesClient kubernetesClient;
     private KubernetesMockServer mockServer;
 
     @Test
     public void testPatchOnlyWhenChanged() throws InterruptedException {
-        var helper = new StatusHelper<FlinkDeploymentStatus>(kubernetesClient);
+        var helper = new StatusRecorder<FlinkDeploymentStatus>(kubernetesClient, (e, s) -> {});
         var deployment = TestUtils.buildApplicationCluster();
         kubernetesClient.resource(deployment).createOrReplace();
         var lastRequest = mockServer.getLastRequest();

@@ -41,7 +41,8 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
-import org.apache.flink.kubernetes.operator.utils.StatusHelper;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.metrics.testutils.MetricListener;
 
@@ -68,8 +69,13 @@ import okhttp3.Headers;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.Assertions;
 
+import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
@@ -79,6 +85,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+
+import static org.junit.Assert.assertTrue;
 
 /** Testing utilities. */
 public class TestUtils {
@@ -91,6 +99,9 @@ public class TestUtils {
     public static final String IMAGE = String.format("flink:%s", FLINK_VERSION);
     public static final String IMAGE_POLICY = "IfNotPresent";
     public static final String SAMPLE_JAR = "local:///tmp/sample.jar";
+
+    private static final String TEST_PLUGINS = "test-plugins";
+    private static final String PlUGINS_JAR = TEST_PLUGINS + "-test-jar.jar";
 
     public static FlinkDeployment buildSessionCluster() {
         return buildSessionCluster(FlinkVersion.v1_15);
@@ -420,6 +431,17 @@ public class TestUtils {
         };
     }
 
+    public static String getTestPluginsRootDir(Path temporaryFolder) throws IOException {
+        File testValidatorFolder = new File(temporaryFolder.toFile(), TEST_PLUGINS);
+        assertTrue(testValidatorFolder.mkdirs());
+        File testValidatorJar = new File("target", PlUGINS_JAR);
+        assertTrue(testValidatorJar.exists());
+        Files.copy(
+                testValidatorJar.toPath(), Paths.get(testValidatorFolder.toString(), PlUGINS_JAR));
+
+        return temporaryFolder.toAbsolutePath().toString();
+    }
+
     // This code is taken slightly modified from: http://stackoverflow.com/a/7201825/568695
     // it changes the environment variables of this JVM. Use only for testing purposes!
     @SuppressWarnings("unchecked")
@@ -455,15 +477,18 @@ public class TestUtils {
             KubernetesClient kubernetesClient,
             TestingFlinkService flinkService) {
 
-        var statusHelper = new StatusHelper<FlinkDeploymentStatus>(kubernetesClient);
+        var statusRecorder =
+                new StatusRecorder<FlinkDeploymentStatus>(kubernetesClient, (r, s) -> {});
+        var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
         return new FlinkDeploymentController(
                 configManager,
                 kubernetesClient,
                 ValidatorUtils.discoverValidators(configManager),
-                new ReconcilerFactory(kubernetesClient, flinkService, configManager),
-                new ObserverFactory(kubernetesClient, flinkService, configManager, statusHelper),
+                new ReconcilerFactory(kubernetesClient, flinkService, configManager, eventRecorder),
+                new ObserverFactory(flinkService, configManager, statusRecorder, eventRecorder),
                 new MetricManager<>(new MetricListener().getMetricGroup()),
-                statusHelper);
+                statusRecorder,
+                eventRecorder);
     }
 
     /** Testing ResponseProvider. */

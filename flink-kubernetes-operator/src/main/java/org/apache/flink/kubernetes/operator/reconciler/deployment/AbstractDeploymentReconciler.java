@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -40,16 +41,19 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
     private static final Logger LOG = LoggerFactory.getLogger(AbstractDeploymentReconciler.class);
 
     protected final FlinkConfigManager configManager;
+    protected final EventRecorder eventRecorder;
     protected final KubernetesClient kubernetesClient;
     protected final FlinkService flinkService;
 
     public AbstractDeploymentReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkConfigManager configManager) {
+            FlinkConfigManager configManager,
+            EventRecorder eventRecorder) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.configManager = configManager;
+        this.eventRecorder = eventRecorder;
     }
 
     @Override

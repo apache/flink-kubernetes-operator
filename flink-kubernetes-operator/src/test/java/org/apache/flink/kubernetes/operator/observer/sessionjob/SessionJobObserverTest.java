@@ -23,15 +23,18 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.TestingStatusHelper;
+import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -39,16 +42,25 @@ import java.util.Map;
 /** Tests for {@link SessionJobObserver}. */
 @EnableKubernetesMockClient(crud = true)
 public class SessionJobObserverTest {
+
     private KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+    private final TestingFlinkService flinkService = new TestingFlinkService();
+    private SessionJobObserver observer;
+    private FlinkSessionJobReconciler reconciler;
+
+    @BeforeEach
+    public void before() {
+        var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
+        TestingStatusRecorder<FlinkSessionJobStatus> statusRecorder = new TestingStatusRecorder<>();
+        observer =
+                new SessionJobObserver(flinkService, configManager, statusRecorder, eventRecorder);
+        reconciler = new FlinkSessionJobReconciler(kubernetesClient, flinkService, configManager);
+    }
 
     @Test
     public void testBasicObserve() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
-        final var flinkService = new TestingFlinkService(kubernetesClient);
-        final var reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
-        final var observer =
-                new SessionJobObserver(flinkService, configManager, new TestingStatusHelper<>());
         final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
 
         // observe the brand new job, nothing to do.
@@ -106,10 +118,6 @@ public class SessionJobObserverTest {
     @Test
     public void testObserveWithEffectiveConfig() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
-        final var flinkService = new TestingFlinkService(kubernetesClient);
-        final var reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
-        final var observer =
-                new SessionJobObserver(flinkService, configManager, new TestingStatusHelper<>());
         final var readyContext =
                 TestUtils.createContextWithReadyFlinkDeployment(
                         Map.of(RestOptions.PORT.key(), "8088"));
@@ -132,10 +140,6 @@ public class SessionJobObserverTest {
     @Test
     public void testObserveSavepoint() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
-        final var flinkService = new TestingFlinkService(kubernetesClient);
-        final var reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
-        final var observer =
-                new SessionJobObserver(flinkService, configManager, new TestingStatusHelper<>());
         final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
 
         // submit job

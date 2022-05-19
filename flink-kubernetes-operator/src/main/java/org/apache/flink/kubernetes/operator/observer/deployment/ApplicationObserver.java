@@ -27,10 +27,10 @@ import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.ApplicationObserverContext;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.StatusHelper;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
 import java.util.List;
@@ -46,14 +46,15 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     private final JobStatusObserver<ApplicationObserverContext> jobStatusObserver;
 
     public ApplicationObserver(
-            KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            StatusHelper<FlinkDeploymentStatus> statusHelper) {
-        super(kubernetesClient, flinkService, configManager);
-        this.savepointObserver = new SavepointObserver<>(flinkService, configManager, statusHelper);
+            StatusRecorder<FlinkDeploymentStatus> statusRecorder,
+            EventRecorder eventRecorder) {
+        super(flinkService, configManager, eventRecorder);
+        this.savepointObserver =
+                new SavepointObserver(flinkService, configManager, statusRecorder, eventRecorder);
         this.jobStatusObserver =
-                new JobStatusObserver<>(flinkService) {
+                new JobStatusObserver<>(flinkService, eventRecorder) {
                     @Override
                     public void onTimeout(ApplicationObserverContext ctx) {
                         observeJmDeployment(ctx.flinkApp, ctx.context, ctx.deployedConfig);

@@ -1,5 +1,5 @@
 ---
-title: "Validator"
+title: "Custom Resource Validators"
 weight: 5
 type: docs
 aliases:
@@ -26,21 +26,21 @@ under the License.
 
 # Custom `FlinkResourceValidator` implementation
 
-`FlinkResourceValidator`, an interface for validating the resources of `FlinkDeployment` and `FlinkSessionJob`,  is a pluggable component based on the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism. During development, we can customize the implementation of `FlinkResourceValidator` and make sure to retain the service definition in `META-INF/services`. 
+`FlinkResourceValidator`, an interface for validating the resources of `FlinkDeployment` and `FlinkSessionJob`,  is a pluggable component based on the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism. During development, we can customize the implementation of `FlinkResourceValidator` and make sure to retain the service definition in `META-INF/services`.
 The following steps demonstrate how to develop and use a custom validator.
 
 1. Implement `FlinkResourceValidator` interface:
     ```java
     package org.apache.flink.kubernetes.operator.validation;
-   
+
     import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
     import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
-   
+
     import java.util.Optional;
-   
+
     /** Custom validator implementation of {@link FlinkResourceValidator}. */
     public class CustomValidator implements FlinkResourceValidator {
-   
+
         @Override
         public Optional<String> validateDeployment(FlinkDeployment deployment) {
             if (deployment.getSpec().getFlinkVersion() == null) {
@@ -48,7 +48,7 @@ The following steps demonstrate how to develop and use a custom validator.
             }
             return Optional.empty();
         }
-   
+
         @Override
         public Optional<String> validateSessionJob(
                  FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
@@ -67,7 +67,7 @@ The following steps demonstrate how to develop and use a custom validator.
 
 3. Use the Maven tool to package the project and generate the custom validator JAR.
 
-4. Create Dockerfile to build a custom image from the `apache/flink-kubernetes-operator` official image and copy the generated JAR to custom validator plugin directory. 
+4. Create Dockerfile to build a custom image from the `apache/flink-kubernetes-operator` official image and copy the generated JAR to custom validator plugin directory.
     `/opt/flink/plugins` is the value of `FLINK_PLUGINS_DIR` environment variable in the flink-kubernetes-operator helm chart. The structure of custom validator directory under `/opt/flink/plugins` is as follows:
     ```text
     /opt/flink/plugins
@@ -75,7 +75,7 @@ The following steps demonstrate how to develop and use a custom validator.
         │   ├── custom-validator.jar
         └── ...
     ```
-    
+
     With the custom validator directory location, the Dockerfile is defined as follows:
     ```shell script
     FROM apache/flink-kubernetes-operator

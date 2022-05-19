@@ -20,15 +20,19 @@ package org.apache.flink.kubernetes.operator.observer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.TestingStatusHelper;
+import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -39,15 +43,25 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link SavepointObserver}. */
+@EnableKubernetesMockClient(crud = true)
 public class SavepointObserverTest {
 
+    private KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private final TestingFlinkService flinkService = new TestingFlinkService();
+    private SavepointObserver observer;
+    private final EventRecorder eventRecorder = new EventRecorder(null, (r, e) -> {});
+
+    @BeforeEach
+    public void before() {
+        var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
+        observer =
+                new SavepointObserver(
+                        flinkService, configManager, new TestingStatusRecorder<>(), eventRecorder);
+    }
 
     @Test
     public void testBasicObserve() {
-        SavepointObserver observer =
-                new SavepointObserver(flinkService, configManager, new TestingStatusHelper<>());
         SavepointInfo spInfo = new SavepointInfo();
         Assertions.assertTrue(spInfo.getSavepointHistory().isEmpty());
 
@@ -67,8 +81,6 @@ public class SavepointObserverTest {
                 KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
                 Duration.ofMillis(5));
 
-        SavepointObserver observer =
-                new SavepointObserver(flinkService, configManager, new TestingStatusHelper<>());
         SavepointInfo spInfo = new SavepointInfo();
 
         Savepoint sp1 = new Savepoint(1, "sp1", SavepointTriggerType.MANUAL);
@@ -98,9 +110,6 @@ public class SavepointObserverTest {
                 KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD,
                 Duration.ofMillis(5));
         configManager.updateDefaultConfig(conf);
-
-        SavepointObserver observer =
-                new SavepointObserver(flinkService, configManager, new TestingStatusHelper<>());
         SavepointInfo spInfo = new SavepointInfo();
 
         Savepoint sp1 = new Savepoint(1, "sp1", SavepointTriggerType.MANUAL);
@@ -135,8 +144,6 @@ public class SavepointObserverTest {
         jobStatus.setState("RUNNING");
 
         var savepointInfo = jobStatus.getSavepointInfo();
-        var observer =
-                new SavepointObserver(flinkService, configManager, new TestingStatusHelper<>());
         flinkService.triggerSavepoint(null, SavepointTriggerType.PERIODIC, savepointInfo, conf);
 
         var triggerTs = savepointInfo.getTriggerTimestamp();

@@ -17,12 +17,14 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 
 import java.time.Instant;
+import java.util.function.Consumer;
 
 /**
  * The util to generate an event for the target resource. It is copied from
@@ -63,7 +65,8 @@ public class EventUtils {
             Type type,
             String reason,
             String message,
-            Component component) {
+            Component component,
+            Consumer<Event> eventListener) {
         var eventName = generateEventName(target, type, reason, message, component);
 
         var existing =
@@ -86,6 +89,7 @@ public class EventUtils {
                     .events()
                     .inNamespace(target.getMetadata().getNamespace())
                     .createOrReplace(existing);
+            eventListener.accept(existing);
             return false;
         } else {
             var event =
@@ -113,6 +117,7 @@ public class EventUtils {
                             .endMetadata()
                             .build();
             client.v1().events().inNamespace(target.getMetadata().getNamespace()).create(event);
+            eventListener.accept(event);
             return true;
         }
     }

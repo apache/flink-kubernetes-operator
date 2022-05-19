@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -62,8 +63,9 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
     public ApplicationReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkConfigManager configManager) {
-        super(kubernetesClient, flinkService, configManager);
+            FlinkConfigManager configManager,
+            EventRecorder eventRecorder) {
+        super(kubernetesClient, flinkService, configManager, eventRecorder);
     }
 
     @Override
