@@ -20,8 +20,9 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -36,7 +37,9 @@ public class StatusHelper<STATUS extends CommonStatus<?>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(StatusHelper.class);
 
-    protected final ConcurrentHashMap<Tuple2<String, String>, STATUS> statusCache =
+    protected final ObjectMapper objectMapper = new ObjectMapper();
+
+    protected final ConcurrentHashMap<Tuple2<String, String>, ObjectNode> statusCache =
             new ConcurrentHashMap<>();
 
     private final KubernetesClient client;
@@ -64,6 +67,14 @@ public class StatusHelper<STATUS extends CommonStatus<?>> {
         // in the meantime
         resource.getMetadata().setResourceVersion(null);
 
+        ObjectNode newStatus = objectMapper.convertValue(resource.getStatus(), ObjectNode.class);
+        ObjectNode previousStatus = statusCache.put(getKey(resource), newStatus);
+
+        if (newStatus.equals(previousStatus)) {
+            LOG.debug("No status change.");
+            return;
+        }
+
         Exception err = null;
         for (int i = 0; i < 3; i++) {
             // In any case we retry the status update 3 times to avoid some intermittent
@@ -73,7 +84,6 @@ public class StatusHelper<STATUS extends CommonStatus<?>> {
                         .inNamespace(namespace)
                         .withName(name)
                         .patchStatus(resource);
-                statusCache.put(getKey(resource), ReconciliationUtils.clone(resource.getStatus()));
                 return;
             } catch (Exception e) {
                 LOG.error("Error while patching status, retrying {}/3...", (i + 1), e);
@@ -97,7 +107,10 @@ public class StatusHelper<STATUS extends CommonStatus<?>> {
     public <T extends CustomResource<?, STATUS>> void updateStatusFromCache(T resource) {
         var cachedStatus = statusCache.get(getKey(resource));
         if (cachedStatus != null) {
-            resource.setStatus(ReconciliationUtils.clone(cachedStatus));
+            resource.setStatus(
+                    (STATUS)
+                            objectMapper.convertValue(
+                                    cachedStatus, resource.getStatus().getClass()));
         }
     }
 
