@@ -1,5 +1,5 @@
 ---
-title: "Upgrade"
+title: "Operator Upgrades"
 weight: 4
 type: docs
 aliases:
@@ -24,8 +24,68 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# Upgrade the CRD
-During development, we delete the old CRD and create it from scratch. In an environment with existing deployments that is not possible, as deleting the CRD would wipe out all existing CRs with the `kind: FlinkDeployment`.
+# Operator Upgrade Process
+
+This page details the process of upgrading the operator to a new version. 
+
+Please check the [compatibility page]({{< ref "docs/operations/compatibility" >}}) for the complete overview of the backward compatibility guarantees before upgrading to new versions.
+
+{{< hint danger >}}
+Upgrading from the preview/experimental `v1alpha1` release to `v1beta1` requires a one time manual process.
+Please check the [related section](#upgrading-from-v1alpha1---v1beta1).
+{{< /hint >}}
+
+## Normal Upgrade Process 
+
+Normally upgrading the operator to a new release or development version consists of the following two steps:
+1. Upgrading the CRDs
+2. Upgrading the Helm deployment
+
+We will cover these steps in detail in the next sections.
+
+### 1. Upgrading the CRD
+
+The first step of the upgrade process is upgrading the CRDs for `FlinkDeployment` and `FlinkSessionJob` resources.
+This step must be completed manually and is not part of the helm installation logic.
+
+```sh
+kubectl replace -f helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml
+kubectl replace -f helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml
+```
+
+{{< hint danger >}}
+Please note that we are using the `replace` command here which ensures that running deployments are unaffected.
+{{< /hint >}}
+
+### 2. Upgrading the Helm deployment
+
+Once we have the new CRDs versions we can upgrade the Helm deployment.
+
+```sh
+# Uninstall running Helm deployment
+helm uninstall flink-kubernetes-operator
+helm install ...
+```
+
+The exact installation command depends on your current environment and settings. Please see the [helm page]({{< ref "docs/operations/helm" >}}) for details.
+
+## Upgrading from v1alpha1 -> v1beta1
+
+The first stable `v1beta1` release introduced some breaking changes on the operator side when upgrading from the preview (`v1alpha1`) release.
+These changes require a one time manual upgrade process for the running jobs.
+
+### Upgrading without existing FlinkDeployments
+
+In an environment without any `FlinkDeployments` you simply need to uninstall the operator and delete the v1alpha1 CRD.
+
+```sh
+helm uninstall flink-kubernetes-operator
+kubectl delete crd flinkdeployments.flink.apache.org
+# Now simply reinstall the operator with the new v1beta1 version
+```
+
+### Upgrading with existing FlinkDeployments
+
 The following steps demonstrate the CRD upgrade process from `v1alpha1` to `v1beta1` in an environment with an existing [stateful](https://github.com/apache/flink-kubernetes-operator/blob/main/examples/basic-checkpoint-ha.yaml) job with an old `v1alpha1` apiVersion. After the CRD upgrade, the job will resumed from the savepoint.
 
 1. Suspend the job and create savepoint:
