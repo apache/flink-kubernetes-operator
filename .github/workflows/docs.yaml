@@ -29,6 +29,7 @@ jobs:
         branch:
           - main
           - release-0.1
+          - release-1.0
     steps:
       - uses: actions/checkout@v3
         with:
@@ -41,9 +42,11 @@ jobs:
           echo "flink_branch=${currentBranch}"
           echo "flink_branch=${currentBranch}" >> ${GITHUB_ENV}
           if [ "${currentBranch} = "main" ]; then
-            echo "flink_alias=release-1.0" >> ${GITHUB_ENV}
-          elif [ "${currentBranch} = "release-0.1" ]; then
+            echo "flink_alias=release-1.1" >> ${GITHUB_ENV}
+          elif [ "${currentBranch} = "release-1.0" ]; then
             echo "flink_alias=stable" >> ${GITHUB_ENV}
+          else
+            echo "flink_alias=${currentBranch}" >> ${GITHUB_ENV}
           fi
       - name: Build documentation
         run: |
