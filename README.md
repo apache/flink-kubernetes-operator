@@ -30,7 +30,7 @@ Please check out our docs to read about the [upgrade process](https://nightlies.
 
 ## Version Matrix
 
-| Operator Version     | API Version | Flink Compatibility | Operator Image Tag                       |
+| Operator Version     | API Version | Flink Compatibility | Operator Image                           |
 |----------------------|-------------|---------------------|------------------------------------------|
 | `latest` (main HEAD) | `v1beta1`   | 1.13, 1.14, 1.15    |                                          |
 | `release-1.0.0`      | `v1beta1`   | 1.13, 1.14, 1.15    | Release process underway                 |
