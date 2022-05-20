@@ -67,20 +67,16 @@ metadata:
 spec:
   ...
 status:
+  clusterInfo:
+    ...
   jobManagerDeploymentStatus: READY
   jobStatus:
-    jobId: 93dfe8199a35d5503f4048a1a999c704
-    jobName: State machine job
-    savepointInfo: {}
-    state: RUNNING
-    updateTime: "1647351134601"
+    ...
   reconciliationStatus:
-    lastReconciledSpec:
-      ...
-    success: true
+    ...
 ```
 
-Users can use the status of the FlinkDeployment to gauge the health of their deployments and any executed operation.
+While the status contains a lot of information that the operator tracks about the deployment, it is considered to be internal to the operator logic and users should only rely on it with care.
 
 ## FlinkDeployment spec overview
 
