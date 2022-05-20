@@ -64,7 +64,11 @@ perl -pi -e "s#^ENV OPERATOR_VERSION=.*#ENV OPERATOR_VERSION=${NEW_VERSION}#" Do
 # change Helm chart version info
 perl -pi -e "s#^version: .*#version: ${NEW_VERSION}#" helm/flink-kubernetes-operator/Chart.yaml
 perl -pi -e "s#^appVersion: .*#appVersion: ${NEW_VERSION}#" helm/flink-kubernetes-operator/Chart.yaml
-
+#change version of documentation
+cd docs
+perl -pi -e "s#^  Version = .*#  Version = \"${NEW_VERSION}\"#" config.toml
+perl -pi -e "s#^  VersionTitle = .*#  VersionTitle = \"${NEW_VERSION}\"#" config.toml
+cd ..
 
 git commit -am "[release] Update version to ${NEW_VERSION}"
 
