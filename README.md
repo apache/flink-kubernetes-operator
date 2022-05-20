@@ -13,25 +13,28 @@ Check our [quick-start](https://nightlies.apache.org/flink/flink-kubernetes-oper
 
 ## Features at a glance
 
- - Deploy and monitor Flink Application and Session deployments
+ - Deploy and monitor Flink Application, Session and Job deployments
  - Upgrade, suspend and delete deployments
  - Full logging and metrics integration
  - Flexible deployments and native integration with Kubernetes tooling
 
+For the complete feature-set please refer to our [documentation](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/concepts/overview/).
+
 ## Project Status
 
-### Project status: beta
+### Project status: Production Ready
 
 ### Current API version: `v1beta1`
 
-If you are currently using the v1alpha1 version of the APIs in your manifests, please update them to use the v1beta1 version by changing apiVersion: "flink.apache.org/v1alpha1" to apiVersion: "flink.apache.org/v1beta1".
+Please check out our docs to read about the [upgrade process](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/upgrade/) and our [backward compatibility guarantees](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/compatibility/).
 
 ## Version Matrix
 
-| Operator Version | API Version | Flink Release  | Operator Image Tag | Helm Chart Version |
-| ------------- | ------------- | ------------- | ------------- | ------------- |
-| `latest` (main HEAD) | `v1beta1` | 1.15 |  |  |
-| `release-0.1.0` | `v1alpha1` | 1.14 | `2c166e3` | 0.1.0 |
+| Operator Version     | API Version | Flink Compatibility | Operator Image Tag                       |
+|----------------------|-------------|---------------------|------------------------------------------|
+| `latest` (main HEAD) | `v1beta1`   | 1.13, 1.14, 1.15    |                                          |
+| `release-1.0.0`      | `v1beta1`   | 1.13, 1.14, 1.15    | Release process underway                 |
+| `release-0.1.0`      | `v1alpha1`  | 1.14                | `apache/flink-kubernetes-operator:0.1.0` |
 
 ## Support
 
