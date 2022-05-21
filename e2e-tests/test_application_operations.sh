@@ -17,10 +17,14 @@
 # limitations under the License.
 ################################################################################
 
+# This script tests the application job operations:
+# 1. Trigger savepoint
+# 2. last state mode upgrade
 source "$(dirname "$0")"/utils.sh
 
 CLUSTER_ID="flink-example-statemachine"
 APPLICATION_YAML="e2e-tests/data/flinkdep-cr.yaml"
+APPLICATION_IDENTIFIER="flinkdep/$CLUSTER_ID"
 TIMEOUT=300
 
 on_exit cleanup_and_exit $APPLICATION_YAML $TIMEOUT $CLUSTER_ID
@@ -31,15 +35,26 @@ wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT
 jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
 
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
-wait_for_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
-wait_for_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
+wait_for_status $APPLICATION_IDENTIFIER '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
+wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 assert_available_slots 0 $CLUSTER_ID
 
 job_id=$(kubectl logs $jm_pod_name -c flink-main-container | grep -E -o 'Job [a-z0-9]+ is submitted' | awk '{print $2}')
 
+# Testing trigger savepoint
+kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"job": {"savepointTriggerNonce": 123456 } } }'
+wait_for_logs $jm_pod_name "Triggering savepoint for job" ${TIMEOUT} || exit 1
+wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.savepointInfo.triggerId' "" $TIMEOUT || exit 1
+wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.savepointInfo.triggerTimestamp' 0 $TIMEOUT || exit 1
+location=$(kubectl get flinkdep $CLUSTER_ID -o yaml | yq '.status.jobStatus.savepointInfo.lastSavepoint.location')
+if [ "$location" == "" ];then
+  echo "lost savepoint location"
+  exit 1
+fi
+
+# Testing last-state mode upgrade
 # Update the FlinkDeployment and trigger the last state upgrade
 kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"job": {"parallelism": 1 } } }'
-
 kubectl wait --for=delete pod --timeout=${TIMEOUT}s --selector="app=${CLUSTER_ID}"
 wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT
 jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
@@ -52,4 +67,5 @@ wait_for_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RU
 assert_available_slots 1 $CLUSTER_ID
 
 echo "Successfully run the last-state upgrade test"
+
 
