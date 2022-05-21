@@ -74,6 +74,10 @@ RUN chown -R flink:flink $FLINK_HOME && \
     chown flink:flink $FLINK_KUBERNETES_SHADED_JAR && \
     chown flink:flink /docker-entrypoint.sh
 
+# Updating Debian
+RUN apt-get update
+RUN apt-get upgrade -y
+
 USER flink
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["help"]
