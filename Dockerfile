@@ -75,7 +75,7 @@ RUN chown -R flink:flink $FLINK_HOME && \
     chown flink:flink /docker-entrypoint.sh
 
 # Updating Debian
-RUN apt-get update
+RUN apt-get update && apt-get install -y apt-transport-https
 RUN apt-get upgrade -y
 
 USER flink
