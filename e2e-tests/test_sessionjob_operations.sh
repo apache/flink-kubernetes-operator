@@ -17,6 +17,9 @@
 # limitations under the License.
 ################################################################################
 
+# This script tests the session job operations:
+# 1. Trigger savepoint
+# 2. savepoint mode upgrade
 source "$(dirname "$0")"/utils.sh
 
 CLUSTER_ID="session-cluster-1"
@@ -38,6 +41,18 @@ wait_for_status $SESSION_CLUSTER_IDENTIFIER '.status.jobManagerDeploymentStatus'
 wait_for_status $SESSION_JOB_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 assert_available_slots 0 $CLUSTER_ID
 
+# Testing trigger savepoint
+kubectl patch sessionjob ${SESSION_JOB_NAME} --type merge --patch '{"spec":{"job": {"savepointTriggerNonce": 123456 } } }'
+wait_for_logs $jm_pod_name "Triggering savepoint for job" ${TIMEOUT} || exit 1
+wait_for_status $SESSION_JOB_IDENTIFIER '.status.jobStatus.savepointInfo.triggerId' "" $TIMEOUT || exit 1
+wait_for_status $SESSION_JOB_IDENTIFIER '.status.jobStatus.savepointInfo.triggerTimestamp' 0 $TIMEOUT || exit 1
+location=$(kubectl get $SESSION_JOB_IDENTIFIER -o yaml | yq '.status.jobStatus.savepointInfo.lastSavepoint.location')
+if [ "$location" == "" ];then
+  echo "lost savepoint location"
+  exit 1
+fi
+
+# Testing savepoint mode upgrade
 # Update the FlinkSessionJob and trigger the savepoint upgrade
 kubectl patch sessionjob ${SESSION_JOB_NAME} --type merge --patch '{"spec":{"job": {"parallelism": 1 } } }'
 
