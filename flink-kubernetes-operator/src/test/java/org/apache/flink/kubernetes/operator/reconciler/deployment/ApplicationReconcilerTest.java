@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -136,6 +137,23 @@ public class ApplicationReconcilerTest {
             fail();
         } catch (DeploymentFailedException expected) {
         }
+
+        flinkService.clear();
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        deployment.getSpec().setRestartNonce(200L);
+        flinkService.setHaDataAvailable(false);
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .getSavepointInfo()
+                .setLastSavepoint(Savepoint.of("finished_sp"));
+        deployment.getStatus().getJobStatus().setState("FINISHED");
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        reconciler.reconcile(deployment, context);
+        reconciler.reconcile(deployment, context);
+
+        assertEquals(1, flinkService.getRunningCount());
+        assertEquals("finished_sp", runningJobs.get(0).f0);
     }
 
     @Test
