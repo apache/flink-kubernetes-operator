@@ -604,16 +604,6 @@ public class FlinkService {
                                                                                     .FIELD_NAME_STATUS)
                                                                     .asText())
                                                     == CheckpointStatsStatus.COMPLETED)
-                            .filter(
-                                    cp ->
-                                            !cp.get(
-                                                            CheckpointStatistics
-                                                                    .CompletedCheckpointStatistics
-                                                                    .FIELD_NAME_EXTERNAL_PATH)
-                                                    .asText()
-                                                    .equals(
-                                                            NonPersistentMetadataCheckpointStorageLocation
-                                                                    .EXTERNAL_POINTER))
                             .max(
                                     Comparator.comparingLong(
                                             cp ->
@@ -633,8 +623,26 @@ public class FlinkService {
                                                                             .FIELD_NAME_EXTERNAL_PATH)
                                                             .asText()));
 
+            if (latestCheckpointOpt.isEmpty()) {
+                // Use restore checkpoint instead
+                LOG.info(
+                        "Could not find any checkpoints in the history, returning restore checkpoint if present");
+                latestCheckpointOpt = checkpoints.getRestorePath().map(Savepoint::of);
+            }
+
             if (!latestCheckpointOpt.isPresent()) {
-                LOG.warn("Could not find any externally addressable checkpoints.");
+                LOG.warn("Could not find any checkpoints.");
+            }
+
+            if (latestCheckpointOpt.isPresent()
+                    && latestCheckpointOpt
+                            .get()
+                            .equals(
+                                    NonPersistentMetadataCheckpointStorageLocation
+                                            .EXTERNAL_POINTER)) {
+                throw new DeploymentFailedException(
+                        "Latest checkpoint not externally addressable, manual recovery required.",
+                        "CheckpointNotFound");
             }
             return latestCheckpointOpt;
         }
