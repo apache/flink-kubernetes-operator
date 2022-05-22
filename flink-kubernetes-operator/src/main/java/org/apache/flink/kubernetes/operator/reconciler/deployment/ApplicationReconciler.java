@@ -204,19 +204,20 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                         deployment, configManager);
 
         if (upgradeMode == UpgradeMode.STATELESS) {
-            LOG.debug("Stateless job, ready for upgrade");
+            LOG.info("Stateless job, ready for upgrade");
             return Optional.of(upgradeMode);
         }
 
         if (ReconciliationUtils.isJobInTerminalState(status)) {
-            LOG.debug("Job is terminal state, ready for upgrade");
-            return Optional.of(upgradeMode);
+            LOG.info(
+                    "Job is in terminal state, ready for upgrade from observed latest checkpoint/savepoint");
+            return Optional.of(UpgradeMode.SAVEPOINT);
         }
 
         if (ReconciliationUtils.isJobRunning(status)) {
-            LOG.debug("Job is running state, ready for upgrade");
+            LOG.info("Job is in running state, ready for upgrade with {}", upgradeMode);
             if (changedToLastStateWithoutHa) {
-                LOG.debug(
+                LOG.info(
                         "Using savepoint upgrade mode when switching to last-state without HA previously enabled");
                 return Optional.of(UpgradeMode.SAVEPOINT);
             } else {
@@ -227,7 +228,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
         if (FlinkUtils.isKubernetesHAActivated(deployConfig)
                 && FlinkUtils.isKubernetesHAActivated(configManager.getObserveConfig(deployment))
                 && flinkService.isHaMetadataAvailable(deployConfig)) {
-            LOG.debug(
+            LOG.info(
                     "Job is not running but HA metadata is available for last state restore, ready for upgrade");
             return Optional.of(UpgradeMode.LAST_STATE);
         }
@@ -240,7 +241,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                             + "Manual restore required.",
                     "UpgradeFailed");
         } else {
-            LOG.debug(
+            LOG.info(
                     "Job is not running yet and HA metadata is not available, waiting for upgradeable state");
             return Optional.empty();
         }

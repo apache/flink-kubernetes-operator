@@ -89,13 +89,15 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         }
 
         if (isJmDeploymentReady(flinkApp)) {
-            if (observeClusterInfo(flinkApp, observeConfig)) {
-                if (observeFlinkCluster(flinkApp, context, observeConfig)) {
-                    if (reconciliationStatus.getState() != ReconciliationState.ROLLED_BACK) {
-                        reconciliationStatus.markReconciledSpecAsStable();
-                    }
+            if (observeFlinkCluster(flinkApp, context, observeConfig)) {
+                if (reconciliationStatus.getState() != ReconciliationState.ROLLED_BACK) {
+                    reconciliationStatus.markReconciledSpecAsStable();
                 }
             }
+        }
+
+        if (isJmDeploymentReady(flinkApp)) {
+            observeClusterInfo(flinkApp, observeConfig);
         }
 
         if (!ReconciliationUtils.isJobRunning(flinkApp.getStatus())) {
@@ -115,9 +117,9 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         clearErrorsIfDeploymentIsHealthy(flinkApp);
     }
 
-    private boolean observeClusterInfo(FlinkDeployment flinkApp, Configuration configuration) {
+    private void observeClusterInfo(FlinkDeployment flinkApp, Configuration configuration) {
         if (!flinkApp.getStatus().getClusterInfo().isEmpty()) {
-            return true;
+            return;
         }
         try {
             Map<String, String> clusterInfo = flinkService.getClusterInfo(configuration);
@@ -125,9 +127,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
             logger.debug("ClusterInfo: {}", clusterInfo);
         } catch (Exception e) {
             logger.error("Exception while fetching cluster info", e);
-            return false;
         }
-        return true;
     }
 
     protected void observeJmDeployment(
