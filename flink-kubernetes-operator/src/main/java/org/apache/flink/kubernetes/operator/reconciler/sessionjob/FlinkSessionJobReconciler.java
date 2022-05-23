@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -73,8 +72,7 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                         .deserializeLastReconciledSpec();
 
         Optional<FlinkDeployment> flinkDepOptional =
-                OperatorUtils.getSecondaryResource(
-                        flinkSessionJob, context, configManager.getOperatorConfiguration());
+                context.getSecondaryResource(FlinkDeployment.class);
 
         // if session cluster is not ready, we can't do reconcile for the job.
         if (!helper.sessionClusterReady(flinkDepOptional)) {
@@ -137,8 +135,7 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
     @Override
     public DeleteControl cleanup(FlinkSessionJob sessionJob, Context context) {
         Optional<FlinkDeployment> flinkDepOptional =
-                OperatorUtils.getSecondaryResource(
-                        sessionJob, context, configManager.getOperatorConfiguration());
+                context.getSecondaryResource(FlinkDeployment.class);
 
         if (flinkDepOptional.isPresent()) {
             String jobID = sessionJob.getStatus().getJobStatus().getJobId();

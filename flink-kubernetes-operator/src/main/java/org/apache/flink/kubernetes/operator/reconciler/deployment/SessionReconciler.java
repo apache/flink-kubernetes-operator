@@ -20,18 +20,17 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
-import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
-import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -39,6 +38,7 @@ import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -48,15 +48,12 @@ import java.util.stream.Collectors;
 public class SessionReconciler extends AbstractDeploymentReconciler {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
-    private final InformerManager informerManager;
 
     public SessionReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
-            FlinkConfigManager configManager,
-            InformerManager informerManager) {
+            FlinkConfigManager configManager) {
         super(kubernetesClient, flinkService, configManager);
-        this.informerManager = informerManager;
     }
 
     @Override
@@ -150,11 +147,8 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
 
     @Override
     public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
-        var sessionJobs =
-                informerManager
-                        .getSessionJobInformer(flinkApp.getMetadata().getNamespace())
-                        .getIndexer()
-                        .byIndex(OperatorUtils.CLUSTER_ID_INDEX, flinkApp.getMetadata().getName());
+
+        Set<FlinkSessionJob> sessionJobs = context.getSecondaryResources(FlinkSessionJob.class);
         if (!sessionJobs.isEmpty()) {
             var error =
                     String.format(

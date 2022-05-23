@@ -46,8 +46,10 @@ import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedDependentResourceContext;
 
 import javax.annotation.Nullable;
 
@@ -104,11 +106,26 @@ public class TestingFlinkService extends FlinkService {
             }
 
             @Override
-            public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
+            public Optional getSecondaryResource(Class aClass, String s) {
                 if (jobs.isEmpty() && sessions.isEmpty()) {
                     return Optional.empty();
                 }
-                return Optional.of((T) TestUtils.createDeployment(true));
+                return Optional.of(TestUtils.createDeployment(true));
+            }
+
+            @Override
+            public Set getSecondaryResources(Class expectedType) {
+                return null;
+            }
+
+            @Override
+            public ControllerConfiguration getControllerConfiguration() {
+                return null;
+            }
+
+            @Override
+            public ManagedDependentResourceContext managedDependentResourceContext() {
+                return null;
             }
         };
     }

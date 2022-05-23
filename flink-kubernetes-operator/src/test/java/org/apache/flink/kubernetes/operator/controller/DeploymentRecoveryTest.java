@@ -66,7 +66,8 @@ public class DeploymentRecoveryTest {
 
     @ParameterizedTest
     @MethodSource("applicationTestParams")
-    public void verifyApplicationJmRecovery(FlinkVersion flinkVersion, UpgradeMode upgradeMode) {
+    public void verifyApplicationJmRecovery(FlinkVersion flinkVersion, UpgradeMode upgradeMode)
+            throws Exception {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(upgradeMode);
 
@@ -140,7 +141,7 @@ public class DeploymentRecoveryTest {
 
     @ParameterizedTest
     @EnumSource(FlinkVersion.class)
-    public void verifySessionJmRecovery(FlinkVersion flinkVersion) {
+    public void verifySessionJmRecovery(FlinkVersion flinkVersion) throws Exception {
         FlinkDeployment appCluster = TestUtils.buildSessionCluster(flinkVersion);
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);

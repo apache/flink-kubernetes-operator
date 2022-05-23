@@ -20,7 +20,7 @@ package org.apache.flink.kubernetes.operator;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
-import io.javaoperatorsdk.operator.api.config.ConfigurationService;
+import io.javaoperatorsdk.operator.api.config.ConfigurationServiceProvider;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -28,33 +28,22 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 
-import static java.util.Optional.empty;
-
 /** @link FlinkOperator unit tests. */
 public class FlinkOperatorTest {
 
     @Test
-    public void testExecutorServiceDefaultsToMaxParallelism() {
-        checkExecutorServiceThreadCount(
-                empty(), ConfigurationService.DEFAULT_RECONCILIATION_THREADS_NUMBER);
-    }
-
-    @Test
     public void testExecutorServiceUsesReconciliationMaxParallelismFromConfig() {
         checkExecutorServiceThreadCount(Optional.of(42), 42);
-    }
-
-    @Test
-    public void testExecutorServiceUsesMaxParallelismForMinusOneReconciliationMaxParallelism() {
-        checkExecutorServiceThreadCount(Optional.of(-1), Integer.MAX_VALUE);
+        // TODO: cannot override the operator configs twice in java-operator-sdk v3
+        Assertions.assertThrows(
+                IllegalStateException.class,
+                () -> checkExecutorServiceThreadCount(Optional.of(-1), 1));
     }
 
     private void checkExecutorServiceThreadCount(
             Optional<Integer> parallelism, int expectedThreadCount) {
         var es = getExecutorForParallelismConfig(parallelism);
-
         Assertions.assertInstanceOf(ThreadPoolExecutor.class, es);
-
         ThreadPoolExecutor threadPoolExecutor = (ThreadPoolExecutor) es;
         Assertions.assertEquals(expectedThreadCount, threadPoolExecutor.getMaximumPoolSize());
     }
@@ -66,8 +55,7 @@ public class FlinkOperatorTest {
                         operatorConfig.setInteger(
                                 KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_MAX_PARALLELISM,
                                 p));
-
-        FlinkOperator flinkOperator = new FlinkOperator(operatorConfig);
-        return flinkOperator.getOperator().getConfigurationService().getExecutorService();
+        new FlinkOperator(operatorConfig);
+        return ConfigurationServiceProvider.instance().getExecutorService();
     }
 }

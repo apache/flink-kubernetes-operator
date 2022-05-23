@@ -38,7 +38,6 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
-import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
@@ -61,8 +60,10 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.mockwebserver.utils.ResponseProvider;
+import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
+import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedDependentResourceContext;
 import okhttp3.Headers;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.Assertions;
@@ -71,10 +72,10 @@ import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -204,8 +205,23 @@ public class TestUtils {
             }
 
             @Override
-            public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
+            public Optional getSecondaryResource(Class aClass, String s) {
                 return Optional.empty();
+            }
+
+            @Override
+            public Set getSecondaryResources(Class expectedType) {
+                return null;
+            }
+
+            @Override
+            public ControllerConfiguration getControllerConfiguration() {
+                return null;
+            }
+
+            @Override
+            public ManagedDependentResourceContext managedDependentResourceContext() {
+                return null;
             }
         };
     }
@@ -230,9 +246,23 @@ public class TestUtils {
             }
 
             @Override
-            public <T> Optional<T> getSecondaryResource(
-                    Class<T> expectedType, String eventSourceName) {
-                return Optional.of((T) createDeployment(true));
+            public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
+                return Optional.of(createDeployment(true));
+            }
+
+            @Override
+            public Set getSecondaryResources(Class expectedType) {
+                return null;
+            }
+
+            @Override
+            public ControllerConfiguration getControllerConfiguration() {
+                return null;
+            }
+
+            @Override
+            public ManagedDependentResourceContext managedDependentResourceContext() {
+                return null;
             }
         };
     }
@@ -245,9 +275,23 @@ public class TestUtils {
             }
 
             @Override
-            public <T> Optional<T> getSecondaryResource(
-                    Class<T> expectedType, String eventSourceName) {
-                return Optional.of((T) createDeployment(false));
+            public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
+                return Optional.of(createDeployment(false));
+            }
+
+            @Override
+            public Set getSecondaryResources(Class expectedType) {
+                return null;
+            }
+
+            @Override
+            public ControllerConfiguration getControllerConfiguration() {
+                return null;
+            }
+
+            @Override
+            public ManagedDependentResourceContext managedDependentResourceContext() {
+                return null;
             }
         };
     }
@@ -265,15 +309,29 @@ public class TestUtils {
             }
 
             @Override
-            public <T> Optional<T> getSecondaryResource(
-                    Class<T> expectedType, String eventSourceName) {
+            public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
                 var session = buildSessionCluster();
                 session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
                 session.getSpec().getFlinkConfiguration().putAll(flinkDepConfig);
                 session.getStatus()
                         .getReconciliationStatus()
                         .serializeAndSetLastReconciledSpec(session.getSpec());
-                return Optional.of((T) session);
+                return Optional.of(session);
+            }
+
+            @Override
+            public Set getSecondaryResources(Class expectedType) {
+                return null;
+            }
+
+            @Override
+            public ControllerConfiguration getControllerConfiguration() {
+                return null;
+            }
+
+            @Override
+            public ManagedDependentResourceContext managedDependentResourceContext() {
+                return null;
             }
         };
     }
@@ -286,12 +344,26 @@ public class TestUtils {
             }
 
             @Override
-            public <T> Optional<T> getSecondaryResource(
-                    Class<T> expectedType, String eventSourceName) {
+            public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
                 var session = buildSessionCluster();
                 session.getStatus()
                         .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
-                return Optional.of((T) session);
+                return Optional.of(session);
+            }
+
+            @Override
+            public Set getSecondaryResources(Class expectedType) {
+                return null;
+            }
+
+            @Override
+            public ControllerConfiguration getControllerConfiguration() {
+                return null;
+            }
+
+            @Override
+            public ManagedDependentResourceContext managedDependentResourceContext() {
+                return null;
             }
         };
     }
@@ -306,8 +378,7 @@ public class TestUtils {
             }
 
             @Override
-            public <T> Optional<T> getSecondaryResource(
-                    Class<T> expectedType, String eventSourceName) {
+            public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
                 DeploymentStatus status = new DeploymentStatus();
                 status.setAvailableReplicas(0);
                 status.setReplicas(1);
@@ -326,7 +397,22 @@ public class TestUtils {
                 Deployment deployment = new Deployment();
                 deployment.setSpec(spec);
                 deployment.setStatus(status);
-                return Optional.of((T) deployment);
+                return Optional.of(deployment);
+            }
+
+            @Override
+            public Set getSecondaryResources(Class expectedType) {
+                return null;
+            }
+
+            @Override
+            public ControllerConfiguration getControllerConfiguration() {
+                return null;
+            }
+
+            @Override
+            public ManagedDependentResourceContext managedDependentResourceContext() {
+                return null;
             }
         };
     }
@@ -371,11 +457,7 @@ public class TestUtils {
                 configManager,
                 kubernetesClient,
                 ValidatorUtils.discoverValidators(configManager),
-                new ReconcilerFactory(
-                        kubernetesClient,
-                        flinkService,
-                        configManager,
-                        new InformerManager(new HashSet<>(), kubernetesClient)),
+                new ReconcilerFactory(kubernetesClient, flinkService, configManager),
                 new ObserverFactory(kubernetesClient, flinkService, configManager, statusHelper),
                 new MetricManager<>(new MetricListener().getMetricGroup()),
                 statusHelper);

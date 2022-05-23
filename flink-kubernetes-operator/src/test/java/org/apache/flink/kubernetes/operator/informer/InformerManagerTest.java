@@ -17,16 +17,15 @@
 
 package org.apache.flink.kubernetes.operator.informer;
 
-import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
-
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashSet;
 import java.util.Set;
+
+import static io.javaoperatorsdk.operator.api.reconciler.Constants.DEFAULT_NAMESPACES_SET;
 
 /** Test for {@link InformerManager}. */
 @EnableKubernetesMockClient(crud = true)
@@ -37,14 +36,10 @@ public class InformerManagerTest {
 
     @Test
     public void testNamespacedInformerCreated() {
-        var informerManager = new InformerManager(new HashSet<>(), kubernetesClient);
-        Assertions.assertNotNull(
-                informerManager.getSessionJobInformer(OperatorUtils.ALL_NAMESPACE));
-        Assertions.assertNotNull(informerManager.getFlinkDepInformer(OperatorUtils.ALL_NAMESPACE));
+        var informerManager = new InformerManager(DEFAULT_NAMESPACES_SET, kubernetesClient);
+        Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns1"));
 
         informerManager = new InformerManager(Set.of("ns1", "ns2"), kubernetesClient);
-        Assertions.assertNotNull(informerManager.getSessionJobInformer("ns1"));
-        Assertions.assertNotNull(informerManager.getSessionJobInformer("ns2"));
         Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns1"));
         Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns2"));
     }

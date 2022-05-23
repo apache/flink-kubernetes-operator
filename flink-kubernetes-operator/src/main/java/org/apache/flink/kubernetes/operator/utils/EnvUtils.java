@@ -30,8 +30,12 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 
+import static io.javaoperatorsdk.operator.api.reconciler.Constants.DEFAULT_NAMESPACES_SET;
 import static org.apache.flink.runtime.util.EnvironmentInformation.UNKNOWN;
 import static org.apache.flink.runtime.util.EnvironmentInformation.UNKNOWN_COMMIT_ID_ABBREV;
 import static org.apache.flink.runtime.util.EnvironmentInformation.getJvmStartupOptionsArray;
@@ -200,5 +204,17 @@ public class EnvUtils {
             return defaultValue;
         }
         return value;
+    }
+
+    private static final String NAMESPACES_SPLITTER_KEY = ",";
+
+    public static Set<String> getWatchedNamespaces() {
+        String watchedNamespaces = get(EnvUtils.ENV_WATCHED_NAMESPACES);
+
+        if (StringUtils.isEmpty(watchedNamespaces)) {
+            return DEFAULT_NAMESPACES_SET;
+        } else {
+            return new HashSet<>(Arrays.asList(watchedNamespaces.split(NAMESPACES_SPLITTER_KEY)));
+        }
     }
 }

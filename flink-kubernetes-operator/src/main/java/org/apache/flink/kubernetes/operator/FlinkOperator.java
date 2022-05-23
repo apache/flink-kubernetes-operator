@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
-import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.Observer;
@@ -50,9 +49,7 @@ import org.apache.flink.metrics.MetricGroup;
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
-import io.javaoperatorsdk.operator.api.config.ConfigurationService;
 import io.javaoperatorsdk.operator.api.config.ConfigurationServiceOverrider;
-import io.javaoperatorsdk.operator.config.runtime.DefaultConfigurationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +57,7 @@ import javax.annotation.Nullable;
 
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 /** Main Class for Flink native k8s operator. */
 public class FlinkOperator {
@@ -69,34 +67,47 @@ public class FlinkOperator {
 
     private final KubernetesClient client;
     private final FlinkService flinkService;
-    private final ConfigurationService configurationService;
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
     private final MetricGroup metricGroup;
-    private final InformerManager informerManager;
 
     public FlinkOperator(@Nullable Configuration conf) {
         this.client = new DefaultKubernetesClient();
         this.configManager = conf != null ? new FlinkConfigManager(conf) : new FlinkConfigManager();
-        this.configurationService =
-                getConfigurationService(configManager.getOperatorConfiguration());
-        this.operator = new Operator(client, configurationService);
+        this.operator =
+                new Operator(
+                        client,
+                        getConfigurationServiceOverriderConsumer(
+                                configManager.getOperatorConfiguration()));
         this.flinkService = new FlinkService(client, configManager);
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.metricGroup =
                 OperatorMetricUtils.initOperatorMetrics(configManager.getDefaultConfig());
-        Set<String> watchedNamespaces =
-                configManager.getOperatorConfiguration().getWatchedNamespaces();
-        this.informerManager = new InformerManager(watchedNamespaces, client);
         PluginManager pluginManager =
                 PluginUtils.createPluginManagerFromRootFolder(configManager.getDefaultConfig());
         FileSystem.initialize(configManager.getDefaultConfig(), pluginManager);
     }
 
+    @VisibleForTesting
+    protected static Consumer<ConfigurationServiceOverrider>
+            getConfigurationServiceOverriderConsumer(
+                    FlinkOperatorConfiguration operatorConfiguration) {
+        return overrider -> {
+            int parallelism = operatorConfiguration.getReconcilerMaxParallelism();
+            if (parallelism == -1) {
+                LOG.info("Configuring operator with unbounded reconciliation thread pool.");
+                overrider.withExecutorService(Executors.newCachedThreadPool());
+            } else {
+                LOG.info("Configuring operator with {} reconciliation threads.", parallelism);
+                overrider.withConcurrentReconciliationThreads(parallelism);
+            }
+        };
+    }
+
     private void registerDeploymentController() {
         StatusHelper<FlinkDeploymentStatus> statusHelper = new StatusHelper<>(client);
         ReconcilerFactory reconcilerFactory =
-                new ReconcilerFactory(client, flinkService, configManager, informerManager);
+                new ReconcilerFactory(client, flinkService, configManager);
         ObserverFactory observerFactory =
                 new ObserverFactory(client, flinkService, configManager, statusHelper);
 
@@ -114,7 +125,6 @@ public class FlinkOperator {
                 new FlinkControllerConfig<>(
                         controller,
                         configManager.getOperatorConfiguration().getWatchedNamespaces());
-        controllerConfig.setConfigurationService(configurationService);
         operator.register(controller, controllerConfig);
     }
 
@@ -127,39 +137,17 @@ public class FlinkOperator {
         FlinkSessionJobController controller =
                 new FlinkSessionJobController(
                         configManager,
-                        client,
                         validators,
                         reconciler,
                         observer,
                         new MetricManager<>(metricGroup),
-                        statusHelper,
-                        informerManager);
+                        statusHelper);
 
         FlinkControllerConfig<FlinkSessionJob> controllerConfig =
                 new FlinkControllerConfig<>(
                         controller,
                         configManager.getOperatorConfiguration().getWatchedNamespaces());
-
-        controllerConfig.setConfigurationService(configurationService);
         operator.register(controller, controllerConfig);
-    }
-
-    private ConfigurationService getConfigurationService(
-            FlinkOperatorConfiguration operatorConfiguration) {
-
-        ConfigurationServiceOverrider configOverrider =
-                new ConfigurationServiceOverrider(DefaultConfigurationService.instance())
-                        .checkingCRDAndValidateLocalModel(false);
-
-        int parallelism = operatorConfiguration.getReconcilerMaxParallelism();
-        if (parallelism == -1) {
-            LOG.info("Configuring operator with unbounded reconciliation thread pool.");
-            configOverrider = configOverrider.withExecutorService(Executors.newCachedThreadPool());
-        } else {
-            LOG.info("Configuring operator with {} reconciliation threads.", parallelism);
-            configOverrider = configOverrider.withConcurrentReconciliationThreads(parallelism);
-        }
-        return configOverrider.build();
     }
 
     public void run() {
@@ -167,11 +155,6 @@ public class FlinkOperator {
         registerSessionJobController();
         operator.installShutdownHook();
         operator.start();
-    }
-
-    @VisibleForTesting
-    protected Operator getOperator() {
-        return operator;
     }
 
     public static void main(String... args) {

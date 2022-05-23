@@ -45,6 +45,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.fabric8.kubernetes.client.CustomResource;
+import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.slf4j.Logger;
@@ -349,16 +350,21 @@ public class ReconciliationUtils {
      * @return This always returns Empty optional currently, due to the status update logic
      */
     public static <STATUS extends CommonStatus<?>, R extends AbstractFlinkResource<?, STATUS>>
-            Optional<R> updateErrorStatus(
+            ErrorStatusUpdateControl<R> toErrorStatusUpdateControl(
                     R resource,
-                    RetryInfo retryInfo,
-                    RuntimeException e,
+                    Optional<RetryInfo> retryInfo,
+                    Exception e,
                     MetricManager<R> metricManager,
                     StatusHelper<STATUS> statusHelper) {
-        LOG.warn(
-                "Attempt count: {}, last attempt: {}",
-                retryInfo.getAttemptCount(),
-                retryInfo.isLastAttempt());
+
+        retryInfo.ifPresent(
+                r -> {
+                    LOG.warn(
+                            "Attempt count: {}, last attempt: {}",
+                            r.getAttemptCount(),
+                            r.isLastAttempt());
+                });
+
         statusHelper.updateStatusFromCache(resource);
         ReconciliationUtils.updateForReconciliationError(
                 resource,
@@ -367,6 +373,6 @@ public class ReconciliationUtils {
         statusHelper.patchAndCacheStatus(resource);
 
         // Status was updated already, no need to return anything
-        return Optional.empty();
+        return ErrorStatusUpdateControl.noStatusUpdate();
     }
 }

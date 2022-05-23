@@ -42,7 +42,6 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
-import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -51,12 +50,9 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -91,7 +87,7 @@ public class FlinkDeploymentControllerTest {
 
     @ParameterizedTest
     @EnumSource(FlinkVersion.class)
-    public void verifyBasicReconcileLoop(FlinkVersion flinkVersion) {
+    public void verifyBasicReconcileLoop(FlinkVersion flinkVersion) throws Exception {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
 
         UpdateControl<FlinkDeployment> updateControl;
@@ -276,7 +272,7 @@ public class FlinkDeploymentControllerTest {
 
     @ParameterizedTest
     @EnumSource(FlinkVersion.class)
-    public void verifyUpgradeFromSavepoint(FlinkVersion flinkVersion) {
+    public void verifyUpgradeFromSavepoint(FlinkVersion flinkVersion) throws Exception {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
@@ -365,7 +361,7 @@ public class FlinkDeploymentControllerTest {
 
     @ParameterizedTest
     @EnumSource(FlinkVersion.class)
-    public void verifyStatelessUpgrade(FlinkVersion flinkVersion) {
+    public void verifyStatelessUpgrade(FlinkVersion flinkVersion) throws Exception {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
@@ -453,21 +449,21 @@ public class FlinkDeploymentControllerTest {
 
     @ParameterizedTest
     @EnumSource(FlinkVersion.class)
-    public void testUpgradeNotReadyClusterSession(FlinkVersion flinkVersion) {
+    public void testUpgradeNotReadyClusterSession(FlinkVersion flinkVersion) throws Exception {
         testUpgradeNotReadyCluster(TestUtils.buildSessionCluster(flinkVersion));
     }
 
     @ParameterizedTest
     @MethodSource("applicationTestParams")
     public void testUpgradeNotReadyClusterApplication(
-            FlinkVersion flinkVersion, UpgradeMode upgradeMode) {
+            FlinkVersion flinkVersion, UpgradeMode upgradeMode) throws Exception {
         var appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(upgradeMode);
         testUpgradeNotReadyCluster(appCluster);
     }
 
     @Test
-    public void verifyReconcileWithBadConfig() {
+    public void verifyReconcileWithBadConfig() throws Exception {
 
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         UpdateControl<FlinkDeployment> updateControl;
@@ -507,7 +503,7 @@ public class FlinkDeploymentControllerTest {
     }
 
     @Test
-    public void verifyReconcileWithAChangedOperatorMode() {
+    public void verifyReconcileWithAChangedOperatorMode() throws Exception {
 
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         UpdateControl<FlinkDeployment> updateControl;
@@ -545,7 +541,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
     }
 
-    private void testUpgradeNotReadyCluster(FlinkDeployment appCluster) {
+    private void testUpgradeNotReadyCluster(FlinkDeployment appCluster) throws Exception {
         flinkService.clear();
         testController.reconcile(appCluster, context);
         assertEquals(
@@ -652,25 +648,7 @@ public class FlinkDeploymentControllerTest {
     }
 
     @Test
-    public void testPrepareEventSource() {
-        // Test watch all
-        testController.setEffectiveNamespaces(Collections.emptySet());
-        List<EventSource> eventSources = testController.prepareEventSources(null);
-        assertEquals(1, eventSources.size());
-        assertEquals("all", eventSources.get(0).name());
-
-        // Test watch namespaces
-        Set<String> namespaces = Set.of("ns1", "ns2", "ns3");
-        testController.setEffectiveNamespaces(namespaces);
-        eventSources = testController.prepareEventSources(null);
-        assertEquals(3, eventSources.size());
-        assertEquals(
-                namespaces,
-                eventSources.stream().map(EventSource::name).collect(Collectors.toSet()));
-    }
-
-    @Test
-    public void testSuccessfulObservationShouldClearErrors() {
+    public void testSuccessfulObservationShouldClearErrors() throws Exception {
         final String crashLoopMessage = "deploy errors";
         flinkService.setJmPodList(TestUtils.createFailedPodList(crashLoopMessage));
 

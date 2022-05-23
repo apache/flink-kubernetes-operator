@@ -25,7 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
 import org.apache.flink.shaded.guava30.com.google.common.cache.Cache;
 import org.apache.flink.shaded.guava30.com.google.common.cache.CacheBuilder;
@@ -63,7 +63,7 @@ public class FlinkConfigManager {
     private final AtomicLong defaultConfigVersion = new AtomicLong(0);
 
     private final LoadingCache<Key, Configuration> cache;
-    private Set<String> namespaces = OperatorUtils.getWatchedNamespaces();
+    private final Set<String> namespaces = EnvUtils.getWatchedNamespaces();
 
     public FlinkConfigManager() {
         this(GlobalConfiguration.loadConfiguration());
@@ -186,13 +186,6 @@ public class FlinkConfigManager {
         executorService.scheduleAtFixedRate(
                 new ConfigUpdater(), millis, millis, TimeUnit.MILLISECONDS);
         LOG.info("Enabled dynamic config updates, checking config changes every {}", checkInterval);
-    }
-
-    @VisibleForTesting
-    public void setWatchedNamespaces(Set<String> namespaces) {
-        this.namespaces = namespaces;
-        operatorConfiguration =
-                FlinkOperatorConfiguration.fromConfiguration(defaultConfig, namespaces);
     }
 
     @VisibleForTesting
