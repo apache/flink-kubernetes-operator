@@ -49,7 +49,6 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.runtime.checkpoint.CheckpointStatsStatus;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
@@ -61,7 +60,6 @@ import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.TriggerId;
-import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatistics;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointInfo;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMessageParameters;
@@ -103,7 +101,6 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -594,45 +591,7 @@ public class FlinkService {
                                     .getSeconds(),
                             TimeUnit.SECONDS);
 
-            var latestCheckpointOpt =
-                    checkpoints.getHistory().stream()
-                            .filter(
-                                    cp ->
-                                            CheckpointStatsStatus.valueOf(
-                                                            cp.get(
-                                                                            CheckpointStatistics
-                                                                                    .FIELD_NAME_STATUS)
-                                                                    .asText())
-                                                    == CheckpointStatsStatus.COMPLETED)
-                            .max(
-                                    Comparator.comparingLong(
-                                            cp ->
-                                                    cp.get(CheckpointStatistics.FIELD_NAME_ID)
-                                                            .asLong()))
-                            .map(
-                                    cp ->
-                                            new Savepoint(
-                                                    cp.get(
-                                                                    CheckpointStatistics
-                                                                            .CompletedCheckpointStatistics
-                                                                            .FIELD_NAME_TRIGGER_TIMESTAMP)
-                                                            .asLong(),
-                                                    cp.get(
-                                                                    CheckpointStatistics
-                                                                            .CompletedCheckpointStatistics
-                                                                            .FIELD_NAME_EXTERNAL_PATH)
-                                                            .asText()));
-
-            if (latestCheckpointOpt.isEmpty()) {
-                // Use restore checkpoint instead
-                LOG.info(
-                        "Could not find any checkpoints in the history, returning restore checkpoint if present");
-                latestCheckpointOpt = checkpoints.getRestorePath().map(Savepoint::of);
-            }
-
-            if (!latestCheckpointOpt.isPresent()) {
-                LOG.warn("Could not find any checkpoints.");
-            }
+            var latestCheckpointOpt = checkpoints.getLatestCheckpointPath();
 
             if (latestCheckpointOpt.isPresent()
                     && latestCheckpointOpt
@@ -644,7 +603,7 @@ public class FlinkService {
                         "Latest checkpoint not externally addressable, manual recovery required.",
                         "CheckpointNotFound");
             }
-            return latestCheckpointOpt;
+            return latestCheckpointOpt.map(Savepoint::of);
         }
     }
 
