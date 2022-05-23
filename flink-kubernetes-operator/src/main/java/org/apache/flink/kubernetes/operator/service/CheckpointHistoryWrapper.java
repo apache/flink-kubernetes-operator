@@ -18,6 +18,7 @@
 
 package org.apache.flink.kubernetes.operator.service;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.runtime.rest.messages.ResponseBody;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -27,7 +28,14 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.node.Obje
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
+import java.util.Optional;
+
+import static org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics.FIELD_NAME_LATEST_CHECKPOINTS;
+import static org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics.LatestCheckpoints.FIELD_NAME_COMPLETED;
+import static org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics.LatestCheckpoints.FIELD_NAME_RESTORED;
+import static org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics.LatestCheckpoints.FIELD_NAME_SAVEPOINT;
+import static org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics.RestoredCheckpointStatistics.FIELD_NAME_EXTERNAL_PATH;
+import static org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistics.RestoredCheckpointStatistics.FIELD_NAME_ID;
 
 /** Custom Response for handling checkpoint history in a multi-version compatible way. */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -35,8 +43,38 @@ import java.util.List;
 @NoArgsConstructor
 public class CheckpointHistoryWrapper implements ResponseBody {
 
-    public static final String FIELD_NAME_HISTORY = "history";
+    @JsonProperty(FIELD_NAME_LATEST_CHECKPOINTS)
+    private ObjectNode latestCheckpoints;
 
-    @JsonProperty(FIELD_NAME_HISTORY)
-    private List<ObjectNode> history;
+    public Optional<String> getLatestCheckpointPath() {
+        if (latestCheckpoints == null) {
+            return Optional.empty();
+        }
+
+        var latestCheckpoint = getCheckpointInfo(FIELD_NAME_RESTORED).orElse(null);
+
+        var completed = getCheckpointInfo(FIELD_NAME_COMPLETED).orElse(null);
+        if (latestCheckpoint == null || (completed != null && completed.f0 > latestCheckpoint.f0)) {
+            latestCheckpoint = completed;
+        }
+        var savepoint = getCheckpointInfo(FIELD_NAME_SAVEPOINT).orElse(null);
+        if (latestCheckpoint == null || (savepoint != null && savepoint.f0 > latestCheckpoint.f0)) {
+            latestCheckpoint = savepoint;
+        }
+
+        return Optional.ofNullable(latestCheckpoint).map(t -> t.f1);
+    }
+
+    private Optional<Tuple2<Long, String>> getCheckpointInfo(String field) {
+        return Optional.ofNullable(latestCheckpoints.get(field))
+                .filter(
+                        checkpoint ->
+                                checkpoint.has(FIELD_NAME_ID)
+                                        && checkpoint.has(FIELD_NAME_EXTERNAL_PATH))
+                .map(
+                        checkpoint ->
+                                Tuple2.of(
+                                        checkpoint.get(FIELD_NAME_ID).asLong(),
+                                        checkpoint.get(FIELD_NAME_EXTERNAL_PATH).asText()));
+    }
 }
