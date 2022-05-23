@@ -308,7 +308,7 @@ public class TestingFlinkService extends FlinkService {
 
     @Override
     public SavepointFetchResult fetchSavepointInfo(
-            String triggerId, String jobId, Configuration conf) {
+            String triggerId, String jobId, String jobStatus, Configuration conf) {
 
         if (savepointFetchResult == null) {
             savepointFetchResult = SavepointFetchResult.pending();

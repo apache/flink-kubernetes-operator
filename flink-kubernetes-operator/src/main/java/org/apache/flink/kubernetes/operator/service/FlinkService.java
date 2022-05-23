@@ -49,6 +49,7 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.runtime.checkpoint.CheckpointException;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
@@ -110,6 +111,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import static org.apache.flink.api.common.JobStatus.RECONCILING;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 
 /** Service for submitting and interacting with Flink clusters and jobs. */
@@ -121,6 +123,9 @@ public class FlinkService {
     private final ArtifactManager artifactManager;
     private final FlinkConfigManager configManager;
     private final ExecutorService executorService;
+
+    private static final String CHECKPOINT_FAILURE_REASON =
+            "Not all required tasks are currently running.";
 
     public FlinkService(KubernetesClient kubernetesClient, FlinkConfigManager configManager) {
         this.kubernetesClient = kubernetesClient;
@@ -608,7 +613,7 @@ public class FlinkService {
     }
 
     public SavepointFetchResult fetchSavepointInfo(
-            String triggerId, String jobId, Configuration conf) {
+            String triggerId, String jobId, String jobStatus, Configuration conf) {
         LOG.info("Fetching savepoint result with triggerId: " + triggerId);
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
@@ -618,32 +623,51 @@ public class FlinkService {
             savepointStatusMessageParameters.jobIdPathParameter.resolve(JobID.fromHexString(jobId));
             savepointStatusMessageParameters.triggerIdPathParameter.resolve(
                     TriggerId.fromHexString(triggerId));
-            CompletableFuture<AsynchronousOperationResult<SavepointInfo>> response =
-                    clusterClient.sendRequest(
-                            savepointStatusHeaders,
-                            savepointStatusMessageParameters,
-                            EmptyRequestBody.getInstance());
+            while (true) {
+                CompletableFuture<AsynchronousOperationResult<SavepointInfo>> response =
+                        clusterClient.sendRequest(
+                                savepointStatusHeaders,
+                                savepointStatusMessageParameters,
+                                EmptyRequestBody.getInstance());
 
-            if (response.get() == null || response.get().resource() == null) {
-                return SavepointFetchResult.pending();
-            }
-
-            if (response.get().resource().getLocation() == null) {
-                if (response.get().resource().getFailureCause() != null) {
-                    LOG.error(
-                            "Failure occurred while fetching the savepoint result",
-                            response.get().resource().getFailureCause());
-                    return SavepointFetchResult.error(
-                            response.get().resource().getFailureCause().toString());
-                } else {
+                if (response.get() == null || response.get().resource() == null) {
                     return SavepointFetchResult.pending();
                 }
+
+                if (response.get().resource().getLocation() == null) {
+                    // If the failure cause contains 'Not all required tasks are currently
+                    // running.', then continue until savepoint is successfully fetched.
+                    if (response.get().resource().getFailureCause() != null) {
+                        if (RECONCILING.name().equals(jobStatus)
+                                && response.get()
+                                        .resource()
+                                        .getFailureCause()
+                                        .getOriginalErrorClassName()
+                                        .equals(CheckpointException.class.getName())
+                                && response.get()
+                                        .resource()
+                                        .getFailureCause()
+                                        .toString()
+                                        .contains(CHECKPOINT_FAILURE_REASON)) {
+                            continue;
+                        } else {
+                            LOG.error(
+                                    "Failure occurred while fetching the savepoint result",
+                                    response.get().resource().getFailureCause());
+                            return SavepointFetchResult.error(
+                                    response.get().resource().getFailureCause().toString());
+                        }
+                    } else {
+                        return SavepointFetchResult.pending();
+                    }
+                }
+                Savepoint savepoint =
+                        new Savepoint(
+                                System.currentTimeMillis(),
+                                response.get().resource().getLocation());
+                LOG.info("Savepoint result: " + savepoint);
+                return SavepointFetchResult.completed(savepoint);
             }
-            Savepoint savepoint =
-                    new Savepoint(
-                            System.currentTimeMillis(), response.get().resource().getLocation());
-            LOG.info("Savepoint result: " + savepoint);
-            return SavepointFetchResult.completed(savepoint);
         } catch (Exception e) {
             LOG.error("Exception while fetching the savepoint result", e);
             return SavepointFetchResult.error(e.getMessage());

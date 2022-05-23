@@ -69,7 +69,8 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
                         .map(Savepoint::getLocation)
                         .orElse(null);
 
-        observeTriggeredSavepointProgress(savepointInfo, jobId, deployedConfig)
+        observeTriggeredSavepointProgress(
+                        savepointInfo, jobId, jobStatus.getState(), deployedConfig)
                 .ifPresent(
                         err ->
                                 EventUtils.createOrUpdateEvent(
@@ -108,11 +109,15 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
      *
      * @param currentSavepointInfo the current savepoint info.
      * @param jobID the jobID of the observed job.
+     * @param jobStatus the status of the observed job.
      * @param deployedConfig Deployed job config.
      * @return The observed error, if no error observed, {@code Optional.empty()} will be returned.
      */
     private Optional<String> observeTriggeredSavepointProgress(
-            SavepointInfo currentSavepointInfo, String jobID, Configuration deployedConfig) {
+            SavepointInfo currentSavepointInfo,
+            String jobID,
+            String jobStatus,
+            Configuration deployedConfig) {
         if (StringUtils.isEmpty(currentSavepointInfo.getTriggerId())) {
             LOG.debug("Savepoint not in progress");
             return Optional.empty();
@@ -120,7 +125,7 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
         LOG.info("Observing savepoint status.");
         SavepointFetchResult savepointFetchResult =
                 flinkService.fetchSavepointInfo(
-                        currentSavepointInfo.getTriggerId(), jobID, deployedConfig);
+                        currentSavepointInfo.getTriggerId(), jobID, jobStatus, deployedConfig);
 
         if (savepointFetchResult.isPending()) {
             if (SavepointUtils.gracePeriodEnded(
