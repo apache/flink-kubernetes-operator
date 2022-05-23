@@ -62,7 +62,7 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
                     MessageParameters,
                     RequestBody,
                     CompletableFuture<ResponseBody>>
-            triggerSavepointFunction =
+            requestProcessor =
                     (ignore1, ignore2, ignore) ->
                             CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
 
@@ -94,14 +94,14 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
         this.stopWithSavepointFunction = stopWithSavepointFunction;
     }
 
-    public void setTriggerSavepointFunction(
+    public void setRequestProcessor(
             TriFunction<
                             MessageHeaders<?, ?, ?>,
                             MessageParameters,
                             RequestBody,
                             CompletableFuture<ResponseBody>>
-                    triggerSavepointFunction) {
-        this.triggerSavepointFunction = triggerSavepointFunction;
+                    requestProcessor) {
+        this.requestProcessor = requestProcessor;
     }
 
     public void setListJobsFunction(
@@ -202,6 +202,6 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
                     P extends ResponseBody>
             CompletableFuture<P> sendRequest(M messageHeaders, U messageParameters, R request) {
         return (CompletableFuture<P>)
-                triggerSavepointFunction.apply(messageHeaders, messageParameters, request);
+                requestProcessor.apply(messageHeaders, messageParameters, request);
     }
 }
