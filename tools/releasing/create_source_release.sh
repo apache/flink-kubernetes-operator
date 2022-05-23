@@ -100,7 +100,7 @@ cd ${CLONE_DIR}
 
 # TODO: We might want to be more specific here later on what to replace
 perl -pi -e "s#^  repository: .*#  repository: ghcr.io/apache/flink-kubernetes-operator#" flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-kubernetes-operator/values.yaml
-perl -pi -e "s#^  tag: .*#  tag: ${commit_hash}#" flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-kubernetes-operator/values.yaml
+perl -pi -e "s#^  tag: .*#  tag: \"${commit_hash}\"#" flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-kubernetes-operator/values.yaml
 
 helm package --app-version ${RELEASE_VERSION} --version ${RELEASE_VERSION} --destination ${RELEASE_DIR} flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-kubernetes-operator
 mv ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}.tgz ${RELEASE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}-helm.tgz
