@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -30,37 +29,38 @@ import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
-import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusHandler;
+import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
-import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 /** Controller that runs the main reconcile loop for Flink deployments. */
-@ControllerConfiguration
+@ControllerConfiguration()
 public class FlinkDeploymentController
         implements Reconciler<FlinkDeployment>,
                 ErrorStatusHandler<FlinkDeployment>,
-                EventSourceInitializer<FlinkDeployment> {
+                EventSourceInitializer<FlinkDeployment>,
+                Cleaner<FlinkDeployment> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
 
     private final FlinkConfigManager configManager;
@@ -71,7 +71,6 @@ public class FlinkDeploymentController
     private final ObserverFactory observerFactory;
     private final MetricManager<FlinkDeployment> metricManager;
     private final StatusHelper<FlinkDeploymentStatus> statusHelper;
-    private Set<String> effectiveNamespaces;
     private final ConcurrentHashMap<Tuple2<String, String>, FlinkDeploymentStatus> statusCache =
             new ConcurrentHashMap<>();
 
@@ -90,7 +89,6 @@ public class FlinkDeploymentController
         this.observerFactory = observerFactory;
         this.metricManager = metricManager;
         this.statusHelper = statusHelper;
-        this.effectiveNamespaces = configManager.getOperatorConfiguration().getWatchedNamespaces();
     }
 
     @Override
@@ -108,7 +106,8 @@ public class FlinkDeploymentController
     }
 
     @Override
-    public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context) {
+    public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context)
+            throws Exception {
         LOG.info("Starting reconciliation");
         statusHelper.updateStatusFromCache(flinkApp);
         FlinkDeployment previousDeployment = ReconciliationUtils.clone(flinkApp);
@@ -152,26 +151,18 @@ public class FlinkDeploymentController
     }
 
     @Override
-    public List<EventSource> prepareEventSources(EventSourceContext<FlinkDeployment> ctx) {
-        if (effectiveNamespaces.isEmpty()) {
-            return List.of(OperatorUtils.createJmDepInformerEventSource(kubernetesClient));
-        } else {
-            return effectiveNamespaces.stream()
-                    .map(ns -> OperatorUtils.createJmDepInformerEventSource(kubernetesClient, ns))
-                    .collect(Collectors.toList());
-        }
-    }
-
-    @VisibleForTesting
-    public void setEffectiveNamespaces(Set<String> effectiveNamespaces) {
-        this.effectiveNamespaces = effectiveNamespaces;
+    public Map<String, EventSource> prepareEventSources(
+            EventSourceContext<FlinkDeployment> context) {
+        return EventSourceInitializer.nameEventSources(
+                EventSourceUtils.getSessionJobInformerEventSource(context),
+                EventSourceUtils.getDeploymentInformerEventSource(context));
     }
 
     @Override
-    public Optional<FlinkDeployment> updateErrorStatus(
-            FlinkDeployment flinkApp, RetryInfo retryInfo, RuntimeException e) {
-        return ReconciliationUtils.updateErrorStatus(
-                flinkApp, retryInfo, e, metricManager, statusHelper);
+    public ErrorStatusUpdateControl<FlinkDeployment> updateErrorStatus(
+            FlinkDeployment flinkDeployment, Context<FlinkDeployment> context, Exception e) {
+        return ReconciliationUtils.toErrorStatusUpdateControl(
+                flinkDeployment, context.getRetryInfo(), e, metricManager, statusHelper);
     }
 
     private boolean validateDeployment(FlinkDeployment deployment) {

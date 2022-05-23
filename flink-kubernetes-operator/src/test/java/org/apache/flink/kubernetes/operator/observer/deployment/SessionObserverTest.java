@@ -23,19 +23,9 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.observer.Observer;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 
-import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
-import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import org.junit.jupiter.api.Test;
-
-import java.util.Optional;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -95,78 +85,5 @@ public class SessionObserverTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
-    }
-
-    @Test
-    public void testWatchMultipleNamespaces() {
-        FlinkService flinkService = new TestingFlinkService();
-        FlinkDeployment deployment = TestUtils.buildSessionCluster();
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec());
-
-        Deployment k8sDeployment = new Deployment();
-        k8sDeployment.setSpec(new DeploymentSpec());
-        k8sDeployment.setStatus(new DeploymentStatus());
-
-        AtomicInteger secondaryResourceAccessed = new AtomicInteger(0);
-        Observer observer = new SessionObserver(null, flinkService, configManager);
-        observer.observe(
-                deployment,
-                new Context() {
-                    @Override
-                    public Optional<RetryInfo> getRetryInfo() {
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
-                        assertNull(s);
-                        secondaryResourceAccessed.addAndGet(1);
-                        return Optional.of((T) k8sDeployment);
-                    }
-                });
-
-        assertEquals(1, secondaryResourceAccessed.get());
-
-        configManager.setWatchedNamespaces(Set.of(deployment.getMetadata().getNamespace()));
-        observer.observe(
-                deployment,
-                new Context() {
-                    @Override
-                    public Optional<RetryInfo> getRetryInfo() {
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
-                        assertNull(s);
-                        secondaryResourceAccessed.addAndGet(1);
-                        return Optional.of((T) k8sDeployment);
-                    }
-                });
-
-        assertEquals(2, secondaryResourceAccessed.get());
-
-        configManager.setWatchedNamespaces(Set.of(deployment.getMetadata().getNamespace(), "ns"));
-        observer.observe(
-                deployment,
-                new Context() {
-                    @Override
-                    public Optional<RetryInfo> getRetryInfo() {
-                        return Optional.empty();
-                    }
-
-                    @Override
-                    public <T> Optional<T> getSecondaryResource(Class<T> aClass, String s) {
-                        assertEquals(deployment.getMetadata().getNamespace(), s);
-                        secondaryResourceAccessed.addAndGet(1);
-                        return Optional.of((T) k8sDeployment);
-                    }
-                });
-
-        configManager.setWatchedNamespaces(null);
-        assertEquals(3, secondaryResourceAccessed.get());
     }
 }

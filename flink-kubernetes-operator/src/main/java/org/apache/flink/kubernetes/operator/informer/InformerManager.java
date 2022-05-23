@@ -19,22 +19,26 @@ package org.apache.flink.kubernetes.operator.informer;
 
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
-import org.apache.flink.kubernetes.operator.utils.OperatorUtils;
 import org.apache.flink.util.Preconditions;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
+import io.javaoperatorsdk.operator.api.reconciler.Constants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+
+import static io.javaoperatorsdk.operator.api.reconciler.Constants.DEFAULT_NAMESPACES_SET;
 
 /** The manager of the informers. */
 public class InformerManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(InformerManager.class);
+    public static final String CLUSTER_ID_INDEX = "clusterId_index";
     private final Set<String> watchedNamespaces;
     private final KubernetesClient kubernetesClient;
     private volatile Map<String, SharedIndexInformer<FlinkSessionJob>> sessionJobInformers;
@@ -43,59 +47,19 @@ public class InformerManager {
     public InformerManager(Set<String> watchedNamespaces, KubernetesClient kubernetesClient) {
         this.watchedNamespaces = watchedNamespaces;
         this.kubernetesClient = kubernetesClient;
-        LOG.info(
-                "Created informer manager with watchedNamespaces: {}",
-                watchedNamespaces.isEmpty()
-                        ? "[" + OperatorUtils.ALL_NAMESPACE + "]"
-                        : watchedNamespaces);
-    }
-
-    public SharedIndexInformer<FlinkSessionJob> getSessionJobInformer(String namespace) {
-        initSessionJobInformersWithIndexer();
-        var effectiveNamespace =
-                watchedNamespaces.isEmpty() ? OperatorUtils.ALL_NAMESPACE : namespace;
-        var informer = sessionJobInformers.get(effectiveNamespace);
-        Preconditions.checkNotNull(
-                informer, String.format("The informer for %s should not be null", namespace));
-        return informer;
+        LOG.info("Created informer manager with watchedNamespaces: {}", watchedNamespaces);
     }
 
     public SharedIndexInformer<FlinkDeployment> getFlinkDepInformer(String namespace) {
         initFlinkDepInformers();
         var effectiveNamespace =
-                watchedNamespaces.isEmpty() ? OperatorUtils.ALL_NAMESPACE : namespace;
+                DEFAULT_NAMESPACES_SET.equals(watchedNamespaces)
+                        ? Constants.WATCH_ALL_NAMESPACES
+                        : namespace;
         var informer = flinkDepInformers.get(effectiveNamespace);
         Preconditions.checkNotNull(
                 informer, String.format("The informer for %s should not be null", namespace));
         return informer;
-    }
-
-    private void initSessionJobInformersWithIndexer() {
-        if (sessionJobInformers == null) {
-            synchronized (this) {
-                if (sessionJobInformers == null) {
-                    var runnableInformers =
-                            OperatorUtils.createRunnableInformer(
-                                    FlinkSessionJob.class, watchedNamespaces, kubernetesClient);
-                    for (Map.Entry<String, SharedIndexInformer<FlinkSessionJob>> runnableInformer :
-                            runnableInformers.entrySet()) {
-                        runnableInformer
-                                .getValue()
-                                .addIndexers(
-                                        Map.of(
-                                                OperatorUtils.CLUSTER_ID_INDEX,
-                                                sessionJob ->
-                                                        List.of(
-                                                                sessionJob
-                                                                        .getSpec()
-                                                                        .getDeploymentName())));
-                        runnableInformer.getValue().run();
-                    }
-                    this.sessionJobInformers = runnableInformers;
-                    LOG.info("Created session job informers for {}", sessionJobInformers.keySet());
-                }
-            }
-        }
     }
 
     private void initFlinkDepInformers() {
@@ -103,7 +67,7 @@ public class InformerManager {
             synchronized (this) {
                 if (flinkDepInformers == null) {
                     var runnableInformers =
-                            OperatorUtils.createRunnableInformer(
+                            createRunnableInformer(
                                     FlinkDeployment.class, watchedNamespaces, kubernetesClient);
                     for (Map.Entry<String, SharedIndexInformer<FlinkDeployment>> runnableInformer :
                             runnableInformers.entrySet()) {
@@ -115,6 +79,29 @@ public class InformerManager {
                             flinkDepInformers.keySet());
                 }
             }
+        }
+    }
+
+    private static <CR extends HasMetadata>
+            Map<String, SharedIndexInformer<CR>> createRunnableInformer(
+                    Class<CR> resourceClass,
+                    Set<String> effectiveNamespaces,
+                    KubernetesClient kubernetesClient) {
+        if (DEFAULT_NAMESPACES_SET.equals(effectiveNamespaces)) {
+            return Map.of(
+                    Constants.WATCH_ALL_NAMESPACES,
+                    kubernetesClient.resources(resourceClass).inAnyNamespace().runnableInformer(0));
+        } else {
+            var informers = new HashMap<String, SharedIndexInformer<CR>>();
+            for (String effectiveNamespace : effectiveNamespaces) {
+                informers.put(
+                        effectiveNamespace,
+                        kubernetesClient
+                                .resources(resourceClass)
+                                .inNamespace(effectiveNamespace)
+                                .runnableInformer(0));
+            }
+            return informers;
         }
     }
 }

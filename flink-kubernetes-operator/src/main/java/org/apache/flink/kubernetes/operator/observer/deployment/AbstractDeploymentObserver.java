@@ -153,7 +153,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
             return;
         }
 
-        Optional<Deployment> deployment = getSecondaryResource(flinkApp, context);
+        Optional<Deployment> deployment = context.getSecondaryResource(Deployment.class);
         if (deployment.isPresent()) {
             DeploymentStatus status = deployment.get().getStatus();
             DeploymentSpec spec = deployment.get().getSpec();
@@ -197,14 +197,6 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
                 && previousJmStatus != JobManagerDeploymentStatus.ERROR) {
             onMissingDeployment(flinkApp);
         }
-    }
-
-    private Optional<Deployment> getSecondaryResource(FlinkDeployment flinkApp, Context context) {
-        return context.getSecondaryResource(
-                Deployment.class,
-                configManager.getOperatorConfiguration().getWatchedNamespaces().size() > 1
-                        ? flinkApp.getMetadata().getNamespace()
-                        : null);
     }
 
     private void checkFailedCreate(DeploymentStatus status) {
