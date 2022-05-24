@@ -36,7 +36,8 @@ COPY $DOCS_DIR/pom.xml ./$DOCS_DIR/
 COPY $OPERATOR_DIR/src ./$OPERATOR_DIR/src
 COPY $WEBHOOK_DIR/src ./$WEBHOOK_DIR/src
 
-COPY .git ./.git
+# Copy the .git directory when the directory exists.
+COPY *.git ./.git
 COPY tools ./tools
 
 RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl !flink-kubernetes-docs -DskipTests=$SKIP_TESTS
