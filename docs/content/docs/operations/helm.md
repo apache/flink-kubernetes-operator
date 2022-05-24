@@ -107,6 +107,28 @@ The webhook can be disabled during helm install by passing the `--set webhook.cr
 The operator supports watching a specific list of namespaces for FlinkDeployment resources. You can enable it by setting the `--set watchNamespaces={flink-test}` parameter.
 When this is enabled role-based access control is only created specifically for these namespaces for the operator and the jobmanagers, otherwise it defaults to cluster scope.
 
+<span class="label label-info">Note</span> When working with webhook in a specified namespace, users should pay attention to the definition of `namespaceSelector.matchExpressions` in `webhook.yaml`. Currently, the default implementation of webhook relies on the `kubernetes.io/metadata.name` label to filter the validation requests
+so that only validation requests from the specified namespace will be processed. The `kubernetes.io/metadata.name` label is automatically attached since k8s [1.21.1](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.21.md#v1211).
+
+As a result, for users who run the flink kubernetes operator with older k8s version, they may label the specified namespace by themselves before installing the operator with helm:
+
+```
+kubectl label namespace <target namespace name> kubernetes.io/metadata.name=<target namespace name>
+```
+
+Besides, users can define their own namespaceSelector to filter the requests due to customized requirements. 
+
+For example, if users label their namespace with key-value pair {customized_namespace_key: &lt;target namespace name&gt; }
+the corresponding namespaceSelector that only accepts requests from this namespace could be:
+```yaml
+namespaceSelector:
+  matchExpressions:
+    - key: customized_namespace_key
+    operator: In
+    values: [{{- range .Values.watchNamespaces }}{{ . | quote }},{{- end}}]
+```
+Check out this [document](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/) for more details.
+
 ## Working with Argo CD
 
 If you are using [Argo CD](https://argoproj.github.io) to manage the operator, you will encounter the issue which complains the CRDs too long. Same with [this issue](https://github.com/prometheus-operator/prometheus-operator/issues/4439).
