@@ -20,9 +20,7 @@ package org.apache.flink.kubernetes.operator.reconciler.sessionjob;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import org.slf4j.Logger;
 
@@ -33,46 +31,14 @@ public class SessionJobHelper {
 
     private final Logger logger;
     private final FlinkSessionJob sessionJob;
-    private final FlinkSessionJobSpec lastReconciledSpec;
 
     public SessionJobHelper(FlinkSessionJob sessionJob, Logger logger) {
         this.sessionJob = sessionJob;
-        this.lastReconciledSpec =
-                sessionJob.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         this.logger = logger;
-    }
-
-    public boolean savepointInProgress() {
-        return SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus());
-    }
-
-    public boolean shouldTriggerSavepoint() {
-        if (lastReconciledSpec == null) {
-            return false;
-        }
-        if (savepointInProgress()) {
-            return false;
-        }
-        return savepointTriggerNonce() != null
-                && !savepointTriggerNonce()
-                        .equals(lastReconciledSpec.getJob().getSavepointTriggerNonce());
-    }
-
-    private Long savepointTriggerNonce() {
-        return sessionJob.getSpec().getJob().getSavepointTriggerNonce();
     }
 
     public boolean specChanged(FlinkSessionJobSpec lastReconciledSpec) {
         return !sessionJob.getSpec().equals(lastReconciledSpec);
-    }
-
-    public boolean isJobRunning(FlinkDeployment deployment) {
-        FlinkDeploymentStatus status = deployment.getStatus();
-        JobManagerDeploymentStatus deploymentStatus = status.getJobManagerDeploymentStatus();
-        return deploymentStatus == JobManagerDeploymentStatus.READY
-                && org.apache.flink.api.common.JobStatus.RUNNING
-                        .name()
-                        .equals(sessionJob.getStatus().getJobStatus().getState());
     }
 
     public boolean sessionClusterReady(Optional<FlinkDeployment> flinkDeploymentOpt) {

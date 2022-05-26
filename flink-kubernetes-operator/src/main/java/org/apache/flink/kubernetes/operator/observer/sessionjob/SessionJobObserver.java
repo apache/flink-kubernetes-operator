@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.VoidObserverContext;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobHelper;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.util.Preconditions;
@@ -44,6 +45,7 @@ import java.util.stream.Collectors;
 public class SessionJobObserver implements Observer<FlinkSessionJob> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionJobObserver.class);
+    private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
     private final SavepointObserver savepointObserver;
     private final JobStatusObserver<VoidObserverContext> jobStatusObserver;
@@ -52,6 +54,7 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
             FlinkService flinkService,
             FlinkConfigManager configManager,
             StatusHelper<FlinkSessionJobStatus> statusHelper) {
+        this.flinkService = flinkService;
         this.configManager = configManager;
         this.savepointObserver = new SavepointObserver(flinkService, configManager, statusHelper);
         this.jobStatusObserver =
@@ -118,5 +121,7 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
         if (jobFound) {
             savepointObserver.observeSavepointStatus(flinkSessionJob, deployedConfig);
         }
+        SavepointUtils.resetTriggerIfJobNotRunning(
+                flinkService.getKubernetesClient(), flinkSessionJob);
     }
 }

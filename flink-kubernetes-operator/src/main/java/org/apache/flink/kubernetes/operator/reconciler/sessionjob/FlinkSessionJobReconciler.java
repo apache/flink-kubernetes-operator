@@ -28,9 +28,11 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -79,13 +81,13 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
             return;
         }
 
-        Configuration deployedConfig =
+        Configuration sessionJobConfig =
                 configManager.getSessionJobConfig(flinkDepOptional.get(), flinkSessionJob);
 
         if (lastReconciledSpec == null) {
             submitAndInitStatus(
                     flinkSessionJob,
-                    deployedConfig,
+                    sessionJobConfig,
                     Optional.ofNullable(
                                     flinkSessionJob.getSpec().getJob().getInitialSavepointPath())
                             .orElse(null));
@@ -94,17 +96,17 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
             return;
         }
 
-        if (!deployedConfig.getBoolean(
+        if (!sessionJobConfig.getBoolean(
                         KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT)
-                && helper.savepointInProgress()) {
+                && SavepointUtils.savepointInProgress(flinkSessionJob.getStatus().getJobStatus())) {
             LOG.info("Delaying job reconciliation until pending savepoint is completed");
             return;
         }
 
         boolean specChanged = helper.specChanged(lastReconciledSpec);
+        var jobSpec = flinkSessionJob.getSpec().getJob();
 
         if (specChanged) {
-            var jobSpec = flinkSessionJob.getSpec().getJob();
             JobState currentJobState = lastReconciledSpec.getJob().getState();
             JobState desiredJobState = jobSpec.getState();
             UpgradeMode upgradeMode = jobSpec.getUpgradeMode();
@@ -113,22 +115,24 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                 if (desiredJobState == JobState.RUNNING) {
                     LOG.info("Upgrading/Restarting running job, suspending first...");
                 }
-                stateAfterReconcile = suspendJob(flinkSessionJob, upgradeMode, deployedConfig);
+                stateAfterReconcile = suspendJob(flinkSessionJob, upgradeMode, sessionJobConfig);
             }
             if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
                 if (upgradeMode == UpgradeMode.STATELESS) {
-                    submitAndInitStatus(flinkSessionJob, deployedConfig, null);
+                    submitAndInitStatus(flinkSessionJob, sessionJobConfig, null);
                 } else if (upgradeMode == UpgradeMode.LAST_STATE
                         || upgradeMode == UpgradeMode.SAVEPOINT) {
-                    restoreFromLastSavepoint(flinkSessionJob, deployedConfig);
+                    restoreFromLastSavepoint(flinkSessionJob, sessionJobConfig);
                 }
                 stateAfterReconcile = JobState.RUNNING;
             }
             ReconciliationUtils.updateForSpecReconciliationSuccess(
                     flinkSessionJob, stateAfterReconcile);
-        } else if (helper.shouldTriggerSavepoint() && helper.isJobRunning(flinkDepOptional.get())) {
-            triggerSavepoint(flinkSessionJob, deployedConfig);
-            ReconciliationUtils.updateSavepointReconciliationSuccess(flinkSessionJob);
+        } else {
+            if (!SavepointUtils.triggerSavepointIfNeeded(
+                    flinkService, flinkSessionJob, sessionJobConfig)) {
+                LOG.info("Session Job is fully reconciled, nothing to do.");
+            }
         }
     }
 
@@ -199,18 +203,9 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
         jobStatus.setState(stateAfterReconcile.name());
         savepointOpt.ifPresent(
                 location -> {
-                    Savepoint sp = Savepoint.of(location);
-                    jobStatus.getSavepointInfo().setLastSavepoint(sp);
-                    jobStatus.getSavepointInfo().addSavepointToHistory(sp);
+                    Savepoint sp = Savepoint.of(location, SavepointTriggerType.UPGRADE);
+                    jobStatus.getSavepointInfo().updateLastSavepoint(sp);
                 });
         return stateAfterReconcile;
-    }
-
-    private void triggerSavepoint(FlinkSessionJob sessionJob, Configuration effectiveConfig)
-            throws Exception {
-        flinkService.triggerSavepoint(
-                sessionJob.getStatus().getJobStatus().getJobId(),
-                sessionJob.getStatus().getJobStatus().getSavepointInfo(),
-                effectiveConfig);
     }
 }

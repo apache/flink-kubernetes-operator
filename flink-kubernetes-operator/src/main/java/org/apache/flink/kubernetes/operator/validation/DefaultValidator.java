@@ -197,6 +197,12 @@ public class DefaultValidator implements FlinkResourceValidator {
                         String.format(
                                 "Savepoint could not be manually triggered for the running job while config key[%s] is not set",
                                 CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
+            } else if (configuration.contains(
+                    KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL)) {
+                return Optional.of(
+                        String.format(
+                                "Periodic savepoints cannot be enabled when config key[%s] is not set",
+                                CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
             }
         }
 

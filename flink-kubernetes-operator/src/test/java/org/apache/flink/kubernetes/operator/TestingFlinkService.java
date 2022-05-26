@@ -35,6 +35,8 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -88,7 +90,7 @@ public class TestingFlinkService extends FlinkService {
     private PodList podList = new PodList();
     private Consumer<Configuration> listJobConsumer = conf -> {};
     private List<String> disposedSavepoints = new ArrayList<>();
-    private SavepointFetchResult savepointFetchResult;
+    private Map<String, Boolean> savepointTriggers = new HashMap<>();
 
     public TestingFlinkService() {
         super(null, new FlinkConfigManager(new Configuration()));
@@ -234,10 +236,27 @@ public class TestingFlinkService extends FlinkService {
     @Override
     public void triggerSavepoint(
             String jobId,
-            org.apache.flink.kubernetes.operator.crd.status.SavepointInfo savepointInfo,
-            Configuration conf)
-            throws Exception {
-        savepointInfo.setTrigger("trigger_" + triggerCounter++);
+            SavepointTriggerType triggerType,
+            SavepointInfo savepointInfo,
+            Configuration conf) {
+        var triggerId = "trigger_" + triggerCounter++;
+        savepointInfo.setTrigger(triggerId, triggerType);
+        savepointTriggers.put(triggerId, false);
+    }
+
+    @Override
+    public SavepointFetchResult fetchSavepointInfo(
+            String triggerId, String jobId, Configuration conf) {
+
+        if (savepointTriggers.containsKey(triggerId)) {
+            if (savepointTriggers.get(triggerId)) {
+                return SavepointFetchResult.completed("savepoint_" + savepointCounter++);
+            }
+            savepointTriggers.put(triggerId, true);
+            return SavepointFetchResult.pending();
+        }
+
+        return SavepointFetchResult.error("Failed");
     }
 
     @Override
@@ -323,23 +342,6 @@ public class TestingFlinkService extends FlinkService {
     protected void waitForClusterShutdown(Configuration conf) {}
 
     @Override
-    public SavepointFetchResult fetchSavepointInfo(
-            String triggerId, String jobId, Configuration conf) {
-
-        if (savepointFetchResult == null) {
-            savepointFetchResult = SavepointFetchResult.pending();
-            return savepointFetchResult;
-        }
-
-        if (savepointFetchResult.isPending()) {
-            savepointFetchResult = SavepointFetchResult.error("Failed");
-            return savepointFetchResult;
-        }
-
-        return SavepointFetchResult.completed(Savepoint.of("savepoint_" + savepointCounter++));
-    }
-
-    @Override
     public void disposeSavepoint(String savepointPath, Configuration conf) {
         disposedSavepoints.add(savepointPath);
     }
@@ -363,7 +365,7 @@ public class TestingFlinkService extends FlinkService {
         }
 
         if (t.f0 != null) {
-            return Optional.of(Savepoint.of(t.f0));
+            return Optional.of(Savepoint.of(t.f0, SavepointTriggerType.UNKNOWN));
         } else {
             return Optional.empty();
         }

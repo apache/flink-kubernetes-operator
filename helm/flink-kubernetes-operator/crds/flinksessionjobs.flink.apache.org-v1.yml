@@ -96,11 +96,25 @@ spec:
                             type: integer
                           location:
                             type: string
+                          triggerType:
+                            enum:
+                            - MANUAL
+                            - PERIODIC
+                            - UPGRADE
+                            - UNKNOWN
+                            type: string
                         type: object
                       triggerId:
                         type: string
                       triggerTimestamp:
                         type: integer
+                      triggerType:
+                        enum:
+                        - MANUAL
+                        - PERIODIC
+                        - UPGRADE
+                        - UNKNOWN
+                        type: string
                       savepointHistory:
                         items:
                           properties:
@@ -108,8 +122,17 @@ spec:
                               type: integer
                             location:
                               type: string
+                            triggerType:
+                              enum:
+                              - MANUAL
+                              - PERIODIC
+                              - UPGRADE
+                              - UNKNOWN
+                              type: string
                           type: object
                         type: array
+                      lastPeriodicSavepointTimestamp:
+                        type: integer
                     type: object
                 type: object
               error:

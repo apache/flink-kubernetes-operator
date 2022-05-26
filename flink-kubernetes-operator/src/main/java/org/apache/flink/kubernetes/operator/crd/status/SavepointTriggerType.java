@@ -15,26 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.observer;
+package org.apache.flink.kubernetes.operator.crd.status;
 
-import lombok.Value;
-
-/** Result of a fetch savepoint operation. */
-@Value
-public class SavepointFetchResult {
-    String location;
-    boolean pending;
-    String error;
-
-    public static SavepointFetchResult error(String error) {
-        return new SavepointFetchResult(null, false, error);
-    }
-
-    public static SavepointFetchResult pending() {
-        return new SavepointFetchResult(null, true, null);
-    }
-
-    public static SavepointFetchResult completed(String location) {
-        return new SavepointFetchResult(location, false, null);
-    }
+/** Savepoint trigger mechanism. */
+public enum SavepointTriggerType {
+    /** Savepoint manually triggered by changing the savepointTriggerNonce. */
+    MANUAL,
+    /** Savepoint periodically triggered by the operator. */
+    PERIODIC,
+    /** Savepoint triggered during stateful upgrade. */
+    UPGRADE,
+    /** Savepoint trigger mechanism unknown, such as savepoint retrieved directly from Flink job. */
+    UNKNOWN
 }

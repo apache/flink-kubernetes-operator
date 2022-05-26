@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.messages.Acknowledge;
@@ -203,6 +204,7 @@ public class FlinkServiceTest {
         flinkDeployment.getStatus().setJobStatus(jobStatus);
         flinkService.triggerSavepoint(
                 flinkDeployment.getStatus().getJobStatus().getJobId(),
+                SavepointTriggerType.MANUAL,
                 flinkDeployment.getStatus().getJobStatus().getSavepointInfo(),
                 configuration);
         assertTrue(triggerSavepointFuture.isDone());

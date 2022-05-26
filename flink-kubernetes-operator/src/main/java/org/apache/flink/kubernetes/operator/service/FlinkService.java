@@ -45,6 +45,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -60,6 +61,8 @@ import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
+import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointInfo;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMessageParameters;
@@ -434,10 +437,8 @@ public class FlinkService {
         deploymentStatus.getJobStatus().setState(JobStatus.FINISHED.name());
         savepointOpt.ifPresent(
                 location -> {
-                    Savepoint sp = Savepoint.of(location);
-                    deploymentStatus.getJobStatus().getSavepointInfo().setLastSavepoint(sp);
-                    // this is required for Flink < 1.15
-                    deploymentStatus.getJobStatus().getSavepointInfo().addSavepointToHistory(sp);
+                    Savepoint sp = Savepoint.of(location, SavepointTriggerType.UPGRADE);
+                    deploymentStatus.getJobStatus().getSavepointInfo().updateLastSavepoint(sp);
                 });
 
         var shutdownDisabled =
@@ -536,6 +537,7 @@ public class FlinkService {
 
     public void triggerSavepoint(
             String jobId,
+            SavepointTriggerType triggerType,
             org.apache.flink.kubernetes.operator.crd.status.SavepointInfo savepointInfo,
             Configuration conf)
             throws Exception {
@@ -567,8 +569,7 @@ public class FlinkService {
                             .get(timeout, TimeUnit.SECONDS);
             LOG.info("Savepoint successfully triggered: " + response.getTriggerId().toHexString());
 
-            savepointInfo.setTrigger(response.getTriggerId().toHexString());
-            savepointInfo.setTriggerTimestamp(System.currentTimeMillis());
+            savepointInfo.setTrigger(response.getTriggerId().toHexString(), triggerType);
         }
     }
 
@@ -603,7 +604,8 @@ public class FlinkService {
                         "Latest checkpoint not externally addressable, manual recovery required.",
                         "CheckpointNotFound");
             }
-            return latestCheckpointOpt.map(Savepoint::of);
+            return latestCheckpointOpt.map(
+                    pointer -> Savepoint.of(pointer, SavepointTriggerType.UNKNOWN));
         }
     }
 
@@ -639,11 +641,9 @@ public class FlinkService {
                     return SavepointFetchResult.pending();
                 }
             }
-            Savepoint savepoint =
-                    new Savepoint(
-                            System.currentTimeMillis(), response.get().resource().getLocation());
-            LOG.info("Savepoint result: " + savepoint);
-            return SavepointFetchResult.completed(savepoint);
+            String location = response.get().resource().getLocation();
+            LOG.info("Savepoint result: {}", location);
+            return SavepointFetchResult.completed(location);
         } catch (Exception e) {
             LOG.error("Exception while fetching the savepoint result", e);
             return SavepointFetchResult.error(e.getMessage());
@@ -653,7 +653,17 @@ public class FlinkService {
     public void disposeSavepoint(String savepointPath, Configuration conf) throws Exception {
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
-            clusterClient.disposeSavepoint(savepointPath);
+            clusterClient
+                    .sendRequest(
+                            SavepointDisposalTriggerHeaders.getInstance(),
+                            EmptyMessageParameters.getInstance(),
+                            new SavepointDisposalRequest(savepointPath))
+                    .get(
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkClientTimeout()
+                                    .getSeconds(),
+                            TimeUnit.SECONDS);
         }
     }
 

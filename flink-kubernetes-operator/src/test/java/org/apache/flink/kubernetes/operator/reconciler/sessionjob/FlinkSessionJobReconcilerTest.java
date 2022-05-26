@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
@@ -194,6 +195,14 @@ public class FlinkSessionJobReconcilerTest {
                         .getSavepointInfo()
                         .getSavepointHistory()
                         .size());
+        assertEquals(
+                SavepointTriggerType.UPGRADE,
+                statefulSessionJob
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getTriggerType());
 
         // upgraded
         reconciler.reconcile(statefulSessionJob, readyContext);
@@ -299,6 +308,9 @@ public class FlinkSessionJobReconcilerTest {
         assertEquals(
                 "trigger_0",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertEquals(
+                SavepointTriggerType.MANUAL,
+                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
 
         // parallelism not changed
         assertEquals(

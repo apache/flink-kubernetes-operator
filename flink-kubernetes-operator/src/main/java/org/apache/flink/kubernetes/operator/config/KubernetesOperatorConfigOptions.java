@@ -163,4 +163,12 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Custom HTTP header for HttpArtifactFetcher. The header will be applied when getting the session job artifacts. "
                                     + "Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
+
+    public static final ConfigOption<Duration> PERIODIC_SAVEPOINT_INTERVAL =
+            ConfigOptions.key("kubernetes.operator.periodic.savepoint.interval")
+                    .durationType()
+                    .defaultValue(Duration.ZERO)
+                    .withDescription(
+                            "Interval at which periodic savepoints will be triggered. "
+                                    + "The triggering schedule is not guaranteed, savepoints will be triggered as part of the regular reconcile loop.");
 }
