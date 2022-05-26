@@ -271,7 +271,7 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
                 throw new RuntimeException("This indicates a bug...");
             }
             LOG.info("Deleting deployment with terminated application before new deployment");
-            flinkService.deleteClusterDeployment(meta, status, false);
+            flinkService.deleteClusterDeployment(meta, status, true);
             FlinkUtils.waitForClusterShutdown(
                     kubernetesClient,
                     deployConfig,
