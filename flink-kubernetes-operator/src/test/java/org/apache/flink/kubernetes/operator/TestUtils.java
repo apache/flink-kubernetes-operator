@@ -70,6 +70,7 @@ import org.junit.jupiter.api.Assertions;
 
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -102,6 +103,7 @@ public class TestUtils {
                 new ObjectMetaBuilder()
                         .withName(TEST_DEPLOYMENT_NAME)
                         .withNamespace(TEST_NAMESPACE)
+                        .withCreationTimestamp(Instant.now().toString())
                         .build());
         deployment.setSpec(getTestFlinkDeploymentSpec(version));
         return deployment;
@@ -132,6 +134,7 @@ public class TestUtils {
                 new ObjectMetaBuilder()
                         .withName(TEST_SESSION_JOB_NAME)
                         .withNamespace(TEST_NAMESPACE)
+                        .withCreationTimestamp(Instant.now().toString())
                         .build());
         sessionJob.setSpec(
                 FlinkSessionJobSpec.builder()

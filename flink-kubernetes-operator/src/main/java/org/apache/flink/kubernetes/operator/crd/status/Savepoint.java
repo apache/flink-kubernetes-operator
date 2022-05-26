@@ -35,7 +35,10 @@ public class Savepoint {
     /** External pointer of the savepoint can be used to recover jobs. */
     private String location;
 
-    public static Savepoint of(String location) {
-        return new Savepoint(System.currentTimeMillis(), location);
+    /** Savepoint trigger mechanism. */
+    private SavepointTriggerType triggerType = SavepointTriggerType.UNKNOWN;
+
+    public static Savepoint of(String location, SavepointTriggerType type) {
+        return new Savepoint(System.currentTimeMillis(), location, type);
     }
 }

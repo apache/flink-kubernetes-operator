@@ -260,6 +260,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | timeStamp | long | Millisecond timestamp at the start of the savepoint operation. |
 | location | java.lang.String | External pointer of the savepoint can be used to recover jobs. |
+| triggerType | org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType | Savepoint trigger mechanism. |
 
 ### SavepointInfo
 **Class**: org.apache.flink.kubernetes.operator.crd.status.SavepointInfo
@@ -270,5 +271,19 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | lastSavepoint | org.apache.flink.kubernetes.operator.crd.status.Savepoint | Last completed savepoint by the operator. |
 | triggerId | java.lang.String | Trigger id of a pending savepoint operation. |
-| triggerTimestamp | java.lang.Long | Trigger timestamp of a pending savepoint operation. |
+| triggerTimestamp | long | Trigger timestamp of a pending savepoint operation. |
+| triggerType | org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType | Savepoint trigger mechanism. |
 | savepointHistory | java.util.List<org.apache.flink.kubernetes.operator.crd.status.Savepoint> | List of recent savepoints. |
+| lastPeriodicSavepointTimestamp | long | Trigger timestamp of last periodic savepoint operation. |
+
+### SavepointTriggerType
+**Class**: org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType
+
+**Description**: Savepoint trigger mechanism.
+
+| Value | Docs |
+| ----- | ---- |
+| MANUAL | Savepoint manually triggered by changing the savepointTriggerNonce. |
+| PERIODIC | Savepoint periodically triggered by the operator. |
+| UPGRADE | Savepoint triggered during stateful upgrade. |
+| UNKNOWN | Savepoint trigger mechanism unknown, such as savepoint retrieved directly from Flink job. |

@@ -286,17 +286,15 @@ public class ReconciliationUtils {
                         == JobManagerDeploymentStatus.MISSING);
     }
 
-    public static boolean isJobInTerminalState(FlinkDeploymentStatus status) {
+    public static boolean isJobInTerminalState(CommonStatus<?> status) {
         var jobState = status.getJobStatus().getState();
         return org.apache.flink.api.common.JobStatus.valueOf(jobState).isGloballyTerminalState();
     }
 
-    public static boolean isJobRunning(FlinkDeploymentStatus status) {
-        JobManagerDeploymentStatus deploymentStatus = status.getJobManagerDeploymentStatus();
-        return deploymentStatus == JobManagerDeploymentStatus.READY
-                && org.apache.flink.api.common.JobStatus.RUNNING
-                        .name()
-                        .equals(status.getJobStatus().getState());
+    public static boolean isJobRunning(CommonStatus<?> status) {
+        return org.apache.flink.api.common.JobStatus.RUNNING
+                .name()
+                .equals(status.getJobStatus().getState());
     }
 
     /**

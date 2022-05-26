@@ -23,7 +23,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,40 +41,42 @@ public class SavepointInfo {
     private String triggerId = "";
 
     /** Trigger timestamp of a pending savepoint operation. */
-    private Long triggerTimestamp = 0L;
+    private long triggerTimestamp = 0L;
+
+    /** Savepoint trigger mechanism. */
+    private SavepointTriggerType triggerType = SavepointTriggerType.UNKNOWN;
 
     /** List of recent savepoints. */
     private List<Savepoint> savepointHistory = new ArrayList<>();
 
-    public void setTrigger(String triggerId) {
+    /** Trigger timestamp of last periodic savepoint operation. */
+    private long lastPeriodicSavepointTimestamp = 0L;
+
+    public void setTrigger(String triggerId, SavepointTriggerType triggerType) {
         this.triggerId = triggerId;
         this.triggerTimestamp = System.currentTimeMillis();
+        this.triggerType = triggerType;
     }
 
-    public boolean resetTrigger() {
-        boolean reseted = StringUtils.isNotEmpty(this.triggerId);
+    public void resetTrigger() {
         this.triggerId = "";
         this.triggerTimestamp = 0L;
-        return reseted;
-    }
-
-    public void updateLastSavepoint(Savepoint savepoint) {
-        lastSavepoint = savepoint;
-        resetTrigger();
     }
 
     /**
-     * Add the savepoint to the history if it isn't already the most recent savepoint.
+     * Update last savepoint info and add the savepoint to the history if it isn't already the most
+     * recent savepoint.
      *
-     * @param newSavepoint
+     * @param savepoint
      */
-    public void addSavepointToHistory(Savepoint newSavepoint) {
-        if (!savepointHistory.isEmpty()) {
-            Savepoint recentSp = savepointHistory.get(savepointHistory.size() - 1);
-            if (recentSp.getLocation().equals(newSavepoint.getLocation())) {
-                return;
+    public void updateLastSavepoint(Savepoint savepoint) {
+        if (lastSavepoint == null || !lastSavepoint.getLocation().equals(savepoint.getLocation())) {
+            lastSavepoint = savepoint;
+            savepointHistory.add(savepoint);
+            if (savepoint.getTriggerType() == SavepointTriggerType.PERIODIC) {
+                lastPeriodicSavepointTimestamp = savepoint.getTimeStamp();
             }
         }
-        savepointHistory.add(newSavepoint);
+        resetTrigger();
     }
 }

@@ -142,12 +142,10 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
             rollbackApplication(flinkApp);
         } else if (ReconciliationUtils.shouldRecoverDeployment(observeConfig, flinkApp)) {
             recoverJmDeployment(flinkApp, observeConfig);
-        } else if (SavepointUtils.shouldTriggerSavepoint(desiredJobSpec, status)
-                && ReconciliationUtils.isJobRunning(status)) {
-            triggerSavepoint(flinkApp);
-            ReconciliationUtils.updateSavepointReconciliationSuccess(flinkApp);
         } else {
-            LOG.info("Deployment is fully reconciled, nothing to do.");
+            if (!SavepointUtils.triggerSavepointIfNeeded(flinkService, flinkApp, observeConfig)) {
+                LOG.info("Deployment is fully reconciled, nothing to do.");
+            }
         }
     }
 
@@ -325,12 +323,5 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
     @SneakyThrows
     protected void shutdown(FlinkDeployment flinkApp) {
         flinkService.cancelJob(flinkApp, UpgradeMode.STATELESS);
-    }
-
-    private void triggerSavepoint(FlinkDeployment deployment) throws Exception {
-        flinkService.triggerSavepoint(
-                deployment.getStatus().getJobStatus().getJobId(),
-                deployment.getStatus().getJobStatus().getSavepointInfo(),
-                configManager.getObserveConfig(deployment));
     }
 }

@@ -38,6 +38,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
@@ -133,6 +134,20 @@ public class DefaultValidatorTest {
                         "Savepoint could not be manually triggered for the running job while config key[%s] is not set",
                         CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
 
+        testError(
+                dep -> {
+                    dep.getSpec()
+                            .setFlinkConfiguration(
+                                    Map.of(
+                                            KubernetesOperatorConfigOptions
+                                                    .PERIODIC_SAVEPOINT_INTERVAL
+                                                    .key(),
+                                            "1m"));
+                },
+                String.format(
+                        "Periodic savepoints cannot be enabled when config key[%s] is not set",
+                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
+
         // Test conf validation
         testSuccess(
                 dep ->
@@ -214,7 +229,7 @@ public class DefaultValidatorTest {
                     dep.getStatus()
                             .getJobStatus()
                             .getSavepointInfo()
-                            .setLastSavepoint(Savepoint.of("sp"));
+                            .setLastSavepoint(Savepoint.of("sp", SavepointTriggerType.UPGRADE));
 
                     dep.getStatus()
                             .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());

@@ -34,6 +34,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -116,6 +117,14 @@ public class ApplicationReconcilerTest {
         runningJobs = flinkService.listJobs();
         assertEquals(1, flinkService.getRunningCount());
         assertEquals("savepoint_0", runningJobs.get(0).f0);
+        assertEquals(
+                SavepointTriggerType.UPGRADE,
+                statefulUpgrade
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getTriggerType());
 
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().setRestartNonce(100L);
@@ -146,7 +155,7 @@ public class ApplicationReconcilerTest {
                 .getStatus()
                 .getJobStatus()
                 .getSavepointInfo()
-                .setLastSavepoint(Savepoint.of("finished_sp"));
+                .setLastSavepoint(Savepoint.of("finished_sp", SavepointTriggerType.UPGRADE));
         deployment.getStatus().getJobStatus().setState("FINISHED");
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler.reconcile(deployment, context);
@@ -236,6 +245,9 @@ public class ApplicationReconcilerTest {
         assertEquals(
                 "trigger_0",
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertEquals(
+                SavepointTriggerType.MANUAL,
+                spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
 
         spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
 
@@ -254,6 +266,9 @@ public class ApplicationReconcilerTest {
         assertEquals(
                 "trigger_1",
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertEquals(
+                SavepointTriggerType.MANUAL,
+                spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
 
         spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
 

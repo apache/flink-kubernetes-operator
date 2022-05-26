@@ -77,10 +77,11 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
                                         resource,
                                         EventUtils.Type.Warning,
                                         "SavepointError",
-                                        "Savepoint failed for savepointTriggerNonce: "
-                                                + resource.getSpec()
+                                        SavepointUtils.createSavepointError(
+                                                savepointInfo,
+                                                resource.getSpec()
                                                         .getJob()
-                                                        .getSavepointTriggerNonce(),
+                                                        .getSavepointTriggerNonce()),
                                         EventUtils.Component.Operator));
 
         // We only need to observe latest checkpoint/savepoint for terminal jobs
@@ -145,10 +146,14 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
         }
 
         LOG.info("Savepoint status updated with latest completed savepoint info");
-        currentSavepointInfo.updateLastSavepoint(savepointFetchResult.getSavepoint());
+        var savepoint =
+                new Savepoint(
+                        currentSavepointInfo.getTriggerTimestamp(),
+                        savepointFetchResult.getLocation(),
+                        currentSavepointInfo.getTriggerType());
+        currentSavepointInfo.updateLastSavepoint(savepoint);
 
-        updateSavepointHistory(
-                currentSavepointInfo, savepointFetchResult.getSavepoint(), deployedConfig);
+        updateSavepointHistory(currentSavepointInfo, savepoint, deployedConfig);
         return Optional.empty();
     }
 
@@ -157,8 +162,6 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
             SavepointInfo currentSavepointInfo,
             Savepoint newSavepoint,
             Configuration deployedConfig) {
-
-        currentSavepointInfo.addSavepointToHistory(newSavepoint);
 
         // maintain history
         List<Savepoint> savepointHistory = currentSavepointInfo.getSavepointHistory();
@@ -195,11 +198,7 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
         try {
             flinkService
                     .getLastCheckpoint(JobID.fromHexString(jobID), deployedConfig)
-                    .ifPresent(
-                            sp -> {
-                                savepointInfo.updateLastSavepoint(sp);
-                                savepointInfo.addSavepointToHistory(sp);
-                            });
+                    .ifPresent(savepointInfo::updateLastSavepoint);
         } catch (Exception e) {
             LOG.error("Could not observe latest savepoint information.", e);
             throw new ReconciliationException(e);

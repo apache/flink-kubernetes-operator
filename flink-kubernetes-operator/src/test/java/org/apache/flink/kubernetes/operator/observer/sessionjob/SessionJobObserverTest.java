@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingStatusHelper;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
@@ -152,20 +153,22 @@ public class SessionJobObserverTest {
         Assertions.assertFalse(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
-        flinkService.triggerSavepoint(jobID, savepointInfo, new Configuration());
+        flinkService.triggerSavepoint(
+                jobID, SavepointTriggerType.MANUAL, savepointInfo, new Configuration());
         Assertions.assertTrue(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
         Assertions.assertEquals("trigger_0", savepointInfo.getTriggerId());
-        observer.observe(sessionJob, readyContext); // pending
-        observer.observe(sessionJob, readyContext); // error
 
-        flinkService.triggerSavepoint(jobID, savepointInfo, new Configuration());
+        flinkService.triggerSavepoint(
+                jobID, SavepointTriggerType.MANUAL, savepointInfo, new Configuration());
         Assertions.assertTrue(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
         Assertions.assertEquals("trigger_1", savepointInfo.getTriggerId());
-        flinkService.triggerSavepoint(jobID, savepointInfo, new Configuration());
+        flinkService.triggerSavepoint(
+                jobID, SavepointTriggerType.MANUAL, savepointInfo, new Configuration());
         Assertions.assertTrue(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
+        observer.observe(sessionJob, readyContext); // pending
         observer.observe(sessionJob, readyContext); // success
         Assertions.assertEquals("savepoint_0", savepointInfo.getLastSavepoint().getLocation());
         Assertions.assertFalse(

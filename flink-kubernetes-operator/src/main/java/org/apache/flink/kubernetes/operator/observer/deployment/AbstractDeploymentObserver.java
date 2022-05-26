@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -72,10 +73,9 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
 
     @Override
     public void observe(FlinkDeployment flinkApp, Context context) {
-        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
-                flinkApp.getStatus().getReconciliationStatus();
-        FlinkDeploymentSpec lastReconciledSpec =
-                reconciliationStatus.deserializeLastReconciledSpec();
+        var status = flinkApp.getStatus();
+        var reconciliationStatus = status.getReconciliationStatus();
+        var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
 
         // Nothing has been launched so skip observing
         if (lastReconciledSpec == null
@@ -101,20 +101,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
             observeClusterInfo(flinkApp, observeConfig);
         }
 
-        if (!ReconciliationUtils.isJobRunning(flinkApp.getStatus())) {
-            if (flinkApp.getStatus().getJobStatus().getSavepointInfo().resetTrigger()) {
-                logger.error("Job is not running, cancelling savepoint operation");
-                EventUtils.createOrUpdateEvent(
-                        flinkService.getKubernetesClient(),
-                        flinkApp,
-                        EventUtils.Type.Warning,
-                        "SavepointError",
-                        "Savepoint failed for savepointTriggerNonce: "
-                                + flinkApp.getSpec().getJob().getSavepointTriggerNonce(),
-                        EventUtils.Component.Operator);
-            }
-        }
-
+        SavepointUtils.resetTriggerIfJobNotRunning(flinkService.getKubernetesClient(), flinkApp);
         clearErrorsIfDeploymentIsHealthy(flinkApp);
     }
 

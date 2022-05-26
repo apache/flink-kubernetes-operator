@@ -55,10 +55,10 @@ public abstract class JobStatusObserver<CTX> {
             clusterJobStatuses = new ArrayList<>(flinkService.listJobs(deployedConfig));
         } catch (Exception e) {
             LOG.error("Exception while listing jobs", e);
+            ifRunningMoveToReconciling(jobStatus, previousJobStatus);
             if (e instanceof TimeoutException) {
                 onTimeout(ctx);
             }
-            ifRunningMoveToReconciling(jobStatus, previousJobStatus);
             return false;
         }
 

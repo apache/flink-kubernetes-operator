@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -173,6 +174,7 @@ public class ApplicationObserverTest {
 
         flinkService.triggerSavepoint(
                 deployment.getStatus().getJobStatus().getJobId(),
+                SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
                 conf);
         // pending savepoint
@@ -182,6 +184,7 @@ public class ApplicationObserverTest {
         observer.observe(deployment, readyContext);
         assertTrue(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
+        deployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId("unknown");
         // savepoint error
         assertEquals(
                 0,
@@ -217,12 +220,15 @@ public class ApplicationObserverTest {
         // savepoint success
         flinkService.triggerSavepoint(
                 deployment.getStatus().getJobStatus().getJobId(),
+                SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
                 conf);
         assertEquals(
                 "trigger_1",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         observer.observe(deployment, readyContext);
+        observer.observe(deployment, readyContext);
+
         assertEquals(
                 "savepoint_0",
                 deployment
@@ -236,6 +242,7 @@ public class ApplicationObserverTest {
         // second attempt success
         flinkService.triggerSavepoint(
                 deployment.getStatus().getJobStatus().getJobId(),
+                SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
                 conf);
         assertEquals(
@@ -244,6 +251,8 @@ public class ApplicationObserverTest {
         assertTrue(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
         observer.observe(deployment, readyContext);
+        observer.observe(deployment, readyContext);
+
         assertEquals(
                 "savepoint_1",
                 deployment
@@ -257,6 +266,7 @@ public class ApplicationObserverTest {
         // application failure after checkpoint trigger
         flinkService.triggerSavepoint(
                 deployment.getStatus().getJobStatus().getJobId(),
+                SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
                 conf);
         assertEquals(
