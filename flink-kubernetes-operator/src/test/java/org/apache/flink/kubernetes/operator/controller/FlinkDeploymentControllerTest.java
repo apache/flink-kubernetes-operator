@@ -327,10 +327,6 @@ public class FlinkDeploymentControllerTest {
                         .getSavepointHistory()
                         .size());
 
-        flinkService.setDeployFailure(true);
-        assertNotEquals(0, testController.reconcile(appCluster, context).getScheduleDelay().get());
-
-        flinkService.setDeployFailure(false);
         testController.reconcile(appCluster, context);
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());

@@ -79,7 +79,8 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
 
         // Nothing has been launched so skip observing
         if (lastReconciledSpec == null
-                || reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
+                || reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK
+                || reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
             return;
         }
 

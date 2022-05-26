@@ -35,7 +35,6 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
-import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -128,7 +127,7 @@ public class TestingFlinkService extends FlinkService {
             validateHaMetadataExists(conf);
         }
         if (deployFailure) {
-            throw new DeploymentFailedException("Deployment failure", "test");
+            throw new Exception("Deployment failure");
         }
         if (!jobs.isEmpty()) {
             throw new Exception("Cannot submit 2 application clusters at the same time");
