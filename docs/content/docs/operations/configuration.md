@@ -50,11 +50,50 @@ defaultConfiguration:
 
 To learn more about metrics and logging configuration please refer to the dedicated [docs page]({{< ref "docs/operations/metrics-logging" >}}).
 
+## Dynamic Operator Configuration
+
+The Kubernetes operator supports dynamic config changes through the operator ConfigMaps. Dynamic operator configuration can be enabled by setting `kubernetes.operator.dynamic.config.enabled`  to true. Time interval for checking dynamic config changes is specified by `kubernetes.operator.dynamic.config.check.interval` of which default value is 5 minutes. 
+
+Verify whether dynamic operator configuration updates is enabled via the `deploy/flink-kubernetes-operator` log has:
+
+```
+2022-05-28 13:08:29,222 o.a.f.k.o.c.FlinkConfigManager [INFO ] Enabled dynamic config updates, checking config changes every PT5M
+```
+
+For example, the default configuration of `flink-conf.yaml` in the `defaultConfiguration` section of the Helm `values.yaml` file is as follows:
+
+```
+defaultConfiguration:
+  create: true
+  append: false
+  flink-conf.yaml: |+
+    # Flink Config Overrides
+    kubernetes.operator.reconciler.reschedule.interval: 60 s
+```
+
+When the interval for the controller to reschedule the reconcile process need to change with 30 seconds, `kubernetes.operator.reconciler.reschedule.interval` in the `defaultConfiguration` section can directly change to 30s:
+
+```
+defaultConfiguration:
+  create: true
+  append: false
+  flink-conf.yaml: |+
+    # Flink Config Overrides
+    kubernetes.operator.reconciler.reschedule.interval: 30 s
+```
+
+Verify whether the config value of `kubernetes.operator.reconciler.reschedule.interval` is updated to 30 seconds via the `deploy/flink-kubernetes-operator` log has:
+
+```text
+2022-05-28 13:08:30,115 o.a.f.k.o.c.FlinkConfigManager [INFO ] Updating default configuration to {kubernetes.operator.reconciler.reschedule.interval=PT30S}
+```
+
 ## Operator Configuration Reference
 
 {{< generated/kubernetes_operator_config_configuration >}}
 
 ## Job Specific Configuration Reference
+
 Job specific configuration can be configured under `spec.flinkConfiguration` and it will override flink configurations defined in `flink-conf.yaml`.
 
 - For application clusters, `spec.flinkConfiguration` will be located in `FlinkDeployment` CustomResource.
