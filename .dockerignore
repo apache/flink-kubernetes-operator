@@ -1,32 +1,23 @@
 # Compiled class file
-*.class
+**/*.class
 
 # Log file
-*.log
-
-# BlueJ files
-*.ctxt
+**/*.log
 
 # Package Files
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
+**/*.jar
+**/*.war
+**/*.nar
+**/*.ear
+**/*.zip
+**/*.tar.gz
+**/*.rar
 
 ### Maven template
-target/
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-pom.xml.next
-release.properties
-dependency-reduced-pom.xml
-buildNumber.properties
-.mvn/timing.properties
+**/target/
+**/dependency-reduced-pom.xml
+**/.mvn/timing.properties
 
-.idea
-*.iml
-*.DS_Store
+**/.idea
+**/*.iml
+**/*.DS_Store
