@@ -20,25 +20,8 @@ FROM maven:3.8.4-openjdk-11 AS build
 ARG SKIP_TESTS=true
 
 WORKDIR /app
-ENV SHADED_DIR=flink-kubernetes-shaded
-ENV OPERATOR_DIR=flink-kubernetes-operator
-ENV WEBHOOK_DIR=flink-kubernetes-webhook
-ENV DOCS_DIR=flink-kubernetes-docs
 
-RUN mkdir $OPERATOR_DIR $WEBHOOK_DIR
-
-COPY pom.xml .
-COPY $SHADED_DIR/pom.xml ./$SHADED_DIR/
-COPY $WEBHOOK_DIR/pom.xml ./$WEBHOOK_DIR/
-COPY $OPERATOR_DIR/pom.xml ./$OPERATOR_DIR/
-COPY $DOCS_DIR/pom.xml ./$DOCS_DIR/
-
-COPY $OPERATOR_DIR/src ./$OPERATOR_DIR/src
-COPY $WEBHOOK_DIR/src ./$WEBHOOK_DIR/src
-
-# Copy the .git directory when the directory exists.
-COPY *.git ./.git
-COPY tools ./tools
+COPY . .
 
 RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl !flink-kubernetes-docs -DskipTests=$SKIP_TESTS
 
