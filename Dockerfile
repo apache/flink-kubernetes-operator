@@ -35,7 +35,7 @@ RUN cd /app/tools/license; mkdir jars; cd jars; \
 # stage
 FROM openjdk:11-jre
 ENV FLINK_HOME=/opt/flink
-ENV OPERATOR_VERSION=1.0-SNAPSHOT
+ENV OPERATOR_VERSION=1.0.0
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
 ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION.jar
 ENV FLINK_KUBERNETES_SHADED_JAR=flink-kubernetes-shaded-$OPERATOR_VERSION.jar
