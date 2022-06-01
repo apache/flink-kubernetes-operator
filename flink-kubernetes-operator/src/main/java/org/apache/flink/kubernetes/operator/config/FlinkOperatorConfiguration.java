@@ -24,11 +24,15 @@ import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import lombok.Value;
 
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Set;
 
 /** Configuration class for operator. */
 @Value
 public class FlinkOperatorConfiguration {
+
+    private static final String NAMESPACES_SPLITTER_KEY = "\\s*,\\s*";
 
     Duration reconcileInterval;
     int reconcilerMaxParallelism;
@@ -43,8 +47,7 @@ public class FlinkOperatorConfiguration {
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
 
-    public static FlinkOperatorConfiguration fromConfiguration(
-            Configuration operatorConfig, Set<String> watchedNamespaces) {
+    public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL);
@@ -93,6 +96,15 @@ public class FlinkOperatorConfiguration {
             // not running in k8s, simplify local development
             flinkServiceHostOverride = "localhost";
         }
+
+        var watchedNamespaces =
+                new HashSet<>(
+                        Arrays.asList(
+                                operatorConfig
+                                        .get(
+                                                KubernetesOperatorConfigOptions
+                                                        .OPERATOR_WATCHED_NAMESPACES)
+                                        .split(NAMESPACES_SPLITTER_KEY)));
 
         return new FlinkOperatorConfiguration(
                 reconcileInterval,

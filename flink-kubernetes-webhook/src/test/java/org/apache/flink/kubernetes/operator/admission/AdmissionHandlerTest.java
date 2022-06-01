@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
+import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
@@ -44,6 +45,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Base64;
+import java.util.Collections;
 
 import static io.javaoperatorsdk.admissioncontroller.Operation.CREATE;
 import static org.apache.flink.kubernetes.operator.admission.AdmissionHandler.MUTATOR_REQUEST_PATH;
@@ -61,8 +63,8 @@ public class AdmissionHandlerTest {
     private final AdmissionHandler admissionHandler =
             new AdmissionHandler(
                     new FlinkValidator(
-                            ValidatorUtils.discoverValidators(new FlinkConfigManager()),
-                            new FlinkConfigManager()),
+                            ValidatorUtils.discoverValidators(new FlinkConfigManager(ns -> {})),
+                            new InformerManager(Collections.EMPTY_SET, null)),
                     new FlinkMutator());
 
     @Test

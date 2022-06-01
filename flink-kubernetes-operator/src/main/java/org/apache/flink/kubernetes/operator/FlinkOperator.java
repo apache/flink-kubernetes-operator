@@ -17,17 +17,13 @@
 
 package org.apache.flink.kubernetes.operator;
 
-import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
-import org.apache.flink.kubernetes.operator.controller.FlinkControllerConfig;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
@@ -49,15 +45,18 @@ import org.apache.flink.metrics.MetricGroup;
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
+import io.javaoperatorsdk.operator.RegisteredController;
 import io.javaoperatorsdk.operator.api.config.ConfigurationServiceOverrider;
+import io.javaoperatorsdk.operator.api.config.ControllerConfigurationOverrider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Executors;
-import java.util.function.Consumer;
 
 /** Main Class for Flink native k8s operator. */
 public class FlinkOperator {
@@ -69,16 +68,16 @@ public class FlinkOperator {
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
+    private final Set<RegisteredController> registeredControllers = new HashSet<>();
     private final MetricGroup metricGroup;
 
     public FlinkOperator(@Nullable Configuration conf) {
         this.client = new DefaultKubernetesClient();
-        this.configManager = conf != null ? new FlinkConfigManager(conf) : new FlinkConfigManager();
-        this.operator =
-                new Operator(
-                        client,
-                        getConfigurationServiceOverriderConsumer(
-                                configManager.getOperatorConfiguration()));
+        this.configManager =
+                conf != null
+                        ? new FlinkConfigManager(conf) // For testing only
+                        : new FlinkConfigManager(this::handleNamespaceChanges);
+        this.operator = new Operator(client, this::overrideOperatorConfigs);
         this.flinkService = new FlinkService(client, configManager);
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.metricGroup =
@@ -88,20 +87,25 @@ public class FlinkOperator {
         FileSystem.initialize(configManager.getDefaultConfig(), pluginManager);
     }
 
-    @VisibleForTesting
-    protected static Consumer<ConfigurationServiceOverrider>
-            getConfigurationServiceOverriderConsumer(
-                    FlinkOperatorConfiguration operatorConfiguration) {
-        return overrider -> {
-            int parallelism = operatorConfiguration.getReconcilerMaxParallelism();
-            if (parallelism == -1) {
-                LOG.info("Configuring operator with unbounded reconciliation thread pool.");
-                overrider.withExecutorService(Executors.newCachedThreadPool());
-            } else {
-                LOG.info("Configuring operator with {} reconciliation threads.", parallelism);
-                overrider.withConcurrentReconciliationThreads(parallelism);
-            }
-        };
+    private void handleNamespaceChanges(Set<String> namespaces) {
+        registeredControllers.forEach(
+                controller -> {
+                    if (controller.allowsNamespaceChanges()) {
+                        LOG.info("Changing namespaces on {} to {}", controller, namespaces);
+                        controller.changeNamespaces(namespaces);
+                    }
+                });
+    }
+
+    private void overrideOperatorConfigs(ConfigurationServiceOverrider overrider) {
+        int parallelism = configManager.getOperatorConfiguration().getReconcilerMaxParallelism();
+        if (parallelism == -1) {
+            LOG.info("Configuring operator with unbounded reconciliation thread pool.");
+            overrider.withExecutorService(Executors.newCachedThreadPool());
+        } else {
+            LOG.info("Configuring operator with {} reconciliation threads.", parallelism);
+            overrider.withConcurrentReconciliationThreads(parallelism);
+        }
     }
 
     private void registerDeploymentController() {
@@ -120,12 +124,7 @@ public class FlinkOperator {
                         observerFactory,
                         new MetricManager<>(metricGroup),
                         statusHelper);
-
-        FlinkControllerConfig<FlinkDeployment> controllerConfig =
-                new FlinkControllerConfig<>(
-                        controller,
-                        configManager.getOperatorConfiguration().getWatchedNamespaces());
-        operator.register(controller, controllerConfig);
+        registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 
     private void registerSessionJobController() {
@@ -143,11 +142,20 @@ public class FlinkOperator {
                         new MetricManager<>(metricGroup),
                         statusHelper);
 
-        FlinkControllerConfig<FlinkSessionJob> controllerConfig =
-                new FlinkControllerConfig<>(
-                        controller,
-                        configManager.getOperatorConfiguration().getWatchedNamespaces());
-        operator.register(controller, controllerConfig);
+        registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
+    }
+
+    private void overrideControllerConfigs(ControllerConfigurationOverrider<?> overrider) {
+        // TODO: https://github.com/java-operator-sdk/java-operator-sdk/issues/1259
+        String[] watchedNamespaces =
+                configManager
+                        .getOperatorConfiguration()
+                        .getWatchedNamespaces()
+                        .toArray(String[]::new);
+        String fakeNs = UUID.randomUUID().toString();
+        overrider.settingNamespace(fakeNs);
+        overrider.addingNamespaces(watchedNamespaces);
+        overrider.removingNamespaces(fakeNs);
     }
 
     public void run() {

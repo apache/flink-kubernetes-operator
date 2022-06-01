@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
 import org.apache.flink.shaded.guava30.com.google.common.cache.Cache;
 import org.apache.flink.shaded.guava30.com.google.common.cache.CacheBuilder;
@@ -48,6 +47,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_ENABLED;
@@ -63,13 +63,21 @@ public class FlinkConfigManager {
     private final AtomicLong defaultConfigVersion = new AtomicLong(0);
 
     private final LoadingCache<Key, Configuration> cache;
-    private final Set<String> namespaces = EnvUtils.getWatchedNamespaces();
 
-    public FlinkConfigManager() {
-        this(GlobalConfiguration.loadConfiguration());
+    private final Consumer<Set<String>> namespaceListener;
+
+    @VisibleForTesting
+    public FlinkConfigManager(Configuration defaultConfig) {
+        this(defaultConfig, ns -> {});
     }
 
-    public FlinkConfigManager(Configuration defaultConfig) {
+    public FlinkConfigManager(Consumer<Set<String>> namespaceListener) {
+        this(GlobalConfiguration.loadConfiguration(), namespaceListener);
+    }
+
+    public FlinkConfigManager(
+            Configuration defaultConfig, Consumer<Set<String>> namespaceListener) {
+        this.namespaceListener = namespaceListener;
         Duration cacheTimeout =
                 defaultConfig.get(KubernetesOperatorConfigOptions.OPERATOR_CONFIG_CACHE_TIMEOUT);
         this.cache =
@@ -109,14 +117,16 @@ public class FlinkConfigManager {
 
     @VisibleForTesting
     public void updateDefaultConfig(Configuration newConf) {
-        if (newConf.equals(defaultConfig)) {
+        if (defaultConfig != null
+                && newConf != null
+                && defaultConfig.toMap().equals(newConf.toMap())) {
             LOG.info("Default configuration did not change, nothing to do...");
             return;
         }
 
         LOG.info("Updating default configuration to {}", newConf);
-        this.operatorConfiguration =
-                FlinkOperatorConfiguration.fromConfiguration(newConf, namespaces);
+        this.operatorConfiguration = FlinkOperatorConfiguration.fromConfiguration(newConf);
+        this.namespaceListener.accept(operatorConfiguration.getWatchedNamespaces());
         this.defaultConfig = newConf.clone();
         // We do not invalidate the cache to avoid deleting currently used temp files,
         // simply bump the version

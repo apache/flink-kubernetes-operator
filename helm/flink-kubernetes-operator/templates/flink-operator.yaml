@@ -68,8 +68,6 @@ spec:
               value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.operator }}
-            - name: FLINK_OPERATOR_WATCH_NAMESPACES
-              value: {{ join "," .Values.watchNamespaces  }}
           securityContext:
             {{- toYaml .Values.operatorSecurityContext | nindent 12 }}
           volumeMounts:
@@ -111,8 +109,6 @@ spec:
               value: /opt/flink/plugins
             - name: OPERATOR_NAMESPACE
               value: {{ .Release.Namespace }}
-            - name: FLINK_OPERATOR_WATCH_NAMESPACES
-              value: {{ join "," .Values.watchNamespaces  }}
           securityContext:
             {{- toYaml .Values.webhookSecurityContext | nindent 12 }}
           volumeMounts:
@@ -160,6 +156,9 @@ data:
 {{- end }}
 {{- if index (.Values.defaultConfiguration) "flink-conf.yaml" }}
   {{- index (.Values.defaultConfiguration) "flink-conf.yaml" | nindent 4 -}}
+{{- end }}
+{{- if .Values.watchNamespaces }}
+    kubernetes.operator.watched.namespaces: {{ join "," .Values.watchNamespaces  }}
 {{- end }}
   log4j-operator.properties: |+
 {{- if .Values.defaultConfiguration.append }}

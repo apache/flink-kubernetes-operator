@@ -42,5 +42,10 @@ public class InformerManagerTest {
         informerManager = new InformerManager(Set.of("ns1", "ns2"), kubernetesClient);
         Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns1"));
         Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns2"));
+
+        informerManager.changNameSpaces(Set.of("ns1", "ns2", "ns3"));
+        Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns1"));
+        Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns2"));
+        Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns3"));
     }
 }

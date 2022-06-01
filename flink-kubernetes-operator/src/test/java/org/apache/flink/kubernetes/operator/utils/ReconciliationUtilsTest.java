@@ -32,8 +32,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.junit.jupiter.api.Test;
 
-import java.util.Collections;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -42,8 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 public class ReconciliationUtilsTest {
 
     FlinkOperatorConfiguration operatorConfiguration =
-            FlinkOperatorConfiguration.fromConfiguration(
-                    new Configuration(), Collections.emptySet());
+            FlinkOperatorConfiguration.fromConfiguration(new Configuration());
 
     @Test
     public void testRescheduleUpgradeImmediately() {
