@@ -60,16 +60,7 @@ Verify whether dynamic operator configuration updates is enabled via the `deploy
 2022-05-28 13:08:29,222 o.a.f.k.o.c.FlinkConfigManager [INFO ] Enabled dynamic config updates, checking config changes every PT5M
 ```
 
-When the interval for the controller to reschedule the reconcile process need to change with 30 seconds,  the ConfigMap can be directly edited via `kubectl patch` or `kubectl edit` command. The `kubernetes.operator.reconciler.reschedule.interval` config option, of which default value is 60 seconds, can directly change to 30s in the `defaultConfiguration` section:
-
-```yaml
-defaultConfiguration:
-  create: true
-  append: false
-  flink-conf.yaml: |+
-    # Flink Config Overrides
-    kubernetes.operator.reconciler.reschedule.interval: 30 s
-```
+To change config values dynamically the ConfigMap can be directly edited via `kubectl patch` or `kubectl edit` command. For example to change the reschedule interval you can override `kubernetes.operator.reconciler.reschedule.interval`.
 
 Verify whether the config value of `kubernetes.operator.reconciler.reschedule.interval` is updated to 30 seconds via the `deploy/flink-kubernetes-operator` log has:
 
