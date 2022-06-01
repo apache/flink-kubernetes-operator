@@ -33,6 +33,8 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -95,8 +97,14 @@ public class ReconciliationUtils {
         }
     }
 
-    public static <SPEC extends AbstractFlinkSpec> void updateSavepointReconciliationSuccess(
-            AbstractFlinkResource<SPEC, ?> target) {
+    public static <SPEC extends AbstractFlinkSpec> void updateLastReconciledSavepointTrigger(
+            SavepointInfo savepointInfo, AbstractFlinkResource<SPEC, ?> target) {
+
+        // We only need to update for MANUAL triggers
+        if (savepointInfo.getTriggerType() != SavepointTriggerType.MANUAL) {
+            return;
+        }
+
         var commonStatus = target.getStatus();
         var spec = target.getSpec();
         ReconciliationStatus<SPEC> reconciliationStatus = commonStatus.getReconciliationStatus();

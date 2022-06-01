@@ -222,7 +222,6 @@ public class ApplicationReconcilerTest {
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
-        // trigger savepoint
         FlinkDeployment spDeployment = ReconciliationUtils.clone(deployment);
 
         // don't trigger if nonce is missing
@@ -235,6 +234,13 @@ public class ApplicationReconcilerTest {
                 .getJob()
                 .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
         reconciler.reconcile(spDeployment, context);
+        assertNull(
+                spDeployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getSavepointTriggerNonce());
         assertEquals(
                 "trigger_0",
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
@@ -250,12 +256,16 @@ public class ApplicationReconcilerTest {
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
 
         spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
+        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+                spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
 
         // don't trigger when nonce is the same
         reconciler.reconcile(spDeployment, context);
         assertFalse(SavepointUtils.savepointInProgress(spDeployment.getStatus().getJobStatus()));
 
         spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
+        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+                spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
 
         // trigger when new nonce is defined
         spDeployment
@@ -270,7 +280,19 @@ public class ApplicationReconcilerTest {
                 SavepointTriggerType.MANUAL,
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
 
+        // re-trigger after reset
         spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
+        reconciler.reconcile(spDeployment, context);
+        assertEquals(
+                "trigger_2",
+                spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
+        assertEquals(
+                SavepointTriggerType.MANUAL,
+                spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
+
+        spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
+        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+                spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
 
         // don't trigger nonce is cleared
         spDeployment.getSpec().getJob().setSavepointTriggerNonce(null);

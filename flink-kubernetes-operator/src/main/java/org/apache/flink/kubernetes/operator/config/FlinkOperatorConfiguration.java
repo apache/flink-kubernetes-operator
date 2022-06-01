@@ -34,7 +34,6 @@ public class FlinkOperatorConfiguration {
     int reconcilerMaxParallelism;
     Duration progressCheckInterval;
     Duration restApiReadyDelay;
-    Duration savepointTriggerGracePeriod;
     Duration flinkClientTimeout;
     String flinkServiceHostOverride;
     Set<String> watchedNamespaces;
@@ -61,11 +60,6 @@ public class FlinkOperatorConfiguration {
         Duration progressCheckInterval =
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL);
-
-        Duration savepointTriggerGracePeriod =
-                operatorConfig.get(
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD);
 
         Duration flinkClientTimeout =
                 operatorConfig.get(
@@ -103,7 +97,6 @@ public class FlinkOperatorConfiguration {
                 reconcilerMaxParallelism,
                 progressCheckInterval,
                 restApiReadyDelay,
-                savepointTriggerGracePeriod,
                 flinkClientTimeout,
                 flinkServiceHostOverride,
                 watchedNamespaces,

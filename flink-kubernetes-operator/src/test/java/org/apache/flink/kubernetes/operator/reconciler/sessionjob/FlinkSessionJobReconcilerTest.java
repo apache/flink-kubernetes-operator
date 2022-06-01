@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -278,8 +279,7 @@ public class FlinkSessionJobReconcilerTest {
         assertTrue(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
 
         // the last reconcile nonce updated
-        assertEquals(
-                2L,
+        assertNull(
                 sp1SessionJob
                         .getStatus()
                         .getReconciliationStatus()
@@ -323,6 +323,8 @@ public class FlinkSessionJobReconcilerTest {
                         .getParallelism());
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
+        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(), sp1SessionJob);
 
         // running -> suspended
         reconciler.reconcile(sp1SessionJob, readyContext);
@@ -345,20 +347,19 @@ public class FlinkSessionJobReconcilerTest {
                 flinkService.listSessionJobs());
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-
-        // don't trigger when nonce is the same
-        sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(2L);
-        reconciler.reconcile(sp1SessionJob, readyContext);
-        assertFalse(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
+        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(), sp1SessionJob);
 
         // trigger when new nonce is defined
-        sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(3L);
+        sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(4L);
         reconciler.reconcile(sp1SessionJob, readyContext);
         assertEquals(
                 "trigger_1",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
+        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(), sp1SessionJob);
 
         // don't trigger when nonce is cleared
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(null);

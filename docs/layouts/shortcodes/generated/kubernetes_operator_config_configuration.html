@@ -69,12 +69,6 @@
             <td>Final delay before deployment is marked ready after port becomes accessible.</td>
         </tr>
         <tr>
-            <td><h5>kubernetes.operator.observer.savepoint.trigger.grace-period</h5></td>
-            <td style="word-wrap: break-word;">10 s</td>
-            <td>Duration</td>
-            <td>The interval before a savepoint trigger attempt is marked as unsuccessful.</td>
-        </tr>
-        <tr>
             <td><h5>kubernetes.operator.periodic.savepoint.interval</h5></td>
             <td style="word-wrap: break-word;">0 ms</td>
             <td>Duration</td>
@@ -121,6 +115,12 @@
             <td style="word-wrap: break-word;">10</td>
             <td>Integer</td>
             <td>Maximum number of savepoint history entries to retain.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.savepoint.trigger.grace-period</h5></td>
+            <td style="word-wrap: break-word;">1 min</td>
+            <td>Duration</td>
+            <td>The interval before a savepoint trigger attempt is marked as unsuccessful.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.user.artifacts.base.dir</h5></td>

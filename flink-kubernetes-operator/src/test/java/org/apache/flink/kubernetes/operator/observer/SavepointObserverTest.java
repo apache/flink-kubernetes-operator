@@ -53,7 +53,7 @@ public class SavepointObserverTest {
 
         Savepoint sp = new Savepoint(1, "sp1", SavepointTriggerType.MANUAL);
         spInfo.updateLastSavepoint(sp);
-        observer.updateSavepointHistory(spInfo, sp, configManager.getDefaultConfig());
+        observer.cleanupSavepointHistory(spInfo, sp, configManager.getDefaultConfig());
 
         Assertions.assertNotNull(spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -73,7 +73,7 @@ public class SavepointObserverTest {
 
         Savepoint sp1 = new Savepoint(1, "sp1", SavepointTriggerType.MANUAL);
         spInfo.updateLastSavepoint(sp1);
-        observer.updateSavepointHistory(spInfo, sp1, conf);
+        observer.cleanupSavepointHistory(spInfo, sp1, conf);
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp1), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -81,7 +81,7 @@ public class SavepointObserverTest {
 
         Savepoint sp2 = new Savepoint(2, "sp2", SavepointTriggerType.MANUAL);
         spInfo.updateLastSavepoint(sp2);
-        observer.updateSavepointHistory(spInfo, sp2, conf);
+        observer.cleanupSavepointHistory(spInfo, sp2, conf);
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp2), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
