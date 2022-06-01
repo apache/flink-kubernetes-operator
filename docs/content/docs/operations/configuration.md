@@ -52,7 +52,7 @@ To learn more about metrics and logging configuration please refer to the dedica
 
 ## Dynamic Operator Configuration
 
-The Kubernetes operator supports dynamic config changes through the operator ConfigMaps. Dynamic operator configuration can be enabled by setting `kubernetes.operator.dynamic.config.enabled`  to true. Time interval for checking dynamic config changes is specified by `kubernetes.operator.dynamic.config.check.interval` of which default value is 5 minutes. 
+The Kubernetes operator supports dynamic config changes through the operator ConfigMaps. Dynamic operator configuration is enabled by default, and can be disabled by setting `kubernetes.operator.dynamic.config.enabled`  to false. Time interval for checking dynamic config changes is specified by `kubernetes.operator.dynamic.config.check.interval` of which default value is 5 minutes. 
 
 Verify whether dynamic operator configuration updates is enabled via the `deploy/flink-kubernetes-operator` log has:
 
@@ -60,20 +60,9 @@ Verify whether dynamic operator configuration updates is enabled via the `deploy
 2022-05-28 13:08:29,222 o.a.f.k.o.c.FlinkConfigManager [INFO ] Enabled dynamic config updates, checking config changes every PT5M
 ```
 
-For example, the default configuration of `flink-conf.yaml` in the `defaultConfiguration` section of the Helm `values.yaml` file is as follows:
+When the interval for the controller to reschedule the reconcile process need to change with 30 seconds,  the ConfigMap can be directly edited via `kubectl patch` or `kubectl edit` command. The `kubernetes.operator.reconciler.reschedule.interval` config option, of which default value is 60 seconds, can directly change to 30s in the `defaultConfiguration` section:
 
-```
-defaultConfiguration:
-  create: true
-  append: false
-  flink-conf.yaml: |+
-    # Flink Config Overrides
-    kubernetes.operator.reconciler.reschedule.interval: 60 s
-```
-
-When the interval for the controller to reschedule the reconcile process need to change with 30 seconds, `kubernetes.operator.reconciler.reschedule.interval` in the `defaultConfiguration` section can directly change to 30s:
-
-```
+```yaml
 defaultConfiguration:
   create: true
   append: false
