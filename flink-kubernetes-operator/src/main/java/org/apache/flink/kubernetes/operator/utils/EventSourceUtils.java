@@ -69,7 +69,11 @@ public class EventSourceUtils {
         context.getPrimaryCache()
                 .addIndexer(
                         FLINK_DEPLOYMENT_IDX,
-                        flinkDeployment -> List.of(flinkDeployment.getMetadata().getName()));
+                        flinkDeployment ->
+                                List.of(
+                                        compositeKey(
+                                                flinkDeployment.getMetadata().getName(),
+                                                flinkDeployment.getMetadata().getNamespace())));
 
         InformerConfiguration<FlinkSessionJob> configuration =
                 InformerConfiguration.from(FlinkSessionJob.class, context)
@@ -78,7 +82,13 @@ public class EventSourceUtils {
                                         context.getPrimaryCache()
                                                 .byIndex(
                                                         FLINK_DEPLOYMENT_IDX,
-                                                        sessionJob.getSpec().getDeploymentName())
+                                                        compositeKey(
+                                                                sessionJob
+                                                                        .getSpec()
+                                                                        .getDeploymentName(),
+                                                                sessionJob
+                                                                        .getMetadata()
+                                                                        .getNamespace()))
                                                 .stream()
                                                 .map(ResourceID::fromResource)
                                                 .collect(Collectors.toSet()))
@@ -94,7 +104,11 @@ public class EventSourceUtils {
         context.getPrimaryCache()
                 .addIndexer(
                         FLINK_SESSIONJOB_IDX,
-                        sessionJob -> List.of(sessionJob.getSpec().getDeploymentName()));
+                        sessionJob ->
+                                List.of(
+                                        compositeKey(
+                                                sessionJob.getSpec().getDeploymentName(),
+                                                sessionJob.getMetadata().getNamespace())));
 
         InformerConfiguration<FlinkDeployment> configuration =
                 InformerConfiguration.from(FlinkDeployment.class, context)
@@ -103,7 +117,13 @@ public class EventSourceUtils {
                                         context.getPrimaryCache()
                                                 .byIndex(
                                                         FLINK_SESSIONJOB_IDX,
-                                                        flinkDeployment.getMetadata().getName())
+                                                        compositeKey(
+                                                                flinkDeployment
+                                                                        .getMetadata()
+                                                                        .getName(),
+                                                                flinkDeployment
+                                                                        .getMetadata()
+                                                                        .getNamespace()))
                                                 .stream()
                                                 .map(ResourceID::fromResource)
                                                 .collect(Collectors.toSet()))
@@ -112,5 +132,9 @@ public class EventSourceUtils {
                         .build();
 
         return new InformerEventSource<>(configuration, context);
+    }
+
+    private static String compositeKey(String name, String namespace) {
+        return String.format("%s_%s", name, namespace);
     }
 }
