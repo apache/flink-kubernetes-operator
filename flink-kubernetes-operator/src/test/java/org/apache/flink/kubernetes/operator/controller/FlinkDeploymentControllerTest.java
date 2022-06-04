@@ -276,6 +276,14 @@ public class FlinkDeploymentControllerTest {
 
     @ParameterizedTest
     @EnumSource(FlinkVersion.class)
+    public void cleanUpDeploymentWithError(FlinkVersion flinkVersion) {
+        FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        var deleteControl = testController.cleanup(flinkDeployment, context);
+        assertNotNull(deleteControl);
+    }
+
+    @ParameterizedTest
+    @EnumSource(FlinkVersion.class)
     public void verifyUpgradeFromSavepoint(FlinkVersion flinkVersion) {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
