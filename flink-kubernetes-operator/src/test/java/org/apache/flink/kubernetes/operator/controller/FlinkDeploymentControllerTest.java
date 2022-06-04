@@ -702,6 +702,13 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
     }
 
+    @Test
+    public void cleanUpNewDeployment() {
+        FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        var deleteControl = testController.cleanup(flinkDeployment, context);
+        assertNotNull(deleteControl);
+    }
+
     private static Stream<Arguments> applicationTestParams() {
         List<Arguments> args = new ArrayList<>();
         for (FlinkVersion version : FlinkVersion.values()) {
