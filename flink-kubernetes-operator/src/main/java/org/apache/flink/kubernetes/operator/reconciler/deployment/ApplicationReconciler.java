@@ -322,6 +322,11 @@ public class ApplicationReconciler extends AbstractDeploymentReconciler {
     @Override
     @SneakyThrows
     protected void shutdown(FlinkDeployment flinkApp) {
-        flinkService.cancelJob(flinkApp, UpgradeMode.STATELESS);
+        var status = flinkApp.getStatus();
+        if (status.getReconciliationStatus().getLastReconciledSpec() == null) {
+            flinkService.deleteClusterDeployment(flinkApp.getMetadata(), status, true);
+        } else {
+            flinkService.cancelJob(flinkApp, UpgradeMode.STATELESS);
+        }
     }
 }
