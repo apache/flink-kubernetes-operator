@@ -233,28 +233,6 @@ public class DefaultValidatorTest {
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
                 });
 
-        testError(
-                dep -> {
-                    dep.setStatus(new FlinkDeploymentStatus());
-                    dep.getStatus().setJobStatus(new JobStatus());
-
-                    dep.getStatus()
-                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
-                    FlinkDeploymentSpec spec = ReconciliationUtils.clone(dep.getSpec());
-                    spec.getJob().setState(JobState.SUSPENDED);
-                    dep.getStatus()
-                            .getReconciliationStatus()
-                            .serializeAndSetLastReconciledSpec(spec);
-
-                    dep.getSpec()
-                            .getFlinkConfiguration()
-                            .put(
-                                    CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
-                                    "file:///flink-data/savepoints");
-                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
-                },
-                "Cannot perform savepoint restore without a valid savepoint");
-
         // Test cluster type validation
         testError(
                 dep -> {
