@@ -133,9 +133,7 @@ public class SavepointUtils {
 
     public static boolean gracePeriodEnded(Configuration conf, SavepointInfo savepointInfo) {
         Duration gracePeriod =
-                conf.get(
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD);
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_TRIGGER_GRACE_PERIOD);
         var endOfGracePeriod =
                 Instant.ofEpochMilli(savepointInfo.getTriggerTimestamp()).plus(gracePeriod);
         return endOfGracePeriod.isBefore(Instant.now());
@@ -148,7 +146,7 @@ public class SavepointUtils {
         if (!ReconciliationUtils.isJobRunning(status)
                 && SavepointUtils.savepointInProgress(jobStatus)) {
             var savepointInfo = jobStatus.getSavepointInfo();
-            ReconciliationUtils.updateLastReconciledSavepointTrigger(savepointInfo, resource);
+            ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(savepointInfo, resource);
             savepointInfo.resetTrigger();
             LOG.error("Job is not running, cancelling savepoint operation");
             EventUtils.createOrUpdateEvent(

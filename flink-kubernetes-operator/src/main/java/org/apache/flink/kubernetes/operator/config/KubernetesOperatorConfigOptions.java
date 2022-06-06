@@ -57,7 +57,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The interval for observing status for in-progress operations such as deployment and savepoints.");
 
-    public static final ConfigOption<Duration> OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD =
+    public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_TRIGGER_GRACE_PERIOD =
             ConfigOptions.key("kubernetes.operator.savepoint.trigger.grace-period")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(1))

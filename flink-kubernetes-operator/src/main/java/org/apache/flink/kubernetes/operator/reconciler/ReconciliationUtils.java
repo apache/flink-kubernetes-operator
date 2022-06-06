@@ -97,7 +97,7 @@ public class ReconciliationUtils {
         }
     }
 
-    public static <SPEC extends AbstractFlinkSpec> void updateLastReconciledSavepointTrigger(
+    public static <SPEC extends AbstractFlinkSpec> void updateLastReconciledSavepointTriggerNonce(
             SavepointInfo savepointInfo, AbstractFlinkResource<SPEC, ?> target) {
 
         // We only need to update for MANUAL triggers
@@ -107,9 +107,8 @@ public class ReconciliationUtils {
 
         var commonStatus = target.getStatus();
         var spec = target.getSpec();
-        ReconciliationStatus<SPEC> reconciliationStatus = commonStatus.getReconciliationStatus();
-        commonStatus.setError(null);
-        SPEC lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        var reconciliationStatus = commonStatus.getReconciliationStatus();
+        var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
         lastReconciledSpec
                 .getJob()
                 .setSavepointTriggerNonce(spec.getJob().getSavepointTriggerNonce());

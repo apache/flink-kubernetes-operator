@@ -256,7 +256,7 @@ public class ApplicationReconcilerTest {
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
 
         spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                 spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
 
         // don't trigger when nonce is the same
@@ -264,7 +264,7 @@ public class ApplicationReconcilerTest {
         assertFalse(SavepointUtils.savepointInProgress(spDeployment.getStatus().getJobStatus()));
 
         spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                 spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
 
         // trigger when new nonce is defined
@@ -291,7 +291,7 @@ public class ApplicationReconcilerTest {
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
 
         spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                 spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
 
         // don't trigger nonce is cleared

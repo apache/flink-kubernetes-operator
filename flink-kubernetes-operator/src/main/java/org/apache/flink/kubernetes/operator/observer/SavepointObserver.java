@@ -83,12 +83,11 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
     }
 
     /**
-     * Observe the savepoint result based on the current savepoint info.
+     * Observe the status of manually triggered savepoints.
      *
      * @param resource the resource being observed
      * @param jobID the jobID of the observed job.
      * @param deployedConfig Deployed job config.
-     * @return The observed error, if no error observed, {@code Optional.empty()} will be returned.
      */
     private void observeTriggeredSavepoint(
             AbstractFlinkResource<?, ?> resource, String jobID, Configuration deployedConfig) {
@@ -111,7 +110,8 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
                 LOG.error(
                         "Savepoint attempt failed after grace period. Won't be retried again: "
                                 + err);
-                ReconciliationUtils.updateLastReconciledSavepointTrigger(savepointInfo, resource);
+                ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
+                        savepointInfo, resource);
                 EventUtils.createOrUpdateEvent(
                         flinkService.getKubernetesClient(),
                         resource,
@@ -134,11 +134,12 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
                         savepointFetchResult.getLocation(),
                         savepointInfo.getTriggerType());
 
-        ReconciliationUtils.updateLastReconciledSavepointTrigger(savepointInfo, resource);
+        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(savepointInfo, resource);
         savepointInfo.updateLastSavepoint(savepoint);
         cleanupSavepointHistory(savepointInfo, savepoint, deployedConfig);
     }
 
+    /** Clean up and dispose savepoints according to the configured max size/age. */
     @VisibleForTesting
     void cleanupSavepointHistory(
             SavepointInfo currentSavepointInfo,

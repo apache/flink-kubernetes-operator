@@ -323,7 +323,7 @@ public class FlinkSessionJobReconcilerTest {
                         .getParallelism());
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(), sp1SessionJob);
 
         // running -> suspended
@@ -347,7 +347,7 @@ public class FlinkSessionJobReconcilerTest {
                 flinkService.listSessionJobs());
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(), sp1SessionJob);
 
         // trigger when new nonce is defined
@@ -358,7 +358,7 @@ public class FlinkSessionJobReconcilerTest {
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-        ReconciliationUtils.updateLastReconciledSavepointTrigger(
+        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(), sp1SessionJob);
 
         // don't trigger when nonce is cleared
