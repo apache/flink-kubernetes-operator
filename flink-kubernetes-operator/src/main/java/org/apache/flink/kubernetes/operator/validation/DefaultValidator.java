@@ -287,14 +287,6 @@ public class DefaultValidator implements FlinkResourceValidator {
         JobSpec oldJob = oldSpec.getJob();
         JobSpec newJob = newSpec.getJob();
         if (oldJob != null && newJob != null) {
-            if (oldJob.getState() == JobState.SUSPENDED
-                    && newJob.getState() == JobState.RUNNING
-                    && newJob.getUpgradeMode() == UpgradeMode.SAVEPOINT
-                    && (deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint()
-                            == null)) {
-                return Optional.of("Cannot perform savepoint restore without a valid savepoint");
-            }
-
             if (StringUtils.isNullOrWhitespaceOnly(
                             effectiveConfig.get(CheckpointingOptions.SAVEPOINT_DIRECTORY.key()))
                     && deployment.getStatus().getJobManagerDeploymentStatus()
@@ -396,19 +388,6 @@ public class DefaultValidator implements FlinkResourceValidator {
             }
 
             return Optional.empty();
-        }
-
-        FlinkSessionJobSpec oldSpec =
-                sessionJob.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
-
-        JobSpec oldJob = oldSpec.getJob();
-        JobSpec newJob = newSpec.getJob();
-        if (oldJob.getState() == JobState.SUSPENDED
-                && newJob.getState() == JobState.RUNNING
-                && newJob.getUpgradeMode() == UpgradeMode.SAVEPOINT
-                && (sessionJob.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint()
-                        == null)) {
-            return Optional.of("Cannot perform savepoint restore without a valid savepoint");
         }
 
         return Optional.empty();
