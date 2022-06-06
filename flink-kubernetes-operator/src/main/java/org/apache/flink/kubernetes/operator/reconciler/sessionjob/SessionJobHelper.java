@@ -54,7 +54,7 @@ public class SessionJobHelper {
                 return true;
             }
         } else {
-            logger.info("Session cluster deployment is not found");
+            logger.warn("Session cluster deployment is not found");
             return false;
         }
     }
