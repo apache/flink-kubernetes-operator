@@ -99,7 +99,7 @@ flink-kubernetes-operator default 1 2022-03-09 17 (tel:12022030917):39:55.461359
 
 Once the operator is running as seen in the previous step you are ready to submit a Flink job:
 ```bash
-kubectl create -f https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.0/examples/basic.yaml
+kubectl create -f https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0/examples/basic.yaml
 ```
 You may follow the logs of your job, after a successful startup (which can take on the order of a minute in a fresh environment, seconds afterwards) you can:
 
