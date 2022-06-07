@@ -42,7 +42,7 @@ import static org.apache.flink.api.common.JobStatus.RUNNING;
 /** The observer of {@link org.apache.flink.kubernetes.operator.config.Mode#APPLICATION} cluster. */
 public class ApplicationObserver extends AbstractDeploymentObserver {
 
-    private final SavepointObserver savepointObserver;
+    private final SavepointObserver<FlinkDeploymentStatus> savepointObserver;
     private final JobStatusObserver<ApplicationObserverContext> jobStatusObserver;
 
     public ApplicationObserver(
@@ -51,7 +51,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
             FlinkConfigManager configManager,
             StatusHelper<FlinkDeploymentStatus> statusHelper) {
         super(kubernetesClient, flinkService, configManager);
-        this.savepointObserver = new SavepointObserver(flinkService, configManager, statusHelper);
+        this.savepointObserver = new SavepointObserver<>(flinkService, configManager, statusHelper);
         this.jobStatusObserver =
                 new JobStatusObserver<>(flinkService) {
                     @Override
@@ -60,18 +60,12 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
                     }
 
                     @Override
-                    protected Optional<String> updateJobStatus(
+                    protected Optional<JobStatusMessage> filterTargetJob(
                             JobStatus status, List<JobStatusMessage> clusterJobStatuses) {
-                        clusterJobStatuses.sort(
-                                (j1, j2) -> Long.compare(j2.getStartTime(), j1.getStartTime()));
-                        JobStatusMessage newJob = clusterJobStatuses.get(0);
-
-                        status.setState(newJob.getJobState().name());
-                        status.setJobName(newJob.getJobName());
-                        status.setJobId(newJob.getJobId().toHexString());
-                        status.setStartTime(String.valueOf(newJob.getStartTime()));
-                        status.setUpdateTime(String.valueOf(System.currentTimeMillis()));
-                        return Optional.of(status.getState());
+                        if (!clusterJobStatuses.isEmpty()) {
+                            return Optional.of(clusterJobStatuses.get(0));
+                        }
+                        return Optional.empty();
                     }
                 };
     }
@@ -80,11 +74,9 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     protected boolean observeFlinkCluster(
             FlinkDeployment flinkApp, Context context, Configuration deployedConfig) {
 
-        var jobStatus = flinkApp.getStatus().getJobStatus();
-
         boolean jobFound =
                 jobStatusObserver.observe(
-                        jobStatus,
+                        flinkApp,
                         deployedConfig,
                         new ApplicationObserverContext(flinkApp, context, deployedConfig));
         if (jobFound) {

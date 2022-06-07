@@ -47,7 +47,7 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
     private static final Logger LOG = LoggerFactory.getLogger(SessionJobObserver.class);
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
-    private final SavepointObserver savepointObserver;
+    private final SavepointObserver<FlinkSessionJobStatus> savepointObserver;
     private final JobStatusObserver<VoidObserverContext> jobStatusObserver;
 
     public SessionJobObserver(
@@ -56,14 +56,14 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
             StatusHelper<FlinkSessionJobStatus> statusHelper) {
         this.flinkService = flinkService;
         this.configManager = configManager;
-        this.savepointObserver = new SavepointObserver(flinkService, configManager, statusHelper);
+        this.savepointObserver = new SavepointObserver<>(flinkService, configManager, statusHelper);
         this.jobStatusObserver =
                 new JobStatusObserver<>(flinkService) {
                     @Override
-                    protected void onTimeout(VoidObserverContext voidObserverContext) {}
+                    protected void onTimeout(VoidObserverContext sessionJobObserverContext) {}
 
                     @Override
-                    protected Optional<String> updateJobStatus(
+                    protected Optional<JobStatusMessage> filterTargetJob(
                             JobStatus status, List<JobStatusMessage> clusterJobStatuses) {
                         var jobId =
                                 Preconditions.checkNotNull(
@@ -82,15 +82,9 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
                         if (matchedList.size() == 0) {
                             LOG.info("No job found for JobID: {}", jobId);
                             return Optional.empty();
+                        } else {
+                            return Optional.of(matchedList.get(0));
                         }
-
-                        JobStatusMessage newJob = matchedList.get(0);
-
-                        status.setState(newJob.getJobState().name());
-                        status.setJobName(newJob.getJobName());
-                        status.setStartTime(String.valueOf(newJob.getStartTime()));
-                        status.setUpdateTime(String.valueOf(System.currentTimeMillis()));
-                        return Optional.of(status.getState());
                     }
                 };
     }
@@ -115,9 +109,8 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
         var deployedConfig = configManager.getSessionJobConfig(flinkDepOpt.get(), flinkSessionJob);
         var jobFound =
                 jobStatusObserver.observe(
-                        flinkSessionJob.getStatus().getJobStatus(),
-                        deployedConfig,
-                        VoidObserverContext.INSTANCE);
+                        flinkSessionJob, deployedConfig, VoidObserverContext.INSTANCE);
+
         if (jobFound) {
             savepointObserver.observeSavepointStatus(flinkSessionJob, deployedConfig);
         }

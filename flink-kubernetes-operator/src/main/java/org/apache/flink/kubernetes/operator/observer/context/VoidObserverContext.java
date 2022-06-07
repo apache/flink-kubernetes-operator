@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer.context;
 
-/** A empty observer context. */
+/** An empty observer context. */
 public class VoidObserverContext {
     public static final VoidObserverContext INSTANCE = new VoidObserverContext();
 }

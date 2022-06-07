@@ -42,8 +42,10 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
+import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
+import org.apache.flink.util.SerializedThrowable;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -82,6 +84,7 @@ public class TestingFlinkService extends FlinkService {
     private int triggerCounter = 0;
 
     private final List<Tuple2<String, JobStatusMessage>> jobs = new ArrayList<>();
+    private final Map<JobID, String> jobErrors = new HashMap<>();
     private final Map<JobID, SubmittedJobInfo> sessionJobs = new HashMap<>();
     private final Set<String> sessions = new HashSet<>();
     private boolean isPortReady = true;
@@ -299,6 +302,17 @@ public class TestingFlinkService extends FlinkService {
                     }
                     return CompletableFuture.completedFuture(Acknowledge.get());
                 });
+
+        clusterClient.setRequestResultFunction(
+                jobID -> {
+                    var builder = new JobResult.Builder().jobId(jobID).netRuntime(1);
+                    if (jobErrors.containsKey(jobID)) {
+                        builder.serializedThrowable(
+                                new SerializedThrowable(
+                                        new RuntimeException(jobErrors.get(jobID))));
+                    }
+                    return CompletableFuture.completedFuture(builder.build());
+                });
         return clusterClient;
     }
 
@@ -387,6 +401,21 @@ public class TestingFlinkService extends FlinkService {
 
     public void setJmPodList(PodList podList) {
         this.podList = podList;
+    }
+
+    public void markApplicationJobFailedWithError(JobID jobID, String error) throws Exception {
+        var job = jobs.stream().filter(tuple -> tuple.f1.getJobId().equals(jobID)).findFirst();
+        if (!job.isPresent()) {
+            throw new Exception("The target job missed");
+        }
+        var oldStatus = job.get().f1;
+        job.get().f1 =
+                new JobStatusMessage(
+                        oldStatus.getJobId(),
+                        oldStatus.getJobName(),
+                        JobStatus.FAILED,
+                        oldStatus.getStartTime());
+        jobErrors.put(jobID, error);
     }
 
     /** The information collector of a submitted job. */

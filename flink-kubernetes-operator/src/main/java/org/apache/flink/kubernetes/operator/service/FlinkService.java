@@ -53,6 +53,7 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
+import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.rest.FileUpload;
 import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
@@ -331,6 +332,19 @@ public class FlinkService {
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
             return clusterClient
                     .listJobs()
+                    .get(
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkClientTimeout()
+                                    .getSeconds(),
+                            TimeUnit.SECONDS);
+        }
+    }
+
+    public JobResult requestJobResult(Configuration conf, JobID jobID) throws Exception {
+        try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
+            return clusterClient
+                    .requestJobResult(jobID)
                     .get(
                             configManager
                                     .getOperatorConfiguration()
