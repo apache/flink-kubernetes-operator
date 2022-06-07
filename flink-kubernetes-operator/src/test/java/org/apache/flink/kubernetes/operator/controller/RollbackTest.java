@@ -64,7 +64,7 @@ public class RollbackTest {
 
     @BeforeEach
     public void setup() {
-        flinkService = new TestingFlinkService();
+        flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         testController =
                 TestUtils.createTestController(

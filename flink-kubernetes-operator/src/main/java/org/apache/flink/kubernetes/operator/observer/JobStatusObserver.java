@@ -18,8 +18,10 @@
 package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import org.slf4j.Logger;
@@ -34,6 +36,7 @@ import java.util.concurrent.TimeoutException;
 public abstract class JobStatusObserver<CTX> {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
+    private static final int MAX_ERROR_STRING_LENGTH = 512;
     private final FlinkService flinkService;
 
     public JobStatusObserver(FlinkService flinkService) {
@@ -43,11 +46,13 @@ public abstract class JobStatusObserver<CTX> {
     /**
      * Observe the status of the flink job.
      *
-     * @param jobStatus The job status to be observed.
+     * @param resource The custom resource to be observed.
      * @param deployedConfig Deployed job config.
      * @return If job found return true, otherwise return false.
      */
-    public boolean observe(JobStatus jobStatus, Configuration deployedConfig, CTX ctx) {
+    public boolean observe(
+            AbstractFlinkResource<?, ?> resource, Configuration deployedConfig, CTX ctx) {
+        var jobStatus = resource.getStatus().getJobStatus();
         LOG.info("Observing job status");
         var previousJobStatus = jobStatus.getState();
         List<JobStatusMessage> clusterJobStatuses;
@@ -63,19 +68,13 @@ public abstract class JobStatusObserver<CTX> {
         }
 
         if (!clusterJobStatuses.isEmpty()) {
-            Optional<String> targetJobStatus = updateJobStatus(jobStatus, clusterJobStatuses);
-            if (targetJobStatus.isEmpty()) {
+            Optional<JobStatusMessage> targetJobStatusMessage =
+                    filterTargetJob(jobStatus, clusterJobStatuses);
+            if (targetJobStatusMessage.isEmpty()) {
                 jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
                 return false;
             } else {
-                if (targetJobStatus.get().equals(previousJobStatus)) {
-                    LOG.info("Job status ({}) unchanged", previousJobStatus);
-                } else {
-                    LOG.info(
-                            "Job status successfully updated from {} to {}",
-                            previousJobStatus,
-                            targetJobStatus.get());
-                }
+                updateJobStatus(resource, targetJobStatusMessage.get(), deployedConfig);
             }
             return true;
         } else {
@@ -94,14 +93,95 @@ public abstract class JobStatusObserver<CTX> {
     protected abstract void onTimeout(CTX ctx);
 
     /**
-     * Find and update previous job status based on the job list from the cluster and return the
-     * target status.
+     * Filter the target job status message by the job list from the cluster.
      *
-     * @param status the target job status to be updated.
+     * @param status the target job status.
      * @param clusterJobStatuses the candidate cluster jobs.
-     * @return The target status of the job. If no matched job found, {@code Optional.empty()} will
+     * @return The target job status message. If no matched job found, {@code Optional.empty()} will
      *     be returned.
      */
-    protected abstract Optional<String> updateJobStatus(
+    protected abstract Optional<JobStatusMessage> filterTargetJob(
             JobStatus status, List<JobStatusMessage> clusterJobStatuses);
+
+    /**
+     * Update the status in CR according to the cluster job status.
+     *
+     * @param resource the target custom resource.
+     * @param clusterJobStatus the status fetch from the cluster.
+     * @param deployedConfig Deployed job config.
+     */
+    private void updateJobStatus(
+            AbstractFlinkResource<?, ?> resource,
+            JobStatusMessage clusterJobStatus,
+            Configuration deployedConfig) {
+        var jobStatus = resource.getStatus().getJobStatus();
+        var previousJobStatus = jobStatus.getState();
+
+        jobStatus.setState(clusterJobStatus.getJobState().name());
+        jobStatus.setJobName(clusterJobStatus.getJobName());
+        jobStatus.setJobId(clusterJobStatus.getJobId().toHexString());
+        jobStatus.setStartTime(String.valueOf(clusterJobStatus.getStartTime()));
+
+        if (jobStatus.getState().equals(previousJobStatus)) {
+            LOG.info("Job status ({}) unchanged", previousJobStatus);
+        } else {
+            jobStatus.setUpdateTime(String.valueOf(System.currentTimeMillis()));
+            var message =
+                    previousJobStatus == null
+                            ? String.format("Job status changed to %s", jobStatus.getState())
+                            : String.format(
+                                    "Job status changed from %s to %s",
+                                    previousJobStatus, jobStatus.getState());
+            LOG.info(message);
+
+            setErrorIfPresent(resource, clusterJobStatus, deployedConfig);
+            EventUtils.createOrUpdateEvent(
+                    flinkService.getKubernetesClient(),
+                    resource,
+                    EventUtils.Type.Normal,
+                    "Status Changed",
+                    message,
+                    EventUtils.Component.Job);
+        }
+    }
+
+    private void setErrorIfPresent(
+            AbstractFlinkResource<?, ?> resource,
+            JobStatusMessage clusterJobStatus,
+            Configuration deployedConfig) {
+        if (clusterJobStatus.getJobState() == org.apache.flink.api.common.JobStatus.FAILED) {
+            try {
+                var result =
+                        flinkService.requestJobResult(deployedConfig, clusterJobStatus.getJobId());
+                result.getSerializedThrowable()
+                        .ifPresent(
+                                t -> {
+                                    var error = t.getFullStringifiedStackTrace();
+                                    var trimmedError = getErrorWithMaxLength(error);
+                                    trimmedError.ifPresent(
+                                            value -> {
+                                                if (!value.equals(
+                                                        resource.getStatus().getError())) {
+                                                    resource.getStatus().setError(value);
+                                                    LOG.error(
+                                                            "Job {} failed with error: {}",
+                                                            clusterJobStatus.getJobId(),
+                                                            error);
+                                                }
+                                            });
+                                });
+            } catch (Exception e) {
+                LOG.warn("Failed to request the job result", e);
+            }
+        }
+    }
+
+    private Optional<String> getErrorWithMaxLength(String error) {
+        if (error == null) {
+            return Optional.empty();
+        } else {
+            return Optional.of(
+                    error.substring(0, Math.min(error.length(), MAX_ERROR_STRING_LENGTH)));
+        }
+    }
 }

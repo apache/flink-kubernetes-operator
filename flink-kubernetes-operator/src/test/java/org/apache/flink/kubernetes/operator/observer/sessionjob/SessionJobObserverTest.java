@@ -45,7 +45,7 @@ public class SessionJobObserverTest {
     @Test
     public void testBasicObserve() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
-        final var flinkService = new TestingFlinkService();
+        final var flinkService = new TestingFlinkService(kubernetesClient);
         final var reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
         final var observer =
                 new SessionJobObserver(flinkService, configManager, new TestingStatusHelper<>());
@@ -106,7 +106,7 @@ public class SessionJobObserverTest {
     @Test
     public void testObserveWithEffectiveConfig() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
-        final var flinkService = new TestingFlinkService();
+        final var flinkService = new TestingFlinkService(kubernetesClient);
         final var reconciler = new FlinkSessionJobReconciler(null, flinkService, configManager);
         final var observer =
                 new SessionJobObserver(flinkService, configManager, new TestingStatusHelper<>());

@@ -71,6 +71,11 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
                 throw new UnsupportedOperationException();
             };
 
+    private Function<JobID, CompletableFuture<JobResult>> requestResultFunction =
+            jobID ->
+                    CompletableFuture.completedFuture(
+                            new JobResult.Builder().jobId(jobID).netRuntime(1).build());
+
     private final Configuration configuration;
     private final T clusterId;
 
@@ -107,6 +112,11 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
     public void setListJobsFunction(
             Supplier<CompletableFuture<Collection<JobStatusMessage>>> listJobsFunction) {
         this.listJobsFunction = listJobsFunction;
+    }
+
+    public void setRequestResultFunction(
+            Function<JobID, CompletableFuture<JobResult>> requestResultFunction) {
+        this.requestResultFunction = requestResultFunction;
     }
 
     @Override
@@ -151,7 +161,7 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
 
     @Override
     public CompletableFuture<JobResult> requestJobResult(@Nonnull JobID jobId) {
-        throw new UnsupportedOperationException();
+        return requestResultFunction.apply(jobId);
     }
 
     @Override

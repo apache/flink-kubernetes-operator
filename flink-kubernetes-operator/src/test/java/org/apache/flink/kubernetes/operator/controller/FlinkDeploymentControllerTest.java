@@ -78,7 +78,7 @@ public class FlinkDeploymentControllerTest {
 
     @BeforeEach
     public void setup() {
-        flinkService = new TestingFlinkService();
+        flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         testController =
                 TestUtils.createTestController(configManager, kubernetesClient, flinkService);

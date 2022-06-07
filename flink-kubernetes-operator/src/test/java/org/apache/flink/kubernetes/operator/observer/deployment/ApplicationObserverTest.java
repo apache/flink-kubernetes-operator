@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -37,10 +38,12 @@ import org.apache.flink.runtime.client.JobStatusMessage;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -57,10 +60,10 @@ public class ApplicationObserverTest {
 
     @Test
     public void observeApplicationCluster() throws Exception {
-        TestingFlinkService flinkService = new TestingFlinkService();
+        TestingFlinkService flinkService = new TestingFlinkService(kubernetesClient);
         ApplicationObserver observer =
                 new ApplicationObserver(
-                        null, flinkService, configManager, new TestingStatusHelper<>());
+                        kubernetesClient, flinkService, configManager, new TestingStatusHelper<>());
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.setStatus(new FlinkDeploymentStatus());
 
@@ -163,11 +166,79 @@ public class ApplicationObserverTest {
     }
 
     @Test
+    public void testEventGeneratedWhenStatusChanged() throws Exception {
+        TestingFlinkService flinkService = new TestingFlinkService(kubernetesClient);
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        Configuration conf =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+        ApplicationObserver observer =
+                new ApplicationObserver(
+                        kubernetesClient, flinkService, configManager, new TestingStatusHelper<>());
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+
+        deployment.setStatus(new FlinkDeploymentStatus());
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec());
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+
+        observer.observe(deployment, readyContext);
+        var eventList =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems();
+        Assertions.assertEquals(1, eventList.size());
+        Assertions.assertEquals("Job status changed to RUNNING", eventList.get(0).getMessage());
+        observer.observe(deployment, readyContext);
+        Assertions.assertEquals(
+                1,
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .size());
+    }
+
+    @Test
+    public void testErrorForwardToStatusWhenJobFailed() throws Exception {
+        TestingFlinkService flinkService = new TestingFlinkService(kubernetesClient);
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        Configuration conf =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+        ApplicationObserver observer =
+                new ApplicationObserver(
+                        kubernetesClient, flinkService, configManager, new TestingStatusHelper<>());
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+
+        deployment.setStatus(new FlinkDeploymentStatus());
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec());
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+
+        observer.observe(deployment, readyContext);
+        Assertions.assertEquals(1, flinkService.getRunningCount());
+        flinkService.markApplicationJobFailedWithError(
+                JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId()),
+                "Job failed");
+        observer.observe(deployment, readyContext);
+        Assertions.assertEquals(0, flinkService.getRunningCount());
+        Assertions.assertTrue(deployment.getStatus().getError().contains("Job failed"));
+    }
+
+    @Test
     public void observeSavepoint() throws Exception {
         TestingFlinkService flinkService = new TestingFlinkService(kubernetesClient);
         ApplicationObserver observer =
                 new ApplicationObserver(
-                        null, flinkService, configManager, new TestingStatusHelper<>());
+                        kubernetesClient, flinkService, configManager, new TestingStatusHelper<>());
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
@@ -191,13 +262,12 @@ public class ApplicationObserverTest {
         // savepoint error within grace period
         assertEquals(
                 0,
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems()
-                        .size());
+                (int)
+                        kubernetesClient.v1().events()
+                                .inNamespace(deployment.getMetadata().getNamespace()).list()
+                                .getItems().stream()
+                                .filter(e -> e.getReason().contains("SavepointError"))
+                                .count());
         observer.observe(deployment, readyContext);
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
         assertEquals(
@@ -226,21 +296,16 @@ public class ApplicationObserverTest {
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
         assertEquals(
                 1,
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems()
-                        .size());
+                kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
+                        .list().getItems().stream()
+                        .filter(e -> e.getReason().contains("SavepointError"))
+                        .count());
         assertEquals(
                 1,
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems()
+                kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
+                        .list().getItems().stream()
+                        .filter(e -> e.getReason().contains("SavepointError"))
+                        .collect(Collectors.toList())
                         .get(0)
                         .getCount());
 
@@ -314,21 +379,16 @@ public class ApplicationObserverTest {
 
         assertEquals(
                 1,
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems()
-                        .size());
+                kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
+                        .list().getItems().stream()
+                        .filter(e -> e.getReason().contains("SavepointError"))
+                        .count());
         assertEquals(
                 2,
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems()
+                kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
+                        .list().getItems().stream()
+                        .filter(e -> e.getReason().contains("SavepointError"))
+                        .collect(Collectors.toList())
                         .get(0)
                         .getCount());
 
@@ -379,7 +439,7 @@ public class ApplicationObserverTest {
         TestingFlinkService flinkService = new TestingFlinkService();
         ApplicationObserver observer =
                 new ApplicationObserver(
-                        null, flinkService, configManager, new TestingStatusHelper<>());
+                        kubernetesClient, flinkService, configManager, new TestingStatusHelper<>());
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         bringToReadyStatus(deployment);
         observer.observe(deployment, readyContext);

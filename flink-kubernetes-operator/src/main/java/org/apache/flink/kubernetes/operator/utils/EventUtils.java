@@ -39,7 +39,8 @@ public class EventUtils {
     /** The component of events. */
     public enum Component {
         Operator,
-        JobManagerDeployment
+        JobManagerDeployment,
+        Job
     }
 
     public static String generateEventName(

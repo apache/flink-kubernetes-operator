@@ -217,6 +217,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         FlinkDeploymentStatus status = dep.getStatus();
         ReconciliationStatus reconciliationStatus = status.getReconciliationStatus();
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.ERROR
+                && !JobStatus.FAILED.name().equals(dep.getStatus().getJobStatus().getState())
                 && reconciliationStatus.isLastReconciledSpecStable()) {
             status.setError(null);
         }
