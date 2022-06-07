@@ -39,6 +39,9 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.time.Instant;
+
 import static org.junit.Assert.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -185,7 +188,7 @@ public class ApplicationObserverTest {
         assertTrue(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
         deployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId("unknown");
-        // savepoint error
+        // savepoint error within grace period
         assertEquals(
                 0,
                 kubernetesClient
@@ -195,6 +198,30 @@ public class ApplicationObserverTest {
                         .list()
                         .getItems()
                         .size());
+        observer.observe(deployment, readyContext);
+        assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
+        assertEquals(
+                0,
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .size());
+
+        deployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId("unknown");
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .getSavepointInfo()
+                .setTriggerType(SavepointTriggerType.MANUAL);
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .getSavepointInfo()
+                .setTriggerTimestamp(Instant.now().minus(Duration.ofHours(1)).toEpochMilli());
+
         observer.observe(deployment, readyContext);
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
         assertEquals(

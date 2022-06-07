@@ -57,10 +57,12 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The interval for observing status for in-progress operations such as deployment and savepoints.");
 
-    public static final ConfigOption<Duration> OPERATOR_OBSERVER_SAVEPOINT_TRIGGER_GRACE_PERIOD =
-            ConfigOptions.key("kubernetes.operator.observer.savepoint.trigger.grace-period")
+    public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_TRIGGER_GRACE_PERIOD =
+            ConfigOptions.key("kubernetes.operator.savepoint.trigger.grace-period")
                     .durationType()
-                    .defaultValue(Duration.ofSeconds(10))
+                    .defaultValue(Duration.ofMinutes(1))
+                    .withDeprecatedKeys(
+                            "kubernetes.operator.observer.savepoint.trigger.grace-period")
                     .withDescription(
                             "The interval before a savepoint trigger attempt is marked as unsuccessful.");
 

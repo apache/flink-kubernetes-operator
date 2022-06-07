@@ -19,7 +19,6 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
@@ -27,12 +26,12 @@ import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusHelper;
 
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,6 +60,7 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
 
     public void observeSavepointStatus(
             AbstractFlinkResource<?, STATUS> resource, Configuration deployedConfig) {
+
         var jobStatus = resource.getStatus().getJobStatus();
         var savepointInfo = jobStatus.getSavepointInfo();
         var jobId = jobStatus.getJobId();
@@ -69,96 +69,79 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
                         .map(Savepoint::getLocation)
                         .orElse(null);
 
-        observeTriggeredSavepointProgress(savepointInfo, jobId, deployedConfig)
-                .ifPresent(
-                        err ->
-                                EventUtils.createOrUpdateEvent(
-                                        flinkService.getKubernetesClient(),
-                                        resource,
-                                        EventUtils.Type.Warning,
-                                        "SavepointError",
-                                        SavepointUtils.createSavepointError(
-                                                savepointInfo,
-                                                resource.getSpec()
-                                                        .getJob()
-                                                        .getSavepointTriggerNonce()),
-                                        EventUtils.Component.Operator));
+        // If any manual or periodic savepoint is in progress, observe it
+        if (SavepointUtils.savepointInProgress(jobStatus)) {
+            observeTriggeredSavepoint(resource, jobId, deployedConfig);
+        }
 
-        // We only need to observe latest checkpoint/savepoint for terminal jobs
-        if (JobStatus.valueOf(jobStatus.getState()).isGloballyTerminalState()) {
+        // If job is in globally terminal state, observe last savepoint
+        if (ReconciliationUtils.isJobInTerminalState(resource.getStatus())) {
             observeLatestSavepoint(savepointInfo, jobId, deployedConfig);
         }
 
-        var currentLastSpPath =
-                Optional.ofNullable(savepointInfo.getLastSavepoint())
-                        .map(Savepoint::getLocation)
-                        .orElse(null);
-
-        // If the last savepoint information changes we need to patch the status
-        // to avoid losing this in case of an operator failure after the cluster was shut down
-        if (currentLastSpPath != null && !currentLastSpPath.equals(previousLastSpPath)) {
-            LOG.info(
-                    "Updating resource status after observing new last savepoint {}",
-                    currentLastSpPath);
-            statusHelper.patchAndCacheStatus(resource);
-        }
+        patchStatusOnSavepointChange(resource, savepointInfo, previousLastSpPath);
     }
 
     /**
-     * Observe the savepoint result based on the current savepoint info.
+     * Observe the status of manually triggered savepoints.
      *
-     * @param currentSavepointInfo the current savepoint info.
+     * @param resource the resource being observed
      * @param jobID the jobID of the observed job.
      * @param deployedConfig Deployed job config.
-     * @return The observed error, if no error observed, {@code Optional.empty()} will be returned.
      */
-    private Optional<String> observeTriggeredSavepointProgress(
-            SavepointInfo currentSavepointInfo, String jobID, Configuration deployedConfig) {
-        if (StringUtils.isEmpty(currentSavepointInfo.getTriggerId())) {
-            LOG.debug("Savepoint not in progress");
-            return Optional.empty();
-        }
+    private void observeTriggeredSavepoint(
+            AbstractFlinkResource<?, ?> resource, String jobID, Configuration deployedConfig) {
+
+        var savepointInfo = resource.getStatus().getJobStatus().getSavepointInfo();
+
         LOG.info("Observing savepoint status.");
-        SavepointFetchResult savepointFetchResult =
+        var savepointFetchResult =
                 flinkService.fetchSavepointInfo(
-                        currentSavepointInfo.getTriggerId(), jobID, deployedConfig);
+                        savepointInfo.getTriggerId(), jobID, deployedConfig);
 
         if (savepointFetchResult.isPending()) {
-            if (SavepointUtils.gracePeriodEnded(
-                    configManager.getOperatorConfiguration(), currentSavepointInfo)) {
-                String errorMsg =
-                        "Savepoint operation timed out after "
-                                + configManager
-                                        .getOperatorConfiguration()
-                                        .getSavepointTriggerGracePeriod();
-                currentSavepointInfo.resetTrigger();
-                LOG.error(errorMsg);
-                return Optional.of(errorMsg);
-            } else {
-                LOG.info("Savepoint operation not finished yet, waiting within grace period...");
-                return Optional.empty();
-            }
+            LOG.info("Savepoint operation not finished yet...");
+            return;
         }
 
         if (savepointFetchResult.getError() != null) {
-            currentSavepointInfo.resetTrigger();
-            return Optional.of(savepointFetchResult.getError());
+            var err = savepointFetchResult.getError();
+            if (SavepointUtils.gracePeriodEnded(deployedConfig, savepointInfo)) {
+                LOG.error(
+                        "Savepoint attempt failed after grace period. Won't be retried again: "
+                                + err);
+                ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
+                        savepointInfo, resource);
+                EventUtils.createOrUpdateEvent(
+                        flinkService.getKubernetesClient(),
+                        resource,
+                        EventUtils.Type.Warning,
+                        "SavepointError",
+                        SavepointUtils.createSavepointError(
+                                savepointInfo,
+                                resource.getSpec().getJob().getSavepointTriggerNonce()),
+                        EventUtils.Component.Operator);
+            } else {
+                LOG.warn("Savepoint failed within grace period, retrying: " + err);
+            }
+            savepointInfo.resetTrigger();
+            return;
         }
 
-        LOG.info("Savepoint status updated with latest completed savepoint info");
         var savepoint =
                 new Savepoint(
-                        currentSavepointInfo.getTriggerTimestamp(),
+                        savepointInfo.getTriggerTimestamp(),
                         savepointFetchResult.getLocation(),
-                        currentSavepointInfo.getTriggerType());
-        currentSavepointInfo.updateLastSavepoint(savepoint);
+                        savepointInfo.getTriggerType());
 
-        updateSavepointHistory(currentSavepointInfo, savepoint, deployedConfig);
-        return Optional.empty();
+        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(savepointInfo, resource);
+        savepointInfo.updateLastSavepoint(savepoint);
+        cleanupSavepointHistory(savepointInfo, savepoint, deployedConfig);
     }
 
+    /** Clean up and dispose savepoints according to the configured max size/age. */
     @VisibleForTesting
-    void updateSavepointHistory(
+    void cleanupSavepointHistory(
             SavepointInfo currentSavepointInfo,
             Savepoint newSavepoint,
             Configuration deployedConfig) {
@@ -202,6 +185,29 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
         } catch (Exception e) {
             LOG.error("Could not observe latest savepoint information.", e);
             throw new ReconciliationException(e);
+        }
+    }
+
+    /**
+     * Patch the Kubernetes Flink resource status if we observed a new last savepoint. This is
+     * crucial to not lose this information once the reconciler shuts down the cluster.
+     */
+    private void patchStatusOnSavepointChange(
+            AbstractFlinkResource<?, STATUS> resource,
+            SavepointInfo savepointInfo,
+            String previousLastSpPath) {
+        var currentLastSpPath =
+                Optional.ofNullable(savepointInfo.getLastSavepoint())
+                        .map(Savepoint::getLocation)
+                        .orElse(null);
+
+        // If the last savepoint information changes we need to patch the status
+        // to avoid losing this in case of an operator failure after the cluster was shut down
+        if (currentLastSpPath != null && !currentLastSpPath.equals(previousLastSpPath)) {
+            LOG.info(
+                    "Updating resource status after observing new last savepoint {}",
+                    currentLastSpPath);
+            statusHelper.patchAndCacheStatus(resource);
         }
     }
 }
