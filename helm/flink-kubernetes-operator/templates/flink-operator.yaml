@@ -25,6 +25,8 @@ metadata:
     {{- include "flink-operator.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "flink-operator.selectorLabels" . | nindent 6 }}
