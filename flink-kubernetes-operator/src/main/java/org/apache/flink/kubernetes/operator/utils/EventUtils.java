@@ -46,7 +46,12 @@ public class EventUtils {
             HasMetadata target, Type type, String reason, String message, Component component) {
         return component
                 + "."
-                + ((reason + message + type + target.getKind() + target.getMetadata().getName())
+                + ((reason
+                                        + message
+                                        + type
+                                        + target.getKind()
+                                        + target.getMetadata().getName()
+                                        + target.getMetadata().getUid())
                                 .hashCode()
                         & 0x7FFFFFFF);
     }

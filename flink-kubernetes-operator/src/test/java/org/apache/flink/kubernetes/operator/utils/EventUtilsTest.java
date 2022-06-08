@@ -81,4 +81,28 @@ public class EventUtilsTest {
 
         Assertions.assertEquals(2, event.getCount());
     }
+
+    @Test
+    public void testSameResourceNameWithDifferentUidNotShareEvents() {
+        var flinkApp = TestUtils.buildApplicationCluster();
+        flinkApp.getMetadata().setUid("uid1");
+        var reason = "Cleanup";
+        var message = "message";
+        var name1 =
+                EventUtils.generateEventName(
+                        flinkApp,
+                        EventUtils.Type.Warning,
+                        reason,
+                        message,
+                        EventUtils.Component.Operator);
+        flinkApp.getMetadata().setUid("uid2");
+        var name2 =
+                EventUtils.generateEventName(
+                        flinkApp,
+                        EventUtils.Type.Warning,
+                        reason,
+                        message,
+                        EventUtils.Component.Operator);
+        Assertions.assertNotEquals(name1, name2);
+    }
 }
