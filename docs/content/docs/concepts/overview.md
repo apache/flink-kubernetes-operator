@@ -73,7 +73,7 @@ Flink Kubernetes Operator aims to capture the responsibilities of a human operat
 # Known Issues & Limitations
 
 ## JobManager High-availability
-The Operator leverages [Kubernetes HA Services](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/kubernetes_ha/) for providing High-availability for Flink jobs. The HA solution can benefit form using additional [Standby replicas](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/overview/), it will result in a faster recovery time, but Flink jobs will still restart when the Leader JobManager goes down.
+The Operator leverages [Kubernetes HA Services](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/kubernetes_ha/) for providing High-availability for Flink jobs. The HA solution can benefit from using additional [Standby replicas](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/overview/), it will result in a faster recovery time, but Flink jobs will still restart when the Leader JobManager goes down.
 
 ## Standalone Kubernetes Support
 The Operator does not support [Standalone Kubernetes](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/standalone/kubernetes/) deployments yet
