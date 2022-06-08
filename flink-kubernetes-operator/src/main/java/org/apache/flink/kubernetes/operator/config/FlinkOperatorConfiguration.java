@@ -40,8 +40,8 @@ public class FlinkOperatorConfiguration {
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
     String artifactsBaseDir;
-    int savepointHistoryMaxCount;
-    Duration savepointHistoryMaxAge;
+    Integer savepointHistoryCountThreshold;
+    Duration savepointHistoryAgeThreshold;
 
     public static FlinkOperatorConfiguration fromConfiguration(
             Configuration operatorConfig, Set<String> watchedNamespaces) {
@@ -79,12 +79,12 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR);
 
-        int savepointHistoryMaxCount =
+        Integer savepointHistoryCountThreshold =
                 operatorConfig.get(
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT);
-        Duration savepointHistoryMaxAge =
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_COUNT_THRESHOLD);
+        Duration savepointHistoryAgeThreshold =
                 operatorConfig.get(
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE);
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_AGE_THRESHOLD);
 
         String flinkServiceHostOverride = null;
         if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {
@@ -103,7 +103,7 @@ public class FlinkOperatorConfiguration {
                 flinkCancelJobTimeout,
                 flinkShutdownClusterTimeout,
                 artifactsBaseDir,
-                savepointHistoryMaxCount,
-                savepointHistoryMaxAge);
+                savepointHistoryCountThreshold,
+                savepointHistoryAgeThreshold);
     }
 }

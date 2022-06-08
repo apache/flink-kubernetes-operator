@@ -89,6 +89,40 @@ public class SavepointObserverTest {
     }
 
     @Test
+    public void testAgeBasedDisposeWithAgeThreshold() {
+        Configuration conf = new Configuration();
+        conf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                Duration.ofMillis(System.currentTimeMillis() * 2));
+        conf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_AGE_THRESHOLD,
+                Duration.ofMillis(5));
+        configManager.updateDefaultConfig(conf);
+
+        SavepointObserver observer =
+                new SavepointObserver(flinkService, configManager, new TestingStatusHelper<>());
+        SavepointInfo spInfo = new SavepointInfo();
+
+        Savepoint sp1 = new Savepoint(1, "sp1", SavepointTriggerType.MANUAL);
+        spInfo.updateLastSavepoint(sp1);
+        observer.cleanupSavepointHistory(spInfo, sp1, conf);
+        Assertions.assertIterableEquals(
+                Collections.singletonList(sp1), spInfo.getSavepointHistory());
+        Assertions.assertIterableEquals(
+                Collections.emptyList(), flinkService.getDisposedSavepoints());
+
+        Savepoint sp2 = new Savepoint(2, "sp2", SavepointTriggerType.MANUAL);
+        spInfo.updateLastSavepoint(sp2);
+        observer.cleanupSavepointHistory(spInfo, sp2, conf);
+        Assertions.assertIterableEquals(
+                Collections.singletonList(sp2), spInfo.getSavepointHistory());
+        Assertions.assertIterableEquals(
+                Collections.singletonList(sp1.getLocation()), flinkService.getDisposedSavepoints());
+
+        configManager.updateDefaultConfig(new Configuration());
+    }
+
+    @Test
     public void testPeriodicSavepoint() throws Exception {
         var conf = new Configuration();
         var deployment = TestUtils.buildApplicationCluster();

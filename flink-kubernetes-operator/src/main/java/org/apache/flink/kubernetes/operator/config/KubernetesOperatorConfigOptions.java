@@ -145,11 +145,24 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Whether to enable recovery of missing/deleted jobmanager deployments.");
 
+    public static final ConfigOption<Integer> OPERATOR_SAVEPOINT_HISTORY_COUNT_THRESHOLD =
+            ConfigOptions.key("kubernetes.operator.savepoint.history.count.threshold")
+                    .intType()
+                    .noDefaultValue()
+                    .withDescription("Number threshold of savepoint history entries to retain.");
+
     public static final ConfigOption<Integer> OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT =
             ConfigOptions.key("kubernetes.operator.savepoint.history.max.count")
                     .intType()
                     .defaultValue(10)
                     .withDescription("Maximum number of savepoint history entries to retain.");
+
+    public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_AGE_THRESHOLD =
+            ConfigOptions.key("kubernetes.operator.savepoint.history.age.threshold")
+                    .durationType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Age threshold for savepoint history entries to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.");
 
     public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE =
             ConfigOptions.key("kubernetes.operator.savepoint.history.max.age")
