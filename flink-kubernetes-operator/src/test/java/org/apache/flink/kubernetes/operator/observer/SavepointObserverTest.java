@@ -95,7 +95,7 @@ public class SavepointObserverTest {
                 KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
                 Duration.ofMillis(System.currentTimeMillis() * 2));
         conf.set(
-                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_AGE_THRESHOLD,
+                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD,
                 Duration.ofMillis(5));
         configManager.updateDefaultConfig(conf);
 
