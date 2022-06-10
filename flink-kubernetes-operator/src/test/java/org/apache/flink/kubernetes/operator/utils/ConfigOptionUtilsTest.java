@@ -36,28 +36,18 @@ public class ConfigOptionUtilsTest {
         config.set(
                 KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
                 Duration.ofMillis(5));
-        config.set(
-                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD,
-                Duration.ofMillis(10));
         assertEquals(
                 ConfigOptionUtils.getValueWithThreshold(
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD,
                         config,
-                        config),
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                        Duration.ofMillis(10)),
                 Duration.ofMillis(5));
 
-        config.set(
-                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD,
-                Duration.ofMillis(4));
         assertEquals(
                 ConfigOptionUtils.getValueWithThreshold(
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD,
                         config,
-                        config),
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                        Duration.ofMillis(4)),
                 Duration.ofMillis(4));
     }
 }

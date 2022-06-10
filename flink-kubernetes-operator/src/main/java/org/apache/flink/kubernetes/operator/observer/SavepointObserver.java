@@ -150,14 +150,13 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
 
         // maintain history
         List<Savepoint> savepointHistory = currentSavepointInfo.getSavepointHistory();
-        Configuration operatorConfig = configManager.getOperatorConfiguration().getOperatorConfig();
         int maxCount =
                 ConfigOptionUtils.getValueWithThreshold(
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT_THRESHOLD,
                         deployedConfig,
-                        operatorConfig);
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
+                        configManager
+                                .getOperatorConfiguration()
+                                .getSavepointHistoryCountThreshold());
         while (savepointHistory.size() > maxCount) {
             // remove oldest entries
             disposeSavepointQuietly(savepointHistory.remove(0), deployedConfig);
@@ -165,11 +164,9 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
 
         Duration maxAge =
                 ConfigOptionUtils.getValueWithThreshold(
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD,
                         deployedConfig,
-                        operatorConfig);
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                        configManager.getOperatorConfiguration().getSavepointHistoryAgeThreshold());
         long maxTms = System.currentTimeMillis() - maxAge.toMillis();
         Iterator<Savepoint> it = savepointHistory.iterator();
         while (it.hasNext()) {

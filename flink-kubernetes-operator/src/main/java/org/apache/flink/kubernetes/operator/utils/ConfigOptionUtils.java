@@ -31,24 +31,18 @@ public class ConfigOptionUtils {
     /**
      * Gets the value of {@link ConfigOption} with threshold.
      *
+     * @param config The effective config
      * @param configOption The config option.
-     * @param thresholdOption The threshold option.
-     * @param effectiveConfig The effective config.
-     * @param operatorConfig The operator config.
+     * @param configThreshold The config threshold.
      * @return The value of {@link ConfigOption} with threshold.
      */
     public static <T extends Comparable<T>> T getValueWithThreshold(
-            ConfigOption<T> configOption,
-            ConfigOption<T> thresholdOption,
-            Configuration effectiveConfig,
-            Configuration operatorConfig) {
-        T configValue = effectiveConfig.get(configOption);
-        T configThreshold = operatorConfig.get(thresholdOption);
+            Configuration config, ConfigOption<T> configOption, T configThreshold) {
+        T configValue = config.get(configOption);
         if (configThreshold != null && configValue.compareTo(configThreshold) > 0) {
             LOG.warn(
-                    "Uses the config threshold [{}] of '{}' instead of the config value [{}] of '{}'.",
+                    "Uses the config threshold [{}] instead of the config value [{}] of '{}'.",
                     configThreshold,
-                    thresholdOption.key(),
                     configValue,
                     configOption.key());
             return configThreshold;
