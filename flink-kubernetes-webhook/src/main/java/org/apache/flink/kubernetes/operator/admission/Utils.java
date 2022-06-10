@@ -15,14 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd;
+package org.apache.flink.kubernetes.operator.admission;
 
-/** Constants used by the CRD. */
-public class CrdConstants {
-    public static final String API_GROUP = "flink.apache.org";
-    public static final String API_VERSION = "v1beta1";
-    public static final String KIND_SESSION_JOB = "FlinkSessionJob";
-    public static final String KIND_FLINK_DEPLOYMENT = "FlinkDeployment";
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 
-    public static final String LABEL_TARGET_SESSION = "target.session";
+/** Admission utils. */
+public class Utils {
+
+    private static final ObjectMapper mapper = new ObjectMapper();
+
+    public static <T> T convertToTargetType(HasMetadata resource, Class<T> targetType)
+            throws JsonProcessingException {
+        var serialized = mapper.writeValueAsString(resource);
+        return mapper.readValue(serialized, targetType);
+    }
 }

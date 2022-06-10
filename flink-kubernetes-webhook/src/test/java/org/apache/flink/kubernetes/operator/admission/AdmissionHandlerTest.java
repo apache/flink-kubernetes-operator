@@ -17,12 +17,18 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.kubernetes.operator.admission.mutator.FlinkMutator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
+import org.apache.flink.shaded.netty4.io.netty.buffer.UnpooledHeapByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.channel.embedded.EmbeddedChannel;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultFullHttpRequest;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.DefaultFullHttpResponse;
@@ -33,11 +39,14 @@ import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import io.fabric8.kubernetes.api.model.GroupVersionKind;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionRequest;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.Base64;
 
 import static io.javaoperatorsdk.admissioncontroller.Operation.CREATE;
+import static org.apache.flink.kubernetes.operator.admission.AdmissionHandler.MUTATOR_REQUEST_PATH;
 import static org.apache.flink.kubernetes.operator.admission.AdmissionHandler.VALIDATE_REQUEST_PATH;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpMethod.GET;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.INTERNAL_SERVER_ERROR;
@@ -53,7 +62,8 @@ public class AdmissionHandlerTest {
             new AdmissionHandler(
                     new FlinkValidator(
                             ValidatorUtils.discoverValidators(new FlinkConfigManager()),
-                            new FlinkConfigManager()));
+                            new FlinkConfigManager()),
+                    new FlinkMutator());
 
     @Test
     public void testHandleIllegalRequest() {
@@ -65,8 +75,8 @@ public class AdmissionHandlerTest {
         assertEquals(INTERNAL_SERVER_ERROR, response.status());
         assertEquals(
                 String.format(
-                        "Illegal path requested: %s. Only %s is accepted.",
-                        illegalRequest, VALIDATE_REQUEST_PATH),
+                        "Illegal path requested: %s. Only %s or %s is accepted.",
+                        illegalRequest, VALIDATE_REQUEST_PATH, MUTATOR_REQUEST_PATH),
                 new String(response.content().array()));
         assertTrue(embeddedChannel.finish());
     }
@@ -112,6 +122,46 @@ public class AdmissionHandlerTest {
         embeddedChannel.writeOutbound(new DefaultFullHttpResponse(HTTP_1_1, OK));
         final DefaultHttpResponse response = embeddedChannel.readOutbound();
         assertEquals(OK, response.status());
+        assertTrue(embeddedChannel.finish());
+    }
+
+    @Test
+    public void testMutateHandler() throws Exception {
+        final EmbeddedChannel embeddedChannel = new EmbeddedChannel(admissionHandler);
+        var sessionJob = new FlinkSessionJob();
+        sessionJob.setSpec(
+                FlinkSessionJobSpec.builder()
+                        .job(JobSpec.builder().jarURI("http://myjob.jar").build())
+                        .deploymentName("test-session")
+                        .build());
+
+        final AdmissionRequest admissionRequest = new AdmissionRequest();
+        admissionRequest.setOperation(CREATE.name());
+        admissionRequest.setObject(sessionJob);
+        admissionRequest.setKind(
+                new GroupVersionKind(
+                        sessionJob.getGroup(), sessionJob.getVersion(), sessionJob.getKind()));
+        final AdmissionReview admissionReview = new AdmissionReview();
+        admissionReview.setRequest(admissionRequest);
+        embeddedChannel.writeInbound(
+                new DefaultFullHttpRequest(
+                        HTTP_1_1,
+                        GET,
+                        MUTATOR_REQUEST_PATH,
+                        Unpooled.wrappedBuffer(
+                                new ObjectMapper()
+                                        .writeValueAsString(admissionReview)
+                                        .getBytes())));
+        embeddedChannel.writeOutbound(new DefaultFullHttpResponse(HTTP_1_1, OK));
+        final DefaultHttpResponse response = embeddedChannel.readOutbound();
+        assertEquals(OK, response.status());
+        Assertions.assertFalse(embeddedChannel.outboundMessages().isEmpty());
+        var body = embeddedChannel.readOutbound();
+        Assertions.assertNotNull(body);
+        var str = new String(((UnpooledHeapByteBuf) body).array());
+        var review = new ObjectMapper().readValue(str, AdmissionReview.class);
+        var patch = new String(Base64.getDecoder().decode(review.getResponse().getPatch()));
+        Assertions.assertTrue(patch.contains(CrdConstants.LABEL_TARGET_SESSION));
         assertTrue(embeddedChannel.finish());
     }
 }

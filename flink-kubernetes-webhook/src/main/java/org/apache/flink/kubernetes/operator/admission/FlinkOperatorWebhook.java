@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.kubernetes.operator.admission.mutator.FlinkMutator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
@@ -61,7 +62,8 @@ public class FlinkOperatorWebhook {
         FlinkConfigManager configManager = new FlinkConfigManager();
         Set<FlinkResourceValidator> validators = ValidatorUtils.discoverValidators(configManager);
         AdmissionHandler endpoint =
-                new AdmissionHandler(new FlinkValidator(validators, configManager));
+                new AdmissionHandler(
+                        new FlinkValidator(validators, configManager), new FlinkMutator());
         ChannelInitializer<SocketChannel> initializer = createChannelInitializer(endpoint);
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);
         NioEventLoopGroup workerGroup = new NioEventLoopGroup();

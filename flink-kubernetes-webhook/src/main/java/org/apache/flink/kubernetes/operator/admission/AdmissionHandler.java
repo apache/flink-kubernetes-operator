@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.kubernetes.operator.admission.mutator.DefaultRequestMutator;
+
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBuf;
 import org.apache.flink.shaded.netty4.io.netty.buffer.ByteBufInputStream;
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
@@ -40,6 +42,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
 import io.javaoperatorsdk.admissioncontroller.AdmissionController;
+import io.javaoperatorsdk.admissioncontroller.mutation.Mutator;
 import io.javaoperatorsdk.admissioncontroller.validation.Validator;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
@@ -62,11 +65,14 @@ public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
     private static final Logger LOG = LoggerFactory.getLogger(AdmissionHandler.class);
     private static final ObjectMapper objectMapper = new ObjectMapper();
     protected static final String VALIDATE_REQUEST_PATH = "/validate";
+    protected static final String MUTATOR_REQUEST_PATH = "/mutate";
 
     private final AdmissionController<HasMetadata> validatingController;
+    private final AdmissionController<HasMetadata> mutatorController;
 
-    public AdmissionHandler(Validator<HasMetadata> validator) {
+    public AdmissionHandler(Validator<HasMetadata> validator, Mutator<HasMetadata> mutator) {
         this.validatingController = new AdmissionController<>(validator);
+        this.mutatorController = new AdmissionController<>(new DefaultRequestMutator(mutator));
     }
 
     @Override
@@ -85,11 +91,23 @@ public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
                 LOG.error("Failed to validate", e);
                 sendError(ctx, ExceptionUtils.getStackTrace(e));
             }
+        } else if (MUTATOR_REQUEST_PATH.equals(path)) {
+            final ByteBuf msgContent = ((FullHttpRequest) httpRequest).content();
+            AdmissionReview review;
+            try {
+                InputStream in = new ByteBufInputStream(msgContent);
+                review = objectMapper.readValue(in, AdmissionReview.class);
+                AdmissionReview response = mutatorController.handle(review);
+                sendResponse(ctx, objectMapper.writeValueAsString(response));
+            } catch (Exception e) {
+                LOG.error("Failed to mutate", e);
+                sendError(ctx, ExceptionUtils.getStackTrace(e));
+            }
         } else {
             String error =
                     String.format(
-                            "Illegal path requested: %s. Only %s is accepted.",
-                            path, VALIDATE_REQUEST_PATH);
+                            "Illegal path requested: %s. Only %s or %s is accepted.",
+                            path, VALIDATE_REQUEST_PATH, MUTATOR_REQUEST_PATH);
             LOG.error(error);
             sendError(ctx, error);
         }
