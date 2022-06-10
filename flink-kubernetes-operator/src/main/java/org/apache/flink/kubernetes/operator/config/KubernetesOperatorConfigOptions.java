@@ -151,12 +151,26 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(10)
                     .withDescription("Maximum number of savepoint history entries to retain.");
 
+    public static final ConfigOption<Integer> OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT_THRESHOLD =
+            ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT.key() + ".threshold")
+                    .intType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Maximum number threshold of savepoint history entries to retain.");
+
     public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE =
             ConfigOptions.key("kubernetes.operator.savepoint.history.max.age")
                     .durationType()
                     .defaultValue(Duration.ofHours(24))
                     .withDescription(
                             "Maximum age for savepoint history entries to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.");
+
+    public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD =
+            ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE.key() + ".threshold")
+                    .durationType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Maximum age threshold for savepoint history entries to retain.");
 
     public static final ConfigOption<Map<String, String>> JAR_ARTIFACT_HTTP_HEADER =
             ConfigOptions.key("kubernetes.operator.user.artifacts.http.header")

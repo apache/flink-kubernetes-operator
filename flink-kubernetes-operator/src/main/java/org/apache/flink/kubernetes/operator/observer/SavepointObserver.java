@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
@@ -28,6 +29,7 @@ import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.ConfigOptionUtils;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusHelper;
@@ -148,13 +150,23 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
 
         // maintain history
         List<Savepoint> savepointHistory = currentSavepointInfo.getSavepointHistory();
-        int maxCount = configManager.getOperatorConfiguration().getSavepointHistoryMaxCount();
+        int maxCount =
+                ConfigOptionUtils.getValueWithThreshold(
+                        deployedConfig,
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
+                        configManager
+                                .getOperatorConfiguration()
+                                .getSavepointHistoryCountThreshold());
         while (savepointHistory.size() > maxCount) {
             // remove oldest entries
             disposeSavepointQuietly(savepointHistory.remove(0), deployedConfig);
         }
 
-        Duration maxAge = configManager.getOperatorConfiguration().getSavepointHistoryMaxAge();
+        Duration maxAge =
+                ConfigOptionUtils.getValueWithThreshold(
+                        deployedConfig,
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                        configManager.getOperatorConfiguration().getSavepointHistoryAgeThreshold());
         long maxTms = System.currentTimeMillis() - maxAge.toMillis();
         Iterator<Savepoint> it = savepointHistory.iterator();
         while (it.hasNext()) {
