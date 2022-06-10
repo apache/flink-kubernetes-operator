@@ -149,6 +149,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | resource | org.apache.flink.kubernetes.operator.crd.spec.Resource | Resource specification for the TaskManager pods. |
+| replicas | java.lang.Integer | Number of TaskManager replicas. If defined, takes precedence over parallelism |
 | podTemplate | io.fabric8.kubernetes.api.model.Pod | TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. |
 
 ### UpgradeMode
@@ -188,6 +189,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | clusterInfo | java.util.Map<java.lang.String,java.lang.String> | Config information from running clusters. |
 | jobManagerDeploymentStatus | org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus | Last observed status of the JobManager deployment. |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentReconciliationStatus | Status of the last reconcile operation. |
+| taskManager | org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo | Information about the TaskManagers for the scale subresource. |
 
 ### FlinkSessionJobReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobReconciliationStatus
@@ -287,3 +289,13 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | PERIODIC | Savepoint periodically triggered by the operator. |
 | UPGRADE | Savepoint triggered during stateful upgrade. |
 | UNKNOWN | Savepoint trigger mechanism unknown, such as savepoint retrieved directly from Flink job. |
+
+### TaskManagerInfo
+**Class**: org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo
+
+**Description**: Last observed status of the Flink job within an application deployment.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| labelSelector | java.lang.String | TaskManager label selector. |
+| replicas | int | Number of TaskManager replicas if defined in the spec. |

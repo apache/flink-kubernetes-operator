@@ -92,7 +92,7 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                                     flinkSessionJob.getSpec().getJob().getInitialSavepointPath())
                             .orElse(null));
             ReconciliationUtils.updateForSpecReconciliationSuccess(
-                    flinkSessionJob, JobState.RUNNING);
+                    flinkSessionJob, JobState.RUNNING, sessionJobConfig);
             return;
         }
 
@@ -127,7 +127,7 @@ public class FlinkSessionJobReconciler implements Reconciler<FlinkSessionJob> {
                 stateAfterReconcile = JobState.RUNNING;
             }
             ReconciliationUtils.updateForSpecReconciliationSuccess(
-                    flinkSessionJob, stateAfterReconcile);
+                    flinkSessionJob, stateAfterReconcile, sessionJobConfig);
         } else {
             if (!SavepointUtils.triggerSavepointIfNeeded(
                     flinkService, flinkSessionJob, sessionJobConfig)) {

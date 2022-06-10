@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -71,14 +72,15 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
         return false;
     }
 
-    protected boolean newSpecIsAlreadyDeployed(FlinkDeployment flinkApp) {
+    protected boolean newSpecIsAlreadyDeployed(FlinkDeployment flinkApp, Configuration deployConf) {
         FlinkDeploymentSpec deployedSpec = ReconciliationUtils.getDeployedSpec(flinkApp);
         if (flinkApp.getSpec().equals(deployedSpec)) {
             LOG.info(
                     "The new spec matches the currently deployed last stable spec. No upgrade needed.");
             ReconciliationUtils.updateForSpecReconciliationSuccess(
                     flinkApp,
-                    deployedSpec.getJob() != null ? deployedSpec.getJob().getState() : null);
+                    deployedSpec.getJob() != null ? deployedSpec.getJob().getState() : null,
+                    deployConf);
             return true;
         }
         return false;

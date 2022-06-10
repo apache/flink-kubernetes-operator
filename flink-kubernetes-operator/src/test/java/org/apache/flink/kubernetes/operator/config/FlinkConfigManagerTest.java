@@ -102,7 +102,8 @@ public class FlinkConfigManagerTest {
         deployment.getSpec().setLogConfiguration(Map.of(Constants.CONFIG_FILE_LOG4J_NAME, "test"));
         deployment.getSpec().setPodTemplate(new Pod());
 
-        ReconciliationUtils.updateForSpecReconciliationSuccess(deployment, JobState.RUNNING);
+        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                deployment, JobState.RUNNING, config);
         Configuration deployConfig = configManager.getObserveConfig(deployment);
         assertFalse(
                 deployConfig.contains(

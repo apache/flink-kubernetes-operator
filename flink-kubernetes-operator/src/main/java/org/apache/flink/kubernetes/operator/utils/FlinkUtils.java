@@ -19,7 +19,9 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
@@ -277,5 +279,11 @@ public class FlinkUtils {
 
     public static boolean clusterShutdownDisabled(FlinkDeploymentSpec spec) {
         return spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_14);
+    }
+
+    public static int getNumTaskManagers(Configuration conf) {
+        int parallelism = conf.get(CoreOptions.DEFAULT_PARALLELISM);
+        int taskSlots = conf.get(TaskManagerOptions.NUM_TASK_SLOTS);
+        return (parallelism + taskSlots - 1) / taskSlots;
     }
 }

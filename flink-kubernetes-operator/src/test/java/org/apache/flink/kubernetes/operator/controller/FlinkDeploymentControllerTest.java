@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
+import org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -287,6 +288,10 @@ public class FlinkDeploymentControllerTest {
         List<Tuple2<String, JobStatusMessage>> jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
+        assertEquals(
+                new TaskManagerInfo(
+                        "component=taskmanager,app=" + appCluster.getMetadata().getName(), 1),
+                appCluster.getStatus().getTaskManager());
 
         List<Tuple2<String, JobStatusMessage>> previousJobs = new ArrayList<>(jobs);
         appCluster.getSpec().getJob().setInitialSavepointPath("s1");
@@ -322,6 +327,7 @@ public class FlinkDeploymentControllerTest {
                         .getSavepointInfo()
                         .getSavepointHistory()
                         .size());
+        assertEquals(new TaskManagerInfo("", 0), appCluster.getStatus().getTaskManager());
 
         testController.reconcile(appCluster, context);
         jobs = flinkService.listJobs();

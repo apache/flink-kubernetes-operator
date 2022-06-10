@@ -72,22 +72,21 @@ public class SessionReconciler extends AbstractDeploymentReconciler {
             status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
             IngressUtils.updateIngressRules(
                     flinkApp.getMetadata(), currentDeploySpec, conf, kubernetesClient);
-            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null, conf);
             return;
         }
 
         Configuration observeConfig = configManager.getObserveConfig(flinkApp);
         boolean specChanged = !currentDeploySpec.equals(lastReconciledSpec);
         if (specChanged) {
-            if (newSpecIsAlreadyDeployed(flinkApp)) {
+            var deployConf =
+                    configManager.getDeployConfig(flinkApp.getMetadata(), currentDeploySpec);
+            if (newSpecIsAlreadyDeployed(flinkApp, deployConf)) {
                 return;
             }
             LOG.debug("Detected spec change, starting upgrade process.");
-            upgradeSessionCluster(
-                    flinkApp,
-                    currentDeploySpec,
-                    configManager.getDeployConfig(flinkApp.getMetadata(), currentDeploySpec));
-            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null);
+            upgradeSessionCluster(flinkApp, currentDeploySpec, deployConf);
+            ReconciliationUtils.updateForSpecReconciliationSuccess(flinkApp, null, deployConf);
         } else if (ReconciliationUtils.shouldRollBack(
                 flinkService, reconciliationStatus, observeConfig)) {
             rollbackSessionCluster(flinkApp);

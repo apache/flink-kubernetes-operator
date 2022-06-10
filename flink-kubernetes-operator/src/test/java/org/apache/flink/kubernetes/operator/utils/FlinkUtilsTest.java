@@ -19,6 +19,9 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.CoreOptions;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
@@ -104,6 +107,22 @@ public class FlinkUtilsTest {
         assertNull(kubernetesClient.configMaps().withName(name).get().getData());
         FlinkUtils.deleteJobGraphInKubernetesHA(
                 clusterId, kubernetesClient.getNamespace(), kubernetesClient);
+    }
+
+    @Test
+    public void testComputeNumTms() {
+        Configuration conf = new Configuration();
+        conf.set(CoreOptions.DEFAULT_PARALLELISM, 2);
+        conf.set(TaskManagerOptions.NUM_TASK_SLOTS, 1);
+
+        assertEquals(2, FlinkUtils.getNumTaskManagers(conf));
+
+        conf.set(TaskManagerOptions.NUM_TASK_SLOTS, 3);
+        assertEquals(1, FlinkUtils.getNumTaskManagers(conf));
+
+        conf.set(CoreOptions.DEFAULT_PARALLELISM, 7);
+        conf.set(TaskManagerOptions.NUM_TASK_SLOTS, 2);
+        assertEquals(4, FlinkUtils.getNumTaskManagers(conf));
     }
 
     private void createHAConfigMapWithData(

@@ -226,11 +226,8 @@ public class FlinkConfigBuilder {
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());
             final URI uri = new URI(spec.getJob().getJarURI());
             effectiveConfig.set(PipelineOptions.JARS, Collections.singletonList(uri.toString()));
+            effectiveConfig.set(CoreOptions.DEFAULT_PARALLELISM, getParallelism());
 
-            if (spec.getJob().getParallelism() > 0) {
-                effectiveConfig.set(
-                        CoreOptions.DEFAULT_PARALLELISM, spec.getJob().getParallelism());
-            }
             if (spec.getJob().getAllowNonRestoredState() != null) {
                 effectiveConfig.set(
                         SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE,
@@ -241,6 +238,18 @@ public class FlinkConfigBuilder {
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.SESSION.getName());
         }
         return this;
+    }
+
+    private int getParallelism() {
+        if (spec.getTaskManager() != null && spec.getTaskManager().getReplicas() != null) {
+            if (spec.getJob().getParallelism() > 0) {
+                LOG.warn("Job parallelism setting is ignored as TaskManager replicas are set");
+            }
+            return spec.getTaskManager().getReplicas()
+                    * effectiveConfig.get(TaskManagerOptions.NUM_TASK_SLOTS);
+        }
+
+        return spec.getJob().getParallelism();
     }
 
     protected Configuration build() {
