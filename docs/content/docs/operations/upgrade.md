@@ -138,3 +138,9 @@ The following steps demonstrate the CRD upgrade process from `v1alpha1` to `v1be
     Starting job 00000000000000000000000000000000 from savepoint /flink-data/savepoints/savepoint-000000-2f40a9c8e4b9/_metadat
     ```
 
+### Changes of default values of FlinkDeployment
+There are some changes or improvement of default values in the fields of the FlinkDeployment in `v1beta1`:
+1. Default value of `crd.spec.Resource#cpu` is `1.0`.
+2. Default value of `crd.spec.JobManagerSpec#replicas` is `1`.
+3. No default value of `crd.spec.FlinkDeploymentSpec#serviceAccount` and users must specify its value explicitly. 
+
