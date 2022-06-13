@@ -95,9 +95,11 @@ jobs:
           - description: 'Default configuration'
             namespace: default
             extraArgs: ''
+            tests: "test_application_kubernetes_ha.sh test_application_operations.sh test_sessionjob_kubernetes_ha.sh test_sessionjob_operations.sh"
           - description: 'WatchNamespaces enabled'
             namespace: flink
             extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
+            tests: "test_application_kubernetes_ha.sh test_application_operations.sh test_sessionjob_kubernetes_ha.sh test_sessionjob_operations.sh test_multi_sessionjob.sh"
         versions:
           - image: flink:1.13
             flinkVersion: v1_13
@@ -153,9 +155,10 @@ jobs:
           sed -i "s/image: flink:.*/image: ${{ matrix.versions.image }}/" e2e-tests/data/*.yaml
           sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.versions.flinkVersion }}/" e2e-tests/data/*.yaml
           git diff HEAD
-          ls e2e-tests/test_*.sh | while read script_test;do \
-            echo "Running $script_test"
-            bash $script_test || exit 1
+          TESTS="${{ matrix.config.tests }}"
+          for test in $TESTS;do \
+            echo "Running e2e-tests/$test"
+            bash e2e-tests/$test || exit 1
           done
           git reset --hard
       - name: Stop the operator

@@ -172,6 +172,7 @@ function cleanup_and_exit() {
     TIMEOUT=$2
     CLUSTER_ID=$3
 
+    kubectl config set-context --current --namespace=default
     kubectl delete -f $APPLICATION_YAML
     kubectl wait --for=delete pod --timeout=${TIMEOUT}s --selector="app=${CLUSTER_ID}"
     kubectl delete cm --selector="app=${CLUSTER_ID},configmap-type=high-availability"
@@ -201,4 +202,18 @@ function on_exit {
 
   # Keep commands in reverse order, so commands would be executed in LIFO order.
   _on_exit_commands=("${command} `echo "${@:2}"`" "${_on_exit_commands[@]-}")
+}
+
+function create_namespace() {
+
+  NAMESPACE_NAME=${1:-default};
+
+  NS=$(kubectl get namespace $NAMESPACE_NAME --ignore-not-found);
+  if [[ "$NS" ]]; then
+    echo "Skipping creation of namespace $NAMESPACE_NAME - already exists";
+  else
+    echo "Creating namespace $NAMESPACE_NAME";
+    kubectl create namespace $NAMESPACE_NAME;
+  fi;
+
 }
