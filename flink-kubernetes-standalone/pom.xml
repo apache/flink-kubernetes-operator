@@ -29,7 +29,6 @@ under the License.
     </parent>
 
 
-
     <artifactId>flink-kubernetes-standalone</artifactId>
     <name>Flink Kubernetes Standalone</name>
     <packaging>jar</packaging>
