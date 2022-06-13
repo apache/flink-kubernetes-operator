@@ -23,6 +23,10 @@ import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 
+import io.fabric8.kubernetes.api.model.ContainerBuilder;
+import io.fabric8.kubernetes.api.model.PodBuilder;
+import io.fabric8.kubernetes.api.model.PodSpecBuilder;
+import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class UserLibMountDecoratorTest {
 
     @Test
-    public void testVolumeAdded() {
+    public void testVolumeAddedApplicationMode() {
         StandaloneKubernetesJobManagerParameters jmParameters =
                 createJmParamsWithClusterMode(
                         StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
@@ -54,7 +58,7 @@ public class UserLibMountDecoratorTest {
     }
 
     @Test
-    public void testVolumeNotAdded() {
+    public void testVolumeNotAddedSessionMode() {
         StandaloneKubernetesJobManagerParameters jmParameters =
                 createJmParamsWithClusterMode(
                         StandaloneKubernetesConfigOptionsInternal.ClusterMode.SESSION);
@@ -67,6 +71,48 @@ public class UserLibMountDecoratorTest {
         FlinkPod decoratedPod = decorator.decorateFlinkPod(baseFlinkPod);
         assertEquals(0, decoratedPod.getMainContainer().getVolumeMounts().size());
         assertEquals(0, decoratedPod.getPodWithoutMainContainer().getSpec().getVolumes().size());
+    }
+
+    @Test
+    public void testVolumeNotAddedExistingVolumeMount() {
+        StandaloneKubernetesJobManagerParameters jmParameters =
+                createJmParamsWithClusterMode(
+                        StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
+        UserLibMountDecorator decorator = new UserLibMountDecorator(jmParameters);
+
+        final String volName = "flink-artifact";
+        final String userLibPath = "/opt/flink/usrlib";
+
+        FlinkPod baseFlinkPod =
+                new FlinkPod.Builder()
+                        .withMainContainer(
+                                new ContainerBuilder()
+                                        .addNewVolumeMount()
+                                        .withName(volName)
+                                        .withMountPath(userLibPath)
+                                        .endVolumeMount()
+                                        .build())
+                        .withPod(
+                                new PodBuilder()
+                                        .withSpec(
+                                                new PodSpecBuilder()
+                                                        .addNewVolumeLike(
+                                                                new VolumeBuilder()
+                                                                        .withName(volName)
+                                                                        .withNewEmptyDir()
+                                                                        .endEmptyDir()
+                                                                        .build())
+                                                        .endVolume()
+                                                        .build())
+                                        .build())
+                        .build();
+
+        assertEquals(1, baseFlinkPod.getMainContainer().getVolumeMounts().size());
+        assertEquals(1, baseFlinkPod.getPodWithoutMainContainer().getSpec().getVolumes().size());
+
+        FlinkPod decoratedPod = decorator.decorateFlinkPod(baseFlinkPod);
+        assertEquals(1, decoratedPod.getMainContainer().getVolumeMounts().size());
+        assertEquals(1, decoratedPod.getPodWithoutMainContainer().getSpec().getVolumes().size());
     }
 
     private StandaloneKubernetesJobManagerParameters createJmParamsWithClusterMode(

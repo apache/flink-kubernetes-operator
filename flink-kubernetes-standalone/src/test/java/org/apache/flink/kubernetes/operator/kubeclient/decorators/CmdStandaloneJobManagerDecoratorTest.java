@@ -18,11 +18,13 @@
 package org.apache.flink.kubernetes.operator.kubeclient.decorators;
 
 import org.apache.flink.client.deployment.ClusterSpecification;
+import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,7 +69,29 @@ public class CmdStandaloneJobManagerDecoratorTest {
     }
 
     @Test
-    public void testApplicationCommandAdded() {
+    public void testApplicationCommandAndArgsAdded() {
+        final String testMainClass = "org.main.class";
+        configuration.set(
+                StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
+                StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
+        configuration.set(ApplicationConfiguration.APPLICATION_MAIN_CLASS, testMainClass);
+        configuration.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, false);
+
+        FlinkPod decoratedPod = decorator.decorateFlinkPod(new FlinkPod.Builder().build());
+        assertThat(
+                decoratedPod.getMainContainer().getCommand(), containsInAnyOrder(MOCK_ENTRYPATH));
+        assertThat(
+                decoratedPod.getMainContainer().getArgs(),
+                containsInAnyOrder(
+                        CmdStandaloneJobManagerDecorator.APPLICATION_MODE_ARG,
+                        "--allowNonRestoredState",
+                        "false",
+                        "--job-classname",
+                        testMainClass));
+    }
+
+    @Test
+    public void testApplicationOptionalArgsNotAdded() {
         configuration.set(
                 StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
