@@ -16,7 +16,7 @@
 # limitations under the License.
 ################################################################################
 ---
-{{- if .Values.webhook.create }}
+{{- if or .Values.webhook.create .Values.webhook.mutator.create }}
 ---
 apiVersion: v1
 kind: Service
@@ -75,6 +75,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   selfSigned: {}
+{{- end }}
+{{- if .Values.webhook.create }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -109,6 +111,8 @@ webhooks:
         operator: In
         values: [{{- range .Values.watchNamespaces }}{{ . | quote }},{{- end}}]
   {{- end }}
+{{- end }}
+{{ if .Values.webhook.mutator.create }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration

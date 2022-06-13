@@ -17,10 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.admission.mutator;
 
-import org.apache.flink.kubernetes.operator.admission.Utils;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.javaoperatorsdk.admissioncontroller.NotAllowedException;
 import io.javaoperatorsdk.admissioncontroller.Operation;
@@ -33,6 +33,7 @@ import java.util.HashMap;
 /** The default mutator. */
 public class FlinkMutator implements Mutator<HasMetadata> {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkMutator.class);
+    private static final ObjectMapper mapper = new ObjectMapper();
 
     @Override
     public HasMetadata mutate(HasMetadata resource, Operation operation)
@@ -42,8 +43,8 @@ public class FlinkMutator implements Mutator<HasMetadata> {
 
             if (CrdConstants.KIND_SESSION_JOB.equals(resource.getKind())) {
                 try {
-                    var sessionJob = Utils.convertToTargetType(resource, FlinkSessionJob.class);
-                    patchInternalLabel(sessionJob);
+                    var sessionJob = mapper.convertValue(resource, FlinkSessionJob.class);
+                    setSessionTargetLabel(sessionJob);
                     return sessionJob;
                 } catch (Exception e) {
                     throw new RuntimeException(e);
@@ -53,7 +54,7 @@ public class FlinkMutator implements Mutator<HasMetadata> {
         return resource;
     }
 
-    private void patchInternalLabel(FlinkSessionJob flinkSessionJob) {
+    private void setSessionTargetLabel(FlinkSessionJob flinkSessionJob) {
         var labels = flinkSessionJob.getMetadata().getLabels();
         if (labels == null) {
             labels = new HashMap<>();
