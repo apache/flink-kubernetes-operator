@@ -16,7 +16,7 @@
 # limitations under the License.
 ################################################################################
 ---
-{{- if .Values.webhook.create }}
+{{- if or .Values.webhook.create .Values.webhook.mutator.create }}
 ---
 apiVersion: v1
 kind: Service
@@ -75,6 +75,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   selfSigned: {}
+{{- end }}
+{{- if .Values.webhook.create }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -109,4 +111,38 @@ webhooks:
         operator: In
         values: [{{- range .Values.watchNamespaces }}{{ . | quote }},{{- end}}]
   {{- end }}
-  {{- end }}
+{{- end }}
+{{ if .Values.webhook.mutator.create }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: {{ .Release.Namespace }}/flink-operator-serving-cert
+  name: flink-operator-{{ .Release.Namespace }}-webhook-configuration
+webhooks:
+  - name: flinkoperator.flink.apache.org
+    admissionReviewVersions: ["v1"]
+    clientConfig:
+      service:
+        name: flink-operator-webhook-service
+        namespace: {{ .Release.Namespace }}
+        path: /mutate
+    failurePolicy: Fail
+    rules:
+      - apiGroups: ["*"]
+        apiVersions: ["*"]
+        scope: "Namespaced"
+        operations:
+          - CREATE
+        resources:
+          - flinksessionjobs
+    sideEffects: None
+    {{- if .Values.watchNamespaces }}
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values: [{{- range .Values.watchNamespaces }}{{ . | quote }},{{- end}}]
+    {{- end }}
+{{- end }}
