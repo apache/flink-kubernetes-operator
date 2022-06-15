@@ -17,12 +17,12 @@
 
 package org.apache.flink.kubernetes.operator.reconciler;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -46,7 +46,6 @@ import org.apache.flink.util.Preconditions;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
@@ -64,6 +63,8 @@ import java.util.Optional;
 public class ReconciliationUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReconciliationUtils.class);
+
+    public static final String INTERNAL_METADATA_JSON_KEY = "$internal_metadata";
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -97,7 +98,7 @@ public class ReconciliationUtils {
             }
             clonedSpec.getJob().setState(stateAfterReconcile);
         }
-        reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec);
+        reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec, target);
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
         reconciliationStatus.setState(
                 upgrading ? ReconciliationState.UPGRADING : ReconciliationState.DEPLOYED);
@@ -120,10 +121,12 @@ public class ReconciliationUtils {
         var spec = target.getSpec();
         var reconciliationStatus = commonStatus.getReconciliationStatus();
         var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+
         lastReconciledSpec
                 .getJob()
                 .setSavepointTriggerNonce(spec.getJob().getSavepointTriggerNonce());
-        reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec);
+
+        reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec, target);
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
     }
 
@@ -209,12 +212,7 @@ public class ReconciliationUtils {
         var reconciliationStatus = deployment.getStatus().getReconciliationStatus();
         var reconciliationState = reconciliationStatus.getState();
         if (reconciliationState != ReconciliationState.ROLLED_BACK) {
-            var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
-            if (lastReconciledSpec == null) {
-                return null;
-            } else {
-                return lastReconciledSpec;
-            }
+            return reconciliationStatus.deserializeLastReconciledSpec();
         } else {
             return reconciliationStatus.deserializeLastStableSpec();
         }
@@ -229,7 +227,7 @@ public class ReconciliationUtils {
                 || currentReconState == ReconciliationState.UPGRADING;
     }
 
-    public static <T> T deserializedSpecWithVersion(
+    public static <T> Tuple2<T, ObjectNode> deserializeSpecWithMeta(
             @Nullable String specString, Class<T> specClass) {
         if (specString == null) {
             return null;
@@ -237,16 +235,24 @@ public class ReconciliationUtils {
 
         try {
             ObjectNode objectNode = (ObjectNode) objectMapper.readTree(specString);
+            ObjectNode internalMeta = (ObjectNode) objectNode.remove(INTERNAL_METADATA_JSON_KEY);
+
+            // backward compatibility
             objectNode.remove("apiVersion");
-            return objectMapper.treeToValue(objectNode, specClass);
+
+            return Tuple2.of(objectMapper.treeToValue(objectNode, specClass), internalMeta);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Could not deserialize spec, this indicates a bug...", e);
         }
     }
 
-    public static String writeSpecWithCurrentVersion(Object spec) {
+    public static String writeSpecWithMeta(
+            Object spec, AbstractFlinkResource<?, ?> relatedResource) {
         ObjectNode objectNode = objectMapper.valueToTree(Preconditions.checkNotNull(spec));
-        objectNode.set("apiVersion", new TextNode(CrdConstants.API_VERSION));
+        ObjectNode internalMeta = objectNode.putObject(INTERNAL_METADATA_JSON_KEY);
+        internalMeta.put("apiVersion", relatedResource.getApiVersion());
+        ObjectNode metadata = internalMeta.putObject("metadata");
+        metadata.put("generation", relatedResource.getMetadata().getGeneration());
         try {
             return objectMapper.writeValueAsString(objectNode);
         } catch (JsonProcessingException e) {
@@ -269,7 +275,7 @@ public class ReconciliationUtils {
             return false;
         }
 
-        FlinkDeploymentSpec lastStableSpec = reconciliationStatus.deserializeLastStableSpec();
+        var lastStableSpec = reconciliationStatus.deserializeLastStableSpec();
         if (lastStableSpec != null
                 && lastStableSpec.getJob() != null
                 && lastStableSpec.getJob().getState() == JobState.SUSPENDED) {

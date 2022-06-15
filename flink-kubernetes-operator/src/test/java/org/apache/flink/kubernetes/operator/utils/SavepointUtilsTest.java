@@ -53,7 +53,7 @@ public class SavepointUtilsTest {
         deployment
                 .getStatus()
                 .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec());
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
 
         assertEquals(
                 Optional.empty(),
@@ -67,7 +67,7 @@ public class SavepointUtilsTest {
         deployment
                 .getStatus()
                 .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec());
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
 
         assertEquals(
                 Optional.of(SavepointTriggerType.PERIODIC),

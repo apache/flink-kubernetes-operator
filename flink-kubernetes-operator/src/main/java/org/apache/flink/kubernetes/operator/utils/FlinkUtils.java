@@ -46,6 +46,8 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -57,6 +59,8 @@ public class FlinkUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    public static final String CR_GENERATION_LABEL = "flinkdeployment.flink.apache.org/generation";
 
     public static Pod mergePodTemplates(Pod toPod, Pod fromPod) {
         if (fromPod == null) {
@@ -285,5 +289,17 @@ public class FlinkUtils {
         int parallelism = conf.get(CoreOptions.DEFAULT_PARALLELISM);
         int taskSlots = conf.get(TaskManagerOptions.NUM_TASK_SLOTS);
         return (parallelism + taskSlots - 1) / taskSlots;
+    }
+
+    public static void setGenerationAnnotation(Configuration conf, Long generation) {
+        if (generation == null) {
+            return;
+        }
+        var labels =
+                new HashMap<>(
+                        conf.getOptional(KubernetesConfigOptions.JOB_MANAGER_ANNOTATIONS)
+                                .orElse(Collections.emptyMap()));
+        labels.put(CR_GENERATION_LABEL, generation.toString());
+        conf.set(KubernetesConfigOptions.JOB_MANAGER_ANNOTATIONS, labels);
     }
 }

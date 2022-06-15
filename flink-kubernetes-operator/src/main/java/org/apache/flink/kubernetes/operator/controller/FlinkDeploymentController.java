@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
@@ -53,7 +52,6 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /** Controller that runs the main reconcile loop for Flink deployments. */
 @ControllerConfiguration()
@@ -73,8 +71,6 @@ public class FlinkDeploymentController
     private final MetricManager<FlinkDeployment> metricManager;
     private final StatusRecorder<FlinkDeploymentStatus> statusRecorder;
     private final EventRecorder eventRecorder;
-    private final ConcurrentHashMap<Tuple2<String, String>, FlinkDeploymentStatus> statusCache =
-            new ConcurrentHashMap<>();
 
     public FlinkDeploymentController(
             FlinkConfigManager configManager,

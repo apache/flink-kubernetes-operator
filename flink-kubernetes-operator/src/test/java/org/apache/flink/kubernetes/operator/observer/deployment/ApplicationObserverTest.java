@@ -26,13 +26,14 @@ import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
@@ -45,9 +46,11 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -73,20 +76,15 @@ public class ApplicationObserverTest {
     @Test
     public void observeApplicationCluster() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        deployment.setStatus(new FlinkDeploymentStatus());
-
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
 
         observer.observe(deployment, TestUtils.createEmptyContext());
         assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec());
-        deployment.getStatus().setJobStatus(new JobStatus());
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                deployment, JobState.RUNNING, new Configuration());
 
         // Validate port check logic
         flinkService.setPortReady(false);
@@ -180,11 +178,9 @@ public class ApplicationObserverTest {
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
 
-        deployment.setStatus(new FlinkDeploymentStatus());
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec());
+        deployment.setStatus(deployment.initStatus());
+        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                deployment, JobState.RUNNING, new Configuration());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
 
         observer.observe(deployment, readyContext);
@@ -216,11 +212,9 @@ public class ApplicationObserverTest {
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
 
-        deployment.setStatus(new FlinkDeploymentStatus());
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec());
+        deployment.setStatus(deployment.initStatus());
+        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                deployment, JobState.RUNNING, new Configuration());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
 
         observer.observe(deployment, readyContext);
@@ -418,10 +412,8 @@ public class ApplicationObserverTest {
     }
 
     private void bringToReadyStatus(FlinkDeployment deployment) {
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec());
+        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                deployment, JobState.RUNNING, new Configuration());
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobName("jobname");
         jobStatus.setJobId("0000000000");
@@ -450,5 +442,72 @@ public class ApplicationObserverTest {
                                     deployment, TestUtils.createContextWithInProgressDeployment());
                         });
         assertEquals(podFailedMessage, exception.getMessage());
+    }
+
+    @Test
+    public void observeAlreadyUpgraded() {
+        var kubernetesDeployment = TestUtils.createDeployment(true);
+        kubernetesDeployment.getMetadata().setAnnotations(new HashMap<>());
+
+        var context = TestUtils.createContextWithDeployment(kubernetesDeployment);
+
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getMetadata().setGeneration(123L);
+
+        var status = deployment.getStatus();
+        var reconStatus = status.getReconciliationStatus();
+
+        // New deployment
+        assertEquals(ReconciliationState.UPGRADING, reconStatus.getState());
+        assertNull(reconStatus.getLastReconciledSpec());
+
+        kubernetesDeployment.getMetadata().setGeneration(1L);
+        observer.observe(deployment, context);
+
+        assertEquals(ReconciliationState.UPGRADING, reconStatus.getState());
+        assertNull(reconStatus.getLastReconciledSpec());
+
+        kubernetesDeployment
+                .getMetadata()
+                .getAnnotations()
+                .put(FlinkUtils.CR_GENERATION_LABEL, "123");
+        observer.observe(deployment, context);
+
+        assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
+        assertNotNull(reconStatus.getLastReconciledSpec());
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                status.getJobManagerDeploymentStatus());
+
+        deployment.getMetadata().setGeneration(321L);
+
+        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                deployment,
+                JobState.SUSPENDED,
+                new FlinkConfigManager(new Configuration())
+                        .getDeployConfig(deployment.getMetadata(), deployment.getSpec()));
+        status = deployment.getStatus();
+        reconStatus = status.getReconciliationStatus();
+
+        assertEquals(status.getReconciliationStatus().getState(), ReconciliationState.UPGRADING);
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+
+        observer.observe(deployment, TestUtils.createEmptyContext());
+        assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
+
+        observer.observe(deployment, context);
+        assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
+
+        kubernetesDeployment
+                .getMetadata()
+                .getAnnotations()
+                .put(FlinkUtils.CR_GENERATION_LABEL, "321");
+        observer.observe(deployment, context);
+
+        assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
+        assertNotNull(reconStatus.getLastReconciledSpec());
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                status.getJobManagerDeploymentStatus());
     }
 }

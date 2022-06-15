@@ -18,10 +18,13 @@
 package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -47,24 +50,37 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
     private String lastStableSpec;
 
     /** Deployment state of the last reconciled spec. */
-    private ReconciliationState state = ReconciliationState.DEPLOYED;
+    private ReconciliationState state = ReconciliationState.UPGRADING;
 
     @JsonIgnore
     public abstract Class<SPEC> getSpecClass();
 
     @JsonIgnore
     public SPEC deserializeLastReconciledSpec() {
-        return ReconciliationUtils.deserializedSpecWithVersion(lastReconciledSpec, getSpecClass());
+        var specWithMeta = deserializeLastReconciledSpecWithMeta();
+        return specWithMeta != null ? specWithMeta.f0 : null;
     }
 
     @JsonIgnore
     public SPEC deserializeLastStableSpec() {
-        return ReconciliationUtils.deserializedSpecWithVersion(lastStableSpec, getSpecClass());
+        var specWithMeta = deserializeLastStableSpecWithMeta();
+        return specWithMeta != null ? specWithMeta.f0 : null;
     }
 
     @JsonIgnore
-    public void serializeAndSetLastReconciledSpec(SPEC spec) {
-        setLastReconciledSpec(ReconciliationUtils.writeSpecWithCurrentVersion(spec));
+    public Tuple2<SPEC, ObjectNode> deserializeLastReconciledSpecWithMeta() {
+        return ReconciliationUtils.deserializeSpecWithMeta(lastReconciledSpec, getSpecClass());
+    }
+
+    @JsonIgnore
+    public Tuple2<SPEC, ObjectNode> deserializeLastStableSpecWithMeta() {
+        return ReconciliationUtils.deserializeSpecWithMeta(lastStableSpec, getSpecClass());
+    }
+
+    @JsonIgnore
+    public void serializeAndSetLastReconciledSpec(
+            SPEC spec, AbstractFlinkResource<SPEC, ?> resource) {
+        setLastReconciledSpec(ReconciliationUtils.writeSpecWithMeta(spec, resource));
     }
 
     public void markReconciledSpecAsStable() {

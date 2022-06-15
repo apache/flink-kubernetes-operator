@@ -34,6 +34,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
@@ -75,13 +76,17 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
     public void observe(FlinkDeployment flinkApp, Context context) {
         var status = flinkApp.getStatus();
         var reconciliationStatus = status.getReconciliationStatus();
-        var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
 
         // Nothing has been launched so skip observing
-        if (lastReconciledSpec == null
-                || reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK
-                || reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+        if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
             return;
+        }
+
+        if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+            checkIfAlreadyUpgraded(flinkApp, context);
+            if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+                return;
+            }
         }
 
         Configuration observeConfig = configManager.getObserveConfig(flinkApp);
@@ -250,6 +255,60 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
                 "Missing",
                 err,
                 EventUtils.Component.JobManagerDeployment);
+    }
+
+    /**
+     * Checks a deployment that is currently in the UPGRADING state whether it was already deployed
+     * but we simply miss the status information. After comparing the target resource generation
+     * with the one from the possible deployment if they match we update the status to the already
+     * DEPLOYED state.
+     *
+     * @param flinkDep Flink resource to check.
+     * @param context Context for reconciliation.
+     */
+    private void checkIfAlreadyUpgraded(FlinkDeployment flinkDep, Context context) {
+        Optional<Deployment> depOpt = context.getSecondaryResource(Deployment.class);
+        var status = flinkDep.getStatus();
+        depOpt.ifPresent(
+                deployment -> {
+                    Map<String, String> annotations = deployment.getMetadata().getAnnotations();
+                    if (annotations == null) {
+                        return;
+                    }
+                    Long deployedGeneration =
+                            Optional.ofNullable(annotations.get(FlinkUtils.CR_GENERATION_LABEL))
+                                    .map(Long::valueOf)
+                                    .orElse(-1L);
+
+                    // For first deployments we get the generation from the metadata directly
+                    // otherwise take it simply from the lastReconciledSpec
+                    Long upgradeTargetGeneration =
+                            Optional.ofNullable(
+                                            status.getReconciliationStatus()
+                                                    .deserializeLastReconciledSpecWithMeta())
+                                    .map(t -> t.f1.get("metadata").get("generation").asLong(-1L))
+                                    .orElse(flinkDep.getMetadata().getGeneration());
+
+                    if (deployedGeneration.equals(upgradeTargetGeneration)) {
+                        logger.info(
+                                "Last reconciled generation is already deployed, setting reconciliation status to "
+                                        + ReconciliationState.DEPLOYED);
+
+                        var firstDeploy =
+                                status.getReconciliationStatus().getLastReconciledSpec() == null;
+                        var conf =
+                                firstDeploy
+                                        ? configManager.getDeployConfig(
+                                                flinkDep.getMetadata(), flinkDep.getSpec())
+                                        : configManager.getObserveConfig(flinkDep);
+
+                        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                                flinkDep, JobState.RUNNING, conf);
+                        status.getJobStatus()
+                                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+                        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+                    }
+                });
     }
 
     /**

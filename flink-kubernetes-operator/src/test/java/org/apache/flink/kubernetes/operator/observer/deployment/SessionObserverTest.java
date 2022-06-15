@@ -22,7 +22,9 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -42,10 +44,8 @@ public class SessionObserverTest {
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         SessionObserver observer =
                 new SessionObserver(flinkService, configManager, new EventRecorder(null, null));
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec());
+        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                deployment, JobState.RUNNING, new Configuration());
 
         observer.observe(deployment, readyContext);
         assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
