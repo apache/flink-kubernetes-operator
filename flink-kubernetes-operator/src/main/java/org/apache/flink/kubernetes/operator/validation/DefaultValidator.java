@@ -105,16 +105,12 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateDeploymentName(String name) {
-        if (name == null) {
-            return Optional.of("FlinkDeployment name must be define.");
-        } else {
-            Matcher matcher = DEPLOYMENT_NAME_PATTERN.matcher(name);
-            if (!matcher.matches()) {
-                return Optional.of(
-                        String.format(
-                                "The FlinkDeployment meta.name: %s is a invalid value, and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc', regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?'",
-                                name));
-            }
+        Matcher matcher = DEPLOYMENT_NAME_PATTERN.matcher(name);
+        if (!matcher.matches()) {
+            return Optional.of(
+                    String.format(
+                            "The FlinkDeployment meta.name: %s is a invalid value, and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc'",
+                            name));
         }
         return Optional.empty();
     }
