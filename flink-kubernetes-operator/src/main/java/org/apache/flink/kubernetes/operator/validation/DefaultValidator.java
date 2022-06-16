@@ -54,7 +54,7 @@ import java.util.regex.Pattern;
 /** Default validator implementation for {@link FlinkDeployment}. */
 public class DefaultValidator implements FlinkResourceValidator {
     private static final Pattern DEPLOYMENT_NAME_PATTERN =
-            Pattern.compile("[a-z]([-a-z\\d]*[a-z\\d])?");
+            Pattern.compile("[a-z]([-a-z\\d]{0,43}[a-z\\d])?");
     private static final String[] FORBIDDEN_CONF_KEYS =
             new String[] {
                 KubernetesConfigOptions.NAMESPACE.key(), KubernetesConfigOptions.CLUSTER_ID.key()
@@ -109,7 +109,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         if (!matcher.matches()) {
             return Optional.of(
                     String.format(
-                            "The FlinkDeployment meta.name: %s is a invalid value, and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc'",
+                            "The FlinkDeployment meta.name: %s is a invalid value, and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc'), and the length must be no more than 45 characters.",
                             name));
         }
         return Optional.empty();
