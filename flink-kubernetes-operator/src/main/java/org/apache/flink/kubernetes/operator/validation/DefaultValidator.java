@@ -109,7 +109,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         if (!matcher.matches()) {
             return Optional.of(
                     String.format(
-                            "The FlinkDeployment meta.name: %s is a invalid value, and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc'), and the length must be no more than 45 characters.",
+                            "The FlinkDeployment name: %s is invalid, must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123'), and the length must be no more than 45 characters.",
                             name));
         }
         return Optional.empty();
