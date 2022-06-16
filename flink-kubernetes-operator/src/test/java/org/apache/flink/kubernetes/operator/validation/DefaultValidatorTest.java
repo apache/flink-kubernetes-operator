@@ -68,6 +68,13 @@ public class DefaultValidatorTest {
     public void testValidationWithoutDefaultConfig() {
         testSuccess(dep -> {});
 
+        // Test meta.name
+        testSuccess(dep -> dep.getMetadata().setName("session-cluster"));
+        testError(dep -> dep.getMetadata().setName(null), "FlinkDeployment name must be define.");
+        testError(
+                dep -> dep.getMetadata().setName("session-cluster-1.13"),
+                "The FlinkDeployment meta.name: session-cluster-1.13 is a invalid value, and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc', regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?'");
+
         // Test job validation
         testError(dep -> dep.getSpec().getJob().setJarURI(null), "Jar URI must be defined");
         testError(

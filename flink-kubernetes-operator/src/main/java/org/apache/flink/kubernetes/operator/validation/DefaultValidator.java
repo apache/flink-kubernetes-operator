@@ -48,10 +48,13 @@ import javax.annotation.Nullable;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Default validator implementation for {@link FlinkDeployment}. */
 public class DefaultValidator implements FlinkResourceValidator {
-
+    private static final Pattern DEPLOYMENT_NAME_PATTERN =
+            Pattern.compile("[a-z]([-a-z\\d]*[a-z\\d])?");
     private static final String[] FORBIDDEN_CONF_KEYS =
             new String[] {
                 KubernetesConfigOptions.NAMESPACE.key(), KubernetesConfigOptions.CLUSTER_ID.key()
@@ -77,6 +80,7 @@ public class DefaultValidator implements FlinkResourceValidator {
             effectiveConfig.putAll(spec.getFlinkConfiguration());
         }
         return firstPresent(
+                validateDeploymentName(deployment.getMetadata().getName()),
                 validateFlinkVersion(spec.getFlinkVersion()),
                 validateFlinkDeploymentConfig(effectiveConfig),
                 validateIngress(
@@ -95,6 +99,21 @@ public class DefaultValidator implements FlinkResourceValidator {
         for (Optional<String> opt : errOpts) {
             if (opt.isPresent()) {
                 return opt;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateDeploymentName(String name) {
+        if (name == null) {
+            return Optional.of("FlinkDeployment name must be define.");
+        } else {
+            Matcher matcher = DEPLOYMENT_NAME_PATTERN.matcher(name);
+            if (!matcher.matches()) {
+                return Optional.of(
+                        String.format(
+                                "The FlinkDeployment meta.name: %s is a invalid value, and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc', regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?'",
+                                name));
             }
         }
         return Optional.empty();
