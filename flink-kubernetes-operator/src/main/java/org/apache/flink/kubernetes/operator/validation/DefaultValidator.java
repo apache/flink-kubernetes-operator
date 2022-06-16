@@ -48,10 +48,13 @@ import javax.annotation.Nullable;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /** Default validator implementation for {@link FlinkDeployment}. */
 public class DefaultValidator implements FlinkResourceValidator {
-
+    private static final Pattern DEPLOYMENT_NAME_PATTERN =
+            Pattern.compile("[a-z]([-a-z\\d]{0,43}[a-z\\d])?");
     private static final String[] FORBIDDEN_CONF_KEYS =
             new String[] {
                 KubernetesConfigOptions.NAMESPACE.key(), KubernetesConfigOptions.CLUSTER_ID.key()
@@ -77,6 +80,7 @@ public class DefaultValidator implements FlinkResourceValidator {
             effectiveConfig.putAll(spec.getFlinkConfiguration());
         }
         return firstPresent(
+                validateDeploymentName(deployment.getMetadata().getName()),
                 validateFlinkVersion(spec.getFlinkVersion()),
                 validateFlinkDeploymentConfig(effectiveConfig),
                 validateIngress(
@@ -96,6 +100,17 @@ public class DefaultValidator implements FlinkResourceValidator {
             if (opt.isPresent()) {
                 return opt;
             }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateDeploymentName(String name) {
+        Matcher matcher = DEPLOYMENT_NAME_PATTERN.matcher(name);
+        if (!matcher.matches()) {
+            return Optional.of(
+                    String.format(
+                            "The FlinkDeployment name: %s is invalid, must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123'), and the length must be no more than 45 characters.",
+                            name));
         }
         return Optional.empty();
     }

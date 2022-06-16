@@ -68,6 +68,12 @@ public class DefaultValidatorTest {
     public void testValidationWithoutDefaultConfig() {
         testSuccess(dep -> {});
 
+        // Test meta.name
+        testSuccess(dep -> dep.getMetadata().setName("session-cluster"));
+        testError(
+                dep -> dep.getMetadata().setName("session-cluster-1.13"),
+                "The FlinkDeployment name: session-cluster-1.13 is invalid, must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123'), and the length must be no more than 45 characters.");
+
         // Test job validation
         testError(dep -> dep.getSpec().getJob().setJarURI(null), "Jar URI must be defined");
         testError(
