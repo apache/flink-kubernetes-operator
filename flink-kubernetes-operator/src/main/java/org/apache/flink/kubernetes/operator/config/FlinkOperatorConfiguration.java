@@ -41,6 +41,7 @@ public class FlinkOperatorConfiguration {
     Duration flinkClientTimeout;
     String flinkServiceHostOverride;
     Set<String> watchedNamespaces;
+    Boolean dynamicNamespacesEnabled;
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
     String artifactsBaseDir;
@@ -106,6 +107,10 @@ public class FlinkOperatorConfiguration {
                                                         .OPERATOR_WATCHED_NAMESPACES)
                                         .split(NAMESPACES_SPLITTER_KEY)));
 
+        boolean dynamicNamespacesEnabled =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_NAMESPACES_ENABLED);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -114,6 +119,7 @@ public class FlinkOperatorConfiguration {
                 flinkClientTimeout,
                 flinkServiceHostOverride,
                 watchedNamespaces,
+                dynamicNamespacesEnabled,
                 flinkCancelJobTimeout,
                 flinkShutdownClusterTimeout,
                 artifactsBaseDir,

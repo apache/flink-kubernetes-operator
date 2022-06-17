@@ -37,11 +37,13 @@ import io.fabric8.kubernetes.api.model.ObjectMeta;
 import lombok.Builder;
 import lombok.SneakyThrows;
 import lombok.Value;
+import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -61,9 +63,7 @@ public class FlinkConfigManager {
     private volatile Configuration defaultConfig;
     private volatile FlinkOperatorConfiguration operatorConfiguration;
     private final AtomicLong defaultConfigVersion = new AtomicLong(0);
-
     private final LoadingCache<Key, Configuration> cache;
-
     private final Consumer<Set<String>> namespaceListener;
 
     @VisibleForTesting
@@ -117,16 +117,22 @@ public class FlinkConfigManager {
 
     @VisibleForTesting
     public void updateDefaultConfig(Configuration newConf) {
-        if (defaultConfig != null
-                && newConf != null
-                && defaultConfig.toMap().equals(newConf.toMap())) {
+        if (ObjectUtils.allNotNull(this.defaultConfig, newConf)
+                && this.defaultConfig.toMap().equals(newConf.toMap())) {
             LOG.info("Default configuration did not change, nothing to do...");
             return;
         }
 
         LOG.info("Updating default configuration to {}", newConf);
+        var oldNs =
+                Optional.ofNullable(this.operatorConfiguration)
+                        .map(FlinkOperatorConfiguration::getWatchedNamespaces)
+                        .orElse(Set.of());
         this.operatorConfiguration = FlinkOperatorConfiguration.fromConfiguration(newConf);
-        this.namespaceListener.accept(operatorConfiguration.getWatchedNamespaces());
+        var newNs = this.operatorConfiguration.getWatchedNamespaces();
+        if (this.operatorConfiguration.getDynamicNamespacesEnabled() && !oldNs.equals(newNs)) {
+            this.namespaceListener.accept(operatorConfiguration.getWatchedNamespaces());
+        }
         this.defaultConfig = newConf.clone();
         // We do not invalidate the cache to avoid deleting currently used temp files,
         // simply bump the version

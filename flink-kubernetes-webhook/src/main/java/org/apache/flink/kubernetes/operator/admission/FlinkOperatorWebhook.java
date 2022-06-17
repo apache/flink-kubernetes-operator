@@ -17,9 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.admission.mutator.FlinkMutator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
@@ -51,7 +51,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.security.KeyStore;
-import java.util.HashSet;
 import java.util.Set;
 
 /** Main Class for Flink native k8s operator. */
@@ -62,26 +61,17 @@ public class FlinkOperatorWebhook {
 
     public static void main(String[] args) throws Exception {
         EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
-        final Set<InformerManager> informerManagers = new HashSet<>();
-
-        FlinkConfigManager configManager =
-                new FlinkConfigManager(
-                        ns -> {
-                            informerManagers.forEach(
-                                    informerManager -> {
-                                        informerManager.changNameSpaces(ns);
-                                    });
-                        });
-
+        var informerManager = new InformerManager(new DefaultKubernetesClient());
+        var configManager = new FlinkConfigManager(informerManager::setNamespaces);
+        if (!configManager.getOperatorConfiguration().getDynamicNamespacesEnabled()) {
+            informerManager.setNamespaces(
+                    configManager.getOperatorConfiguration().getWatchedNamespaces());
+        }
         Set<FlinkResourceValidator> validators = ValidatorUtils.discoverValidators(configManager);
-        var informerManager =
-                new InformerManager(
-                        configManager.getOperatorConfiguration().getWatchedNamespaces(),
-                        new DefaultKubernetesClient());
+
         AdmissionHandler endpoint =
                 new AdmissionHandler(
                         new FlinkValidator(validators, informerManager), new FlinkMutator());
-        informerManagers.add(informerManager);
 
         ChannelInitializer<SocketChannel> initializer = createChannelInitializer(endpoint);
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);

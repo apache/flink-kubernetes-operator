@@ -196,4 +196,11 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Comma separated list of namespaces the operator monitors for custom resources. Defaults to "
                                     + Constants.WATCH_ALL_NAMESPACES);
+
+    public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_NAMESPACES_ENABLED =
+            ConfigOptions.key("kubernetes.operator.dynamic.namespaces.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Enables dynamic change of watched/monitored namespaces. Defaults to false");
 }

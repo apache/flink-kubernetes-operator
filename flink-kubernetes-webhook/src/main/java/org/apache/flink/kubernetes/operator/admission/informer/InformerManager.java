@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.informer;
+package org.apache.flink.kubernetes.operator.admission.informer;
 
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.util.Preconditions;
@@ -42,10 +42,8 @@ public class InformerManager {
     private final KubernetesClient kubernetesClient;
     private volatile Map<String, SharedIndexInformer<FlinkDeployment>> flinkDepInformers;
 
-    public InformerManager(Set<String> watchedNamespaces, KubernetesClient kubernetesClient) {
-        this.watchedNamespaces.addAll(watchedNamespaces);
+    public InformerManager(KubernetesClient kubernetesClient) {
         this.kubernetesClient = kubernetesClient;
-        LOG.info("Created informer manager with watchedNamespaces: {}", watchedNamespaces);
     }
 
     public SharedIndexInformer<FlinkDeployment> getFlinkDepInformer(String namespace) {
@@ -103,7 +101,8 @@ public class InformerManager {
         }
     }
 
-    public void changNameSpaces(Set<String> watchedNamespaces) {
+    public void setNamespaces(Set<String> watchedNamespaces) {
+        LOG.info("Setting namespaces to {}", watchedNamespaces);
         this.watchedNamespaces.clear();
         this.watchedNamespaces.addAll(watchedNamespaces);
         if (flinkDepInformers != null) {
