@@ -138,13 +138,7 @@ public class ApplicationReconciler
             }
             LOG.info("Deleting deployment with terminated application before new deployment");
             flinkService.deleteClusterDeployment(relatedResource.getMetadata(), status, true);
-            FlinkUtils.waitForClusterShutdown(
-                    kubernetesClient,
-                    deployConfig,
-                    configManager
-                            .getOperatorConfiguration()
-                            .getFlinkShutdownClusterTimeout()
-                            .toSeconds());
+            flinkService.waitForClusterShutdown(deployConfig);
         }
         eventRecorder.triggerEvent(
                 relatedResource,

@@ -260,7 +260,7 @@ public class FlinkConfigBuilder {
         return effectiveConfig;
     }
 
-    protected static Configuration buildFrom(
+    public static Configuration buildFrom(
             String namespace, String clusterId, FlinkDeploymentSpec spec, Configuration flinkConfig)
             throws IOException, URISyntaxException {
         return new FlinkConfigBuilder(namespace, clusterId, spec, flinkConfig)
