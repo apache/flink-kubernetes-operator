@@ -29,7 +29,6 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
@@ -52,6 +51,8 @@ public class SessionReconciler
         extends AbstractFlinkResourceReconciler<
                 FlinkDeployment, FlinkDeploymentSpec, FlinkDeploymentStatus> {
 
+    protected final FlinkService flinkService;
+
     private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
 
     public SessionReconciler(
@@ -60,7 +61,13 @@ public class SessionReconciler
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeploymentStatus> statusRecorder) {
-        super(kubernetesClient, flinkService, configManager, eventRecorder, statusRecorder);
+        super(kubernetesClient, configManager, eventRecorder, statusRecorder);
+        this.flinkService = flinkService;
+    }
+
+    @Override
+    protected FlinkService getFlinkService(FlinkDeployment resource, Context context) {
+        return flinkService;
     }
 
     @Override
@@ -82,7 +89,10 @@ public class SessionReconciler
 
     @Override
     protected void reconcileSpecChange(
-            FlinkDeployment deployment, Configuration observeConfig, Configuration deployConfig)
+            FlinkDeployment deployment,
+            Context ctx,
+            Configuration observeConfig,
+            Configuration deployConfig)
             throws Exception {
         deleteSessionCluster(deployment, observeConfig);
 
@@ -94,6 +104,7 @@ public class SessionReconciler
                 deployment,
                 deployment.getSpec(),
                 deployment.getStatus(),
+                ctx,
                 deployConfig,
                 Optional.empty(),
                 false);
@@ -103,13 +114,7 @@ public class SessionReconciler
     private void deleteSessionCluster(FlinkDeployment deployment, Configuration effectiveConfig) {
         flinkService.deleteClusterDeployment(
                 deployment.getMetadata(), deployment.getStatus(), false);
-        FlinkUtils.waitForClusterShutdown(
-                kubernetesClient,
-                effectiveConfig,
-                configManager
-                        .getOperatorConfiguration()
-                        .getFlinkShutdownClusterTimeout()
-                        .toSeconds());
+        flinkService.waitForClusterShutdown(effectiveConfig);
     }
 
     @Override
@@ -117,6 +122,7 @@ public class SessionReconciler
             FlinkDeployment cr,
             FlinkDeploymentSpec spec,
             FlinkDeploymentStatus status,
+            Context ctx,
             Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
@@ -141,6 +147,7 @@ public class SessionReconciler
                 deployment,
                 rollbackSpec,
                 deployment.getStatus(),
+                ctx,
                 rollbackConfig,
                 Optional.empty(),
                 false);
@@ -149,8 +156,8 @@ public class SessionReconciler
     }
 
     @Override
-    public boolean reconcileOtherChanges(FlinkDeployment flinkApp, Configuration observeConfig)
-            throws Exception {
+    public boolean reconcileOtherChanges(
+            FlinkDeployment flinkApp, Context ctx, Configuration observeConfig) throws Exception {
         if (shouldRecoverDeployment(observeConfig, flinkApp)) {
             recoverSession(flinkApp, observeConfig);
             return true;

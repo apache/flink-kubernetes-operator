@@ -65,7 +65,6 @@ public abstract class AbstractFlinkResourceReconciler<
     protected final EventRecorder eventRecorder;
     protected final StatusRecorder<STATUS> statusRecorder;
     protected final KubernetesClient kubernetesClient;
-    protected final FlinkService flinkService;
 
     public static final String MSG_SUSPENDED = "Suspending existing deployment.";
     public static final String MSG_SPEC_CHANGED = "Detected spec change, starting reconciliation.";
@@ -74,12 +73,10 @@ public abstract class AbstractFlinkResourceReconciler<
 
     public AbstractFlinkResourceReconciler(
             KubernetesClient kubernetesClient,
-            FlinkService flinkService,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<STATUS> statusRecorder) {
         this.kubernetesClient = kubernetesClient;
-        this.flinkService = flinkService;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
         this.statusRecorder = statusRecorder;
@@ -112,6 +109,7 @@ public abstract class AbstractFlinkResourceReconciler<
                     cr,
                     spec,
                     status,
+                    ctx,
                     deployConfig,
                     Optional.ofNullable(spec.getJob()).map(JobSpec::getInitialSavepointPath),
                     false);
@@ -128,7 +126,7 @@ public abstract class AbstractFlinkResourceReconciler<
                 reconciliationStatus.getState() == ReconciliationState.UPGRADING
                         || !currentDeploySpec.equals(lastReconciledSpec);
         var observeConfig = getObserveConfig(cr, ctx);
-
+        var flinkService = getFlinkService(cr, ctx);
         if (specChanged) {
             if (checkNewSpecAlreadyDeployed(cr, deployConfig)) {
                 return;
@@ -142,8 +140,8 @@ public abstract class AbstractFlinkResourceReconciler<
                         EventRecorder.Component.JobManagerDeployment,
                         MSG_SPEC_CHANGED);
             }
-            reconcileSpecChange(cr, observeConfig, deployConfig);
-        } else if (shouldRollBack(cr, observeConfig)) {
+            reconcileSpecChange(cr, ctx, observeConfig, deployConfig);
+        } else if (shouldRollBack(cr, observeConfig, flinkService)) {
             // Rollbacks are executed in two steps, we initiate it first then return
             if (initiateRollBack(status)) {
                 return;
@@ -156,7 +154,7 @@ public abstract class AbstractFlinkResourceReconciler<
                     EventRecorder.Component.JobManagerDeployment,
                     MSG_ROLLBACK);
             rollback(cr, ctx, observeConfig);
-        } else if (!reconcileOtherChanges(cr, observeConfig)) {
+        } else if (!reconcileOtherChanges(cr, ctx, observeConfig)) {
             LOG.info("Resource fully reconciled, nothing to do...");
         }
     }
@@ -202,7 +200,8 @@ public abstract class AbstractFlinkResourceReconciler<
      * @throws Exception Error during spec upgrade.
      */
     protected abstract void reconcileSpecChange(
-            CR cr, Configuration observeConfig, Configuration deployConfig) throws Exception;
+            CR cr, Context ctx, Configuration observeConfig, Configuration deployConfig)
+            throws Exception;
 
     /**
      * Rollback deployed resource to the last stable spec.
@@ -224,8 +223,8 @@ public abstract class AbstractFlinkResourceReconciler<
      * @return True if any further reconciliation action was taken.
      * @throws Exception Error during reconciliation.
      */
-    protected abstract boolean reconcileOtherChanges(CR cr, Configuration observeConfig)
-            throws Exception;
+    protected abstract boolean reconcileOtherChanges(
+            CR cr, Context context, Configuration observeConfig) throws Exception;
 
     @Override
     public final DeleteControl cleanup(CR resource, Context context) {
@@ -239,6 +238,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param spec Spec that should be deployed to Kubernetes.
      * @param status Status object of the resource
      * @param deployConfig Flink conf for the deployment.
+     * @param ctx Reconciliation context.
      * @param savepoint Optional savepoint path for applications and session jobs.
      * @param requireHaMetadata Flag used by application deployments to validate HA metadata
      * @throws Exception Error during deployment.
@@ -247,6 +247,7 @@ public abstract class AbstractFlinkResourceReconciler<
             CR relatedResource,
             SPEC spec,
             STATUS status,
+            Context ctx,
             Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
@@ -260,6 +261,15 @@ public abstract class AbstractFlinkResourceReconciler<
      * @return DeleteControl object.
      */
     protected abstract DeleteControl cleanupInternal(CR resource, Context context);
+
+    /**
+     * Get the Flink service related to the resource and context.
+     *
+     * @param resource
+     * @param context
+     * @return
+     */
+    protected abstract FlinkService getFlinkService(CR resource, Context context);
 
     /**
      * Checks whether the desired spec already matches the currently deployed spec. If they match
@@ -296,7 +306,9 @@ public abstract class AbstractFlinkResourceReconciler<
      * @return True if the resource should be rolled back.
      */
     private boolean shouldRollBack(
-            AbstractFlinkResource<SPEC, STATUS> resource, Configuration configuration) {
+            AbstractFlinkResource<SPEC, STATUS> resource,
+            Configuration configuration,
+            FlinkService flinkService) {
 
         var reconciliationStatus = resource.getStatus().getReconciliationStatus();
         if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {

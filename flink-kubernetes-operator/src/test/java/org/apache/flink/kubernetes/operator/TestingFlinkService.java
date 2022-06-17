@@ -36,8 +36,9 @@ import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -75,7 +76,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /** Flink service mock for tests. */
-public class TestingFlinkService extends FlinkService {
+public class TestingFlinkService extends AbstractFlinkService {
 
     public static final Map<String, String> CLUSTER_INFO =
             Map.of(
@@ -170,6 +171,16 @@ public class TestingFlinkService extends FlinkService {
                         System.currentTimeMillis());
 
         jobs.add(Tuple2.of(conf.get(SavepointConfigOptions.SAVEPOINT_PATH), jobStatusMessage));
+    }
+
+    protected void validateHaMetadataExists(Configuration conf) {
+        if (!isHaMetadataAvailable(conf)) {
+            throw new DeploymentFailedException(
+                    "HA metadata not available to restore from last state. "
+                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
+                            + "Manual restore required.",
+                    "RestoreFailed");
+        }
     }
 
     @Override
@@ -384,7 +395,7 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    protected void waitForClusterShutdown(Configuration conf) {}
+    public void waitForClusterShutdown(Configuration conf) {}
 
     @Override
     public void disposeSavepoint(String savepointPath, Configuration conf) {
@@ -427,6 +438,11 @@ public class TestingFlinkService extends FlinkService {
 
     @Override
     public PodList getJmPodList(FlinkDeployment deployment, Configuration conf) {
+        return podList;
+    }
+
+    @Override
+    protected PodList getJmPodList(String namespace, String clusterId) {
         return podList;
     }
 

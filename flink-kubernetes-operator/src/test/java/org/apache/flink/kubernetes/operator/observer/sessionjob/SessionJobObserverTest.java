@@ -24,12 +24,14 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
+import org.apache.flink.kubernetes.operator.TestingFlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
+import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -52,6 +54,7 @@ public class SessionJobObserverTest {
     private TestingFlinkService flinkService;
     private SessionJobObserver observer;
     private SessionJobReconciler reconciler;
+    private FlinkServiceFactory flinkServiceFactory;
 
     @BeforeEach
     public void before() {
@@ -59,12 +62,14 @@ public class SessionJobObserverTest {
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
         var statusRecorder = new TestingStatusRecorder<FlinkSessionJobStatus>();
         flinkService = new TestingFlinkService();
+        flinkServiceFactory = flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
         observer =
-                new SessionJobObserver(flinkService, configManager, statusRecorder, eventRecorder);
+                new SessionJobObserver(
+                        flinkServiceFactory, configManager, statusRecorder, eventRecorder);
         reconciler =
                 new SessionJobReconciler(
                         kubernetesClient,
-                        flinkService,
+                        flinkServiceFactory,
                         configManager,
                         eventRecorder,
                         statusRecorder);

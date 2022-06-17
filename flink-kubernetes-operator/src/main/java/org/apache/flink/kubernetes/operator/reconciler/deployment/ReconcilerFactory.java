@@ -22,7 +22,7 @@ import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
@@ -35,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ReconcilerFactory {
 
     private final KubernetesClient kubernetesClient;
-    private final FlinkService flinkService;
+    private final FlinkServiceFactory flinkServiceFactory;
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
     private final StatusRecorder<FlinkDeploymentStatus> deploymentStatusRecorder;
@@ -43,12 +43,12 @@ public class ReconcilerFactory {
 
     public ReconcilerFactory(
             KubernetesClient kubernetesClient,
-            FlinkService flinkService,
+            FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeploymentStatus> deploymentStatusRecorder) {
         this.kubernetesClient = kubernetesClient;
-        this.flinkService = flinkService;
+        this.flinkServiceFactory = flinkServiceFactory;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
         this.deploymentStatusRecorder = deploymentStatusRecorder;
@@ -63,14 +63,14 @@ public class ReconcilerFactory {
                         case SESSION:
                             return new SessionReconciler(
                                     kubernetesClient,
-                                    flinkService,
+                                    flinkServiceFactory.getOrCreate(flinkApp),
                                     configManager,
                                     eventRecorder,
                                     deploymentStatusRecorder);
                         case APPLICATION:
                             return new ApplicationReconciler(
                                     kubernetesClient,
-                                    flinkService,
+                                    flinkServiceFactory.getOrCreate(flinkApp),
                                     configManager,
                                     eventRecorder,
                                     deploymentStatusRecorder);

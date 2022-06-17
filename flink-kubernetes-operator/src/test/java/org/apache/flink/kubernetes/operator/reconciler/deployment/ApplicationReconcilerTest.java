@@ -488,6 +488,8 @@ public class ApplicationReconcilerTest {
     @Test
     public void testRandomJobResultStorePath() throws Exception {
         FlinkDeployment flinkApp = TestUtils.buildApplicationCluster();
+        Context context = flinkService.getContext();
+
         final String haStoragePath = "file:///flink-data/ha";
         flinkApp.getSpec()
                 .getFlinkConfiguration()
@@ -500,14 +502,14 @@ public class ApplicationReconcilerTest {
 
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-        reconciler.deploy(flinkApp, spec, status, deployConfig, Optional.empty(), false);
+        reconciler.deploy(flinkApp, spec, status, context, deployConfig, Optional.empty(), false);
 
         String path1 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path1.startsWith(haStoragePath));
 
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-        reconciler.deploy(flinkApp, spec, status, deployConfig, Optional.empty(), false);
+        reconciler.deploy(flinkApp, spec, status, context, deployConfig, Optional.empty(), false);
         String path2 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path2.startsWith(haStoragePath));
         assertNotEquals(path1, path2);
