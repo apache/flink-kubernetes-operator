@@ -91,22 +91,26 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        config:
-          - description: 'Default configuration'
-            namespace: default
-            extraArgs: ''
-            tests: "test_application_kubernetes_ha.sh test_application_operations.sh test_sessionjob_kubernetes_ha.sh test_sessionjob_operations.sh"
-          - description: 'WatchNamespaces enabled'
-            namespace: flink
+        version: ["v1_15","v1_14","v1_13"]
+        namespace: ["default","flink"]
+        test:
+          - test_application_kubernetes_ha.sh
+          - test_application_operations.sh
+          - test_sessionjob_kubernetes_ha.sh
+          - test_sessionjob_operations.sh
+          - test_multi_sessionjob.sh
+        include:
+          - namespace: flink
             extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
-            tests: "test_application_kubernetes_ha.sh test_application_operations.sh test_sessionjob_kubernetes_ha.sh test_sessionjob_operations.sh test_multi_sessionjob.sh"
-        versions:
-          - image: flink:1.13
-            flinkVersion: v1_13
-          - image: flink:1.14
-            flinkVersion: v1_14
-          - image: flink:1.15
-            flinkVersion: v1_15
+          - version: v1_15
+            image: flink:1.15
+          - version: v1_14
+            image: flink:1.14
+          - version: v1_13
+            image: flink:1.13
+        exclude:
+          - namespace: default
+            test: test_multi_sessionjob.sh
     name: e2e_ci
     steps:
       - uses: actions/checkout@v2
@@ -122,13 +126,6 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
-      - name: Build with Maven
-        run: |
-          set -o pipefail; mvn clean install -DskipTests | tee ./mvn.log; set +o pipefail
-          if [[ $(cat ./mvn.log | grep -E -v 'flink-runtime-.*.jar, flink-kubernetes-operator-.*.jar define 2 overlapping classes' | grep -c "overlapping classes" -) -gt 0 ]];then
-            echo "Found overlapping classes, please fix"
-            exit 1
-          fi
       - name: Start minikube
         run: |
           source e2e-tests/utils.sh
@@ -147,23 +144,20 @@ jobs:
           docker images
       - name: Start the operator
         run: |
-          helm --debug install flink-kubernetes-operator -n ${{ matrix.config.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.config.extraArgs }}
-          kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.config.namespace }} deploy/flink-kubernetes-operator
+          helm --debug install flink-kubernetes-operator -n ${{ matrix.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.extraArgs }}
+          kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.namespace }} deploy/flink-kubernetes-operator
           kubectl get pods
       - name: Run Flink e2e tests
         run: |
-          sed -i "s/image: flink:.*/image: ${{ matrix.versions.image }}/" e2e-tests/data/*.yaml
-          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.versions.flinkVersion }}/" e2e-tests/data/*.yaml
+          sed -i "s/image: flink:.*/image: ${{ matrix.image }}/" e2e-tests/data/*.yaml
+          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.version }}/" e2e-tests/data/*.yaml
           git diff HEAD
-          TESTS="${{ matrix.config.tests }}"
-          for test in $TESTS;do \
-            echo "Running e2e-tests/$test"
-            bash e2e-tests/$test || exit 1
-          done
+          echo "Running e2e-tests/$test"
+          bash e2e-tests/${{ matrix.test }} || exit 1          
           git reset --hard
       - name: Stop the operator
         run: |
-          helm uninstall -n ${{ matrix.config.namespace }} flink-kubernetes-operator
+          helm uninstall -n ${{ matrix.namespace }} flink-kubernetes-operator
       - name: Stop minikube
         run: |
           source e2e-tests/utils.sh
