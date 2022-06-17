@@ -70,4 +70,7 @@ public class FlinkDeploymentSpec extends AbstractFlinkSpec {
      * configContent.
      */
     private Map<String, String> logConfiguration;
+
+    /** Deployment mode of the Flink cluster, native or standalone. */
+    private KubernetesDeploymentMode mode;
 }

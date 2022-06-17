@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -54,11 +53,10 @@ public abstract class AbstractJobReconciler<
 
     public AbstractJobReconciler(
             KubernetesClient kubernetesClient,
-            FlinkService flinkService,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<STATUS> statusRecorder) {
-        super(kubernetesClient, flinkService, configManager, eventRecorder, statusRecorder);
+        super(kubernetesClient, configManager, eventRecorder, statusRecorder);
     }
 
     @Override
@@ -80,8 +78,8 @@ public abstract class AbstractJobReconciler<
 
     @Override
     protected void reconcileSpecChange(
-            CR resource, Configuration observeConfig, Configuration deployConfig) throws Exception {
-        var deployMeta = resource.getMetadata();
+            CR resource, Context ctx, Configuration observeConfig, Configuration deployConfig)
+            throws Exception {
         STATUS status = resource.getStatus();
         var reconciliationStatus = status.getReconciliationStatus();
         SPEC lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
@@ -107,7 +105,7 @@ public abstract class AbstractJobReconciler<
                     MSG_SUSPENDED);
             // We must record the upgrade mode used to the status later
             currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.get());
-            cancelJob(resource, availableUpgradeMode.get(), observeConfig);
+            cancelJob(resource, ctx, availableUpgradeMode.get(), observeConfig);
             if (desiredJobState == JobState.RUNNING) {
                 ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig);
             } else {
@@ -123,6 +121,7 @@ public abstract class AbstractJobReconciler<
                     resource,
                     currentDeploySpec,
                     status,
+                    ctx,
                     deployConfig,
                     // We decide to enforce HA based on how job was previously suspended
                     lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
@@ -174,6 +173,7 @@ public abstract class AbstractJobReconciler<
             CR resource,
             SPEC spec,
             STATUS status,
+            Context ctx,
             Configuration deployConfig,
             boolean requireHaMetadata)
             throws Exception {
@@ -185,11 +185,11 @@ public abstract class AbstractJobReconciler<
                             .flatMap(s -> Optional.ofNullable(s.getLocation()));
         }
 
-        deploy(resource, spec, status, deployConfig, savepointOpt, requireHaMetadata);
+        deploy(resource, spec, status, ctx, deployConfig, savepointOpt, requireHaMetadata);
     }
 
     @Override
-    protected void rollback(CR resource, Context context, Configuration observeConfig)
+    protected void rollback(CR resource, Context ctx, Configuration observeConfig)
             throws Exception {
         var reconciliationStatus = resource.getStatus().getReconciliationStatus();
         var rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
@@ -198,6 +198,7 @@ public abstract class AbstractJobReconciler<
 
         cancelJob(
                 resource,
+                ctx,
                 upgradeMode == UpgradeMode.STATELESS
                         ? UpgradeMode.STATELESS
                         : UpgradeMode.LAST_STATE,
@@ -207,16 +208,18 @@ public abstract class AbstractJobReconciler<
                 resource,
                 rollbackSpec,
                 resource.getStatus(),
-                getDeployConfig(resource.getMetadata(), rollbackSpec, context),
+                ctx,
+                getDeployConfig(resource.getMetadata(), rollbackSpec, ctx),
                 upgradeMode != UpgradeMode.STATELESS);
 
         reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
     }
 
     @Override
-    public boolean reconcileOtherChanges(CR resource, Configuration observeConfig)
+    public boolean reconcileOtherChanges(CR resource, Context context, Configuration observeConfig)
             throws Exception {
-        return SavepointUtils.triggerSavepointIfNeeded(flinkService, resource, observeConfig);
+        return SavepointUtils.triggerSavepointIfNeeded(
+                getFlinkService(resource, context), resource, observeConfig);
     }
 
     /**
@@ -228,5 +231,6 @@ public abstract class AbstractJobReconciler<
      * @throws Exception Error during cancellation.
      */
     protected abstract void cancelJob(
-            CR resource, UpgradeMode upgradeMode, Configuration observeConfig) throws Exception;
+            CR resource, Context ctx, UpgradeMode upgradeMode, Configuration observeConfig)
+            throws Exception;
 }

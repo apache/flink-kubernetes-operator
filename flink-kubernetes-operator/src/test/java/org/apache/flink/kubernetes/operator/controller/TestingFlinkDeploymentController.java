@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
+import org.apache.flink.kubernetes.operator.TestingFlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -26,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
@@ -67,6 +69,7 @@ public class TestingFlinkDeploymentController
             FlinkConfigManager configManager,
             KubernetesClient kubernetesClient,
             TestingFlinkService flinkService) {
+        FlinkServiceFactory flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
         eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
         statusRecorder =
                 new StatusRecorder<>(
@@ -79,12 +82,12 @@ public class TestingFlinkDeploymentController
                         ValidatorUtils.discoverValidators(configManager),
                         new ReconcilerFactory(
                                 kubernetesClient,
-                                flinkService,
+                                flinkServiceFactory,
                                 configManager,
                                 eventRecorder,
                                 statusRecorder),
                         new ObserverFactory(
-                                flinkService, configManager, statusRecorder, eventRecorder),
+                                flinkServiceFactory, configManager, statusRecorder, eventRecorder),
                         statusRecorder,
                         eventRecorder);
     }

@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -53,6 +54,7 @@ public class ApplicationReconciler
         extends AbstractJobReconciler<FlinkDeployment, FlinkDeploymentSpec, FlinkDeploymentStatus> {
 
     private static final Logger LOG = LoggerFactory.getLogger(ApplicationReconciler.class);
+    protected final FlinkService flinkService;
 
     public ApplicationReconciler(
             KubernetesClient kubernetesClient,
@@ -60,7 +62,13 @@ public class ApplicationReconciler
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeploymentStatus> statusRecorder) {
-        super(kubernetesClient, flinkService, configManager, eventRecorder, statusRecorder);
+        super(kubernetesClient, configManager, eventRecorder, statusRecorder);
+        this.flinkService = flinkService;
+    }
+
+    @Override
+    protected FlinkService getFlinkService(FlinkDeployment resource, Context context) {
+        return flinkService;
     }
 
     @Override
@@ -118,6 +126,7 @@ public class ApplicationReconciler
             FlinkDeployment relatedResource,
             FlinkDeploymentSpec spec,
             FlinkDeploymentStatus status,
+            Context ctx,
             Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
@@ -138,13 +147,7 @@ public class ApplicationReconciler
             }
             LOG.info("Deleting deployment with terminated application before new deployment");
             flinkService.deleteClusterDeployment(relatedResource.getMetadata(), status, true);
-            FlinkUtils.waitForClusterShutdown(
-                    kubernetesClient,
-                    deployConfig,
-                    configManager
-                            .getOperatorConfiguration()
-                            .getFlinkShutdownClusterTimeout()
-                            .toSeconds());
+            flinkService.waitForClusterShutdown(deployConfig);
         }
         eventRecorder.triggerEvent(
                 relatedResource,
@@ -162,7 +165,10 @@ public class ApplicationReconciler
 
     @Override
     protected void cancelJob(
-            FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration observeConfig)
+            FlinkDeployment deployment,
+            Context ctx,
+            UpgradeMode upgradeMode,
+            Configuration observeConfig)
             throws Exception {
         flinkService.cancelJob(deployment, upgradeMode, observeConfig);
     }
@@ -186,24 +192,24 @@ public class ApplicationReconciler
     }
 
     @Override
-    public boolean reconcileOtherChanges(FlinkDeployment deployment, Configuration observeConfig)
-            throws Exception {
-        if (super.reconcileOtherChanges(deployment, observeConfig)) {
+    public boolean reconcileOtherChanges(
+            FlinkDeployment deployment, Context ctx, Configuration observeConfig) throws Exception {
+        if (SavepointUtils.triggerSavepointIfNeeded(flinkService, deployment, observeConfig)) {
             return true;
         }
 
         if (shouldRecoverDeployment(observeConfig, deployment)) {
-            recoverJmDeployment(deployment, observeConfig);
+            recoverJmDeployment(deployment, ctx, observeConfig);
             return true;
         }
         return false;
     }
 
-    private void recoverJmDeployment(FlinkDeployment deployment, Configuration observeConfig)
-            throws Exception {
+    private void recoverJmDeployment(
+            FlinkDeployment deployment, Context ctx, Configuration observeConfig) throws Exception {
         LOG.info("Missing Flink Cluster deployment, trying to recover...");
         FlinkDeploymentSpec specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
-        restoreJob(deployment, specToRecover, deployment.getStatus(), observeConfig, true);
+        restoreJob(deployment, specToRecover, deployment.getStatus(), ctx, observeConfig, true);
     }
 
     @Override

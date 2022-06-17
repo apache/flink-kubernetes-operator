@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
@@ -45,14 +46,27 @@ public class SessionJobReconciler
         extends AbstractJobReconciler<FlinkSessionJob, FlinkSessionJobSpec, FlinkSessionJobStatus> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionJobReconciler.class);
+    private final FlinkServiceFactory flinkServiceFactory;
 
     public SessionJobReconciler(
             KubernetesClient kubernetesClient,
-            FlinkService flinkService,
+            FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkSessionJobStatus> statusRecorder) {
-        super(kubernetesClient, flinkService, configManager, eventRecorder, statusRecorder);
+        super(kubernetesClient, configManager, eventRecorder, statusRecorder);
+        this.flinkServiceFactory = flinkServiceFactory;
+    }
+
+    @Override
+    protected FlinkService getFlinkService(FlinkSessionJob resource, Context context) {
+        Optional<FlinkDeployment> deploymentOpt =
+                context.getSecondaryResource(FlinkDeployment.class);
+
+        if (sessionClusterReady(deploymentOpt)) {
+            return flinkServiceFactory.getOrCreate(deploymentOpt.get());
+        }
+        return null;
     }
 
     @Override
@@ -84,10 +98,12 @@ public class SessionJobReconciler
             FlinkSessionJob cr,
             FlinkSessionJobSpec sessionJobSpec,
             FlinkSessionJobStatus status,
+            Context ctx,
             Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
             throws Exception {
+        FlinkService flinkService = getFlinkService(cr, ctx);
         var jobID =
                 flinkService.submitJobToSessionCluster(
                         cr.getMetadata(), sessionJobSpec, deployConfig, savepoint.orElse(null));
@@ -101,8 +117,12 @@ public class SessionJobReconciler
 
     @Override
     protected void cancelJob(
-            FlinkSessionJob resource, UpgradeMode upgradeMode, Configuration observeConfig)
+            FlinkSessionJob resource,
+            Context ctx,
+            UpgradeMode upgradeMode,
+            Configuration observeConfig)
             throws Exception {
+        FlinkService flinkService = getFlinkService(resource, ctx);
         flinkService.cancelSessionJob(resource, upgradeMode, observeConfig);
     }
 
@@ -117,6 +137,7 @@ public class SessionJobReconciler
                 try {
                     cancelJob(
                             sessionJob,
+                            context,
                             UpgradeMode.STATELESS,
                             getObserveConfig(sessionJob, context));
                 } catch (Exception e) {

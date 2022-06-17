@@ -68,7 +68,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 /** @link FlinkService unit tests */
 @EnableKubernetesMockClient(crud = true)
-public class FlinkServiceTest {
+public class NativeFlinkServiceTest {
     KubernetesClient client;
     private final Configuration configuration = new Configuration();
     private final FlinkConfigManager configManager = new FlinkConfigManager(configuration);
@@ -308,7 +308,7 @@ public class FlinkServiceTest {
                         Tuple2.of(ExecutionState.RUNNING, 4));
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING,
-                FlinkService.getEffectiveStatus(allRunning));
+                AbstractFlinkService.getEffectiveStatus(allRunning));
 
         JobDetails allRunningOrFinished =
                 getJobDetails(
@@ -317,7 +317,7 @@ public class FlinkServiceTest {
                         Tuple2.of(ExecutionState.FINISHED, 2));
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING,
-                FlinkService.getEffectiveStatus(allRunningOrFinished));
+                AbstractFlinkService.getEffectiveStatus(allRunningOrFinished));
 
         JobDetails allRunningOrScheduled =
                 getJobDetails(
@@ -326,7 +326,7 @@ public class FlinkServiceTest {
                         Tuple2.of(ExecutionState.SCHEDULED, 2));
         assertEquals(
                 org.apache.flink.api.common.JobStatus.CREATED,
-                FlinkService.getEffectiveStatus(allRunningOrScheduled));
+                AbstractFlinkService.getEffectiveStatus(allRunningOrScheduled));
 
         JobDetails allFinished =
                 getJobDetails(
@@ -334,7 +334,7 @@ public class FlinkServiceTest {
                         Tuple2.of(ExecutionState.FINISHED, 4));
         assertEquals(
                 org.apache.flink.api.common.JobStatus.FINISHED,
-                FlinkService.getEffectiveStatus(allFinished));
+                AbstractFlinkService.getEffectiveStatus(allFinished));
     }
 
     private JobDetails getJobDetails(
@@ -358,7 +358,7 @@ public class FlinkServiceTest {
     }
 
     private FlinkService createFlinkService(ClusterClient<String> clusterClient) {
-        return new FlinkService(client, new FlinkConfigManager(configuration)) {
+        return new NativeFlinkService(client, new FlinkConfigManager(configuration)) {
             @Override
             protected ClusterClient<String> getClusterClient(Configuration config) {
                 return clusterClient;
