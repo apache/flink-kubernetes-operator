@@ -24,11 +24,15 @@ import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import lombok.Value;
 
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Set;
 
 /** Configuration class for operator. */
 @Value
 public class FlinkOperatorConfiguration {
+
+    private static final String NAMESPACES_SPLITTER_KEY = "\\s*,\\s*";
 
     Duration reconcileInterval;
     int reconcilerMaxParallelism;
@@ -37,14 +41,14 @@ public class FlinkOperatorConfiguration {
     Duration flinkClientTimeout;
     String flinkServiceHostOverride;
     Set<String> watchedNamespaces;
+    Boolean dynamicNamespacesEnabled;
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
     String artifactsBaseDir;
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
 
-    public static FlinkOperatorConfiguration fromConfiguration(
-            Configuration operatorConfig, Set<String> watchedNamespaces) {
+    public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL);
@@ -94,6 +98,19 @@ public class FlinkOperatorConfiguration {
             flinkServiceHostOverride = "localhost";
         }
 
+        var watchedNamespaces =
+                new HashSet<>(
+                        Arrays.asList(
+                                operatorConfig
+                                        .get(
+                                                KubernetesOperatorConfigOptions
+                                                        .OPERATOR_WATCHED_NAMESPACES)
+                                        .split(NAMESPACES_SPLITTER_KEY)));
+
+        boolean dynamicNamespacesEnabled =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_NAMESPACES_ENABLED);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -102,6 +119,7 @@ public class FlinkOperatorConfiguration {
                 flinkClientTimeout,
                 flinkServiceHostOverride,
                 watchedNamespaces,
+                dynamicNamespacesEnabled,
                 flinkCancelJobTimeout,
                 flinkShutdownClusterTimeout,
                 artifactsBaseDir,

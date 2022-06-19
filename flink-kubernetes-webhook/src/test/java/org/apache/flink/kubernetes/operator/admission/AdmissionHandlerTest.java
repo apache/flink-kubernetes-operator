@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
+import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.admission.mutator.FlinkMutator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
@@ -62,8 +63,8 @@ public class AdmissionHandlerTest {
     private final AdmissionHandler admissionHandler =
             new AdmissionHandler(
                     new FlinkValidator(
-                            ValidatorUtils.discoverValidators(new FlinkConfigManager()),
-                            new FlinkConfigManager()),
+                            ValidatorUtils.discoverValidators(new FlinkConfigManager(ns -> {})),
+                            new InformerManager(null)),
                     new FlinkMutator());
 
     @Test

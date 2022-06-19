@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.informer;
+package org.apache.flink.kubernetes.operator.admission.informer;
 
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
@@ -31,6 +30,7 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static io.javaoperatorsdk.operator.api.reconciler.Constants.DEFAULT_NAMESPACES_SET;
 
@@ -38,16 +38,12 @@ import static io.javaoperatorsdk.operator.api.reconciler.Constants.DEFAULT_NAMES
 public class InformerManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(InformerManager.class);
-    public static final String CLUSTER_ID_INDEX = "clusterId_index";
-    private final Set<String> watchedNamespaces;
+    private final Set<String> watchedNamespaces = ConcurrentHashMap.newKeySet();
     private final KubernetesClient kubernetesClient;
-    private volatile Map<String, SharedIndexInformer<FlinkSessionJob>> sessionJobInformers;
     private volatile Map<String, SharedIndexInformer<FlinkDeployment>> flinkDepInformers;
 
-    public InformerManager(Set<String> watchedNamespaces, KubernetesClient kubernetesClient) {
-        this.watchedNamespaces = watchedNamespaces;
+    public InformerManager(KubernetesClient kubernetesClient) {
         this.kubernetesClient = kubernetesClient;
-        LOG.info("Created informer manager with watchedNamespaces: {}", watchedNamespaces);
     }
 
     public SharedIndexInformer<FlinkDeployment> getFlinkDepInformer(String namespace) {
@@ -67,7 +63,7 @@ public class InformerManager {
             synchronized (this) {
                 if (flinkDepInformers == null) {
                     var runnableInformers =
-                            createRunnableInformer(
+                            createRunnableInformers(
                                     FlinkDeployment.class, watchedNamespaces, kubernetesClient);
                     for (Map.Entry<String, SharedIndexInformer<FlinkDeployment>> runnableInformer :
                             runnableInformers.entrySet()) {
@@ -83,7 +79,7 @@ public class InformerManager {
     }
 
     private static <CR extends HasMetadata>
-            Map<String, SharedIndexInformer<CR>> createRunnableInformer(
+            Map<String, SharedIndexInformer<CR>> createRunnableInformers(
                     Class<CR> resourceClass,
                     Set<String> effectiveNamespaces,
                     KubernetesClient kubernetesClient) {
@@ -102,6 +98,26 @@ public class InformerManager {
                                 .runnableInformer(0));
             }
             return informers;
+        }
+    }
+
+    public void setNamespaces(Set<String> watchedNamespaces) {
+        LOG.info("Setting namespaces to {}", watchedNamespaces);
+        this.watchedNamespaces.clear();
+        this.watchedNamespaces.addAll(watchedNamespaces);
+        if (flinkDepInformers != null) {
+            synchronized (this) {
+                if (flinkDepInformers != null) {
+                    flinkDepInformers
+                            .entrySet()
+                            .forEach(
+                                    entry -> {
+                                        LOG.info("Stopping informer in {})", entry.getKey());
+                                        entry.getValue().stop();
+                                    });
+                }
+                flinkDepInformers = null;
+            }
         }
     }
 }

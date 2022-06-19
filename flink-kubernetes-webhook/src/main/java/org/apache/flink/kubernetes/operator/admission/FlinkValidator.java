@@ -17,17 +17,15 @@
 
 package org.apache.flink.kubernetes.operator.admission;
 
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
-import org.apache.flink.kubernetes.operator.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.KubernetesResource;
-import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.informers.cache.Cache;
 import io.javaoperatorsdk.admissioncontroller.NotAllowedException;
 import io.javaoperatorsdk.admissioncontroller.Operation;
@@ -46,13 +44,9 @@ public class FlinkValidator implements Validator<HasMetadata> {
     private final Set<FlinkResourceValidator> validators;
     private final InformerManager informerManager;
 
-    public FlinkValidator(
-            Set<FlinkResourceValidator> validators, FlinkConfigManager configManager) {
+    public FlinkValidator(Set<FlinkResourceValidator> validators, InformerManager informerManager) {
         this.validators = validators;
-        this.informerManager =
-                new InformerManager(
-                        configManager.getOperatorConfiguration().getWatchedNamespaces(),
-                        new DefaultKubernetesClient());
+        this.informerManager = informerManager;
     }
 
     @Override

@@ -22,6 +22,7 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
+import io.javaoperatorsdk.operator.api.reconciler.Constants;
 
 import java.time.Duration;
 import java.util.Map;
@@ -187,4 +188,19 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Interval at which periodic savepoints will be triggered. "
                                     + "The triggering schedule is not guaranteed, savepoints will be triggered as part of the regular reconcile loop.");
+
+    public static final ConfigOption<String> OPERATOR_WATCHED_NAMESPACES =
+            ConfigOptions.key("kubernetes.operator.watched.namespaces")
+                    .stringType()
+                    .defaultValue(Constants.WATCH_ALL_NAMESPACES)
+                    .withDescription(
+                            "Comma separated list of namespaces the operator monitors for custom resources. Defaults to "
+                                    + Constants.WATCH_ALL_NAMESPACES);
+
+    public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_NAMESPACES_ENABLED =
+            ConfigOptions.key("kubernetes.operator.dynamic.namespaces.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Enables dynamic change of watched/monitored namespaces. Defaults to false");
 }
