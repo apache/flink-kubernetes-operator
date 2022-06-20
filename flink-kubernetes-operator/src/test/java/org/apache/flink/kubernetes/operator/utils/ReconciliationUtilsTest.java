@@ -20,10 +20,10 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
-import org.apache.flink.kubernetes.operator.crd.CrdConstants;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** Test for {@link org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils}. */
 public class ReconciliationUtilsTest {
@@ -46,11 +47,11 @@ public class ReconciliationUtilsTest {
     public void testRescheduleUpgradeImmediately() {
         FlinkDeployment app = TestUtils.buildApplicationCluster();
         app.getSpec().getJob().setState(JobState.RUNNING);
+        app.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                app, JobState.RUNNING, new Configuration());
         FlinkDeployment previous = ReconciliationUtils.clone(app);
         FlinkDeployment current = ReconciliationUtils.clone(app);
-        current.getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(ReconciliationUtils.clone(current.getSpec()));
         ReconciliationUtils.updateForSpecReconciliationSuccess(
                 current, JobState.SUSPENDED, new Configuration());
 
@@ -72,12 +73,29 @@ public class ReconciliationUtilsTest {
     @Test
     public void testSpecSerializationWithVersion() throws JsonProcessingException {
         FlinkDeployment app = TestUtils.buildApplicationCluster();
-        String serialized = ReconciliationUtils.writeSpecWithCurrentVersion(app.getSpec());
+        app.getMetadata().setGeneration(12L);
+        String serialized = ReconciliationUtils.writeSpecWithMeta(app.getSpec(), app);
         ObjectNode node = (ObjectNode) new ObjectMapper().readTree(serialized);
-        assertEquals(CrdConstants.API_VERSION, node.get("apiVersion").asText());
+
+        ObjectNode internalMeta =
+                (ObjectNode) node.get(ReconciliationUtils.INTERNAL_METADATA_JSON_KEY);
+        assertEquals("flink.apache.org/v1beta1", internalMeta.get("apiVersion").asText());
+        assertEquals(12L, internalMeta.get("metadata").get("generation").asLong());
         assertEquals(
                 app.getSpec(),
-                ReconciliationUtils.deserializedSpecWithVersion(
-                        serialized, FlinkDeploymentSpec.class));
+                ReconciliationUtils.deserializeSpecWithMeta(serialized, FlinkDeploymentSpec.class)
+                        .f0);
+
+        // test backward compatibility
+        String oldSerialized =
+                "{\"job\":{\"jarURI\":\"local:///opt/flink/examples/streaming/StateMachineExample.jar\",\"parallelism\":2,\"entryClass\":null,\"args\":[],\"state\":\"running\",\"savepointTriggerNonce\":null,\"initialSavepointPath\":null,\"upgradeMode\":\"stateless\",\"allowNonRestoredState\":null},\"restartNonce\":null,\"flinkConfiguration\":{\"taskmanager.numberOfTaskSlots\":\"2\"},\"image\":\"flink:1.15\",\"imagePullPolicy\":null,\"serviceAccount\":\"flink\",\"flinkVersion\":\"v1_15\",\"ingress\":null,\"podTemplate\":null,\"jobManager\":{\"resource\":{\"cpu\":1.0,\"memory\":\"2048m\"},\"replicas\":1,\"podTemplate\":null},\"taskManager\":{\"resource\":{\"cpu\":1.0,\"memory\":\"2048m\"},\"podTemplate\":null},\"logConfiguration\":null,\"apiVersion\":\"v1beta1\"}";
+
+        var migrated =
+                ReconciliationUtils.deserializeSpecWithMeta(
+                        oldSerialized, FlinkDeploymentSpec.class);
+        assertEquals(
+                "local:///opt/flink/examples/streaming/StateMachineExample.jar",
+                migrated.f0.getJob().getJarURI());
+        assertNull(migrated.f1);
     }
 }

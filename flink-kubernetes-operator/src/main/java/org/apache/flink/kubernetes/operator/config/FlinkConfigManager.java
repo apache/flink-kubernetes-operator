@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import org.apache.flink.shaded.guava30.com.google.common.cache.Cache;
 import org.apache.flink.shaded.guava30.com.google.common.cache.CacheBuilder;
@@ -144,7 +145,9 @@ public class FlinkConfigManager {
     }
 
     public Configuration getDeployConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
-        return getConfig(objectMeta, spec);
+        var conf = getConfig(objectMeta, spec);
+        FlinkUtils.setGenerationAnnotation(conf, objectMeta.getGeneration());
+        return conf;
     }
 
     public Configuration getObserveConfig(FlinkDeployment deployment) {

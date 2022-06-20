@@ -257,7 +257,7 @@ public class DefaultValidatorTest {
 
                     dep.getStatus()
                             .getReconciliationStatus()
-                            .serializeAndSetLastReconciledSpec(spec);
+                            .serializeAndSetLastReconciledSpec(spec, dep);
 
                     dep.getSpec()
                             .getFlinkConfiguration()
@@ -278,7 +278,7 @@ public class DefaultValidatorTest {
                     dep.getStatus()
                             .getReconciliationStatus()
                             .serializeAndSetLastReconciledSpec(
-                                    ReconciliationUtils.clone(dep.getSpec()));
+                                    ReconciliationUtils.clone(dep.getSpec()), dep);
                     dep.getSpec().setJob(null);
                 },
                 "Cannot switch from job to session cluster");
@@ -294,7 +294,7 @@ public class DefaultValidatorTest {
                     spec.setJob(null);
                     dep.getStatus()
                             .getReconciliationStatus()
-                            .serializeAndSetLastReconciledSpec(spec);
+                            .serializeAndSetLastReconciledSpec(spec, dep);
                 },
                 "Cannot switch from session to job cluster");
 
@@ -316,7 +316,7 @@ public class DefaultValidatorTest {
 
                     dep.getStatus()
                             .getReconciliationStatus()
-                            .serializeAndSetLastReconciledSpec(spec);
+                            .serializeAndSetLastReconciledSpec(spec, dep);
                     dep.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
                 },
                 String.format(

@@ -138,7 +138,7 @@ public class SavepointObserverTest {
         deployment
                 .getStatus()
                 .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec());
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
 
         var jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setState("RUNNING");

@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.crd;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 
@@ -39,8 +40,9 @@ public class FlinkDeployment
         extends AbstractFlinkResource<FlinkDeploymentSpec, FlinkDeploymentStatus>
         implements Namespaced {
 
+    @VisibleForTesting
     @Override
-    protected FlinkDeploymentStatus initStatus() {
+    public FlinkDeploymentStatus initStatus() {
         return new FlinkDeploymentStatus();
     }
 }

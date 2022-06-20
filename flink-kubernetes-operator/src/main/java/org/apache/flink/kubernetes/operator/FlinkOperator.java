@@ -122,7 +122,6 @@ public class FlinkOperator {
         var controller =
                 new FlinkDeploymentController(
                         configManager,
-                        client,
                         validators,
                         reconcilerFactory,
                         observerFactory,

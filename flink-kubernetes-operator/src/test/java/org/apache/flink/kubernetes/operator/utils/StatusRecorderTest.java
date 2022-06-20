@@ -45,7 +45,7 @@ public class StatusRecorderTest {
         helper.patchAndCacheStatus(deployment);
         assertTrue(mockServer.getLastRequest() != lastRequest);
         lastRequest = mockServer.getLastRequest();
-        deployment.getStatus().getReconciliationStatus().setState(ReconciliationState.UPGRADING);
+        deployment.getStatus().getReconciliationStatus().setState(ReconciliationState.ROLLING_BACK);
         helper.patchAndCacheStatus(deployment);
 
         // We intentionally compare references

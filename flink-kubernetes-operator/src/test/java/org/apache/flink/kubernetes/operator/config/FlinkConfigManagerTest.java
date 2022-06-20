@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
 import io.fabric8.kubernetes.api.model.Pod;
@@ -61,7 +62,7 @@ public class FlinkConfigManagerTest {
                 deployment.getStatus().getReconciliationStatus();
 
         deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "reconciled");
-        reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec());
+        reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         reconciliationStatus.markReconciledSpecAsStable();
 
         deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "latest");
@@ -73,14 +74,21 @@ public class FlinkConfigManagerTest {
         assertEquals("reconciled", configManager.getObserveConfig(deployment).get(testConf));
 
         deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "stable");
-        reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec());
+        reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         reconciliationStatus.markReconciledSpecAsStable();
 
         deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "rolled-back");
-        reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec());
+        reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
 
         assertEquals("stable", configManager.getObserveConfig(deployment).get(testConf));
+
+        deployment.getMetadata().setGeneration(5L);
+        var deployConfig =
+                configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
+        assertEquals(
+                Map.of(FlinkUtils.CR_GENERATION_LABEL, "5"),
+                deployConfig.get(KubernetesConfigOptions.JOB_MANAGER_ANNOTATIONS));
     }
 
     @Test

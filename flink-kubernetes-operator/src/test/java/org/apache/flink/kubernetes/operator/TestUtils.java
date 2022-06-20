@@ -49,6 +49,7 @@ import org.apache.flink.metrics.testutils.MetricListener;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.ContainerStatusBuilder;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -68,6 +69,8 @@ import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedDepen
 import okhttp3.Headers;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.Assertions;
+
+import javax.annotation.Nullable;
 
 import java.io.File;
 import java.io.IOException;
@@ -131,6 +134,7 @@ public class TestUtils {
                                 .upgradeMode(UpgradeMode.STATELESS)
                                 .state(JobState.RUNNING)
                                 .build());
+        deployment.setStatus(deployment.initStatus());
         return deployment;
     }
 
@@ -211,35 +215,6 @@ public class TestUtils {
         return new PodListBuilder().withItems(pod).build();
     }
 
-    public static Context createEmptyContext() {
-        return new Context() {
-            @Override
-            public Optional<RetryInfo> getRetryInfo() {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional getSecondaryResource(Class aClass, String s) {
-                return Optional.empty();
-            }
-
-            @Override
-            public Set getSecondaryResources(Class expectedType) {
-                return null;
-            }
-
-            @Override
-            public ControllerConfiguration getControllerConfiguration() {
-                return null;
-            }
-
-            @Override
-            public ManagedDependentResourceContext managedDependentResourceContext() {
-                return null;
-            }
-        };
-    }
-
     public static Deployment createDeployment(boolean ready) {
         DeploymentStatus status = new DeploymentStatus();
         status.setAvailableReplicas(ready ? 1 : 0);
@@ -247,12 +222,13 @@ public class TestUtils {
         DeploymentSpec spec = new DeploymentSpec();
         spec.setReplicas(1);
         Deployment deployment = new Deployment();
+        deployment.setMetadata(new ObjectMeta());
         deployment.setSpec(spec);
         deployment.setStatus(status);
         return deployment;
     }
 
-    public static Context createContextWithReadyJobManagerDeployment() {
+    public static Context createContextWithDeployment(@Nullable Deployment deployment) {
         return new Context() {
             @Override
             public Optional<RetryInfo> getRetryInfo() {
@@ -261,7 +237,7 @@ public class TestUtils {
 
             @Override
             public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
-                return Optional.of(createDeployment(true));
+                return Optional.ofNullable(deployment);
             }
 
             @Override
@@ -281,33 +257,16 @@ public class TestUtils {
         };
     }
 
+    public static Context createEmptyContext() {
+        return createContextWithDeployment(null);
+    }
+
+    public static Context createContextWithReadyJobManagerDeployment() {
+        return createContextWithDeployment(createDeployment(true));
+    }
+
     public static Context createContextWithInProgressDeployment() {
-        return new Context() {
-            @Override
-            public Optional<RetryInfo> getRetryInfo() {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
-                return Optional.of(createDeployment(false));
-            }
-
-            @Override
-            public Set getSecondaryResources(Class expectedType) {
-                return null;
-            }
-
-            @Override
-            public ControllerConfiguration getControllerConfiguration() {
-                return null;
-            }
-
-            @Override
-            public ManagedDependentResourceContext managedDependentResourceContext() {
-                return null;
-            }
-        };
+        return createContextWithDeployment(createDeployment(false));
     }
 
     public static Context createContextWithReadyFlinkDeployment() {
@@ -329,7 +288,7 @@ public class TestUtils {
                 session.getSpec().getFlinkConfiguration().putAll(flinkDepConfig);
                 session.getStatus()
                         .getReconciliationStatus()
-                        .serializeAndSetLastReconciledSpec(session.getSpec());
+                        .serializeAndSetLastReconciledSpec(session.getSpec(), session);
                 return Optional.of(session);
             }
 
@@ -482,7 +441,6 @@ public class TestUtils {
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
         return new FlinkDeploymentController(
                 configManager,
-                kubernetesClient,
                 ValidatorUtils.discoverValidators(configManager),
                 new ReconcilerFactory(kubernetesClient, flinkService, configManager, eventRecorder),
                 new ObserverFactory(flinkService, configManager, statusRecorder, eventRecorder),
