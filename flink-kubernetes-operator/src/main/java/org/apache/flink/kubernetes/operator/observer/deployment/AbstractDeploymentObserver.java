@@ -280,14 +280,8 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
                                     .map(Long::valueOf)
                                     .orElse(-1L);
 
-                    // For first deployments we get the generation from the metadata directly
-                    // otherwise take it simply from the lastReconciledSpec
                     Long upgradeTargetGeneration =
-                            Optional.ofNullable(
-                                            status.getReconciliationStatus()
-                                                    .deserializeLastReconciledSpecWithMeta())
-                                    .map(t -> t.f1.get("metadata").get("generation").asLong(-1L))
-                                    .orElse(flinkDep.getMetadata().getGeneration());
+                            ReconciliationUtils.getUpgradeTargetGeneration(flinkDep);
 
                     if (deployedGeneration.equals(upgradeTargetGeneration)) {
                         logger.info(

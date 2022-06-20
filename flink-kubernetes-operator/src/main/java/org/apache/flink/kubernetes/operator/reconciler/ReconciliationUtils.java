@@ -64,7 +64,7 @@ public class ReconciliationUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReconciliationUtils.class);
 
-    public static final String INTERNAL_METADATA_JSON_KEY = "$internal_metadata";
+    public static final String INTERNAL_METADATA_JSON_KEY = "resource_metadata";
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -228,19 +228,23 @@ public class ReconciliationUtils {
     }
 
     public static <T> Tuple2<T, ObjectNode> deserializeSpecWithMeta(
-            @Nullable String specString, Class<T> specClass) {
-        if (specString == null) {
+            @Nullable String specWithMetaString, Class<T> specClass) {
+        if (specWithMetaString == null) {
             return null;
         }
 
         try {
-            ObjectNode objectNode = (ObjectNode) objectMapper.readTree(specString);
-            ObjectNode internalMeta = (ObjectNode) objectNode.remove(INTERNAL_METADATA_JSON_KEY);
+            ObjectNode wrapper = (ObjectNode) objectMapper.readTree(specWithMetaString);
+            ObjectNode internalMeta = (ObjectNode) wrapper.remove(INTERNAL_METADATA_JSON_KEY);
 
-            // backward compatibility
-            objectNode.remove("apiVersion");
-
-            return Tuple2.of(objectMapper.treeToValue(objectNode, specClass), internalMeta);
+            if (internalMeta == null) {
+                // migrating from old format
+                wrapper.remove("apiVersion");
+                return Tuple2.of(objectMapper.treeToValue(wrapper, specClass), internalMeta);
+            } else {
+                return Tuple2.of(
+                        objectMapper.treeToValue(wrapper.get("spec"), specClass), internalMeta);
+            }
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Could not deserialize spec, this indicates a bug...", e);
         }
@@ -248,13 +252,16 @@ public class ReconciliationUtils {
 
     public static String writeSpecWithMeta(
             Object spec, AbstractFlinkResource<?, ?> relatedResource) {
-        ObjectNode objectNode = objectMapper.valueToTree(Preconditions.checkNotNull(spec));
-        ObjectNode internalMeta = objectNode.putObject(INTERNAL_METADATA_JSON_KEY);
+        ObjectNode wrapper = objectMapper.createObjectNode();
+        wrapper.set("spec", objectMapper.valueToTree(Preconditions.checkNotNull(spec)));
+
+        ObjectNode internalMeta = wrapper.putObject(INTERNAL_METADATA_JSON_KEY);
         internalMeta.put("apiVersion", relatedResource.getApiVersion());
         ObjectNode metadata = internalMeta.putObject("metadata");
         metadata.put("generation", relatedResource.getMetadata().getGeneration());
+
         try {
-            return objectMapper.writeValueAsString(objectNode);
+            return objectMapper.writeValueAsString(wrapper);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Could not serialize spec, this indicates a bug...", e);
         }
@@ -406,5 +413,21 @@ public class ReconciliationUtils {
 
         // Status was updated already, no need to return anything
         return ErrorStatusUpdateControl.noStatusUpdate();
+    }
+
+    public static Long getUpgradeTargetGeneration(FlinkDeployment deployment) {
+        var lastSpecWithMeta =
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpecWithMeta();
+
+        if (lastSpecWithMeta == null || lastSpecWithMeta.f1 == null) {
+            // For first deployments and when migrating from before this feature simply return
+            // current generation
+            return deployment.getMetadata().getGeneration();
+        }
+
+        return lastSpecWithMeta.f1.get("metadata").get("generation").asLong(-1L);
     }
 }

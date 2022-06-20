@@ -441,7 +441,6 @@ public class TestUtils {
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
         return new FlinkDeploymentController(
                 configManager,
-                kubernetesClient,
                 ValidatorUtils.discoverValidators(configManager),
                 new ReconcilerFactory(kubernetesClient, flinkService, configManager, eventRecorder),
                 new ObserverFactory(flinkService, configManager, statusRecorder, eventRecorder),

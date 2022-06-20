@@ -34,7 +34,6 @@ import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -63,7 +62,6 @@ public class FlinkDeploymentController
     private static final Logger LOG = LoggerFactory.getLogger(FlinkDeploymentController.class);
 
     private final FlinkConfigManager configManager;
-    private final KubernetesClient kubernetesClient;
 
     private final Set<FlinkResourceValidator> validators;
     private final ReconcilerFactory reconcilerFactory;
@@ -74,7 +72,6 @@ public class FlinkDeploymentController
 
     public FlinkDeploymentController(
             FlinkConfigManager configManager,
-            KubernetesClient kubernetesClient,
             Set<FlinkResourceValidator> validators,
             ReconcilerFactory reconcilerFactory,
             ObserverFactory observerFactory,
@@ -82,7 +79,6 @@ public class FlinkDeploymentController
             StatusRecorder<FlinkDeploymentStatus> statusRecorder,
             EventRecorder eventRecorder) {
         this.configManager = configManager;
-        this.kubernetesClient = kubernetesClient;
         this.validators = validators;
         this.reconcilerFactory = reconcilerFactory;
         this.observerFactory = observerFactory;

@@ -35,6 +35,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /** Test for {@link org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils}. */
 public class ReconciliationUtilsTest {
@@ -84,5 +85,17 @@ public class ReconciliationUtilsTest {
                 app.getSpec(),
                 ReconciliationUtils.deserializeSpecWithMeta(serialized, FlinkDeploymentSpec.class)
                         .f0);
+
+        // test backward compatibility
+        String oldSerialized =
+                "{\"job\":{\"jarURI\":\"local:///opt/flink/examples/streaming/StateMachineExample.jar\",\"parallelism\":2,\"entryClass\":null,\"args\":[],\"state\":\"running\",\"savepointTriggerNonce\":null,\"initialSavepointPath\":null,\"upgradeMode\":\"stateless\",\"allowNonRestoredState\":null},\"restartNonce\":null,\"flinkConfiguration\":{\"taskmanager.numberOfTaskSlots\":\"2\"},\"image\":\"flink:1.15\",\"imagePullPolicy\":null,\"serviceAccount\":\"flink\",\"flinkVersion\":\"v1_15\",\"ingress\":null,\"podTemplate\":null,\"jobManager\":{\"resource\":{\"cpu\":1.0,\"memory\":\"2048m\"},\"replicas\":1,\"podTemplate\":null},\"taskManager\":{\"resource\":{\"cpu\":1.0,\"memory\":\"2048m\"},\"podTemplate\":null},\"logConfiguration\":null,\"apiVersion\":\"v1beta1\"}";
+
+        var migrated =
+                ReconciliationUtils.deserializeSpecWithMeta(
+                        oldSerialized, FlinkDeploymentSpec.class);
+        assertEquals(
+                "local:///opt/flink/examples/streaming/StateMachineExample.jar",
+                migrated.f0.getJob().getJarURI());
+        assertNull(migrated.f1);
     }
 }
