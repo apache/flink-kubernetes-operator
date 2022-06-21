@@ -60,14 +60,16 @@ public class ReconcilerFactory {
                 Mode.getMode(flinkApp),
                 mode -> {
                     switch (mode) {
-                        case SESSION:
+                        case NATIVE_SESSION:
+                        case STANDALONE_SESSION:
                             return new SessionReconciler(
                                     kubernetesClient,
                                     flinkServiceFactory.getOrCreate(flinkApp),
                                     configManager,
                                     eventRecorder,
                                     deploymentStatusRecorder);
-                        case APPLICATION:
+                        case NATIVE_APPLICATION:
+                        case STANDALONE_APPLICATION:
                             return new ApplicationReconciler(
                                     kubernetesClient,
                                     flinkServiceFactory.getOrCreate(flinkApp),

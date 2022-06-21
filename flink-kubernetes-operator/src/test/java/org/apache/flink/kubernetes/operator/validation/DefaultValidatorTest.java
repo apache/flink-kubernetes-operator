@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentReconciliationStatus;
@@ -300,6 +301,74 @@ public class DefaultValidatorTest {
                             .serializeAndSetLastReconciledSpec(spec, dep);
                 },
                 "Cannot switch from session to job cluster");
+
+        testError(
+                dep -> {
+                    dep.setStatus(new FlinkDeploymentStatus());
+                    dep.getStatus().setJobStatus(new JobStatus());
+
+                    dep.getStatus()
+                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
+                    dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+                    FlinkDeploymentSpec spec = ReconciliationUtils.clone(dep.getSpec());
+
+                    spec.setMode(KubernetesDeploymentMode.NATIVE);
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(spec, dep);
+                },
+                "Cannot switch from native kubernetes to standalone kubernetes cluster");
+
+        testError(
+                dep -> {
+                    dep.setStatus(new FlinkDeploymentStatus());
+                    dep.getStatus().setJobStatus(new JobStatus());
+
+                    dep.getStatus()
+                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
+                    dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+                    FlinkDeploymentSpec spec = ReconciliationUtils.clone(dep.getSpec());
+
+                    spec.setMode(null);
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(spec, dep);
+                },
+                "Cannot switch from native kubernetes to standalone kubernetes cluster");
+
+        testError(
+                dep -> {
+                    dep.setStatus(new FlinkDeploymentStatus());
+                    dep.getStatus().setJobStatus(new JobStatus());
+
+                    dep.getStatus()
+                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
+                    dep.getSpec().setMode(null);
+                    FlinkDeploymentSpec spec = ReconciliationUtils.clone(dep.getSpec());
+
+                    spec.setMode(KubernetesDeploymentMode.STANDALONE);
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(spec, dep);
+                },
+                "Cannot switch from standalone kubernetes to native kubernetes cluster");
+
+        testError(
+                dep -> {
+                    dep.setStatus(new FlinkDeploymentStatus());
+                    dep.getStatus().setJobStatus(new JobStatus());
+
+                    dep.getStatus()
+                            .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());
+                    dep.getSpec().setMode(KubernetesDeploymentMode.NATIVE);
+                    FlinkDeploymentSpec spec = ReconciliationUtils.clone(dep.getSpec());
+
+                    spec.setMode(KubernetesDeploymentMode.STANDALONE);
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(spec, dep);
+                },
+                "Cannot switch from standalone kubernetes to native kubernetes cluster");
 
         // Test upgrade mode change validation
         testError(

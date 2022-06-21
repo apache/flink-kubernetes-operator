@@ -34,6 +34,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
@@ -59,6 +60,8 @@ import static org.apache.flink.configuration.DeploymentOptions.SUBMIT_FAILED_JOB
 import static org.apache.flink.configuration.DeploymentOptionsInternal.CONF_DIR;
 import static org.apache.flink.configuration.WebOptions.CANCEL_ENABLE;
 import static org.apache.flink.kubernetes.configuration.KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE;
+import static org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION;
+import static org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal.ClusterMode.SESSION;
 import static org.apache.flink.kubernetes.operator.utils.FlinkUtils.mergePodTemplates;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOGBACK_NAME;
@@ -216,11 +219,34 @@ public class FlinkConfigBuilder {
                     spec.getTaskManager().getPodTemplate(),
                     effectiveConfig,
                     false);
+
+            if (spec.getTaskManager().getReplicas() != null
+                    && spec.getTaskManager().getReplicas() > 0) {
+                effectiveConfig.set(
+                        StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS,
+                        spec.getTaskManager().getReplicas());
+            }
         }
         return this;
     }
 
     protected FlinkConfigBuilder applyJobOrSessionSpec() throws URISyntaxException {
+        KubernetesDeploymentMode deploymentMode = KubernetesDeploymentMode.getDeploymentMode(spec);
+
+        if (deploymentMode == KubernetesDeploymentMode.STANDALONE) {
+            effectiveConfig.set(DeploymentOptions.TARGET, "remote");
+            effectiveConfig.set(
+                    StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
+                    spec.getJob() == null ? SESSION : APPLICATION);
+
+            if (spec.getJob() != null) {
+                effectiveConfig.set(
+                        PipelineOptions.CLASSPATHS,
+                        Collections.singletonList(spec.getJob().getJarURI()));
+            }
+            return this;
+        }
+
         if (spec.getJob() != null) {
             effectiveConfig.set(
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());

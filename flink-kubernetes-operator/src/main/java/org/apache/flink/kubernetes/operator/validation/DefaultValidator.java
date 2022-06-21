@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
@@ -304,6 +305,24 @@ public class DefaultValidator implements FlinkResourceValidator {
 
         if (newSpec.getJob() == null && oldSpec.getJob() != null) {
             return Optional.of("Cannot switch from job to session cluster");
+        }
+
+        KubernetesDeploymentMode oldDeploymentMode =
+                oldSpec.getMode() == null ? KubernetesDeploymentMode.NATIVE : oldSpec.getMode();
+
+        KubernetesDeploymentMode newDeploymentMode =
+                newSpec.getMode() == null ? KubernetesDeploymentMode.NATIVE : newSpec.getMode();
+
+        if (oldDeploymentMode == KubernetesDeploymentMode.NATIVE
+                && newDeploymentMode != KubernetesDeploymentMode.NATIVE) {
+            return Optional.of(
+                    "Cannot switch from native kubernetes to standalone kubernetes cluster");
+        }
+
+        if (oldDeploymentMode == KubernetesDeploymentMode.STANDALONE
+                && newDeploymentMode != KubernetesDeploymentMode.STANDALONE) {
+            return Optional.of(
+                    "Cannot switch from standalone kubernetes to native kubernetes cluster");
         }
 
         JobSpec oldJob = oldSpec.getJob();

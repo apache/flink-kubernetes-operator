@@ -55,12 +55,14 @@ public class ObserverFactory {
                 Mode.getMode(flinkApp),
                 mode -> {
                     switch (mode) {
-                        case SESSION:
+                        case NATIVE_SESSION:
+                        case STANDALONE_SESSION:
                             return new SessionObserver(
                                     flinkServiceFactory.getOrCreate(flinkApp),
                                     configManager,
                                     eventRecorder);
-                        case APPLICATION:
+                        case NATIVE_APPLICATION:
+                        case STANDALONE_APPLICATION:
                             return new ApplicationObserver(
                                     flinkServiceFactory.getOrCreate(flinkApp),
                                     configManager,
