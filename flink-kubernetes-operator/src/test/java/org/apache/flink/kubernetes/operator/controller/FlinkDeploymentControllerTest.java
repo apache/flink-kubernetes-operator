@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
@@ -35,14 +36,18 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.api.model.EventBuilder;
+import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
+import io.fabric8.kubernetes.api.model.networking.v1.IngressRule;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -691,6 +696,72 @@ public class FlinkDeploymentControllerTest {
         FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
         var deleteControl = testController.cleanup(flinkDeployment, context);
         assertNotNull(deleteControl);
+    }
+
+    @Test
+    public void testIngressLifeCycle() throws Exception {
+        FlinkDeployment appNoIngress = TestUtils.buildApplicationCluster();
+        testController.reconcile(appNoIngress, context);
+        // deploy without ingress
+        assertNull(
+                kubernetesClient
+                        .network()
+                        .v1()
+                        .ingresses()
+                        .inNamespace(appNoIngress.getMetadata().getNamespace())
+                        .withName(appNoIngress.getMetadata().getName())
+                        .get());
+
+        // deploy with ingress
+        FlinkDeployment appWithIngress = TestUtils.buildApplicationCluster();
+        IngressSpec.IngressSpecBuilder builder = IngressSpec.builder();
+        builder.template("{{name}}.{{namespace}}.example.com");
+        IngressSpec ingressSpec = builder.build();
+        appWithIngress.getSpec().setIngress(ingressSpec);
+        testController.reconcile(appWithIngress, context);
+        testController.reconcile(appWithIngress, context);
+        Ingress ingress =
+                kubernetesClient
+                        .network()
+                        .v1()
+                        .ingresses()
+                        .inNamespace(appWithIngress.getMetadata().getNamespace())
+                        .withName(appWithIngress.getMetadata().getName())
+                        .get();
+        Assertions.assertNotNull(ingress);
+        IngressRule ingressRule = ingress.getSpec().getRules().stream().findFirst().get();
+        Assertions.assertEquals(
+                ingressRule.getHost(),
+                IngressUtils.getIngressUrl(
+                                "{{name}}.{{namespace}}.example.com",
+                                appWithIngress.getMetadata().getName(),
+                                appWithIngress.getMetadata().getNamespace())
+                        .getHost());
+
+        // upgrade with new ingress
+        builder.template("http://{{name}}.{{namespace}}.foo.bar");
+        ingressSpec = builder.build();
+        appWithIngress.getSpec().setIngress(ingressSpec);
+        testController.reconcile(appWithIngress, context);
+        testController.reconcile(appWithIngress, context);
+        ingress =
+                kubernetesClient
+                        .network()
+                        .v1()
+                        .ingresses()
+                        .inNamespace(appWithIngress.getMetadata().getNamespace())
+                        .withName(appWithIngress.getMetadata().getName())
+                        .get();
+        Assertions.assertNotNull(ingress);
+        ingressRule = ingress.getSpec().getRules().stream().findFirst().get();
+        Assertions.assertNotNull(ingressRule);
+        Assertions.assertEquals(
+                ingressRule.getHost(),
+                IngressUtils.getIngressUrl(
+                                "{{name}}.{{namespace}}.foo.bar",
+                                appWithIngress.getMetadata().getName(),
+                                appWithIngress.getMetadata().getNamespace())
+                        .getHost());
     }
 
     private static Stream<Arguments> applicationTestParams() {
