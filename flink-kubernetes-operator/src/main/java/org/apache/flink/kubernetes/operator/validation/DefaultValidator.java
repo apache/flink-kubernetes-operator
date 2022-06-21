@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
@@ -88,7 +89,11 @@ public class DefaultValidator implements FlinkResourceValidator {
                         deployment.getMetadata().getName(),
                         deployment.getMetadata().getNamespace()),
                 validateLogConfig(spec.getLogConfiguration()),
-                validateJobSpec(spec.getJob(), spec.getTaskManager(), effectiveConfig),
+                validateJobSpec(
+                        spec.getJob(),
+                        spec.getTaskManager(),
+                        effectiveConfig,
+                        KubernetesDeploymentMode.getDeploymentMode(deployment)),
                 validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager()),
                 validateSpecChange(deployment, effectiveConfig),
@@ -173,7 +178,10 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateJobSpec(
-            JobSpec job, @Nullable TaskManagerSpec tm, Map<String, String> confMap) {
+            JobSpec job,
+            @Nullable TaskManagerSpec tm,
+            Map<String, String> confMap,
+            KubernetesDeploymentMode mode) {
         if (job == null) {
             return Optional.empty();
         }
@@ -306,6 +314,24 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of("Cannot switch from job to session cluster");
         }
 
+        KubernetesDeploymentMode oldDeploymentMode =
+                oldSpec.getMode() == null ? KubernetesDeploymentMode.NATIVE : oldSpec.getMode();
+
+        KubernetesDeploymentMode newDeploymentMode =
+                newSpec.getMode() == null ? KubernetesDeploymentMode.NATIVE : newSpec.getMode();
+
+        if (oldDeploymentMode == KubernetesDeploymentMode.NATIVE
+                && newDeploymentMode != KubernetesDeploymentMode.NATIVE) {
+            return Optional.of(
+                    "Cannot switch from native kubernetes to standalone kubernetes cluster");
+        }
+
+        if (oldDeploymentMode == KubernetesDeploymentMode.STANDALONE
+                && newDeploymentMode != KubernetesDeploymentMode.STANDALONE) {
+            return Optional.of(
+                    "Cannot switch from standalone kubernetes to native kubernetes cluster");
+        }
+
         JobSpec oldJob = oldSpec.getJob();
         JobSpec newJob = newSpec.getJob();
         if (oldJob != null && newJob != null) {
@@ -358,7 +384,11 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateNotApplicationCluster(sessionCluster),
                 validateSessionClusterId(sessionJob, sessionCluster),
-                validateJobSpec(sessionJob.getSpec().getJob(), null, effectiveConfig));
+                validateJobSpec(
+                        sessionJob.getSpec().getJob(),
+                        null,
+                        effectiveConfig,
+                        KubernetesDeploymentMode.getDeploymentMode(sessionCluster)));
     }
 
     private Optional<String> validateJobNotEmpty(FlinkSessionJob sessionJob) {

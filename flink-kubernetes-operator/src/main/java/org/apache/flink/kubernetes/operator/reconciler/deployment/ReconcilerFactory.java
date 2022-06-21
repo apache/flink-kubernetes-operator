@@ -17,9 +17,11 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
@@ -39,7 +41,8 @@ public class ReconcilerFactory {
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
     private final StatusRecorder<FlinkDeploymentStatus> deploymentStatusRecorder;
-    private final Map<Mode, Reconciler<FlinkDeployment>> reconcilerMap;
+    private final Map<Tuple2<Mode, KubernetesDeploymentMode>, Reconciler<FlinkDeployment>>
+            reconcilerMap;
 
     public ReconcilerFactory(
             KubernetesClient kubernetesClient,
@@ -57,9 +60,11 @@ public class ReconcilerFactory {
 
     public Reconciler<FlinkDeployment> getOrCreate(FlinkDeployment flinkApp) {
         return reconcilerMap.computeIfAbsent(
-                Mode.getMode(flinkApp),
-                mode -> {
-                    switch (mode) {
+                Tuple2.of(
+                        Mode.getMode(flinkApp),
+                        KubernetesDeploymentMode.getDeploymentMode(flinkApp)),
+                modes -> {
+                    switch (modes.f0) {
                         case SESSION:
                             return new SessionReconciler(
                                     kubernetesClient,
@@ -76,7 +81,7 @@ public class ReconcilerFactory {
                                     deploymentStatusRecorder);
                         default:
                             throw new UnsupportedOperationException(
-                                    String.format("Unsupported running mode: %s", mode));
+                                    String.format("Unsupported running mode: %s", modes.f0));
                     }
                 });
     }

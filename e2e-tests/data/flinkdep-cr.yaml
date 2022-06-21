@@ -83,6 +83,7 @@ spec:
     entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample
     parallelism: 2
     upgradeMode: last-state
+  mode: native
 
 ---
 apiVersion: v1

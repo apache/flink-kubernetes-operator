@@ -45,11 +45,7 @@ public class EventSourceUtils {
     public static InformerEventSource<Deployment, FlinkDeployment> getDeploymentInformerEventSource(
             EventSourceContext<FlinkDeployment> context) {
         final String labelSelector =
-                Map.of(
-                                Constants.LABEL_TYPE_KEY,
-                                Constants.LABEL_TYPE_NATIVE_TYPE,
-                                Constants.LABEL_COMPONENT_KEY,
-                                Constants.LABEL_COMPONENT_JOB_MANAGER)
+                Map.of(Constants.LABEL_COMPONENT_KEY, Constants.LABEL_COMPONENT_JOB_MANAGER)
                         .entrySet().stream()
                         .map(Object::toString)
                         .collect(Collectors.joining(","));
