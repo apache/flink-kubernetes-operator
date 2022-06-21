@@ -21,6 +21,7 @@ package org.apache.flink.kubernetes.operator.config;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
+import io.javaoperatorsdk.operator.api.config.RetryConfiguration;
 import lombok.Value;
 
 import java.time.Duration;
@@ -47,6 +48,7 @@ public class FlinkOperatorConfiguration {
     String artifactsBaseDir;
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
+    RetryConfiguration retryConfiguration;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -111,6 +113,8 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_NAMESPACES_ENABLED);
 
+        RetryConfiguration retryConfiguration = new FlinkOperatorRetryConfiguration(operatorConfig);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -124,6 +128,47 @@ public class FlinkOperatorConfiguration {
                 flinkShutdownClusterTimeout,
                 artifactsBaseDir,
                 savepointHistoryCountThreshold,
-                savepointHistoryAgeThreshold);
+                savepointHistoryAgeThreshold,
+                retryConfiguration);
+    }
+
+    /** Enables configurable retry mechanism for reconciliation errors. */
+    protected static class FlinkOperatorRetryConfiguration implements RetryConfiguration {
+        private final int maxAttempts;
+        private final long initialInterval;
+        private final double intervalMultiplier;
+
+        public FlinkOperatorRetryConfiguration(Configuration operatorConfig) {
+            maxAttempts =
+                    operatorConfig.getInteger(
+                            KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_ATTEMPTS);
+            initialInterval =
+                    operatorConfig
+                            .get(KubernetesOperatorConfigOptions.OPERATOR_RETRY_INITIAL_INTERVAL)
+                            .toMillis();
+            intervalMultiplier =
+                    operatorConfig.getDouble(
+                            KubernetesOperatorConfigOptions.OPERATOR_RETRY_INTERVAL_MULTIPLIER);
+        }
+
+        @Override
+        public int getMaxAttempts() {
+            return maxAttempts;
+        }
+
+        @Override
+        public long getInitialInterval() {
+            return initialInterval;
+        }
+
+        @Override
+        public double getIntervalMultiplier() {
+            return intervalMultiplier;
+        }
+
+        @Override
+        public long getMaxInterval() {
+            return (long) (initialInterval * Math.pow(intervalMultiplier, maxAttempts));
+        }
     }
 }

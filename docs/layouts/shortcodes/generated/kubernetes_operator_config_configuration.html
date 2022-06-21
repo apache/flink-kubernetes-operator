@@ -48,7 +48,7 @@
             <td><h5>kubernetes.operator.dynamic.namespaces.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
-            <td>Enables dynamic change of watched/monitored namespaces. Defaults to false</td>
+            <td>Enables dynamic change of watched/monitored namespaces.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.upgrade.ignore-pending-savepoint</h5></td>
@@ -111,6 +111,24 @@
             <td>The interval for the controller to reschedule the reconcile process.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.retry.initial.interval</h5></td>
+            <td style="word-wrap: break-word;">5 s</td>
+            <td>Duration</td>
+            <td>Initial interval of automatic reconcile retries on recoverable errors.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.retry.interval.multiplier</h5></td>
+            <td style="word-wrap: break-word;">2.0</td>
+            <td>Double</td>
+            <td>Interval multiplier of automatic reconcile retries on recoverable errors.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.retry.max.attempts</h5></td>
+            <td style="word-wrap: break-word;">10</td>
+            <td>Integer</td>
+            <td>Max attempts of automatic reconcile retries on recoverable errors.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.savepoint.history.max.age</h5></td>
             <td style="word-wrap: break-word;">86400000 ms</td>
             <td>Duration</td>
@@ -156,7 +174,7 @@
             <td><h5>kubernetes.operator.watched.namespaces</h5></td>
             <td style="word-wrap: break-word;">"JOSDK_ALL_NAMESPACES"</td>
             <td>String</td>
-            <td>Comma separated list of namespaces the operator monitors for custom resources. Defaults to JOSDK_ALL_NAMESPACES</td>
+            <td>Comma separated list of namespaces the operator monitors for custom resources.</td>
         </tr>
     </tbody>
 </table>

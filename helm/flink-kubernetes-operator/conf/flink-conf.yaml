@@ -39,6 +39,11 @@ parallelism.default: 2
 # kubernetes.operator.deployment.readiness.timeout: 1min
 # kubernetes.operator.user.artifacts.base.dir: /opt/flink/artifacts
 # kubernetes.operator.job.upgrade.ignore-pending-savepoint: false
+# kubernetes.operator.watched.namespaces: ns1,ns2
+# kubernetes.operator.dynamic.namespaces.enabled: false
+# kubernetes.operator.retry.initial.interval: 5 s
+# kubernetes.operator.retry.interval.multiplier: 2
+# kubernetes.operator.retry.max.attempts: 10
 
 # kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
 # kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE

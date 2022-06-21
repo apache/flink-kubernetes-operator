@@ -194,13 +194,32 @@ public class KubernetesOperatorConfigOptions {
                     .stringType()
                     .defaultValue(Constants.WATCH_ALL_NAMESPACES)
                     .withDescription(
-                            "Comma separated list of namespaces the operator monitors for custom resources. Defaults to "
-                                    + Constants.WATCH_ALL_NAMESPACES);
+                            "Comma separated list of namespaces the operator monitors for custom resources.");
 
     public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_NAMESPACES_ENABLED =
             ConfigOptions.key("kubernetes.operator.dynamic.namespaces.enabled")
                     .booleanType()
                     .defaultValue(false)
+                    .withDescription("Enables dynamic change of watched/monitored namespaces.");
+
+    public static final ConfigOption<Duration> OPERATOR_RETRY_INITIAL_INTERVAL =
+            ConfigOptions.key("kubernetes.operator.retry.initial.interval")
+                    .durationType()
+                    .defaultValue(Duration.ofSeconds(5))
                     .withDescription(
-                            "Enables dynamic change of watched/monitored namespaces. Defaults to false");
+                            "Initial interval of automatic reconcile retries on recoverable errors.");
+
+    public static final ConfigOption<Double> OPERATOR_RETRY_INTERVAL_MULTIPLIER =
+            ConfigOptions.key("kubernetes.operator.retry.interval.multiplier")
+                    .doubleType()
+                    .defaultValue(2.0)
+                    .withDescription(
+                            "Interval multiplier of automatic reconcile retries on recoverable errors.");
+
+    public static final ConfigOption<Integer> OPERATOR_RETRY_MAX_ATTEMPTS =
+            ConfigOptions.key("kubernetes.operator.retry.max.attempts")
+                    .intType()
+                    .defaultValue(10)
+                    .withDescription(
+                            "Max attempts of automatic reconcile retries on recoverable errors.");
 }
