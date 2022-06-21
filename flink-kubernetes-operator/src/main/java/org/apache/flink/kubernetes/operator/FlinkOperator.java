@@ -48,6 +48,7 @@ import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.RegisteredController;
 import io.javaoperatorsdk.operator.api.config.ConfigurationServiceOverrider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfigurationOverrider;
+import io.javaoperatorsdk.operator.processing.retry.GenericRetry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -160,6 +161,9 @@ public class FlinkOperator {
         overrider.settingNamespace(fakeNs);
         overrider.addingNamespaces(watchedNamespaces);
         overrider.removingNamespaces(fakeNs);
+        overrider.withRetry(
+                GenericRetry.fromConfiguration(
+                        configManager.getOperatorConfiguration().getRetryConfiguration()));
     }
 
     public void run() {
