@@ -65,6 +65,7 @@ spec:
     resource:
       memory: "1024m"
       cpu: 0.5
+  mode: native
 
 ---
 apiVersion: flink.apache.org/v1beta1

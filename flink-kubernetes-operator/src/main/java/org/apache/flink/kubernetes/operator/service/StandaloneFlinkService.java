@@ -20,11 +20,15 @@ package org.apache.flink.kubernetes.operator.service;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.client.deployment.ClusterDeploymentException;
 import org.apache.flink.client.deployment.ClusterSpecification;
+import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.Mode;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.kubeclient.Fabric8FlinkStandaloneKubeClient;
 import org.apache.flink.kubernetes.operator.kubeclient.FlinkStandaloneKubeClient;
@@ -58,20 +62,23 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void submitApplicationCluster(
-            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
+    protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
         LOG.info("Deploying application cluster");
-        // TODO some HA stuff?
-        submitClusterInternal(conf);
+        submitClusterInternal(conf, Mode.APPLICATION);
         LOG.info("Application cluster successfully deployed");
     }
 
     @Override
     public void submitSessionCluster(Configuration conf) throws Exception {
         LOG.info("Deploying session cluster");
-        // TODO some HA stuff?
-        submitClusterInternal(conf);
+        submitClusterInternal(conf, Mode.SESSION);
         LOG.info("Session cluster successfully deployed");
+    }
+
+    @Override
+    public void cancelJob(FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration conf)
+            throws Exception {
+        cancelJob(deployment, upgradeMode, conf, true);
     }
 
     @Override
@@ -106,13 +113,26 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                 executorService);
     }
 
-    private void submitClusterInternal(Configuration conf) throws ClusterDeploymentException {
+    private void submitClusterInternal(Configuration conf, Mode mode)
+            throws ClusterDeploymentException {
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
 
         FlinkStandaloneKubeClient client = createNamespacedKubeClient(conf, namespace);
         try (final KubernetesStandaloneClusterDescriptor kubernetesClusterDescriptor =
                 new KubernetesStandaloneClusterDescriptor(conf, client)) {
-            kubernetesClusterDescriptor.deploySessionCluster(getClusterSpecification(conf));
+            switch (mode) {
+                case APPLICATION:
+                    kubernetesClusterDescriptor.deployApplicationCluster(
+                            getClusterSpecification(conf),
+                            ApplicationConfiguration.fromConfiguration(conf));
+                    break;
+                case SESSION:
+                    kubernetesClusterDescriptor.deploySessionCluster(getClusterSpecification(conf));
+                    break;
+                default:
+                    throw new UnsupportedOperationException(
+                            String.format("Unsupported running mode: %s", mode));
+            }
         }
     }
 

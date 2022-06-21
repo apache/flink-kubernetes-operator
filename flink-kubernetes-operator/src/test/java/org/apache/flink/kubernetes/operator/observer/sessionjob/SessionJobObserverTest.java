@@ -54,7 +54,6 @@ public class SessionJobObserverTest {
     private TestingFlinkService flinkService;
     private SessionJobObserver observer;
     private SessionJobReconciler reconciler;
-    private FlinkServiceFactory flinkServiceFactory;
 
     @BeforeEach
     public void before() {
@@ -62,7 +61,7 @@ public class SessionJobObserverTest {
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
         var statusRecorder = new TestingStatusRecorder<FlinkSessionJobStatus>();
         flinkService = new TestingFlinkService();
-        flinkServiceFactory = flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
+        FlinkServiceFactory flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
         observer =
                 new SessionJobObserver(
                         flinkServiceFactory, configManager, statusRecorder, eventRecorder);

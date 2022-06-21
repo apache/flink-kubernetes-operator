@@ -57,6 +57,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | jobManager | org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec | JobManager specs. |
 | taskManager | org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec | TaskManager specs. |
 | logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the Flink deployment. Format logConfigFileName ->  configContent. |
+| mode | org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode | Deployment mode of the Flink cluster, native or standalone. |
 
 ### FlinkSessionJobSpec
 **Class**: org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec
@@ -130,6 +131,16 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----- | ---- |
 | RUNNING | Job is expected to be processing data. |
 | SUSPENDED | Processing is suspended with the intention of continuing later. |
+
+### KubernetesDeploymentMode
+**Class**: org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode
+
+**Description**: Enum to control Flink deployment mode on Kubernetes.
+
+| Value | Docs |
+| ----- | ---- |
+| NATIVE | Deploys Flink using Flinks native Kubernetes support. Only supported for newer versions of  Flink |
+| STANDALONE | Deploys Flink on-top of kubernetes in standalone mode. |
 
 ### Resource
 **Class**: org.apache.flink.kubernetes.operator.crd.spec.Resource

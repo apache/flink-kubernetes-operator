@@ -70,6 +70,7 @@ public class TestingFlinkDeploymentController
             KubernetesClient kubernetesClient,
             TestingFlinkService flinkService) {
         FlinkServiceFactory flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
+
         eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
         statusRecorder =
                 new StatusRecorder<>(

@@ -22,6 +22,8 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +34,8 @@ public class FlinkServiceFactory {
     private final KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager;
     private final Map<KubernetesDeploymentMode, FlinkService> serviceMap;
+
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkServiceFactory.class);
 
     public FlinkServiceFactory(
             KubernetesClient kubernetesClient, FlinkConfigManager configManager) {
@@ -46,8 +50,10 @@ public class FlinkServiceFactory {
                 mode -> {
                     switch (mode) {
                         case NATIVE:
+                            LOG.info("Using NativeFlinkService");
                             return new NativeFlinkService(kubernetesClient, configManager);
                         case STANDALONE:
+                            LOG.info("Using StandaloneFlinkService");
                             return new StandaloneFlinkService(kubernetesClient, configManager);
                         default:
                             throw new UnsupportedOperationException(
@@ -57,6 +63,7 @@ public class FlinkServiceFactory {
     }
 
     public FlinkService getOrCreate(FlinkDeployment deployment) {
+        LOG.info("Getting service for {}", deployment.getMetadata().getName());
         return getOrCreate(getDeploymentMode(deployment));
     }
 

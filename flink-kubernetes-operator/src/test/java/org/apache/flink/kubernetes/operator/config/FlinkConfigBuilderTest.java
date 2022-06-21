@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.config;
 
+import org.apache.flink.client.deployment.application.ApplicationConfiguration;
+import org.apache.flink.configuration.ConfigUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
@@ -33,9 +35,11 @@ import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
@@ -54,6 +58,7 @@ import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE;
@@ -62,6 +67,8 @@ import static org.apache.flink.kubernetes.operator.TestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.TestUtils.SERVICE_ACCOUNT;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 
 /** FlinkConfigBuilderTest. */
 public class FlinkConfigBuilderTest {
@@ -345,6 +352,84 @@ public class FlinkConfigBuilderTest {
                         .build();
         Assertions.assertTrue(
                 configuration.getBoolean(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE));
+    }
+
+    @Test
+    public void testApplyStandaloneApplicationSpec() throws URISyntaxException, IOException {
+        FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
+        final String entryClass = "entry.class";
+        final String jarUri = "local:///flink/opt/StateMachine.jar";
+        final String correctedJarUri = "file:///flink/opt/StateMachine.jar";
+        dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        dep.getSpec().getJob().setEntryClass(entryClass);
+        dep.getSpec().getJob().setJarURI(jarUri);
+        dep.getSpec().setTaskManager(new TaskManagerSpec());
+        dep.getSpec().getTaskManager().setReplicas(3);
+        dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+
+        Configuration configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+
+        Assertions.assertEquals("remote", configuration.getString(DeploymentOptions.TARGET));
+        Assertions.assertEquals(
+                StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION,
+                configuration.get(StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE));
+        Assertions.assertEquals(6, configuration.getInteger(CoreOptions.DEFAULT_PARALLELISM));
+        Assertions.assertEquals(
+                entryClass,
+                configuration.getString(ApplicationConfiguration.APPLICATION_MAIN_CLASS));
+        Assertions.assertEquals(
+                3,
+                configuration.get(
+                        StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS));
+        List<String> classpaths =
+                ConfigUtils.decodeListFromConfig(
+                        configuration, PipelineOptions.CLASSPATHS, String::toString);
+        assertThat(classpaths, containsInAnyOrder(correctedJarUri));
+
+        dep.getSpec().getTaskManager().setReplicas(null);
+        dep.getSpec().getJob().setParallelism(10);
+
+        configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+        Assertions.assertEquals(
+                5,
+                configuration.get(
+                        StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS));
+    }
+
+    @Test
+    public void testApplyStandaloneSessionSpec() throws URISyntaxException, IOException {
+        FlinkDeployment dep = ReconciliationUtils.clone(flinkDeployment);
+        dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        dep.getSpec().setJob(null);
+        dep.getSpec().setTaskManager(new TaskManagerSpec());
+        dep.getSpec().getTaskManager().setReplicas(5);
+        dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+
+        Configuration configuration =
+                new FlinkConfigBuilder(dep, new Configuration())
+                        .applyFlinkConfiguration()
+                        .applyTaskManagerSpec()
+                        .applyJobOrSessionSpec()
+                        .build();
+
+        Assertions.assertEquals("remote", configuration.getString(DeploymentOptions.TARGET));
+        Assertions.assertEquals(
+                StandaloneKubernetesConfigOptionsInternal.ClusterMode.SESSION,
+                configuration.get(StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE));
+        Assertions.assertEquals(
+                5,
+                configuration.get(
+                        StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS));
     }
 
     @Test

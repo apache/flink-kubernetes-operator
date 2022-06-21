@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
@@ -156,6 +157,10 @@ public class TestingFlinkService extends AbstractFlinkService {
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
+        deployApplicationCluster(jobSpec, conf);
+    }
+
+    protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
         if (deployFailure) {
             throw new Exception("Deployment failure");
         }
@@ -356,6 +361,13 @@ public class TestingFlinkService extends AbstractFlinkService {
                 System.currentTimeMillis(),
                 new int[ExecutionState.values().length],
                 0);
+    }
+
+    @Override
+    public void cancelJob(
+            FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration configuration)
+            throws Exception {
+        cancelJob(deployment, upgradeMode, configuration, false);
     }
 
     private String cancelJob(FlinkVersion flinkVersion, JobID jobID, boolean savepoint)
