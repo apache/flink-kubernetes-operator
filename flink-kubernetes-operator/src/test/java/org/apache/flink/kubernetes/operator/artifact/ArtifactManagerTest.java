@@ -62,7 +62,9 @@ public class ArtifactManagerTest {
 
     @Test
     public void testGenerateJarDir() {
-        String baseDir = artifactManager.generateJarDir(TestUtils.buildSessionJob());
+        var sessionJob = TestUtils.buildSessionJob();
+        String baseDir =
+                artifactManager.generateJarDir(sessionJob.getMetadata(), sessionJob.getSpec());
         String expected =
                 tempDir.toString()
                         + File.separator

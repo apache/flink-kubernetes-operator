@@ -33,7 +33,7 @@ import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.observer.sessionjob.SessionJobObserver;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
-import org.apache.flink.kubernetes.operator.reconciler.sessionjob.FlinkSessionJobReconciler;
+import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -133,8 +133,9 @@ public class FlinkOperator {
     }
 
     private void registerSessionJobController() {
-        var reconciler = new FlinkSessionJobReconciler(client, flinkService, configManager);
         var eventRecorder = EventRecorder.create(client, listeners);
+        var reconciler =
+                new SessionJobReconciler(client, flinkService, configManager, eventRecorder);
         var statusRecorder = StatusRecorder.<FlinkSessionJobStatus>create(client, listeners);
         var observer =
                 new SessionJobObserver(flinkService, configManager, statusRecorder, eventRecorder);

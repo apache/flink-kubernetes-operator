@@ -68,6 +68,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 public class FlinkServiceTest {
     KubernetesClient client;
     private final Configuration configuration = new Configuration();
+    private final FlinkConfigManager configManager = new FlinkConfigManager(configuration);
 
     @BeforeEach
     public void setup() {
@@ -98,7 +99,8 @@ public class FlinkServiceTest {
 
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         deployment.getStatus().getJobStatus().setState("RUNNING");
-        flinkService.cancelJob(deployment, UpgradeMode.STATELESS);
+        flinkService.cancelJob(
+                deployment, UpgradeMode.STATELESS, configManager.getObserveConfig(deployment));
         assertTrue(cancelFuture.isDone());
         assertEquals(jobID, cancelFuture.get());
         assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
@@ -134,7 +136,8 @@ public class FlinkServiceTest {
         ReconciliationUtils.updateForSpecReconciliationSuccess(
                 deployment, JobState.RUNNING, new Configuration());
 
-        flinkService.cancelJob(deployment, UpgradeMode.SAVEPOINT);
+        flinkService.cancelJob(
+                deployment, UpgradeMode.SAVEPOINT, configManager.getObserveConfig(deployment));
         assertTrue(stopWithSavepointFuture.isDone());
         assertEquals(jobID, stopWithSavepointFuture.get().f0);
         assertFalse(stopWithSavepointFuture.get().f1);
@@ -166,7 +169,8 @@ public class FlinkServiceTest {
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
 
-        flinkService.cancelJob(deployment, UpgradeMode.LAST_STATE);
+        flinkService.cancelJob(
+                deployment, UpgradeMode.LAST_STATE, configManager.getObserveConfig(deployment));
         assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
         assertNull(
                 client.apps()

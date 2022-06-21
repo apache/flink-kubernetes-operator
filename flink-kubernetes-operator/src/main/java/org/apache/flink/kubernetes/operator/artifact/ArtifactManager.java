@@ -19,9 +19,10 @@ package org.apache.flink.kubernetes.operator.artifact;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.util.FlinkRuntimeException;
 
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,15 +65,14 @@ public class ArtifactManager {
         }
     }
 
-    public String generateJarDir(FlinkSessionJob sessionJob) {
+    public String generateJarDir(ObjectMeta meta, FlinkSessionJobSpec spec) {
         return String.join(
                 File.separator,
                 new String[] {
                     new File(configManager.getOperatorConfiguration().getArtifactsBaseDir())
-                            .getAbsolutePath(),
-                    sessionJob.getMetadata().getNamespace(),
-                    sessionJob.getSpec().getDeploymentName(),
-                    sessionJob.getMetadata().getName()
+                                    .getAbsolutePath(),
+                            meta.getNamespace(),
+                    spec.getDeploymentName(), meta.getName()
                 });
     }
 }

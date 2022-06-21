@@ -26,7 +26,7 @@ import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.VoidObserverContext;
-import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobHelper;
+import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -103,13 +103,12 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
 
         Optional<FlinkDeployment> flinkDepOpt = context.getSecondaryResource(FlinkDeployment.class);
 
-        var helper = new SessionJobHelper(flinkSessionJob, LOG);
-
-        if (!helper.sessionClusterReady(flinkDepOpt)) {
+        if (!SessionJobReconciler.sessionClusterReady(flinkDepOpt)) {
             return;
         }
 
-        var deployedConfig = configManager.getSessionJobConfig(flinkDepOpt.get(), flinkSessionJob);
+        var deployedConfig =
+                configManager.getSessionJobConfig(flinkDepOpt.get(), flinkSessionJob.getSpec());
         var jobFound =
                 jobStatusObserver.observe(
                         flinkSessionJob, deployedConfig, VoidObserverContext.INSTANCE);

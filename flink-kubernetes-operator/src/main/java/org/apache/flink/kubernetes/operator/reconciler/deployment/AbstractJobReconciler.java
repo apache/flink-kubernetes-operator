@@ -1,0 +1,211 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.flink.kubernetes.operator.reconciler.deployment;
+
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+
+import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Optional;
+
+/**
+ * Reconciler responsible for handling the job lifecycle according to the desired and current
+ * states.
+ */
+public abstract class AbstractJobReconciler<
+                CR extends AbstractFlinkResource<SPEC, STATUS>,
+                SPEC extends AbstractFlinkSpec,
+                STATUS extends CommonStatus<SPEC>>
+        extends AbstractFlinkResourceReconciler<CR, SPEC, STATUS> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(AbstractJobReconciler.class);
+
+    public AbstractJobReconciler(
+            KubernetesClient kubernetesClient,
+            FlinkService flinkService,
+            FlinkConfigManager configManager,
+            EventRecorder eventRecorder) {
+        super(kubernetesClient, flinkService, configManager, eventRecorder);
+    }
+
+    @Override
+    public boolean readyToReconcile(CR resource, Context context, Configuration deployConfig) {
+        if (shouldWaitForPendingSavepoint(
+                resource.getStatus().getJobStatus(),
+                getDeployConfig(resource.getMetadata(), resource.getSpec(), context))) {
+            LOG.info("Delaying job reconciliation until pending savepoint is completed.");
+            return false;
+        }
+        return true;
+    }
+
+    private boolean shouldWaitForPendingSavepoint(JobStatus jobStatus, Configuration conf) {
+        return !conf.getBoolean(
+                        KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT)
+                && SavepointUtils.savepointInProgress(jobStatus);
+    }
+
+    @Override
+    protected void reconcileSpecChange(
+            CR resource, Configuration observeConfig, Configuration deployConfig) throws Exception {
+        var deployMeta = resource.getMetadata();
+        STATUS status = resource.getStatus();
+        var reconciliationStatus = status.getReconciliationStatus();
+        SPEC lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        SPEC currentDeploySpec = resource.getSpec();
+
+        JobState currentJobState = lastReconciledSpec.getJob().getState();
+        JobState desiredJobState = currentDeploySpec.getJob().getState();
+        JobState newState = currentJobState;
+        if (currentJobState == JobState.RUNNING) {
+            if (desiredJobState == JobState.RUNNING) {
+                LOG.info("Upgrading/Restarting running job, suspending first...");
+            }
+            Optional<UpgradeMode> availableUpgradeMode =
+                    getAvailableUpgradeMode(resource, deployConfig, observeConfig);
+            if (availableUpgradeMode.isEmpty()) {
+                return;
+            }
+            // We must record the upgrade mode used to the status later
+            currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.get());
+            cancelJob(resource, availableUpgradeMode.get(), observeConfig);
+            newState = JobState.SUSPENDED;
+        }
+        if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
+            restoreJob(
+                    deployMeta,
+                    currentDeploySpec,
+                    status,
+                    deployConfig,
+                    // We decide to enforce HA based on how job was previously suspended
+                    lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
+            newState = JobState.RUNNING;
+        }
+        ReconciliationUtils.updateForSpecReconciliationSuccess(resource, newState, deployConfig);
+    }
+
+    protected Optional<UpgradeMode> getAvailableUpgradeMode(
+            CR resource, Configuration deployConfig, Configuration observeConfig) {
+        var status = resource.getStatus();
+        var upgradeMode = resource.getSpec().getJob().getUpgradeMode();
+        var changedToLastStateWithoutHa =
+                ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
+                        resource, observeConfig);
+
+        if (upgradeMode == UpgradeMode.STATELESS) {
+            LOG.info("Stateless job, ready for upgrade");
+            return Optional.of(upgradeMode);
+        }
+
+        if (ReconciliationUtils.isJobInTerminalState(status)) {
+            LOG.info(
+                    "Job is in terminal state, ready for upgrade from observed latest checkpoint/savepoint");
+            return Optional.of(UpgradeMode.SAVEPOINT);
+        }
+
+        if (ReconciliationUtils.isJobRunning(status)) {
+            LOG.info("Job is in running state, ready for upgrade with {}", upgradeMode);
+            if (changedToLastStateWithoutHa) {
+                LOG.info(
+                        "Using savepoint upgrade mode when switching to last-state without HA previously enabled");
+                return Optional.of(UpgradeMode.SAVEPOINT);
+            } else {
+                return Optional.of(upgradeMode);
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    protected void restoreJob(
+            ObjectMeta meta,
+            SPEC spec,
+            STATUS status,
+            Configuration deployConfig,
+            boolean requireHaMetadata)
+            throws Exception {
+        Optional<String> savepointOpt = Optional.empty();
+
+        if (spec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
+            savepointOpt =
+                    Optional.ofNullable(status.getJobStatus().getSavepointInfo().getLastSavepoint())
+                            .flatMap(s -> Optional.ofNullable(s.getLocation()));
+        }
+
+        deploy(meta, spec, status, deployConfig, savepointOpt, requireHaMetadata);
+    }
+
+    @Override
+    protected void rollback(CR resource, Context context, Configuration observeConfig)
+            throws Exception {
+        var reconciliationStatus = resource.getStatus().getReconciliationStatus();
+        var rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
+
+        UpgradeMode upgradeMode = resource.getSpec().getJob().getUpgradeMode();
+
+        cancelJob(
+                resource,
+                upgradeMode == UpgradeMode.STATELESS
+                        ? UpgradeMode.STATELESS
+                        : UpgradeMode.LAST_STATE,
+                observeConfig);
+
+        restoreJob(
+                resource.getMetadata(),
+                rollbackSpec,
+                resource.getStatus(),
+                getDeployConfig(resource.getMetadata(), rollbackSpec, context),
+                upgradeMode != UpgradeMode.STATELESS);
+
+        reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
+    }
+
+    @Override
+    public boolean reconcileOtherChanges(CR resource, Configuration observeConfig)
+            throws Exception {
+        return SavepointUtils.triggerSavepointIfNeeded(flinkService, resource, observeConfig);
+    }
+
+    /**
+     * Cancel the job for the given resource using the specified upgrade mode.
+     *
+     * @param resource Related Flink resource.
+     * @param upgradeMode
+     * @param observeConfig Observe configuration.
+     * @throws Exception
+     */
+    protected abstract void cancelJob(
+            CR resource, UpgradeMode upgradeMode, Configuration observeConfig) throws Exception;
+}
