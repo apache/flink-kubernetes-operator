@@ -30,6 +30,9 @@ image:
 rbac:
   create: true
 
+operatorPod:
+   annotations: {}
+
 operatorServiceAccount:
   create: true
   annotations: {}
