@@ -318,7 +318,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                     && deployment.getStatus().getJobManagerDeploymentStatus()
                             != JobManagerDeploymentStatus.MISSING
                     && ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-                            deployment, configManager)) {
+                            deployment, configManager.getObserveConfig(deployment))) {
                 return Optional.of(
                         String.format(
                                 "Job could not be upgraded to last-state while config key[%s] is not set",

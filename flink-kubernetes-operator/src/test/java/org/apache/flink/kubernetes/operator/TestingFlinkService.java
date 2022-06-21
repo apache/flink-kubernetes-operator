@@ -28,10 +28,9 @@ import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
-import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
@@ -85,7 +84,6 @@ public class TestingFlinkService extends FlinkService {
 
     private final List<Tuple2<String, JobStatusMessage>> jobs = new ArrayList<>();
     private final Map<JobID, String> jobErrors = new HashMap<>();
-    private final Map<JobID, SubmittedJobInfo> sessionJobs = new HashMap<>();
     private final Set<String> sessions = new HashSet<>();
     private boolean isPortReady = true;
     private boolean haDataAvailable = true;
@@ -138,7 +136,6 @@ public class TestingFlinkService extends FlinkService {
     public void clear() {
         jobs.clear();
         sessions.clear();
-        sessionJobs.clear();
     }
 
     @Override
@@ -185,16 +182,24 @@ public class TestingFlinkService extends FlinkService {
 
     @Override
     public JobID submitJobToSessionCluster(
-            FlinkSessionJob sessionJob, Configuration conf, @Nullable String savepoint) {
+            ObjectMeta meta,
+            FlinkSessionJobSpec spec,
+            Configuration conf,
+            @Nullable String savepoint)
+            throws Exception {
+
+        if (deployFailure) {
+            throw new Exception("Deployment failure");
+        }
         JobID jobID = new JobID();
         JobStatusMessage jobStatusMessage =
                 new JobStatusMessage(
                         jobID,
-                        sessionJob.getMetadata().getName(),
+                        conf.getString(KubernetesConfigOptions.CLUSTER_ID),
                         JobStatus.RUNNING,
                         System.currentTimeMillis());
-        sessionJob.getStatus().getJobStatus().setJobId(jobID.toHexString());
-        sessionJobs.put(jobID, new SubmittedJobInfo(savepoint, jobStatusMessage, conf));
+
+        jobs.add(Tuple2.of(savepoint, jobStatusMessage));
         return jobID;
     }
 
@@ -216,24 +221,6 @@ public class TestingFlinkService extends FlinkService {
 
     public long getRunningCount() {
         return jobs.stream().filter(t -> !t.f1.getJobState().isTerminalState()).count();
-    }
-
-    public Map<JobID, SubmittedJobInfo> listSessionJobs() {
-        return new HashMap<>(sessionJobs);
-    }
-
-    @Override
-    public Optional<String> cancelSessionJob(
-            JobID jobID, UpgradeMode upgradeMode, Configuration conf) throws Exception {
-        if (sessionJobs.remove(jobID) == null) {
-            throw new Exception("Job not found");
-        }
-
-        if (upgradeMode == UpgradeMode.SAVEPOINT) {
-            return Optional.of("savepoint_" + savepointCounter++);
-        } else {
-            return Optional.empty();
-        }
     }
 
     @Override
@@ -275,12 +262,8 @@ public class TestingFlinkService extends FlinkService {
                                     .equals(KubernetesDeploymentTarget.APPLICATION.getName())) {
                         throw new RuntimeException("Trying to list a job without submitting it");
                     }
-                    var lists = jobs.stream().map(t -> t.f1).collect(Collectors.toList());
-                    lists.addAll(
-                            sessionJobs.values().stream()
-                                    .map(t -> t.jobStatusMessage)
-                                    .collect(Collectors.toList()));
-                    return CompletableFuture.completedFuture(lists);
+                    return CompletableFuture.completedFuture(
+                            jobs.stream().map(t -> t.f1).collect(Collectors.toList()));
                 });
 
         clusterClient.setStopWithSavepointFunction(

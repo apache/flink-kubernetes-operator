@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
-import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
@@ -489,21 +488,18 @@ public class ApplicationReconcilerTest {
         ObjectMeta deployMeta = flinkApp.getMetadata();
         FlinkDeploymentStatus status = flinkApp.getStatus();
         FlinkDeploymentSpec spec = flinkApp.getSpec();
-        JobSpec jobSpec = spec.getJob();
         Configuration deployConfig = configManager.getDeployConfig(deployMeta, spec);
 
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-        reconciler.deployFlinkJob(
-                deployMeta, jobSpec, status, deployConfig, Optional.empty(), false);
+        reconciler.deploy(deployMeta, spec, status, deployConfig, Optional.empty(), false);
 
         String path1 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path1.startsWith(haStoragePath));
 
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-        reconciler.deployFlinkJob(
-                deployMeta, jobSpec, status, deployConfig, Optional.empty(), false);
+        reconciler.deploy(deployMeta, spec, status, deployConfig, Optional.empty(), false);
         String path2 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path2.startsWith(haStoragePath));
         assertNotEquals(path1, path2);
