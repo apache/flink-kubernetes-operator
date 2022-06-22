@@ -50,12 +50,11 @@ public class FlinkOperatorConfiguration {
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
-                operatorConfig.get(
-                        KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL);
+                operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL);
 
         int reconcilerMaxParallelism =
                 operatorConfig.getInteger(
-                        KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_MAX_PARALLELISM);
+                        KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_PARALLELISM);
 
         Duration restApiReadyDelay =
                 operatorConfig.get(
@@ -66,18 +65,15 @@ public class FlinkOperatorConfiguration {
                         KubernetesOperatorConfigOptions.OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL);
 
         Duration flinkClientTimeout =
-                operatorConfig.get(
-                        KubernetesOperatorConfigOptions.OPERATOR_OBSERVER_FLINK_CLIENT_TIMEOUT);
+                operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_FLINK_CLIENT_TIMEOUT);
 
         Duration flinkCancelJobTimeout =
                 operatorConfig.get(
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_RECONCILER_FLINK_CANCEL_JOB_TIMEOUT);
+                        KubernetesOperatorConfigOptions.OPERATOR_FLINK_CLIENT_CANCEL_TIMEOUT);
 
         Duration flinkShutdownClusterTimeout =
                 operatorConfig.get(
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_RECONCILER_FLINK_CLUSTER_SHUTDOWN_TIMEOUT);
+                        KubernetesOperatorConfigOptions.OPERATOR_RESOURCE_CLEANUP_TIMEOUT);
 
         String artifactsBaseDir =
                 operatorConfig.get(

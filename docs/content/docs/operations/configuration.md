@@ -44,7 +44,7 @@ defaultConfiguration:
     kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
     kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE
 
-    kubernetes.operator.reconciler.reschedule.interval: 15 s
+    kubernetes.operator.reconcile.interval: 15 s
     kubernetes.operator.observer.progress-check.interval: 5 s
 ```
 
@@ -60,12 +60,12 @@ Verify whether dynamic operator configuration updates is enabled via the `deploy
 2022-05-28 13:08:29,222 o.a.f.k.o.c.FlinkConfigManager [INFO ] Enabled dynamic config updates, checking config changes every PT5M
 ```
 
-To change config values dynamically the ConfigMap can be directly edited via `kubectl patch` or `kubectl edit` command. For example to change the reschedule interval you can override `kubernetes.operator.reconciler.reschedule.interval`.
+To change config values dynamically the ConfigMap can be directly edited via `kubectl patch` or `kubectl edit` command. For example to change the reschedule interval you can override `kubernetes.operator.reconcile.interval`.
 
-Verify whether the config value of `kubernetes.operator.reconciler.reschedule.interval` is updated to 30 seconds via the `deploy/flink-kubernetes-operator` log has:
+Verify whether the config value of `kubernetes.operator.reconcile.interval` is updated to 30 seconds via the `deploy/flink-kubernetes-operator` log has:
 
 ```text
-2022-05-28 13:08:30,115 o.a.f.k.o.c.FlinkConfigManager [INFO ] Updating default configuration to {kubernetes.operator.reconciler.reschedule.interval=PT30S}
+2022-05-28 13:08:30,115 o.a.f.k.o.c.FlinkConfigManager [INFO ] Updating default configuration to {kubernetes.operator.reconcile.interval=PT30S}
 ```
 
 ## Operator Configuration Reference

@@ -201,7 +201,7 @@ It is therefore very likely that savepoints live beyond the max age configuratio
 ## Recovery of missing job deployments
 
 When Kubernetes HA is enabled, the operator can recover the Flink cluster deployments in cases when it was accidentally deleted
-by the user or some external process. Deployment recovery can be turned off in the configuration by setting `kubernetes.operator.reconciler.jm-deployment-recovery.enabled` to `false`, however it is recommended to keep this setting on the default `true` value.
+by the user or some external process. Deployment recovery can be turned off in the configuration by setting `kubernetes.operator.jm-deployment-recovery.enabled` to `false`, however it is recommended to keep this setting on the default `true` value.
 
 This is not something that would usually happen during normal operation and can also indicate a deeper problem, 
 therefore an Error event is also triggered by the system when it detects a missing deployment.
