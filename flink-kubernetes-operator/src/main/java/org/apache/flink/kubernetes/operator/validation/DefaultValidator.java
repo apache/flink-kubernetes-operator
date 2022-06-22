@@ -89,7 +89,11 @@ public class DefaultValidator implements FlinkResourceValidator {
                         deployment.getMetadata().getName(),
                         deployment.getMetadata().getNamespace()),
                 validateLogConfig(spec.getLogConfiguration()),
-                validateJobSpec(spec.getJob(), spec.getTaskManager(), effectiveConfig),
+                validateJobSpec(
+                        spec.getJob(),
+                        spec.getTaskManager(),
+                        effectiveConfig,
+                        KubernetesDeploymentMode.getDeploymentMode(deployment)),
                 validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager()),
                 validateSpecChange(deployment, effectiveConfig),
@@ -174,7 +178,10 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateJobSpec(
-            JobSpec job, @Nullable TaskManagerSpec tm, Map<String, String> confMap) {
+            JobSpec job,
+            @Nullable TaskManagerSpec tm,
+            Map<String, String> confMap,
+            KubernetesDeploymentMode mode) {
         if (job == null) {
             return Optional.empty();
         }
@@ -197,6 +204,10 @@ public class DefaultValidator implements FlinkResourceValidator {
                         String.format(
                                 "Checkpoint directory[%s] must be defined for last-state and savepoint upgrade modes",
                                 CheckpointingOptions.CHECKPOINTS_DIRECTORY.key()));
+            }
+
+            if (mode == KubernetesDeploymentMode.STANDALONE) {
+                return Optional.of("Standalone mode currently only support stateless upgrade mode");
             }
         }
 
@@ -377,7 +388,11 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateNotApplicationCluster(sessionCluster),
                 validateSessionClusterId(sessionJob, sessionCluster),
-                validateJobSpec(sessionJob.getSpec().getJob(), null, effectiveConfig));
+                validateJobSpec(
+                        sessionJob.getSpec().getJob(),
+                        null,
+                        effectiveConfig,
+                        KubernetesDeploymentMode.getDeploymentMode(sessionCluster)));
     }
 
     private Optional<String> validateJobNotEmpty(FlinkSessionJob sessionJob) {
