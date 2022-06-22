@@ -30,10 +30,11 @@ import java.util.Map;
 /** This class holds configuration constants used by flink operator. */
 public class KubernetesOperatorConfigOptions {
 
-    public static final ConfigOption<Duration> OPERATOR_RECONCILER_RESCHEDULE_INTERVAL =
-            ConfigOptions.key("kubernetes.operator.reconciler.reschedule.interval")
+    public static final ConfigOption<Duration> OPERATOR_RECONCILE_INTERVAL =
+            ConfigOptions.key("kubernetes.operator.reconcile.interval")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(60))
+                    .withDeprecatedKeys("kubernetes.operator.reconciler.reschedule.interval")
                     .withDescription(
                             "The interval for the controller to reschedule the reconcile process.");
 
@@ -44,10 +45,11 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Final delay before deployment is marked ready after port becomes accessible.");
 
-    public static final ConfigOption<Integer> OPERATOR_RECONCILER_MAX_PARALLELISM =
-            ConfigOptions.key("kubernetes.operator.reconciler.max.parallelism")
+    public static final ConfigOption<Integer> OPERATOR_RECONCILE_PARALLELISM =
+            ConfigOptions.key("kubernetes.operator.reconcile.parallelism")
                     .intType()
                     .defaultValue(ConfigurationService.DEFAULT_RECONCILIATION_THREADS_NUMBER)
+                    .withDeprecatedKeys("kubernetes.operator.reconciler.max.parallelism")
                     .withDescription(
                             "The maximum number of threads running the reconciliation loop. Use -1 for infinite.");
 
@@ -67,26 +69,30 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The interval before a savepoint trigger attempt is marked as unsuccessful.");
 
-    public static final ConfigOption<Duration> OPERATOR_OBSERVER_FLINK_CLIENT_TIMEOUT =
-            ConfigOptions.key("kubernetes.operator.observer.flink.client.timeout")
+    public static final ConfigOption<Duration> OPERATOR_FLINK_CLIENT_TIMEOUT =
+            ConfigOptions.key("kubernetes.operator.flink.client.timeout")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(10))
+                    .withDeprecatedKeys("kubernetes.operator.observer.flink.client.timeout")
                     .withDescription(
                             "The timeout for the observer to wait the flink rest client to return.");
 
-    public static final ConfigOption<Duration> OPERATOR_RECONCILER_FLINK_CANCEL_JOB_TIMEOUT =
-            ConfigOptions.key("kubernetes.operator.reconciler.flink.cancel.job.timeout")
+    public static final ConfigOption<Duration> OPERATOR_FLINK_CLIENT_CANCEL_TIMEOUT =
+            ConfigOptions.key("kubernetes.operator.flink.client.cancel.timeout")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(1))
+                    .withDeprecatedKeys("kubernetes.operator.reconciler.flink.cancel.job.timeout")
                     .withDescription(
                             "The timeout for the reconciler to wait for flink to cancel job.");
 
-    public static final ConfigOption<Duration> OPERATOR_RECONCILER_FLINK_CLUSTER_SHUTDOWN_TIMEOUT =
-            ConfigOptions.key("kubernetes.operator.reconciler.flink.cluster.shutdown.timeout")
+    public static final ConfigOption<Duration> OPERATOR_RESOURCE_CLEANUP_TIMEOUT =
+            ConfigOptions.key("kubernetes.operator.resource.cleanup.timeout")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(60))
+                    .withDeprecatedKeys(
+                            "kubernetes.operator.reconciler.flink.cluster.shutdown.timeout")
                     .withDescription(
-                            "The timeout for the reconciler to wait for flink to shutdown cluster.");
+                            "The timeout for the resource clean up to wait for flink to shutdown cluster.");
 
     public static final ConfigOption<Boolean> DEPLOYMENT_ROLLBACK_ENABLED =
             ConfigOptions.key("kubernetes.operator.deployment.rollback.enabled")
@@ -139,10 +145,12 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(1000)
                     .withDescription("Max config cache size.");
 
-    public static final ConfigOption<Boolean> OPERATOR_RECOVER_JM_DEPLOYMENT_ENABLED =
-            ConfigOptions.key("kubernetes.operator.reconciler.jm-deployment-recovery.enabled")
+    public static final ConfigOption<Boolean> OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED =
+            ConfigOptions.key("kubernetes.operator.jm-deployment-recovery.enabled")
                     .booleanType()
                     .defaultValue(true)
+                    .withDeprecatedKeys(
+                            "kubernetes.operator.reconciler.jm-deployment-recovery.enabled")
                     .withDescription(
                             "Whether to enable recovery of missing/deleted jobmanager deployments.");
 

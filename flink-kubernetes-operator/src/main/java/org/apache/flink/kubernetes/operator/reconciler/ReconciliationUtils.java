@@ -309,7 +309,7 @@ public class ReconciliationUtils {
 
         if (!ReconciliationUtils.jmMissingForRunningDeployment(deployment)
                 || !conf.get(
-                        KubernetesOperatorConfigOptions.OPERATOR_RECOVER_JM_DEPLOYMENT_ENABLED)) {
+                        KubernetesOperatorConfigOptions.OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED)) {
             return false;
         }
 

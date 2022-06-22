@@ -420,12 +420,12 @@ public class DefaultValidatorTest {
                             .setFlinkConfiguration(
                                     Map.of(
                                             KubernetesOperatorConfigOptions
-                                                    .OPERATOR_RECONCILER_RESCHEDULE_INTERVAL
+                                                    .OPERATOR_RECONCILE_INTERVAL
                                                     .key(),
                                             "60"));
                 },
                 flinkDeployment -> {},
-                "Invalid session job flinkConfiguration key: kubernetes.operator.reconciler.reschedule.interval."
+                "Invalid session job flinkConfiguration key: kubernetes.operator.reconcile.interval."
                         + " Allowed keys are [kubernetes.operator.user.artifacts.http.header]");
     }
 

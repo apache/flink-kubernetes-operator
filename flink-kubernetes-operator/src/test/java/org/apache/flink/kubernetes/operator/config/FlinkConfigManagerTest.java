@@ -98,12 +98,10 @@ public class FlinkConfigManagerTest {
         assertFalse(
                 configManager
                         .getDefaultConfig()
-                        .contains(
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_RECONCILER_RESCHEDULE_INTERVAL));
+                        .contains(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));
 
         config.set(
-                KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL,
+                KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL,
                 Duration.ofSeconds(15));
 
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
@@ -114,8 +112,7 @@ public class FlinkConfigManagerTest {
                 deployment, JobState.RUNNING, config);
         Configuration deployConfig = configManager.getObserveConfig(deployment);
         assertFalse(
-                deployConfig.contains(
-                        KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_RESCHEDULE_INTERVAL));
+                deployConfig.contains(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));
         assertTrue(new File(deployConfig.get(DeploymentOptionsInternal.CONF_DIR)).exists());
         assertTrue(
                 new File(deployConfig.get(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE))
@@ -157,9 +154,7 @@ public class FlinkConfigManagerTest {
                 Duration.ofSeconds(15),
                 configManager
                         .getDefaultConfig()
-                        .get(
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_RECONCILER_RESCHEDULE_INTERVAL));
+                        .get(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));
         assertEquals(
                 Duration.ofSeconds(15),
                 configManager.getOperatorConfiguration().getReconcileInterval());
@@ -168,8 +163,6 @@ public class FlinkConfigManagerTest {
                 Duration.ofSeconds(15),
                 configManager
                         .getObserveConfig(deployment)
-                        .get(
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_RECONCILER_RESCHEDULE_INTERVAL));
+                        .get(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));
     }
 }

@@ -53,8 +53,7 @@ public class FlinkOperatorTest {
         parallelism.ifPresent(
                 p ->
                         operatorConfig.setInteger(
-                                KubernetesOperatorConfigOptions.OPERATOR_RECONCILER_MAX_PARALLELISM,
-                                p));
+                                KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_PARALLELISM, p));
         new FlinkOperator(operatorConfig);
         return ConfigurationServiceProvider.instance().getExecutorService();
     }
