@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,7 +67,7 @@ public abstract class AbstractDeploymentReconciler implements Reconciler<FlinkDe
         ReconciliationStatus<?> reconciliationStatus = status.getReconciliationStatus();
         if (reconciliationStatus.getState() != ReconciliationState.ROLLING_BACK) {
             LOG.warn("Preparing to roll back to last stable spec.");
-            if (status.getError() == null) {
+            if (StringUtils.isEmpty(status.getError())) {
                 status.setError(
                         "Deployment is not ready within the configured timeout, rolling back.");
             }
