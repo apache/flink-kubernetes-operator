@@ -34,13 +34,18 @@ spec:
     metadata:
       labels:
         {{- include "flink-operator.selectorLabels" . | nindent 8 }}
+        {{- if index (.Values.operatorPod) "labels" }}
+          {{- with .Values.operatorPod.labels }}
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
+        {{- end }}
       annotations:
         kubectl.kubernetes.io/default-container: {{ .Chart.Name }}
-       {{- if index (.Values.operatorPod) "annotations" }}
-        {{- with .Values.operatorPod.annotations }}
-          {{- toYaml . | nindent 8 }}
+        {{- if index (.Values.operatorPod) "annotations" }}
+          {{- with .Values.operatorPod.annotations }}
+            {{- toYaml . | nindent 8 }}
+          {{- end }}
         {{- end }}
-       {{- end }}
     spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
