@@ -64,6 +64,8 @@ The configurable parameters of the Helm chart and which default values as detail
 | image.pullPolicy | The image pull policy of flink-kubernetes-operator. | IfNotPresent |
 | image.tag | The image tag of flink-kubernetes-operator. | latest |
 | rbac.create | Whether to enable RBAC to create for said namespaces. | true |
+| operatorPod.annotations | Custom annotations to be added to the operator pod (but not the deployment). | |
+| operatorPod.labels | Custom labels to be added to the operator pod (but not the deployment). | |
 | operatorServiceAccount.create | Whether to enable operator service account to create for flink-kubernetes-operator. | true |
 | operatorServiceAccount.annotations | The annotations of operator service account. | |
 | operatorServiceAccount.name | The name of operator service account. | flink-operator |
@@ -78,7 +80,7 @@ The configurable parameters of the Helm chart and which default values as detail
 | operatorSecurityContext | Defines privilege and access control settings for a pod or container for operator security context.  | |
 | webhookSecurityContext | Defines privilege and access control settings for a pod or container for webhook security context. | |
 | webhook.create | Whether to enable webhook validator to create for flink-kubernetes-operator.                        | true |
-| wenhook.mutator.create | Whether to enable webhook mutator to create for flink-kubernetes-operator. | True |
+| webhook.mutator.create | Whether to enable webhook mutator to create for flink-kubernetes-operator. | true |
 | webhook.keystore | The ConfigMap of webhook key store. | useDefaultPassword: true |
 | defaultConfiguration.create | Whether to enable default configuration to create for flink-kubernetes-operator. | true |
 | defaultConfiguration.append | Whether to append configuration files with configs.  | true |

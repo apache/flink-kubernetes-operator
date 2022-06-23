@@ -32,6 +32,7 @@ rbac:
 
 operatorPod:
    annotations: {}
+   labels: {}
 
 operatorServiceAccount:
   create: true
