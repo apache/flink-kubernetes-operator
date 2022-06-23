@@ -76,7 +76,7 @@ public class ReconciliationUtils {
         var spec = target.getSpec();
 
         ReconciliationStatus<SPEC> reconciliationStatus = status.getReconciliationStatus();
-        status.setError(null);
+        status.setError("");
 
         // For application deployments we update the taskmanager info
         if (target instanceof FlinkDeployment && spec.getJob() != null) {

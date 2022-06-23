@@ -224,7 +224,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.ERROR
                 && !JobStatus.FAILED.name().equals(dep.getStatus().getJobStatus().getState())
                 && reconciliationStatus.isLastReconciledSpecStable()) {
-            status.setError(null);
+            status.setError("");
         }
     }
 

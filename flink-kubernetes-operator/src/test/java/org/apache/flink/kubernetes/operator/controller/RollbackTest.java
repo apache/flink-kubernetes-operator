@@ -315,7 +315,7 @@ public class RollbackTest {
         assertEquals(
                 ReconciliationState.DEPLOYED,
                 deployment.getStatus().getReconciliationStatus().getState());
-        assertNull(deployment.getStatus().getError());
+        assertEquals("", deployment.getStatus().getError());
 
         deployment.getSpec().setRestartNonce(456L);
         triggerRollback.run();
@@ -347,7 +347,7 @@ public class RollbackTest {
             assertEquals(
                     ReconciliationState.DEPLOYED,
                     deployment.getStatus().getReconciliationStatus().getState());
-            assertNull(deployment.getStatus().getError());
+            assertEquals("", deployment.getStatus().getError());
 
             deployment.getSpec().getJob().setState(JobState.RUNNING);
             testController.reconcile(deployment, context);
@@ -360,7 +360,7 @@ public class RollbackTest {
             assertEquals(
                     ReconciliationState.DEPLOYED,
                     deployment.getStatus().getReconciliationStatus().getState());
-            assertNull(deployment.getStatus().getError());
+            assertEquals("", deployment.getStatus().getError());
 
             // Verify suspending a rolled back job
             triggerRollback.run();
@@ -378,7 +378,7 @@ public class RollbackTest {
             assertEquals(
                     ReconciliationState.DEPLOYED,
                     deployment.getStatus().getReconciliationStatus().getState());
-            assertNull(deployment.getStatus().getError());
+            assertEquals("", deployment.getStatus().getError());
         }
     }
 }
