@@ -78,6 +78,10 @@ spec:
               value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.operator }}
+            {{- range $k, $v := .Values.operatorPod.env }}
+            - name: {{ $v.name }}
+              value: {{ $v.value }}
+            {{- end }}
           securityContext:
             {{- toYaml .Values.operatorSecurityContext | nindent 12 }}
           volumeMounts:

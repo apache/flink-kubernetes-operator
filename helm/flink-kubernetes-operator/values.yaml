@@ -31,8 +31,11 @@ rbac:
   create: true
 
 operatorPod:
-   annotations: {}
-   labels: {}
+  annotations: {}
+  labels: {}
+  env:
+  # - name: ""
+  #   value: ""
 
 operatorServiceAccount:
   create: true
