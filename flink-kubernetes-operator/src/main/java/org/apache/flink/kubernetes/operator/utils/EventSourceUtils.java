@@ -27,11 +27,13 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import io.javaoperatorsdk.operator.processing.event.source.PrimaryToSecondaryMapper;
 import io.javaoperatorsdk.operator.processing.event.source.informer.InformerEventSource;
 import io.javaoperatorsdk.operator.processing.event.source.informer.Mappers;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /** Utility class to locate secondary resources. */
@@ -71,7 +73,7 @@ public class EventSourceUtils {
                         FLINK_DEPLOYMENT_IDX,
                         flinkDeployment ->
                                 List.of(
-                                        compositeKey(
+                                        indexKey(
                                                 flinkDeployment.getMetadata().getName(),
                                                 flinkDeployment.getMetadata().getNamespace())));
 
@@ -82,7 +84,7 @@ public class EventSourceUtils {
                                         context.getPrimaryCache()
                                                 .byIndex(
                                                         FLINK_DEPLOYMENT_IDX,
-                                                        compositeKey(
+                                                        indexKey(
                                                                 sessionJob
                                                                         .getSpec()
                                                                         .getDeploymentName(),
@@ -106,7 +108,7 @@ public class EventSourceUtils {
                         FLINK_SESSIONJOB_IDX,
                         sessionJob ->
                                 List.of(
-                                        compositeKey(
+                                        indexKey(
                                                 sessionJob.getSpec().getDeploymentName(),
                                                 sessionJob.getMetadata().getNamespace())));
 
@@ -117,7 +119,7 @@ public class EventSourceUtils {
                                         context.getPrimaryCache()
                                                 .byIndex(
                                                         FLINK_SESSIONJOB_IDX,
-                                                        compositeKey(
+                                                        indexKey(
                                                                 flinkDeployment
                                                                         .getMetadata()
                                                                         .getName(),
@@ -127,14 +129,24 @@ public class EventSourceUtils {
                                                 .stream()
                                                 .map(ResourceID::fromResource)
                                                 .collect(Collectors.toSet()))
+                        .withPrimaryToSecondaryMapper(
+                                (PrimaryToSecondaryMapper<FlinkSessionJob>)
+                                        sessionJob ->
+                                                Set.of(
+                                                        new ResourceID(
+                                                                sessionJob
+                                                                        .getSpec()
+                                                                        .getDeploymentName(),
+                                                                sessionJob
+                                                                        .getMetadata()
+                                                                        .getNamespace())))
                         .withNamespacesInheritedFromController(context)
                         .followNamespaceChanges(true)
                         .build();
-
         return new InformerEventSource<>(configuration, context);
     }
 
-    private static String compositeKey(String name, String namespace) {
-        return String.format("%s_%s", name, namespace);
+    private static String indexKey(String name, String namespace) {
+        return name + "#" + namespace;
     }
 }

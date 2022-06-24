@@ -57,7 +57,6 @@ import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.Executors;
 
 /** Main Class for Flink native k8s operator. */
@@ -151,16 +150,8 @@ public class FlinkOperator {
     }
 
     private void overrideControllerConfigs(ControllerConfigurationOverrider<?> overrider) {
-        // TODO: https://github.com/java-operator-sdk/java-operator-sdk/issues/1259
-        String[] watchedNamespaces =
-                configManager
-                        .getOperatorConfiguration()
-                        .getWatchedNamespaces()
-                        .toArray(String[]::new);
-        String fakeNs = UUID.randomUUID().toString();
-        overrider.settingNamespace(fakeNs);
-        overrider.addingNamespaces(watchedNamespaces);
-        overrider.removingNamespaces(fakeNs);
+        overrider.settingNamespaces(
+                configManager.getOperatorConfiguration().getWatchedNamespaces());
         overrider.withRetry(
                 GenericRetry.fromConfiguration(
                         configManager.getOperatorConfiguration().getRetryConfiguration()));

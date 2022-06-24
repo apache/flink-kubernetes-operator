@@ -28,6 +28,7 @@ TIMEOUT=300
 SESSION_CLUSTER_IDENTIFIER="flinkdep/$CLUSTER_ID"
 SESSION_JOB_NAME="flink-example-statemachine"
 SESSION_JOB_IDENTIFIER="sessionjob/$SESSION_JOB_NAME"
+OPERATOR_POD_LABEL="app.kubernetes.io/name=flink-kubernetes-operator"
 
 on_exit cleanup_and_exit $APPLICATION_YAML $TIMEOUT $CLUSTER_ID
 
@@ -65,3 +66,15 @@ assert_available_slots 1 $CLUSTER_ID
 
 echo "Successfully run the sessionjob savepoint upgrade test"
 
+# Test Operator restart
+echo "Delete session job " + $SESSION_JOB_NAME
+kubectl delete flinksessionjob $SESSION_JOB_NAME
+echo "Killing the operator pod"
+kubectl delete pod -l $OPERATOR_POD_LABEL
+echo "Submitting the session job again"
+retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
+
+wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT
+wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
+wait_for_status $SESSION_CLUSTER_IDENTIFIER '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
+wait_for_status $SESSION_JOB_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1

@@ -122,9 +122,10 @@ public class FlinkConfigManager {
                 && this.defaultConfig.toMap().equals(newConf.toMap())) {
             LOG.info("Default configuration did not change, nothing to do...");
             return;
+        } else {
+            LOG.info("Setting default configuration to {}", newConf);
         }
 
-        LOG.info("Updating default configuration to {}", newConf);
         var oldNs =
                 Optional.ofNullable(this.operatorConfiguration)
                         .map(FlinkOperatorConfiguration::getWatchedNamespaces)
