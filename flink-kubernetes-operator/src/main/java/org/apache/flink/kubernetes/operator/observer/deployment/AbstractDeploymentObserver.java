@@ -278,21 +278,35 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
                     Long upgradeTargetGeneration =
                             ReconciliationUtils.getUpgradeTargetGeneration(flinkDep);
 
+                    Long currentSpecGeneration = flinkDep.getMetadata().getGeneration();
+
                     if (deployedGeneration.equals(upgradeTargetGeneration)) {
-                        logger.info(
-                                "Last reconciled generation is already deployed, setting reconciliation status to "
-                                        + ReconciliationState.DEPLOYED);
+                        logger.info("Pending upgrade is already deployed, updating status.");
 
                         var firstDeploy =
                                 status.getReconciliationStatus().getLastReconciledSpec() == null;
-                        var conf =
-                                firstDeploy
-                                        ? configManager.getDeployConfig(
-                                                flinkDep.getMetadata(), flinkDep.getSpec())
-                                        : configManager.getObserveConfig(flinkDep);
+                        if (firstDeploy) {
+                            ReconciliationUtils.updateForSpecReconciliationSuccess(
+                                    flinkDep,
+                                    JobState.RUNNING,
+                                    configManager.getDeployConfig(
+                                            flinkDep.getMetadata(), flinkDep.getSpec()));
+                        } else {
+                            ReconciliationUtils.updateStatusForAlreadyUpgraded(flinkDep);
+                        }
+
+                        status.getJobStatus()
+                                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+                        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+                    } else if (deployedGeneration.equals(currentSpecGeneration)) {
+                        logger.info(
+                                "Deployment is already upgraded to latest spec, updating status.");
 
                         ReconciliationUtils.updateForSpecReconciliationSuccess(
-                                flinkDep, JobState.RUNNING, conf);
+                                flinkDep,
+                                JobState.RUNNING,
+                                configManager.getDeployConfig(
+                                        flinkDep.getMetadata(), flinkDep.getSpec()));
                         status.getJobStatus()
                                 .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
                         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);

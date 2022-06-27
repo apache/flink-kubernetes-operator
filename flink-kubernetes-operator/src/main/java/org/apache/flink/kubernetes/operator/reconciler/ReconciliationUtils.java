@@ -224,7 +224,14 @@ public class ReconciliationUtils {
                 || currentReconState == ReconciliationState.UPGRADING;
     }
 
-    public static <T> Tuple2<T, ObjectNode> deserializeSpecWithMeta(
+    /**
+     * Deserializes the spec and custom metadata object from JSON.
+     *
+     * @param specWithMetaString JSON string.
+     * @param specClass Spec class for deserialization.
+     * @return Tuple2 of spec and meta.
+     */
+    public static <T extends AbstractFlinkSpec> Tuple2<T, ObjectNode> deserializeSpecWithMeta(
             @Nullable String specWithMetaString, Class<T> specClass) {
         if (specWithMetaString == null) {
             return null;
@@ -247,15 +254,38 @@ public class ReconciliationUtils {
         }
     }
 
+    /**
+     * Serializes the spec and custom meta information into a JSON string.
+     *
+     * @param spec Flink resource spec.
+     * @param relatedResource Related Flink resource for creating the meta object.
+     * @return Serialized json.
+     */
     public static String writeSpecWithMeta(
-            Object spec, AbstractFlinkResource<?, ?> relatedResource) {
-        ObjectNode wrapper = objectMapper.createObjectNode();
-        wrapper.set("spec", objectMapper.valueToTree(Preconditions.checkNotNull(spec)));
+            AbstractFlinkSpec spec, AbstractFlinkResource<?, ?> relatedResource) {
 
-        ObjectNode internalMeta = wrapper.putObject(INTERNAL_METADATA_JSON_KEY);
+        ObjectNode internalMeta = objectMapper.createObjectNode();
+
         internalMeta.put("apiVersion", relatedResource.getApiVersion());
         ObjectNode metadata = internalMeta.putObject("metadata");
         metadata.put("generation", relatedResource.getMetadata().getGeneration());
+
+        return writeSpecWithMeta(spec, internalMeta);
+    }
+
+    /**
+     * Serializes the spec and custom meta information into a JSON string.
+     *
+     * @param spec Flink resource spec.
+     * @param meta Custom meta object.
+     * @return Serialized json.
+     */
+    public static String writeSpecWithMeta(AbstractFlinkSpec spec, ObjectNode meta) {
+
+        ObjectNode wrapper = objectMapper.createObjectNode();
+
+        wrapper.set("spec", objectMapper.valueToTree(Preconditions.checkNotNull(spec)));
+        wrapper.set(INTERNAL_METADATA_JSON_KEY, meta);
 
         try {
             return objectMapper.writeValueAsString(wrapper);
@@ -352,22 +382,33 @@ public class ReconciliationUtils {
         return ErrorStatusUpdateControl.noStatusUpdate();
     }
 
-    public static Long getUpgradeTargetGeneration(FlinkDeployment deployment) {
+    /**
+     * Get spec generation for the current in progress upgrade.
+     *
+     * @param resource Flink resource.
+     * @return The spec generation for the upgrade.
+     */
+    public static Long getUpgradeTargetGeneration(AbstractFlinkResource<?, ?> resource) {
         var lastSpecWithMeta =
-                deployment
-                        .getStatus()
+                resource.getStatus()
                         .getReconciliationStatus()
                         .deserializeLastReconciledSpecWithMeta();
 
         if (lastSpecWithMeta == null || lastSpecWithMeta.f1 == null) {
             // For first deployments and when migrating from before this feature simply return
             // current generation
-            return deployment.getMetadata().getGeneration();
+            return resource.getMetadata().getGeneration();
         }
 
         return lastSpecWithMeta.f1.get("metadata").get("generation").asLong(-1L);
     }
 
+    /**
+     * Checks the status and if the corresponding Flink job/application is in stable running state,
+     * it updates the last stable spec.
+     *
+     * @param status Status to be updated.
+     */
     public static void checkAndUpdateStableSpec(CommonStatus<?> status) {
         var flinkJobStatus =
                 org.apache.flink.api.common.JobStatus.valueOf(status.getJobStatus().getState());
@@ -392,5 +433,22 @@ public class ReconciliationUtils {
             // If the job finished on its own, it's marked stable
             status.getReconciliationStatus().markReconciledSpecAsStable();
         }
+    }
+
+    /**
+     * Updates status in cases where a previously successful deployment wasn't recorded for any
+     * reason. We simply change the job status from SUSPENDED -> RUNNING and ReconciliationState to
+     * DEPLOYED while keeping the metadata.
+     *
+     * @param resource Flink resource to be updated.
+     */
+    public static <SPEC extends AbstractFlinkSpec> void updateStatusForAlreadyUpgraded(
+            AbstractFlinkResource<SPEC, ?> resource) {
+        var reconciliationStatus = resource.getStatus().getReconciliationStatus();
+        var lastSpecWithMeta = reconciliationStatus.deserializeLastReconciledSpecWithMeta();
+        lastSpecWithMeta.f0.getJob().setState(JobState.RUNNING);
+        reconciliationStatus.setState(ReconciliationState.DEPLOYED);
+        reconciliationStatus.setLastReconciledSpec(
+                ReconciliationUtils.writeSpecWithMeta(lastSpecWithMeta.f0, lastSpecWithMeta.f1));
     }
 }

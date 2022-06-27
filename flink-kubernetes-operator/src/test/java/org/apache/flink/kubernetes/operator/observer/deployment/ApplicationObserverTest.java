@@ -478,9 +478,16 @@ public class ApplicationObserverTest {
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 status.getJobManagerDeploymentStatus());
+        assertEquals(
+                JobState.RUNNING,
+                status.getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState());
 
+        // Test regular upgrades
+        deployment.getSpec().getJob().setParallelism(5);
         deployment.getMetadata().setGeneration(321L);
-
         ReconciliationUtils.updateForSpecReconciliationSuccess(
                 deployment,
                 JobState.SUSPENDED,
@@ -502,12 +509,41 @@ public class ApplicationObserverTest {
                 .getMetadata()
                 .getAnnotations()
                 .put(FlinkUtils.CR_GENERATION_LABEL, "321");
+        deployment.getMetadata().setGeneration(322L);
         observer.observe(deployment, context);
 
         assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
-        assertNotNull(reconStatus.getLastReconciledSpec());
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 status.getJobManagerDeploymentStatus());
+
+        var specWithMeta = status.getReconciliationStatus().deserializeLastReconciledSpecWithMeta();
+        assertEquals(321L, specWithMeta.f1.get("metadata").get("generation").asLong());
+        assertEquals(JobState.RUNNING, specWithMeta.f0.getJob().getState());
+        assertEquals(5, specWithMeta.f0.getJob().getParallelism());
+
+        // Test upgrade with spec change in the middle
+        deployment.getMetadata().setGeneration(400L);
+        ReconciliationUtils.updateForSpecReconciliationSuccess(
+                deployment,
+                JobState.SUSPENDED,
+                new FlinkConfigManager(new Configuration())
+                        .getDeployConfig(deployment.getMetadata(), deployment.getSpec()));
+        assertEquals(status.getReconciliationStatus().getState(), ReconciliationState.UPGRADING);
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+
+        kubernetesDeployment
+                .getMetadata()
+                .getAnnotations()
+                .put(FlinkUtils.CR_GENERATION_LABEL, "401");
+
+        deployment.getMetadata().setGeneration(401L);
+        deployment.getSpec().getJob().setParallelism(6);
+        observer.observe(deployment, context);
+        assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
+        specWithMeta = status.getReconciliationStatus().deserializeLastReconciledSpecWithMeta();
+        assertEquals(401, specWithMeta.f1.get("metadata").get("generation").asLong());
+        assertEquals(JobState.RUNNING, specWithMeta.f0.getJob().getState());
+        assertEquals(6, specWithMeta.f0.getJob().getParallelism());
     }
 }
