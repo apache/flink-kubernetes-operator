@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -65,6 +66,15 @@ public abstract class AbstractFlinkResourceReconciler<
     protected final KubernetesClient kubernetesClient;
     protected final FlinkService flinkService;
 
+    public static final String MSG_SUSPENDED = "Suspending existing deployment.";
+    public static final String MSG_SPEC_CHANGED = "Detected spec change, starting reconciliation.";
+    public static final String MSG_ROLLBACK = "Rolling back failed deployment.";
+    public static final String MSG_SUBMIT = "Starting deployment";
+    public static final String REASON_SUSPENDED = "Suspended";
+    public static final String REASON_SPEC_CHANGED = "Spec Changed";
+    public static final String REASON_ROLLBACK = "Rollback";
+    public static final String REASON_SUBMIT = "Submit";
+
     public AbstractFlinkResourceReconciler(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
@@ -95,7 +105,7 @@ public abstract class AbstractFlinkResourceReconciler<
         if (firstDeployment) {
             LOG.info("Deploying for the first time");
             deploy(
-                    cr.getMetadata(),
+                    cr,
                     spec,
                     status,
                     deployConfig,
@@ -118,14 +128,26 @@ public abstract class AbstractFlinkResourceReconciler<
             if (checkNewSpecAlreadyDeployed(cr, deployConfig)) {
                 return;
             }
-            LOG.info("Reconciling spec change");
+            LOG.info(MSG_SPEC_CHANGED);
+            eventRecorder.triggerEvent(
+                    cr,
+                    EventUtils.Type.Normal,
+                    REASON_SPEC_CHANGED,
+                    MSG_SPEC_CHANGED,
+                    EventUtils.Component.JobManagerDeployment);
             reconcileSpecChange(cr, observeConfig, deployConfig);
         } else if (shouldRollBack(reconciliationStatus, observeConfig)) {
             // Rollbacks are executed in two steps, we initiate it first then return
             if (initiateRollBack(status)) {
                 return;
             }
-            LOG.warn("Executing rollback operation");
+            LOG.warn(MSG_ROLLBACK);
+            eventRecorder.triggerEvent(
+                    cr,
+                    EventUtils.Type.Normal,
+                    REASON_ROLLBACK,
+                    MSG_ROLLBACK,
+                    EventUtils.Component.JobManagerDeployment);
             rollback(cr, ctx, observeConfig);
         } else if (!reconcileOtherChanges(cr, observeConfig)) {
             LOG.info("Resource fully reconciled, nothing to do...");
@@ -206,7 +228,7 @@ public abstract class AbstractFlinkResourceReconciler<
     /**
      * Deploys the target resource spec to Kubernetes.
      *
-     * @param meta ObjectMeta of the related resource.
+     * @param relatedResource Related resource.
      * @param spec Spec that should be deployed to Kubernetes.
      * @param status Status object of the resource
      * @param deployConfig Flink conf for the deployment.
@@ -215,7 +237,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * @throws Exception
      */
     protected abstract void deploy(
-            ObjectMeta meta,
+            CR relatedResource,
             SPEC spec,
             STATUS status,
             Configuration deployConfig,

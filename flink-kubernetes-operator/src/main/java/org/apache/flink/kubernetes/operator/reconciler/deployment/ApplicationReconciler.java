@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
@@ -107,7 +108,7 @@ public class ApplicationReconciler
 
     @Override
     protected void deploy(
-            ObjectMeta meta,
+            FlinkDeployment relatedResource,
             FlinkDeploymentSpec spec,
             FlinkDeploymentStatus status,
             Configuration deployConfig,
@@ -129,7 +130,7 @@ public class ApplicationReconciler
                 throw new RuntimeException("This indicates a bug...");
             }
             LOG.info("Deleting deployment with terminated application before new deployment");
-            flinkService.deleteClusterDeployment(meta, status, true);
+            flinkService.deleteClusterDeployment(relatedResource.getMetadata(), status, true);
             FlinkUtils.waitForClusterShutdown(
                     kubernetesClient,
                     deployConfig,
@@ -138,11 +139,18 @@ public class ApplicationReconciler
                             .getFlinkShutdownClusterTimeout()
                             .toSeconds());
         }
+        eventRecorder.triggerEvent(
+                relatedResource,
+                EventUtils.Type.Normal,
+                REASON_SUBMIT,
+                MSG_SUBMIT,
+                EventUtils.Component.JobManagerDeployment);
         flinkService.submitApplicationCluster(spec.getJob(), deployConfig, requireHaMetadata);
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
 
-        IngressUtils.updateIngressRules(meta, spec, deployConfig, kubernetesClient);
+        IngressUtils.updateIngressRules(
+                relatedResource.getMetadata(), spec, deployConfig, kubernetesClient);
     }
 
     @Override
@@ -188,12 +196,7 @@ public class ApplicationReconciler
             throws Exception {
         LOG.info("Missing Flink Cluster deployment, trying to recover...");
         FlinkDeploymentSpec specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
-        restoreJob(
-                deployment.getMetadata(),
-                specToRecover,
-                deployment.getStatus(),
-                observeConfig,
-                true);
+        restoreJob(deployment, specToRecover, deployment.getStatus(), observeConfig, true);
     }
 
     @Override

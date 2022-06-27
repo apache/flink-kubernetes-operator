@@ -30,9 +30,9 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
@@ -98,6 +98,12 @@ public abstract class AbstractJobReconciler<
             if (availableUpgradeMode.isEmpty()) {
                 return;
             }
+            eventRecorder.triggerEvent(
+                    resource,
+                    EventUtils.Type.Normal,
+                    REASON_SUSPENDED,
+                    MSG_SUSPENDED,
+                    EventUtils.Component.JobManagerDeployment);
             // We must record the upgrade mode used to the status later
             currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.get());
             cancelJob(resource, availableUpgradeMode.get(), observeConfig);
@@ -105,7 +111,7 @@ public abstract class AbstractJobReconciler<
         }
         if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
             restoreJob(
-                    deployMeta,
+                    resource,
                     currentDeploySpec,
                     status,
                     deployConfig,
@@ -150,7 +156,7 @@ public abstract class AbstractJobReconciler<
     }
 
     protected void restoreJob(
-            ObjectMeta meta,
+            CR resource,
             SPEC spec,
             STATUS status,
             Configuration deployConfig,
@@ -164,7 +170,7 @@ public abstract class AbstractJobReconciler<
                             .flatMap(s -> Optional.ofNullable(s.getLocation()));
         }
 
-        deploy(meta, spec, status, deployConfig, savepointOpt, requireHaMetadata);
+        deploy(resource, spec, status, deployConfig, savepointOpt, requireHaMetadata);
     }
 
     @Override
@@ -183,7 +189,7 @@ public abstract class AbstractJobReconciler<
                 observeConfig);
 
         restoreJob(
-                resource.getMetadata(),
+                resource,
                 rollbackSpec,
                 resource.getStatus(),
                 getDeployConfig(resource.getMetadata(), rollbackSpec, context),

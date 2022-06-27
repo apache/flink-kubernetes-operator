@@ -103,7 +103,7 @@ public class SessionReconciler
                         .getFlinkShutdownClusterTimeout()
                         .toSeconds());
         deploy(
-                deployment.getMetadata(),
+                deployment,
                 deploySpec,
                 deployment.getStatus(),
                 effectiveConfig,
@@ -113,7 +113,7 @@ public class SessionReconciler
 
     @Override
     protected void deploy(
-            ObjectMeta meta,
+            FlinkDeployment cr,
             FlinkDeploymentSpec spec,
             FlinkDeploymentStatus status,
             Configuration deployConfig,
@@ -122,7 +122,7 @@ public class SessionReconciler
             throws Exception {
         flinkService.submitSessionCluster(deployConfig);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-        IngressUtils.updateIngressRules(meta, spec, deployConfig, kubernetesClient);
+        IngressUtils.updateIngressRules(cr.getMetadata(), spec, deployConfig, kubernetesClient);
     }
 
     @Override
