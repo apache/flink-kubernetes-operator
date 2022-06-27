@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.observer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventUtils;
@@ -79,6 +80,7 @@ public abstract class JobStatusObserver<CTX> {
             } else {
                 updateJobStatus(resource, targetJobStatusMessage.get(), deployedConfig);
             }
+            ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
             return true;
         } else {
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);

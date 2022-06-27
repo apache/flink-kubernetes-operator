@@ -80,10 +80,16 @@ public class SessionJobObserverTest {
         Assertions.assertEquals(
                 JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
 
+        var reconStatus = sessionJob.getStatus().getReconciliationStatus();
+        Assertions.assertNotEquals(
+                reconStatus.getLastReconciledSpec(), reconStatus.getLastStableSpec());
+
         // observe with ready context
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
                 JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+        Assertions.assertEquals(
+                reconStatus.getLastReconciledSpec(), reconStatus.getLastStableSpec());
 
         flinkService.setPortReady(false);
         observer.observe(sessionJob, readyContext);
