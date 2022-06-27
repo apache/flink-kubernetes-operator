@@ -52,6 +52,9 @@ import javax.annotation.Nullable;
 
 import java.util.Optional;
 
+import static org.apache.flink.api.common.JobStatus.FINISHED;
+import static org.apache.flink.api.common.JobStatus.RUNNING;
+
 /** Reconciliation utilities. */
 public class ReconciliationUtils {
 
@@ -363,5 +366,31 @@ public class ReconciliationUtils {
         }
 
         return lastSpecWithMeta.f1.get("metadata").get("generation").asLong(-1L);
+    }
+
+    public static void checkAndUpdateStableSpec(CommonStatus<?> status) {
+        var flinkJobStatus =
+                org.apache.flink.api.common.JobStatus.valueOf(status.getJobStatus().getState());
+
+        if (status.getReconciliationStatus().getState() != ReconciliationState.DEPLOYED) {
+            return;
+        }
+
+        if (flinkJobStatus == RUNNING) {
+            // Running jobs are currently always marked stable
+            status.getReconciliationStatus().markReconciledSpecAsStable();
+            return;
+        }
+
+        var reconciledJobState =
+                status.getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState();
+
+        if (reconciledJobState == JobState.RUNNING && flinkJobStatus == FINISHED) {
+            // If the job finished on its own, it's marked stable
+            status.getReconciliationStatus().markReconciledSpecAsStable();
+        }
     }
 }

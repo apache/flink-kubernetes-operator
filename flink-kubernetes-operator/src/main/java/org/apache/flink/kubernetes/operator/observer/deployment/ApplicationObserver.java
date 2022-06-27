@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
@@ -35,9 +34,6 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 
 import java.util.List;
 import java.util.Optional;
-
-import static org.apache.flink.api.common.JobStatus.FINISHED;
-import static org.apache.flink.api.common.JobStatus.RUNNING;
 
 /** The observer of {@link org.apache.flink.kubernetes.operator.config.Mode#APPLICATION} cluster. */
 public class ApplicationObserver extends AbstractDeploymentObserver {
@@ -72,7 +68,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     }
 
     @Override
-    protected boolean observeFlinkCluster(
+    protected void observeFlinkCluster(
             FlinkDeployment flinkApp, Context context, Configuration deployedConfig) {
 
         boolean jobFound =
@@ -83,31 +79,5 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
         if (jobFound) {
             savepointObserver.observeSavepointStatus(flinkApp, deployedConfig);
         }
-        return isJobStable(flinkApp.getStatus());
-    }
-
-    private boolean isJobStable(FlinkDeploymentStatus deploymentStatus) {
-        var flinkJobStatus =
-                org.apache.flink.api.common.JobStatus.valueOf(
-                        deploymentStatus.getJobStatus().getState());
-
-        if (flinkJobStatus == RUNNING) {
-            // Running jobs are currently always marked stable
-            return true;
-        }
-
-        var reconciledJobState =
-                deploymentStatus
-                        .getReconciliationStatus()
-                        .deserializeLastReconciledSpec()
-                        .getJob()
-                        .getState();
-
-        if (reconciledJobState == JobState.RUNNING && flinkJobStatus == FINISHED) {
-            // If the job finished on its own, it's marked stable
-            return true;
-        }
-
-        return false;
     }
 }

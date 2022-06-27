@@ -95,11 +95,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         }
 
         if (isJmDeploymentReady(flinkApp)) {
-            if (observeFlinkCluster(flinkApp, context, observeConfig)) {
-                if (reconciliationStatus.getState() != ReconciliationState.ROLLED_BACK) {
-                    reconciliationStatus.markReconciledSpecAsStable();
-                }
-            }
+            observeFlinkCluster(flinkApp, context, observeConfig);
         }
 
         if (isJmDeploymentReady(flinkApp)) {
@@ -312,8 +308,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
      * @param flinkApp the target flinkDeployment resource
      * @param context the context with which the operation is executed
      * @param deployedConfig config that is deployed on the Flink cluster
-     * @return true if cluster state is stable
      */
-    protected abstract boolean observeFlinkCluster(
+    protected abstract void observeFlinkCluster(
             FlinkDeployment flinkApp, Context context, Configuration deployedConfig);
 }
