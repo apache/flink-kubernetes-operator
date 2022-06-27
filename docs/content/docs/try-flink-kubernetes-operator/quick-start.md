@@ -75,7 +75,7 @@ In case the cert manager installation failed for any reason you can disable the 
 
 Now you can deploy the latest stable Flink Kubernetes Operator version using the included Helm chart:
 ```bash
-helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-1.0.0/
+helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-1.0.1/
 helm install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator
 ```
 
@@ -92,7 +92,7 @@ flink-kubernetes-operator-fb5d46f94-ghd8b 2/2 Running 0 4m21s
 
 helm list
 NAME NAMESPACE REVISION UPDATED STATUS CHART APP VERSION
-flink-kubernetes-operator default 1 2022-03-09 17 (tel:12022030917):39:55.461359 +0100 CET deployed flink-kubernetes-operator-1.0.0 1.0.0
+flink-kubernetes-operator default 1 2022-03-09 17 (tel:12022030917):39:55.461359 +0100 CET deployed flink-kubernetes-operator-1.0.1 1.0.1
 ```
 
 ## Submitting a Flink job
