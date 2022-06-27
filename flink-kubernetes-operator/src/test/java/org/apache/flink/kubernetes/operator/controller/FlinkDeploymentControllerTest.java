@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
@@ -164,6 +165,22 @@ public class FlinkDeploymentControllerTest {
 
     @Test
     public void verifyFailedDeployment() throws Exception {
+        var submittedEventValidatingResponseProvider =
+                new TestUtils.ValidatingResponseProvider<>(
+                        new EventBuilder().withNewMetadata().endMetadata().build(),
+                        r -> {
+                            assertTrue(
+                                    r.getBody()
+                                            .readUtf8()
+                                            .contains(AbstractFlinkResourceReconciler.MSG_SUBMIT));
+                        });
+        mockServer
+                .expect()
+                .post()
+                .withPath("/api/v1/namespaces/flink-operator-test/events")
+                .andReply(submittedEventValidatingResponseProvider)
+                .once();
+
         var validatingResponseProvider =
                 new TestUtils.ValidatingResponseProvider<>(
                         new EventBuilder().withNewMetadata().endMetadata().build(),
@@ -184,6 +201,7 @@ public class FlinkDeploymentControllerTest {
         updateControl =
                 testController.reconcile(
                         appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+        submittedEventValidatingResponseProvider.assertValidated();
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -218,6 +236,22 @@ public class FlinkDeploymentControllerTest {
     public void verifyInProgressDeploymentWithCrashLoopBackoff() throws Exception {
         String crashLoopMessage = "container fails";
 
+        var submittedEventValidatingResponseProvider =
+                new TestUtils.ValidatingResponseProvider<>(
+                        new EventBuilder().withNewMetadata().endMetadata().build(),
+                        r -> {
+                            assertTrue(
+                                    r.getBody()
+                                            .readUtf8()
+                                            .contains(AbstractFlinkResourceReconciler.MSG_SUBMIT));
+                        });
+        mockServer
+                .expect()
+                .post()
+                .withPath("/api/v1/namespaces/flink-operator-test/events")
+                .andReply(submittedEventValidatingResponseProvider)
+                .once();
+
         var validatingResponseProvider =
                 new TestUtils.ValidatingResponseProvider<>(
                         new EventBuilder().withNewMetadata().endMetadata().build(),
@@ -244,6 +278,7 @@ public class FlinkDeploymentControllerTest {
         updateControl =
                 testController.reconcile(
                         appCluster, TestUtils.createContextWithInProgressDeployment());
+        submittedEventValidatingResponseProvider.assertValidated();
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(

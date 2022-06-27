@@ -79,7 +79,7 @@ public class SessionJobReconciler
 
     @Override
     protected void deploy(
-            ObjectMeta meta,
+            FlinkSessionJob cr,
             FlinkSessionJobSpec sessionJobSpec,
             FlinkSessionJobStatus status,
             Configuration deployConfig,
@@ -88,7 +88,7 @@ public class SessionJobReconciler
             throws Exception {
         var jobID =
                 flinkService.submitJobToSessionCluster(
-                        meta, sessionJobSpec, deployConfig, savepoint.orElse(null));
+                        cr.getMetadata(), sessionJobSpec, deployConfig, savepoint.orElse(null));
         status.setJobStatus(
                 new JobStatus()
                         .toBuilder()
