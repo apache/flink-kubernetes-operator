@@ -63,7 +63,7 @@ For each additional namespace that runs the Flink jobs, users need to do the fol
     metadata:
       labels:
         app.kubernetes.io/name: flink-kubernetes-operator
-        app.kubernetes.io/version: 1.0.0
+        app.kubernetes.io/version: 1.0.1
       name: flink
     ---
     apiVersion: rbac.authorization.k8s.io/v1
@@ -71,7 +71,7 @@ For each additional namespace that runs the Flink jobs, users need to do the fol
     metadata:
       labels:
         app.kubernetes.io/name: flink-kubernetes-operator
-        app.kubernetes.io/version: 1.0.0
+        app.kubernetes.io/version: 1.0.1
       name: flink
     rules:
     - apiGroups:
@@ -93,7 +93,7 @@ For each additional namespace that runs the Flink jobs, users need to do the fol
     metadata:
       labels:
         app.kubernetes.io/name: flink-kubernetes-operator
-        app.kubernetes.io/version: 1.0.0
+        app.kubernetes.io/version: 1.0.1
       name: flink-role-binding
     roleRef:
       apiGroup: rbac.authorization.k8s.io
