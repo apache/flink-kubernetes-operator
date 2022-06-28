@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.listener.ListenerUtils;
+import org.apache.flink.kubernetes.operator.metrics.FlinkOperatorMetrics;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
@@ -73,18 +74,20 @@ public class FlinkOperator {
     private final MetricGroup metricGroup;
     private final Collection<FlinkResourceListener> listeners;
 
+    private static final String OPERATOR_SDK_GROUP = "operator.sdk";
+
     public FlinkOperator(@Nullable Configuration conf) {
         this.client = new DefaultKubernetesClient();
         this.configManager =
                 conf != null
                         ? new FlinkConfigManager(conf) // For testing only
                         : new FlinkConfigManager(this::handleNamespaceChanges);
+        this.metricGroup =
+                OperatorMetricUtils.initOperatorMetrics(configManager.getDefaultConfig());
         this.operator = new Operator(client, this::overrideOperatorConfigs);
         this.flinkService = new FlinkService(client, configManager);
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.listeners = ListenerUtils.discoverListeners(configManager);
-        this.metricGroup =
-                OperatorMetricUtils.initOperatorMetrics(configManager.getDefaultConfig());
         PluginManager pluginManager =
                 PluginUtils.createPluginManagerFromRootFolder(configManager.getDefaultConfig());
         FileSystem.initialize(configManager.getDefaultConfig(), pluginManager);
@@ -108,6 +111,10 @@ public class FlinkOperator {
         } else {
             LOG.info("Configuring operator with {} reconciliation threads.", parallelism);
             overrider.withConcurrentReconciliationThreads(parallelism);
+        }
+        if (configManager.getOperatorConfiguration().getJosdkMetricsEnabled()) {
+            overrider.withMetrics(
+                    new FlinkOperatorMetrics(metricGroup.addGroup(OPERATOR_SDK_GROUP)));
         }
     }
 
