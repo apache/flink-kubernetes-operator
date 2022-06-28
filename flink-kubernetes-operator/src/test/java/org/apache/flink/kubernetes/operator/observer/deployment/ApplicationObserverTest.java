@@ -479,11 +479,8 @@ public class ApplicationObserverTest {
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 status.getJobManagerDeploymentStatus());
         assertEquals(
-                JobState.RUNNING,
-                status.getReconciliationStatus()
-                        .deserializeLastReconciledSpec()
-                        .getJob()
-                        .getState());
+                deployment.getSpec(),
+                status.getReconciliationStatus().deserializeLastReconciledSpec());
 
         // Test regular upgrades
         deployment.getSpec().getJob().setParallelism(5);
@@ -509,7 +506,10 @@ public class ApplicationObserverTest {
                 .getMetadata()
                 .getAnnotations()
                 .put(FlinkUtils.CR_GENERATION_LABEL, "321");
+
         deployment.getMetadata().setGeneration(322L);
+        deployment.getSpec().getJob().setParallelism(4);
+
         observer.observe(deployment, context);
 
         assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
@@ -543,7 +543,6 @@ public class ApplicationObserverTest {
         assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
         specWithMeta = status.getReconciliationStatus().deserializeLastReconciledSpecWithMeta();
         assertEquals(401, specWithMeta.f1.get("metadata").get("generation").asLong());
-        assertEquals(JobState.RUNNING, specWithMeta.f0.getJob().getState());
-        assertEquals(6, specWithMeta.f0.getJob().getParallelism());
+        assertEquals(deployment.getSpec(), specWithMeta.f0);
     }
 }
