@@ -91,7 +91,7 @@ rsync -a \
 
 apache_header=${CLONE_DIR}/flink-kubernetes-operator-${RELEASE_VERSION}/tools/releasing/apache_header.yaml
 # Package helm chart
-commit_hash=$(git log -1 --pretty=format:%h)
+commit_hash=$(git log -1 --pretty=format:%h --abbrev=7)
 
 # Attach apache header to generated crd
 cd flink-kubernetes-operator-${RELEASE_VERSION}/helm/flink-kubernetes-operator/crds
