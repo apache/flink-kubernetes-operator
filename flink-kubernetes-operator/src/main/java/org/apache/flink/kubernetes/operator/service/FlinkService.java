@@ -52,9 +52,12 @@ import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
+import org.apache.flink.runtime.messages.webmonitor.JobDetails;
+import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.FileUpload;
 import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
@@ -62,6 +65,7 @@ import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
+import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
@@ -107,6 +111,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -114,6 +119,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 
@@ -134,6 +140,32 @@ public class FlinkService {
         this.executorService =
                 Executors.newFixedThreadPool(
                         4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
+    }
+
+    private static List<JobStatusMessage> toJobStatusMessage(
+            MultipleJobsDetails multipleJobsDetails) {
+        return multipleJobsDetails.getJobs().stream()
+                .map(
+                        details ->
+                                new JobStatusMessage(
+                                        details.getJobId(),
+                                        details.getJobName(),
+                                        getEffectiveStatus(details),
+                                        details.getStartTime()))
+                .collect(Collectors.toList());
+    }
+
+    @VisibleForTesting
+    protected static JobStatus getEffectiveStatus(JobDetails details) {
+        int numRunning = details.getTasksPerState()[ExecutionState.RUNNING.ordinal()];
+        int numFinished = details.getTasksPerState()[ExecutionState.FINISHED.ordinal()];
+        boolean allRunningOrFinished = details.getNumTasks() == (numRunning + numFinished);
+        JobStatus effectiveStatus = details.getStatus();
+        if (JobStatus.RUNNING.equals(effectiveStatus) && !allRunningOrFinished) {
+            effectiveStatus = JobStatus.CREATED;
+            LOG.debug("Adjusting job state from {} to {}", JobStatus.RUNNING, effectiveStatus);
+        }
+        return effectiveStatus;
     }
 
     public KubernetesClient getKubernetesClient() {
@@ -329,14 +361,19 @@ public class FlinkService {
     }
 
     public Collection<JobStatusMessage> listJobs(Configuration conf) throws Exception {
-        try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
+        try (RestClusterClient<String> clusterClient =
+                (RestClusterClient<String>) getClusterClient(conf)) {
             return clusterClient
-                    .listJobs()
+                    .sendRequest(
+                            JobsOverviewHeaders.getInstance(),
+                            EmptyMessageParameters.getInstance(),
+                            EmptyRequestBody.getInstance())
+                    .thenApply(FlinkService::toJobStatusMessage)
                     .get(
                             configManager
                                     .getOperatorConfiguration()
                                     .getFlinkClientTimeout()
-                                    .getSeconds(),
+                                    .toSeconds(),
                             TimeUnit.SECONDS);
         }
     }

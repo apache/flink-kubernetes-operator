@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.service;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
@@ -35,7 +36,9 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.messages.webmonitor.JobDetails;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
@@ -53,6 +56,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
@@ -302,6 +306,64 @@ public class FlinkServiceTest {
                 objectMapper.readValue(flink14Response, CustomDashboardConfiguration.class);
         dashboardConfiguration =
                 objectMapper.readValue(flink15Response, CustomDashboardConfiguration.class);
+    }
+
+    @Test
+    public void testEffectiveStatus() {
+
+        JobDetails allRunning =
+                getJobDetails(
+                        org.apache.flink.api.common.JobStatus.RUNNING,
+                        Tuple2.of(ExecutionState.RUNNING, 4));
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING,
+                FlinkService.getEffectiveStatus(allRunning));
+
+        JobDetails allRunningOrFinished =
+                getJobDetails(
+                        org.apache.flink.api.common.JobStatus.RUNNING,
+                        Tuple2.of(ExecutionState.RUNNING, 2),
+                        Tuple2.of(ExecutionState.FINISHED, 2));
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING,
+                FlinkService.getEffectiveStatus(allRunningOrFinished));
+
+        JobDetails allRunningOrScheduled =
+                getJobDetails(
+                        org.apache.flink.api.common.JobStatus.RUNNING,
+                        Tuple2.of(ExecutionState.RUNNING, 2),
+                        Tuple2.of(ExecutionState.SCHEDULED, 2));
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.CREATED,
+                FlinkService.getEffectiveStatus(allRunningOrScheduled));
+
+        JobDetails allFinished =
+                getJobDetails(
+                        org.apache.flink.api.common.JobStatus.FINISHED,
+                        Tuple2.of(ExecutionState.FINISHED, 4));
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.FINISHED,
+                FlinkService.getEffectiveStatus(allFinished));
+    }
+
+    private JobDetails getJobDetails(
+            org.apache.flink.api.common.JobStatus status,
+            Tuple2<ExecutionState, Integer>... tasksPerState) {
+        int[] countPerState = new int[ExecutionState.values().length];
+        for (var taskPerState : tasksPerState) {
+            countPerState[taskPerState.f0.ordinal()] = taskPerState.f1;
+        }
+        int numTasks = Arrays.stream(countPerState).sum();
+        return new JobDetails(
+                new JobID(),
+                "test-job",
+                System.currentTimeMillis(),
+                -1,
+                0,
+                status,
+                System.currentTimeMillis(),
+                countPerState,
+                numTasks);
     }
 
     private FlinkService createFlinkService(ClusterClient<String> clusterClient) {
