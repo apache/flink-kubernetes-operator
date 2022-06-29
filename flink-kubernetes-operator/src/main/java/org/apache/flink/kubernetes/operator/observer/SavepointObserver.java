@@ -31,7 +31,6 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.ConfigOptionUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
@@ -120,12 +119,12 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
                         savepointInfo, resource);
                 eventRecorder.triggerEvent(
                         resource,
-                        EventUtils.Type.Warning,
-                        "SavepointError",
+                        EventRecorder.Type.Warning,
+                        EventRecorder.Reason.SavepointError,
+                        EventRecorder.Component.Operator,
                         SavepointUtils.createSavepointError(
                                 savepointInfo,
-                                resource.getSpec().getJob().getSavepointTriggerNonce()),
-                        EventUtils.Component.Operator);
+                                resource.getSpec().getJob().getSavepointTriggerNonce()));
             } else {
                 LOG.warn("Savepoint failed within grace period, retrying: " + err);
             }

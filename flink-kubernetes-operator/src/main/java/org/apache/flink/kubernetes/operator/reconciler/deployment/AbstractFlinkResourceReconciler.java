@@ -33,7 +33,6 @@ import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -70,10 +69,6 @@ public abstract class AbstractFlinkResourceReconciler<
     public static final String MSG_SPEC_CHANGED = "Detected spec change, starting reconciliation.";
     public static final String MSG_ROLLBACK = "Rolling back failed deployment.";
     public static final String MSG_SUBMIT = "Starting deployment";
-    public static final String REASON_SUSPENDED = "Suspended";
-    public static final String REASON_SPEC_CHANGED = "Spec Changed";
-    public static final String REASON_ROLLBACK = "Rollback";
-    public static final String REASON_SUBMIT = "Submit";
 
     public AbstractFlinkResourceReconciler(
             KubernetesClient kubernetesClient,
@@ -131,10 +126,10 @@ public abstract class AbstractFlinkResourceReconciler<
             LOG.info(MSG_SPEC_CHANGED);
             eventRecorder.triggerEvent(
                     cr,
-                    EventUtils.Type.Normal,
-                    REASON_SPEC_CHANGED,
-                    MSG_SPEC_CHANGED,
-                    EventUtils.Component.JobManagerDeployment);
+                    EventRecorder.Type.Normal,
+                    EventRecorder.Reason.SpecChanged,
+                    EventRecorder.Component.JobManagerDeployment,
+                    MSG_SPEC_CHANGED);
             reconcileSpecChange(cr, observeConfig, deployConfig);
         } else if (shouldRollBack(reconciliationStatus, observeConfig)) {
             // Rollbacks are executed in two steps, we initiate it first then return
@@ -144,10 +139,10 @@ public abstract class AbstractFlinkResourceReconciler<
             LOG.warn(MSG_ROLLBACK);
             eventRecorder.triggerEvent(
                     cr,
-                    EventUtils.Type.Normal,
-                    REASON_ROLLBACK,
-                    MSG_ROLLBACK,
-                    EventUtils.Component.JobManagerDeployment);
+                    EventRecorder.Type.Normal,
+                    EventRecorder.Reason.Rollback,
+                    EventRecorder.Component.JobManagerDeployment,
+                    MSG_ROLLBACK);
             rollback(cr, ctx, observeConfig);
         } else if (!reconcileOtherChanges(cr, observeConfig)) {
             LOG.info("Resource fully reconciled, nothing to do...");

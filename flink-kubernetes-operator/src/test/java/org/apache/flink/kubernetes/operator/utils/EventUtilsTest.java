@@ -40,18 +40,18 @@ public class EventUtilsTest {
         var eventName =
                 EventUtils.generateEventName(
                         flinkApp,
-                        EventUtils.Type.Warning,
+                        EventRecorder.Type.Warning,
                         reason,
                         message,
-                        EventUtils.Component.Operator);
+                        EventRecorder.Component.Operator);
         Assertions.assertTrue(
                 EventUtils.createOrUpdateEvent(
                         kubernetesClient,
                         flinkApp,
-                        EventUtils.Type.Warning,
+                        EventRecorder.Type.Warning,
                         reason,
                         message,
-                        EventUtils.Component.Operator,
+                        EventRecorder.Component.Operator,
                         e -> {}));
         var event =
                 kubernetesClient
@@ -68,10 +68,10 @@ public class EventUtilsTest {
                 EventUtils.createOrUpdateEvent(
                         kubernetesClient,
                         flinkApp,
-                        EventUtils.Type.Warning,
+                        EventRecorder.Type.Warning,
                         reason,
                         message,
-                        EventUtils.Component.Operator,
+                        EventRecorder.Component.Operator,
                         e -> {}));
         event =
                 kubernetesClient
@@ -93,18 +93,18 @@ public class EventUtilsTest {
         var name1 =
                 EventUtils.generateEventName(
                         flinkApp,
-                        EventUtils.Type.Warning,
+                        EventRecorder.Type.Warning,
                         reason,
                         message,
-                        EventUtils.Component.Operator);
+                        EventRecorder.Component.Operator);
         flinkApp.getMetadata().setUid("uid2");
         var name2 =
                 EventUtils.generateEventName(
                         flinkApp,
-                        EventUtils.Type.Warning,
+                        EventRecorder.Type.Warning,
                         reason,
                         message,
-                        EventUtils.Component.Operator);
+                        EventRecorder.Component.Operator);
         Assertions.assertNotEquals(name1, name2);
     }
 }

@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import org.slf4j.Logger;
@@ -142,10 +141,10 @@ public abstract class JobStatusObserver<CTX> {
             setErrorIfPresent(resource, clusterJobStatus, deployedConfig);
             eventRecorder.triggerEvent(
                     resource,
-                    EventUtils.Type.Normal,
-                    "Status Changed",
-                    message,
-                    EventUtils.Component.Job);
+                    EventRecorder.Type.Normal,
+                    EventRecorder.Reason.StatusChanged,
+                    EventRecorder.Component.Job,
+                    message);
         }
     }
 

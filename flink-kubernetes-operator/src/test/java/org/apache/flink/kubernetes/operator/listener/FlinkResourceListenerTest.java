@@ -22,7 +22,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -94,17 +93,17 @@ public class FlinkResourceListenerTest {
 
         eventRecorder.triggerEvent(
                 deployment,
-                EventUtils.Type.Warning,
-                "SavepointError",
-                "err",
-                EventUtils.Component.Operator);
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.SavepointError,
+                EventRecorder.Component.Operator,
+                "err");
         assertEquals(1, listener1.events.size());
         eventRecorder.triggerEvent(
                 deployment,
-                EventUtils.Type.Warning,
-                "SavepointError",
-                "err",
-                EventUtils.Component.Operator);
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.SavepointError,
+                EventRecorder.Component.Operator,
+                "err");
         assertEquals(2, listener1.events.size());
 
         for (int i = 0; i < listener1.events.size(); i++) {

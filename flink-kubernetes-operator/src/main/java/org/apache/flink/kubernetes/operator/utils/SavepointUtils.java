@@ -150,11 +150,11 @@ public class SavepointUtils {
             LOG.error("Job is not running, cancelling savepoint operation");
             eventRecorder.triggerEvent(
                     resource,
-                    EventUtils.Type.Warning,
-                    "SavepointError",
+                    EventRecorder.Type.Warning,
+                    EventRecorder.Reason.SavepointError,
+                    EventRecorder.Component.Operator,
                     createSavepointError(
-                            savepointInfo, resource.getSpec().getJob().getSavepointTriggerNonce()),
-                    EventUtils.Component.Operator);
+                            savepointInfo, resource.getSpec().getJob().getSavepointTriggerNonce()));
         }
     }
 

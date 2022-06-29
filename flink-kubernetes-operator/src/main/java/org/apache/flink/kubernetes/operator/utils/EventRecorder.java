@@ -46,10 +46,19 @@ public class EventRecorder {
 
     public boolean triggerEvent(
             AbstractFlinkResource<?, ?> resource,
-            EventUtils.Type type,
+            Type type,
+            Reason reason,
+            Component component,
+            String message) {
+        return triggerEvent(resource, type, reason.toString(), message, component);
+    }
+
+    public boolean triggerEvent(
+            AbstractFlinkResource<?, ?> resource,
+            Type type,
             String reason,
             String message,
-            EventUtils.Component component) {
+            Component component) {
         return EventUtils.createOrUpdateEvent(
                 client,
                 resource,
@@ -93,5 +102,30 @@ public class EventRecorder {
                                     }
                                 });
         return new EventRecorder(client, biConsumer);
+    }
+
+    /** The type of the events. */
+    public enum Type {
+        Normal,
+        Warning
+    }
+
+    /** The component of events. */
+    public enum Component {
+        Operator,
+        JobManagerDeployment,
+        Job
+    }
+
+    /** The reason codes of events. */
+    public enum Reason {
+        Suspended,
+        SpecChanged,
+        Rollback,
+        Submit,
+        StatusChanged,
+        SavepointError,
+        Cleanup,
+        Missing
     }
 }

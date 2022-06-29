@@ -30,7 +30,6 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -100,10 +99,10 @@ public abstract class AbstractJobReconciler<
             }
             eventRecorder.triggerEvent(
                     resource,
-                    EventUtils.Type.Normal,
-                    REASON_SUSPENDED,
-                    MSG_SUSPENDED,
-                    EventUtils.Component.JobManagerDeployment);
+                    EventRecorder.Type.Normal,
+                    EventRecorder.Reason.Suspended,
+                    EventRecorder.Component.JobManagerDeployment,
+                    MSG_SUSPENDED);
             // We must record the upgrade mode used to the status later
             currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.get());
             cancelJob(resource, availableUpgradeMode.get(), observeConfig);

@@ -30,7 +30,6 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
-import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
@@ -139,10 +138,10 @@ public class FlinkDeploymentController
         ReconciliationUtils.updateForReconciliationError(flinkApp, dfe.getMessage());
         eventRecorder.triggerEvent(
                 flinkApp,
-                EventUtils.Type.Warning,
+                EventRecorder.Type.Warning,
                 dfe.getReason(),
                 dfe.getMessage(),
-                EventUtils.Component.JobManagerDeployment);
+                EventRecorder.Component.JobManagerDeployment);
     }
 
     @Override
