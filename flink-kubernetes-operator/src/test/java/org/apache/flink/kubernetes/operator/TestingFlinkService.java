@@ -40,10 +40,15 @@ import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.messages.webmonitor.JobDetails;
+import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
+import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
+import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.util.SerializedThrowable;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -296,7 +301,35 @@ public class TestingFlinkService extends FlinkService {
                     }
                     return CompletableFuture.completedFuture(builder.build());
                 });
+        clusterClient.setRequestProcessor(
+                (messageHeaders, messageParameters, requestBody) -> {
+                    if (messageHeaders instanceof JobsOverviewHeaders) {
+                        return CompletableFuture.completedFuture(getMultipleJobsDetails());
+                    }
+                    return CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
+                });
         return clusterClient;
+    }
+
+    private MultipleJobsDetails getMultipleJobsDetails() {
+        return new MultipleJobsDetails(
+                jobs.stream()
+                        .map(tuple -> tuple.f1)
+                        .map(TestingFlinkService::toJobDetails)
+                        .collect(Collectors.toList()));
+    }
+
+    private static JobDetails toJobDetails(JobStatusMessage jobStatus) {
+        return new JobDetails(
+                jobStatus.getJobId(),
+                jobStatus.getJobName(),
+                jobStatus.getStartTime(),
+                -1,
+                System.currentTimeMillis() - jobStatus.getStartTime(),
+                jobStatus.getJobState(),
+                System.currentTimeMillis(),
+                new int[ExecutionState.values().length],
+                0);
     }
 
     private String cancelJob(FlinkVersion flinkVersion, JobID jobID, boolean savepoint)
