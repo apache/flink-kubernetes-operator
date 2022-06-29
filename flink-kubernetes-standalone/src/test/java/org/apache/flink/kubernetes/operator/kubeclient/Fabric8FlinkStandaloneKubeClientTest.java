@@ -81,7 +81,6 @@ public class Fabric8FlinkStandaloneKubeClientTest {
 
     @Test
     public void testStopAndCleanupCluster() throws Exception {
-        flinkConfig = TestUtils.createTestFlinkConfig();
         ClusterSpecification clusterSpecification = TestUtils.createClusterSpecification();
         StandaloneKubernetesJobManagerParameters jmParameters =
                 new StandaloneKubernetesJobManagerParameters(flinkConfig, clusterSpecification);

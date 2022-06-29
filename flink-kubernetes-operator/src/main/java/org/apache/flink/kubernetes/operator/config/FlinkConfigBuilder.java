@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.config;
 
+import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
@@ -32,9 +33,12 @@ import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
+import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
@@ -227,11 +231,45 @@ public class FlinkConfigBuilder {
                         spec.getTaskManager().getReplicas());
             }
         }
+
+        if (spec.getJob() != null
+                && KubernetesDeploymentMode.getDeploymentMode(spec)
+                        == KubernetesDeploymentMode.STANDALONE) {
+            if (!effectiveConfig.contains(
+                    StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS)) {
+                effectiveConfig.set(
+                        StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS,
+                        FlinkUtils.getNumTaskManagers(effectiveConfig, getParallelism()));
+            }
+        }
         return this;
     }
 
     protected FlinkConfigBuilder applyJobOrSessionSpec() throws URISyntaxException {
         KubernetesDeploymentMode deploymentMode = KubernetesDeploymentMode.getDeploymentMode(spec);
+
+        if (spec.getJob() != null) {
+            JobSpec jobSpec = spec.getJob();
+            effectiveConfig.set(
+                    DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());
+            final URI uri = new URI(jobSpec.getJarURI());
+            effectiveConfig.set(PipelineOptions.JARS, Collections.singletonList(uri.toString()));
+            effectiveConfig.set(CoreOptions.DEFAULT_PARALLELISM, getParallelism());
+
+            if (jobSpec.getAllowNonRestoredState() != null) {
+                effectiveConfig.set(
+                        SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE,
+                        jobSpec.getAllowNonRestoredState());
+            }
+
+            if (jobSpec.getEntryClass() != null) {
+                effectiveConfig.set(
+                        ApplicationConfiguration.APPLICATION_MAIN_CLASS, jobSpec.getEntryClass());
+            }
+        } else {
+            effectiveConfig.set(
+                    DeploymentOptions.TARGET, KubernetesDeploymentTarget.SESSION.getName());
+        }
 
         if (deploymentMode == KubernetesDeploymentMode.STANDALONE) {
             effectiveConfig.set(DeploymentOptions.TARGET, "remote");
@@ -242,28 +280,30 @@ public class FlinkConfigBuilder {
             if (spec.getJob() != null) {
                 effectiveConfig.set(
                         PipelineOptions.CLASSPATHS,
-                        Collections.singletonList(spec.getJob().getJarURI()));
+                        Collections.singletonList(getStandaloneJarURI(spec.getJob())));
             }
-            return this;
-        }
-
-        if (spec.getJob() != null) {
-            effectiveConfig.set(
-                    DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());
-            final URI uri = new URI(spec.getJob().getJarURI());
-            effectiveConfig.set(PipelineOptions.JARS, Collections.singletonList(uri.toString()));
-            effectiveConfig.set(CoreOptions.DEFAULT_PARALLELISM, getParallelism());
-
-            if (spec.getJob().getAllowNonRestoredState() != null) {
-                effectiveConfig.set(
-                        SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE,
-                        spec.getJob().getAllowNonRestoredState());
-            }
-        } else {
-            effectiveConfig.set(
-                    DeploymentOptions.TARGET, KubernetesDeploymentTarget.SESSION.getName());
         }
         return this;
+    }
+
+    private String getStandaloneJarURI(JobSpec jobSpec) throws URISyntaxException {
+        URI uri = new URI(jobSpec.getJarURI());
+
+        // Running an application job through standalone mode doesn't requires file uri scheme and
+        // doesn't accept
+        // local scheme which is used for native so convert here to improve compatibilty at the
+        // operator layer
+        if (uri.getScheme().equals("local")) {
+            uri =
+                    new URI(
+                            "file",
+                            uri.getAuthority() == null ? "" : uri.getAuthority(),
+                            uri.getPath(),
+                            uri.getQuery(),
+                            uri.getFragment());
+        }
+
+        return uri.toASCIIString();
     }
 
     private int getParallelism() {

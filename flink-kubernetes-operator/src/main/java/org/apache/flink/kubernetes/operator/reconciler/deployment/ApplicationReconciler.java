@@ -33,7 +33,6 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
-import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -194,7 +193,7 @@ public class ApplicationReconciler
     @Override
     public boolean reconcileOtherChanges(
             FlinkDeployment deployment, Context ctx, Configuration observeConfig) throws Exception {
-        if (SavepointUtils.triggerSavepointIfNeeded(flinkService, deployment, observeConfig)) {
+        if (super.reconcileOtherChanges(deployment, ctx, observeConfig)) {
             return true;
         }
 

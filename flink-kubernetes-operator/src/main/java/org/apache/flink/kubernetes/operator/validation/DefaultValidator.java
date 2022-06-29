@@ -205,10 +205,6 @@ public class DefaultValidator implements FlinkResourceValidator {
                                 "Checkpoint directory[%s] must be defined for last-state and savepoint upgrade modes",
                                 CheckpointingOptions.CHECKPOINTS_DIRECTORY.key()));
             }
-
-            if (mode == KubernetesDeploymentMode.STANDALONE) {
-                return Optional.of("Standalone mode currently only support stateless upgrade mode");
-            }
         }
 
         if (StringUtils.isNullOrWhitespaceOnly(

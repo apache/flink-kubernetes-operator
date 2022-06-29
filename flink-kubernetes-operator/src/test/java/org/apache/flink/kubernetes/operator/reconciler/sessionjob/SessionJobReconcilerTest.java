@@ -72,7 +72,7 @@ public class SessionJobReconcilerTest {
     @BeforeEach
     public void before() {
         flinkService = new TestingFlinkService();
-        flinkServiceFactory = flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
+        flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
         eventRecorder =
                 new EventRecorder(null, (r, e) -> {}) {
                     @Override

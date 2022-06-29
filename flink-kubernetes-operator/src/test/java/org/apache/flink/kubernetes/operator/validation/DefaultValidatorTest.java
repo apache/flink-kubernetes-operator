@@ -404,32 +404,6 @@ public class DefaultValidatorTest {
                 "spec.serviceAccount must be defined. If you use helm, its value should be the same with the name of jobServiceAccount.");
 
         testSuccess(dep -> dep.getSpec().setServiceAccount("flink"));
-
-        testError(
-                dep -> {
-                    dep.getSpec()
-                            .setFlinkConfiguration(
-                                    Map.of(
-                                            HighAvailabilityOptions.HA_MODE.key(),
-                                            KubernetesHaServicesFactory.class.getCanonicalName(),
-                                            CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(),
-                                            "file://"));
-                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-                    dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
-                },
-                "Standalone mode currently only support stateless upgrade mode");
-
-        testError(
-                dep -> {
-                    dep.getSpec()
-                            .setFlinkConfiguration(
-                                    Map.of(
-                                            CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(),
-                                            "file://"));
-                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
-                    dep.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
-                },
-                "Standalone mode currently only support stateless upgrade mode");
     }
 
     @Test

@@ -27,6 +27,9 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.VolumeBuilder;
+import io.fabric8.kubernetes.api.model.VolumeMount;
+
+import java.util.List;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
 
@@ -48,6 +51,10 @@ public class UserLibMountDecorator extends AbstractKubernetesStepDecorator {
     @Override
     public FlinkPod decorateFlinkPod(FlinkPod flinkPod) {
         if (!kubernetesJobManagerParameters.isApplicationCluster()) {
+            return flinkPod;
+        }
+
+        if (mainContainerHasUserLibPath(flinkPod)) {
             return flinkPod;
         }
 
@@ -77,5 +84,11 @@ public class UserLibMountDecorator extends AbstractKubernetesStepDecorator {
                 .withPod(pod)
                 .withMainContainer(mountedMainContainer)
                 .build();
+    }
+
+    private boolean mainContainerHasUserLibPath(FlinkPod flinkPod) {
+        List<VolumeMount> volumeMounts = flinkPod.getMainContainer().getVolumeMounts();
+        return volumeMounts.stream()
+                .anyMatch(volumeMount -> volumeMount.getMountPath().startsWith(USER_LIB_PATH));
     }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.kubeclient.factory;
 
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.kubeclient.KubernetesJobManagerSpecification;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
@@ -65,6 +66,7 @@ public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBas
     @BeforeEach
     public void setup() throws Exception {
         setupFlinkConfig();
+        flinkConfig.set(KubernetesConfigOptions.FLINK_CONF_DIR, "/missing/dir");
         FlinkPod podTemplate = createPodTemplate();
         StandaloneKubernetesJobManagerParameters tmParameters =
                 new StandaloneKubernetesJobManagerParameters(

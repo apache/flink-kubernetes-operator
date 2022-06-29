@@ -96,6 +96,7 @@ jobs:
       matrix:
         version: ["v1_15","v1_14","v1_13"]
         namespace: ["default","flink"]
+        mode: ["native", "standalone"]
         test:
           - test_application_kubernetes_ha.sh
           - test_application_operations.sh
@@ -154,6 +155,7 @@ jobs:
         run: |
           sed -i "s/image: flink:.*/image: ${{ matrix.image }}/" e2e-tests/data/*.yaml
           sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.version }}/" e2e-tests/data/*.yaml
+          sed -i "s/mode: .*/mode: ${{ matrix.mode }}/" e2e-tests/data/*.yaml
           git diff HEAD
           echo "Running e2e-tests/$test"
           bash e2e-tests/${{ matrix.test }} || exit 1

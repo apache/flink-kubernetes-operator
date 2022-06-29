@@ -20,14 +20,11 @@ package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 
 /** The mode of {@link FlinkDeployment}. */
 public enum Mode {
-    NATIVE_APPLICATION,
-    NATIVE_SESSION,
-    STANDALONE_APPLICATION,
-    STANDALONE_SESSION;
+    APPLICATION,
+    SESSION;
 
     /**
      * Return the mode of the given FlinkDeployment for Observer and Reconciler. Note, switching
@@ -49,10 +46,6 @@ public enum Mode {
     }
 
     private static Mode getMode(FlinkDeploymentSpec spec) {
-        KubernetesDeploymentMode deploymentMode = spec.getMode();
-        if (deploymentMode == null || deploymentMode == KubernetesDeploymentMode.NATIVE) {
-            return spec.getJob() != null ? NATIVE_APPLICATION : NATIVE_SESSION;
-        }
-        return spec.getJob() != null ? STANDALONE_APPLICATION : STANDALONE_SESSION;
+        return spec.getJob() != null ? APPLICATION : SESSION;
     }
 }

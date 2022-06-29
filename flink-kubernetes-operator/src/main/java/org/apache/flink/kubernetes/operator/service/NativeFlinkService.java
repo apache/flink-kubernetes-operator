@@ -26,13 +26,12 @@ import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -56,21 +55,7 @@ public class NativeFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void submitApplicationCluster(
-            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
-        LOG.info(
-                "Deploying application cluster{}",
-                requireHaMetadata ? " requiring last-state from HA metadata" : "");
-        if (FlinkUtils.isKubernetesHAActivated(conf)) {
-            final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
-            final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
-            // Delete the job graph in the HA ConfigMaps so that the newly changed job config(e.g.
-            // parallelism) could take effect
-            FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
-        }
-        if (requireHaMetadata) {
-            validateHaMetadataExists(conf);
-        }
+    protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
         final ClusterClientServiceLoader clusterClientServiceLoader =
                 new DefaultClusterClientServiceLoader();
         final ApplicationDeployer deployer =
@@ -83,16 +68,6 @@ public class NativeFlinkService extends AbstractFlinkService {
 
         deployer.run(conf, applicationConfiguration);
         LOG.info("Application cluster successfully deployed");
-    }
-
-    private void validateHaMetadataExists(Configuration conf) {
-        if (!isHaMetadataAvailable(conf)) {
-            throw new DeploymentFailedException(
-                    "HA metadata not available to restore from last state. "
-                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
-                            + "Manual restore required.",
-                    "RestoreFailed");
-        }
     }
 
     @Override
@@ -108,6 +83,13 @@ public class NativeFlinkService extends AbstractFlinkService {
                     kubernetesClusterClientFactory.getClusterSpecification(conf));
         }
         LOG.info("Session cluster successfully deployed");
+    }
+
+    @Override
+    public void cancelJob(
+            FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration configuration)
+            throws Exception {
+        cancelJob(deployment, upgradeMode, configuration, false);
     }
 
     @Override

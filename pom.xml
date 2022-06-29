@@ -51,7 +51,6 @@ under the License.
     </scm>
 
     <modules>
-        <module>flink-kubernetes-mock-shaded</module>
         <module>flink-kubernetes-standalone</module>
         <module>flink-kubernetes-shaded</module>
         <module>flink-kubernetes-operator</module>
@@ -64,7 +63,7 @@ under the License.
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <maven-assembly-plugin.version>3.3.0</maven-assembly-plugin.version>
-        <maven-surefire-plugin.version>2.22.0</maven-surefire-plugin.version>
+        <maven-surefire-plugin.version>3.0.0-M4</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.0.0-M5</maven-failsafe-plugin.version>
         <maven-resources-plugin.version>3.2.0</maven-resources-plugin.version>
         <git-commit-id-maven-plugin.version>5.0.0</git-commit-id-maven-plugin.version>

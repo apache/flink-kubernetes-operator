@@ -142,9 +142,31 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     protected abstract PodList getJmPodList(String namespace, String clusterId);
 
+    protected abstract void deployApplicationCluster(JobSpec jobSpec, Configuration conf)
+            throws Exception;
+
     @Override
     public KubernetesClient getKubernetesClient() {
         return kubernetesClient;
+    }
+
+    @Override
+    public void submitApplicationCluster(
+            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
+        LOG.info(
+                "Deploying application cluster{}",
+                requireHaMetadata ? " requiring last-state from HA metadata" : "");
+        if (FlinkUtils.isKubernetesHAActivated(conf)) {
+            final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
+            final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
+            // Delete the job graph in the HA ConfigMaps so that the newly changed job config(e.g.
+            // parallelism) could take effect
+            FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
+        }
+        if (requireHaMetadata) {
+            validateHaMetadataExists(conf);
+        }
+        deployApplicationCluster(jobSpec, conf);
     }
 
     @Override
@@ -219,8 +241,11 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    @Override
-    public void cancelJob(FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration conf)
+    protected void cancelJob(
+            FlinkDeployment deployment,
+            UpgradeMode upgradeMode,
+            Configuration conf,
+            boolean deleteClusterAfterSavepoint)
             throws Exception {
         var deploymentStatus = deployment.getStatus();
         var jobIdString = deploymentStatus.getJobStatus().getJobId();
@@ -289,6 +314,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                         clusterId,
                                         ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT.key()),
                                 exception);
+                    }
+                    if (deleteClusterAfterSavepoint) {
+                        deleteClusterDeployment(deployment.getMetadata(), deploymentStatus, true);
                     }
                     break;
                 case LAST_STATE:
@@ -697,7 +725,6 @@ public abstract class AbstractFlinkService implements FlinkService {
     /** Wait until the FLink cluster has completely shut down. */
     @VisibleForTesting
     void waitForClusterShutdown(String namespace, String clusterId, long shutdownTimeout) {
-
         boolean jobManagerRunning = true;
         boolean serviceRunning = true;
 
@@ -764,5 +791,15 @@ public abstract class AbstractFlinkService implements FlinkService {
             LOG.debug("Adjusting job state from {} to {}", JobStatus.RUNNING, effectiveStatus);
         }
         return effectiveStatus;
+    }
+
+    private void validateHaMetadataExists(Configuration conf) {
+        if (!isHaMetadataAvailable(conf)) {
+            throw new DeploymentFailedException(
+                    "HA metadata not available to restore from last state. "
+                            + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
+                            + "Manual restore required.",
+                    "RestoreFailed");
+        }
     }
 }

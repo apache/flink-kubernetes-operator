@@ -21,6 +21,7 @@ import org.apache.flink.client.deployment.ClusterDeploymentException;
 import org.apache.flink.client.deployment.ClusterDescriptor;
 import org.apache.flink.client.deployment.ClusterRetrieveException;
 import org.apache.flink.client.deployment.ClusterSpecification;
+import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.ClusterClientProvider;
 import org.apache.flink.client.program.rest.RestClusterClient;
@@ -89,6 +90,31 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
     @Override
     public ClusterClientProvider<String> deploySessionCluster(
             ClusterSpecification clusterSpecification) throws ClusterDeploymentException {
+        flinkConfig.set(
+                StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
+                StandaloneKubernetesConfigOptionsInternal.ClusterMode.SESSION);
+
+        final ClusterClientProvider clusterClientProvider =
+                deployClusterInternal(clusterSpecification);
+
+        try (ClusterClient<String> clusterClient = clusterClientProvider.getClusterClient()) {
+            LOG.info(
+                    "Created flink session cluster {} successfully, JobManager Web Interface: {}",
+                    clusterId,
+                    clusterClient.getWebInterfaceURL());
+        }
+        return clusterClientProvider;
+    }
+
+    @Override
+    public ClusterClientProvider<String> deployApplicationCluster(
+            ClusterSpecification clusterSpecification,
+            ApplicationConfiguration applicationConfiguration)
+            throws ClusterDeploymentException {
+        flinkConfig.set(
+                StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
+                StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
+        applicationConfiguration.applyToConfiguration(flinkConfig);
         final ClusterClientProvider clusterClientProvider =
                 deployClusterInternal(clusterSpecification);
 

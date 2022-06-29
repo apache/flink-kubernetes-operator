@@ -167,6 +167,10 @@ public class FlinkUtils {
 
     public static int getNumTaskManagers(Configuration conf) {
         int parallelism = conf.get(CoreOptions.DEFAULT_PARALLELISM);
+        return getNumTaskManagers(conf, parallelism);
+    }
+
+    public static int getNumTaskManagers(Configuration conf, int parallelism) {
         int taskSlots = conf.get(TaskManagerOptions.NUM_TASK_SLOTS);
         return (parallelism + taskSlots - 1) / taskSlots;
     }

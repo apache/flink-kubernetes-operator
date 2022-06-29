@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.kubeclient.decorators.InternalServiceDecorato
 import org.apache.flink.kubernetes.kubeclient.decorators.KerberosMountDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.KubernetesStepDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.MountSecretsDecorator;
-import org.apache.flink.kubernetes.kubeclient.decorators.PodTemplateMountDecorator;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesOwnerReference;
 import org.apache.flink.kubernetes.operator.kubeclient.decorators.CmdStandaloneJobManagerDecorator;
@@ -74,7 +73,6 @@ public class StandaloneKubernetesJobManagerFactory {
                     new KerberosMountDecorator(kubernetesJobManagerParameters),
                     new FlinkConfMountDecorator(kubernetesJobManagerParameters),
                     new UserLibMountDecorator(kubernetesJobManagerParameters),
-                    new PodTemplateMountDecorator(kubernetesJobManagerParameters)
                 };
 
         for (KubernetesStepDecorator stepDecorator : stepDecorators) {

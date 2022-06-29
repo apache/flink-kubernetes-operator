@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -79,5 +80,12 @@ public class StandaloneKubernetesJobManagerParameters extends KubernetesJobManag
             return null;
         }
         return flinkConfig.getString(ApplicationConfiguration.APPLICATION_MAIN_CLASS);
+    }
+
+    public Boolean getAllowNonRestoredState() {
+        if (flinkConfig.contains(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE)) {
+            return flinkConfig.get(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE);
+        }
+        return null;
     }
 }
