@@ -32,7 +32,6 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
@@ -67,10 +66,10 @@ public class SessionJobReconcilerTest {
                     @Override
                     public boolean triggerEvent(
                             AbstractFlinkResource<?, ?> resource,
-                            EventUtils.Type type,
+                            Type type,
                             String reason,
                             String message,
-                            EventUtils.Component component) {
+                            Component component) {
                         return false;
                     }
                 };

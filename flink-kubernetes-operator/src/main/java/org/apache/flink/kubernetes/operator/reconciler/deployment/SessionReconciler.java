@@ -29,7 +29,6 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 
@@ -166,10 +165,10 @@ public class SessionReconciler
                                     .collect(Collectors.toList()));
             if (eventRecorder.triggerEvent(
                     deployment,
-                    EventUtils.Type.Warning,
-                    "Cleanup",
-                    error,
-                    EventUtils.Component.Operator)) {
+                    EventRecorder.Type.Warning,
+                    EventRecorder.Reason.Cleanup,
+                    EventRecorder.Component.Operator,
+                    error)) {
                 LOG.warn(error);
             }
             return DeleteControl.noFinalizerRemoval()

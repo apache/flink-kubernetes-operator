@@ -33,7 +33,6 @@ import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
@@ -247,10 +246,10 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         ReconciliationUtils.updateForReconciliationError(deployment, err);
         eventRecorder.triggerEvent(
                 deployment,
-                EventUtils.Type.Warning,
-                "Missing",
-                err,
-                EventUtils.Component.JobManagerDeployment);
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.Missing,
+                EventRecorder.Component.JobManagerDeployment,
+                err);
     }
 
     /**

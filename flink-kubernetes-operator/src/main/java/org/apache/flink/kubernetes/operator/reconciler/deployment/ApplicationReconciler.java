@@ -30,7 +30,6 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.EventUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
@@ -141,10 +140,10 @@ public class ApplicationReconciler
         }
         eventRecorder.triggerEvent(
                 relatedResource,
-                EventUtils.Type.Normal,
-                REASON_SUBMIT,
-                MSG_SUBMIT,
-                EventUtils.Component.JobManagerDeployment);
+                EventRecorder.Type.Normal,
+                EventRecorder.Reason.Submit,
+                EventRecorder.Component.JobManagerDeployment,
+                MSG_SUBMIT);
         flinkService.submitApplicationCluster(spec.getJob(), deployConfig, requireHaMetadata);
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);

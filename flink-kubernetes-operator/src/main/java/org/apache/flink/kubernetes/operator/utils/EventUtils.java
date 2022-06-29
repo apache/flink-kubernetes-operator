@@ -32,21 +32,12 @@ import java.util.function.Consumer;
  */
 public class EventUtils {
 
-    /** The type of the events. */
-    public enum Type {
-        Normal,
-        Warning
-    }
-
-    /** The component of events. */
-    public enum Component {
-        Operator,
-        JobManagerDeployment,
-        Job
-    }
-
     public static String generateEventName(
-            HasMetadata target, Type type, String reason, String message, Component component) {
+            HasMetadata target,
+            EventRecorder.Type type,
+            String reason,
+            String message,
+            EventRecorder.Component component) {
         return component
                 + "."
                 + ((reason
@@ -62,10 +53,10 @@ public class EventUtils {
     public static boolean createOrUpdateEvent(
             KubernetesClient client,
             HasMetadata target,
-            Type type,
+            EventRecorder.Type type,
             String reason,
             String message,
-            Component component,
+            EventRecorder.Component component,
             Consumer<Event> eventListener) {
         var eventName = generateEventName(target, type, reason, message, component);
 
