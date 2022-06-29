@@ -20,9 +20,11 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 
@@ -36,17 +38,20 @@ public class ReconcilerFactory {
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
+    private final StatusRecorder<FlinkDeploymentStatus> deploymentStatusRecorder;
     private final Map<Mode, Reconciler<FlinkDeployment>> reconcilerMap;
 
     public ReconcilerFactory(
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            EventRecorder eventRecorder) {
+            EventRecorder eventRecorder,
+            StatusRecorder<FlinkDeploymentStatus> deploymentStatusRecorder) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
+        this.deploymentStatusRecorder = deploymentStatusRecorder;
         this.reconcilerMap = new ConcurrentHashMap<>();
     }
 
@@ -57,10 +62,18 @@ public class ReconcilerFactory {
                     switch (mode) {
                         case SESSION:
                             return new SessionReconciler(
-                                    kubernetesClient, flinkService, configManager, eventRecorder);
+                                    kubernetesClient,
+                                    flinkService,
+                                    configManager,
+                                    eventRecorder,
+                                    deploymentStatusRecorder);
                         case APPLICATION:
                             return new ApplicationReconciler(
-                                    kubernetesClient, flinkService, configManager, eventRecorder);
+                                    kubernetesClient,
+                                    flinkService,
+                                    configManager,
+                                    eventRecorder,
+                                    deploymentStatusRecorder);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

@@ -48,12 +48,10 @@ public class ReconciliationUtilsTest {
         FlinkDeployment app = TestUtils.buildApplicationCluster();
         app.getSpec().getJob().setState(JobState.RUNNING);
         app.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
-        ReconciliationUtils.updateForSpecReconciliationSuccess(
-                app, JobState.RUNNING, new Configuration());
+        ReconciliationUtils.updateStatusForDeployedSpec(app, new Configuration());
         FlinkDeployment previous = ReconciliationUtils.clone(app);
         FlinkDeployment current = ReconciliationUtils.clone(app);
-        ReconciliationUtils.updateForSpecReconciliationSuccess(
-                current, JobState.SUSPENDED, new Configuration());
+        ReconciliationUtils.updateStatusBeforeSpecUpgrade(current, new Configuration());
 
         UpdateControl<FlinkDeployment> updateControl =
                 ReconciliationUtils.toUpdateControl(operatorConfiguration, current, previous, true);

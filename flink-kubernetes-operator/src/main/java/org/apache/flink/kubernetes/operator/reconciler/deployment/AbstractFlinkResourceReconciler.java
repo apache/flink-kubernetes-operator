@@ -34,6 +34,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -62,6 +63,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
     protected final FlinkConfigManager configManager;
     protected final EventRecorder eventRecorder;
+    protected final StatusRecorder<STATUS> statusRecorder;
     protected final KubernetesClient kubernetesClient;
     protected final FlinkService flinkService;
 
@@ -74,11 +76,13 @@ public abstract class AbstractFlinkResourceReconciler<
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            EventRecorder eventRecorder) {
+            EventRecorder eventRecorder,
+            StatusRecorder<STATUS> statusRecorder) {
         this.kubernetesClient = kubernetesClient;
         this.flinkService = flinkService;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
+        this.statusRecorder = statusRecorder;
     }
 
     @Override
@@ -99,6 +103,12 @@ public abstract class AbstractFlinkResourceReconciler<
         // No further logic is required at this point.
         if (firstDeployment) {
             LOG.info("Deploying for the first time");
+
+            // Before we try to submit the job we record the current spec in the status so we can
+            // handle subsequent deployment and status update errors
+            ReconciliationUtils.updateStatusBeforeSpecUpgrade(cr, deployConfig);
+            statusRecorder.patchAndCacheStatus(cr);
+
             deploy(
                     cr,
                     spec,
@@ -106,8 +116,7 @@ public abstract class AbstractFlinkResourceReconciler<
                     deployConfig,
                     Optional.ofNullable(spec.getJob()).map(JobSpec::getInitialSavepointPath),
                     false);
-            ReconciliationUtils.updateForSpecReconciliationSuccess(
-                    cr, JobState.RUNNING, deployConfig);
+            ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig);
             return;
         }
 
@@ -116,7 +125,9 @@ public abstract class AbstractFlinkResourceReconciler<
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();
 
-        boolean specChanged = !currentDeploySpec.equals(lastReconciledSpec);
+        boolean specChanged =
+                reconciliationStatus.getState() == ReconciliationState.UPGRADING
+                        || !currentDeploySpec.equals(lastReconciledSpec);
         var observeConfig = getObserveConfig(cr, ctx);
 
         if (specChanged) {
@@ -262,10 +273,7 @@ public abstract class AbstractFlinkResourceReconciler<
         if (resource.getSpec().equals(deployedSpec)) {
             LOG.info(
                     "The new spec matches the currently deployed last stable spec. No upgrade needed.");
-            ReconciliationUtils.updateForSpecReconciliationSuccess(
-                    resource,
-                    deployedSpec.getJob() != null ? deployedSpec.getJob().getState() : null,
-                    deployConf);
+            ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConf);
             return true;
         }
         return false;

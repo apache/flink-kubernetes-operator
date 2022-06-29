@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
@@ -56,8 +57,9 @@ public class ApplicationReconciler
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            EventRecorder eventRecorder) {
-        super(kubernetesClient, flinkService, configManager, eventRecorder);
+            EventRecorder eventRecorder,
+            StatusRecorder<FlinkDeploymentStatus> statusRecorder) {
+        super(kubernetesClient, flinkService, configManager, eventRecorder, statusRecorder);
     }
 
     @Override

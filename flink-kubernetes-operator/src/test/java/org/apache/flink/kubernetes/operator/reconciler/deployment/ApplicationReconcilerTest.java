@@ -38,6 +38,7 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 
@@ -73,10 +74,17 @@ public class ApplicationReconcilerTest {
 
     @BeforeEach
     public void before() {
+        kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
+        var statusRecoder =
+                new StatusRecorder<FlinkDeploymentStatus>(kubernetesClient, (r, e) -> {});
         reconciler =
                 new ApplicationReconciler(
-                        kubernetesClient, flinkService, configManager, eventRecorder);
+                        kubernetesClient,
+                        flinkService,
+                        configManager,
+                        eventRecorder,
+                        statusRecoder);
     }
 
     @ParameterizedTest

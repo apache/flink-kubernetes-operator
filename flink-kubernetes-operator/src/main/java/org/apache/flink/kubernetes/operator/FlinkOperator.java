@@ -115,7 +115,8 @@ public class FlinkOperator {
         var statusRecorder = StatusRecorder.<FlinkDeploymentStatus>create(client, listeners);
         var eventRecorder = EventRecorder.create(client, listeners);
         var reconcilerFactory =
-                new ReconcilerFactory(client, flinkService, configManager, eventRecorder);
+                new ReconcilerFactory(
+                        client, flinkService, configManager, eventRecorder, statusRecorder);
         var observerFactory =
                 new ObserverFactory(flinkService, configManager, statusRecorder, eventRecorder);
 
@@ -133,9 +134,10 @@ public class FlinkOperator {
 
     private void registerSessionJobController() {
         var eventRecorder = EventRecorder.create(client, listeners);
-        var reconciler =
-                new SessionJobReconciler(client, flinkService, configManager, eventRecorder);
         var statusRecorder = StatusRecorder.<FlinkSessionJobStatus>create(client, listeners);
+        var reconciler =
+                new SessionJobReconciler(
+                        client, flinkService, configManager, eventRecorder, statusRecorder);
         var observer =
                 new SessionJobObserver(flinkService, configManager, statusRecorder, eventRecorder);
         var controller =

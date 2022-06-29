@@ -24,7 +24,6 @@ import org.apache.flink.configuration.DeploymentOptionsInternal;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -108,8 +107,7 @@ public class FlinkConfigManagerTest {
         deployment.getSpec().setLogConfiguration(Map.of(Constants.CONFIG_FILE_LOG4J_NAME, "test"));
         deployment.getSpec().setPodTemplate(new Pod());
 
-        ReconciliationUtils.updateForSpecReconciliationSuccess(
-                deployment, JobState.RUNNING, config);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, config);
         Configuration deployConfig = configManager.getObserveConfig(deployment);
         assertFalse(
                 deployConfig.contains(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));

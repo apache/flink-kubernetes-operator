@@ -28,13 +28,17 @@ import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,12 +56,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link SessionJobReconciler}. */
+@EnableKubernetesMockClient(crud = true)
 public class SessionJobReconcilerTest {
 
+    private KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private TestingFlinkService flinkService = new TestingFlinkService();
     private EventRecorder eventRecorder;
     private SessionJobReconciler reconciler;
+    private StatusRecorder<FlinkSessionJobStatus> statusRecoder;
 
     @BeforeEach
     public void before() {
@@ -73,7 +80,14 @@ public class SessionJobReconcilerTest {
                         return false;
                     }
                 };
-        reconciler = new SessionJobReconciler(null, flinkService, configManager, eventRecorder);
+        reconciler =
+                new SessionJobReconciler(
+                        null, flinkService, configManager, eventRecorder, statusRecoder);
+        kubernetesClient.resource(TestUtils.buildSessionJob()).createOrReplace();
+        statusRecoder = new StatusRecorder<FlinkSessionJobStatus>(kubernetesClient, (r, e) -> {});
+        reconciler =
+                new SessionJobReconciler(
+                        null, flinkService, configManager, eventRecorder, statusRecoder);
     }
 
     @Test
@@ -443,7 +457,9 @@ public class SessionJobReconcilerTest {
                                         .key(),
                                 "true")));
         // Force upgrade when savepoint is in progress.
-        reconciler = new SessionJobReconciler(null, flinkService, configManager, eventRecorder);
+        reconciler =
+                new SessionJobReconciler(
+                        null, flinkService, configManager, eventRecorder, statusRecoder);
         spSessionJob.getSpec().getJob().setParallelism(100);
         reconciler.reconcile(spSessionJob, readyContext);
         assertEquals(

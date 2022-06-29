@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.operator.TestingClusterClient;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
-import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
@@ -94,8 +93,7 @@ public class FlinkServiceTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
-        ReconciliationUtils.updateForSpecReconciliationSuccess(
-                deployment, JobState.RUNNING, new Configuration());
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         deployment.getStatus().getJobStatus().setState("RUNNING");
@@ -133,8 +131,7 @@ public class FlinkServiceTest {
         JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
         jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
-        ReconciliationUtils.updateForSpecReconciliationSuccess(
-                deployment, JobState.RUNNING, new Configuration());
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         flinkService.cancelJob(
                 deployment, UpgradeMode.SAVEPOINT, configManager.getObserveConfig(deployment));
@@ -148,8 +145,7 @@ public class FlinkServiceTest {
     @Test
     public void testCancelJobWithLastStateUpgradeMode() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        ReconciliationUtils.updateForSpecReconciliationSuccess(
-                deployment, JobState.RUNNING, new Configuration());
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
         final TestingClusterClient<String> testingClusterClient =
                 new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final FlinkService flinkService = createFlinkService(testingClusterClient);
@@ -205,8 +201,7 @@ public class FlinkServiceTest {
 
         final JobID jobID = JobID.generate();
         final FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
-        ReconciliationUtils.updateForSpecReconciliationSuccess(
-                flinkDeployment, JobState.RUNNING, new Configuration());
+        ReconciliationUtils.updateStatusForDeployedSpec(flinkDeployment, new Configuration());
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobId(jobID.toString());
         flinkDeployment.getStatus().setJobStatus(jobStatus);

@@ -262,8 +262,11 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
      * @param context Context for reconciliation.
      */
     private void checkIfAlreadyUpgraded(FlinkDeployment flinkDep, Context context) {
-        Optional<Deployment> depOpt = context.getSecondaryResource(Deployment.class);
         var status = flinkDep.getStatus();
+        if (status.getReconciliationStatus().getLastReconciledSpec() == null) {
+            return;
+        }
+        Optional<Deployment> depOpt = context.getSecondaryResource(Deployment.class);
         depOpt.ifPresent(
                 deployment -> {
                     Map<String, String> annotations = deployment.getMetadata().getAnnotations();
@@ -278,38 +281,21 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
                     Long upgradeTargetGeneration =
                             ReconciliationUtils.getUpgradeTargetGeneration(flinkDep);
 
-                    Long currentSpecGeneration = flinkDep.getMetadata().getGeneration();
-
                     if (deployedGeneration.equals(upgradeTargetGeneration)) {
                         logger.info("Pending upgrade is already deployed, updating status.");
-
-                        var firstDeploy =
-                                status.getReconciliationStatus().getLastReconciledSpec() == null;
-                        if (firstDeploy) {
-                            ReconciliationUtils.updateForSpecReconciliationSuccess(
-                                    flinkDep,
-                                    JobState.RUNNING,
-                                    configManager.getDeployConfig(
-                                            flinkDep.getMetadata(), flinkDep.getSpec()));
-                        } else {
-                            ReconciliationUtils.updateStatusForAlreadyUpgraded(flinkDep);
+                        ReconciliationUtils.updateStatusForAlreadyUpgraded(flinkDep);
+                        if (flinkDep.getSpec().getJob() != null) {
+                            status.getJobStatus()
+                                    .setState(
+                                            org.apache.flink.api.common.JobStatus.RECONCILING
+                                                    .name());
                         }
-
-                        status.getJobStatus()
-                                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
                         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-                    } else if (deployedGeneration.equals(currentSpecGeneration)) {
-                        logger.info(
-                                "Deployment is already upgraded to latest spec, updating status.");
-
-                        ReconciliationUtils.updateForSpecReconciliationSuccess(
-                                flinkDep,
-                                JobState.RUNNING,
-                                configManager.getDeployConfig(
-                                        flinkDep.getMetadata(), flinkDep.getSpec()));
-                        status.getJobStatus()
-                                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
-                        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+                    } else {
+                        logger.warn(
+                                "Running deployment generation {} doesn't match upgrade target generation {}.",
+                                deployedGeneration,
+                                upgradeTargetGeneration);
                     }
                 });
     }

@@ -23,7 +23,10 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Test;
 
@@ -34,10 +37,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * Tests for {@link org.apache.flink.kubernetes.operator.reconciler.deployment.SessionReconciler}.
  */
+@EnableKubernetesMockClient(crud = true)
 public class SessionReconcilerTest {
 
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private final EventRecorder eventRecorder = new EventRecorder(null, (r, e) -> {});
+    private KubernetesClient kubernetesClient;
 
     @Test
     public void testStartSession() throws Exception {
@@ -53,8 +58,14 @@ public class SessionReconcilerTest {
                 };
 
         SessionReconciler reconciler =
-                new SessionReconciler(null, flinkService, configManager, eventRecorder);
+                new SessionReconciler(
+                        kubernetesClient,
+                        flinkService,
+                        configManager,
+                        eventRecorder,
+                        new StatusRecorder<>(kubernetesClient, (r, e) -> {}));
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        kubernetesClient.resource(deployment).createOrReplace();
         reconciler.reconcile(deployment, context);
         assertEquals(1, count.get());
     }
