@@ -116,7 +116,7 @@ public class SessionObserverTest {
         // Test regular upgrades
         deployment.getSpec().getFlinkConfiguration().put("k", "1");
         deployment.getMetadata().setGeneration(321L);
-        ReconciliationUtils.updateStatusBeforeSpecUpgrade(
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
                 deployment,
                 new FlinkConfigManager(new Configuration())
                         .getDeployConfig(deployment.getMetadata(), deployment.getSpec()));

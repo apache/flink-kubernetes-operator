@@ -87,7 +87,7 @@ public class SessionReconciler
         deleteSessionCluster(deployment, observeConfig);
 
         // We record the target spec into an upgrading state before deploying
-        ReconciliationUtils.updateStatusBeforeSpecUpgrade(deployment, deployConfig);
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(deployment, deployConfig);
         statusRecorder.patchAndCacheStatus(deployment);
 
         deploy(

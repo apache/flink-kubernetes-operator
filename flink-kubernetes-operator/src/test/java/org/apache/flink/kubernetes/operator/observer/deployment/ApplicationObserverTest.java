@@ -458,7 +458,7 @@ public class ApplicationObserverTest {
         // Test regular upgrades
         deployment.getSpec().getJob().setParallelism(5);
         deployment.getMetadata().setGeneration(321L);
-        ReconciliationUtils.updateStatusBeforeSpecUpgrade(
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
                 deployment,
                 new FlinkConfigManager(new Configuration())
                         .getDeployConfig(deployment.getMetadata(), deployment.getSpec()));

@@ -106,7 +106,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
             // Before we try to submit the job we record the current spec in the status so we can
             // handle subsequent deployment and status update errors
-            ReconciliationUtils.updateStatusBeforeSpecUpgrade(cr, deployConfig);
+            ReconciliationUtils.updateStatusBeforeDeploymentAttempt(cr, deployConfig);
             statusRecorder.patchAndCacheStatus(cr);
 
             deploy(

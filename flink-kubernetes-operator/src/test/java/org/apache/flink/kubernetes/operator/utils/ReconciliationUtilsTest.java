@@ -51,7 +51,7 @@ public class ReconciliationUtilsTest {
         ReconciliationUtils.updateStatusForDeployedSpec(app, new Configuration());
         FlinkDeployment previous = ReconciliationUtils.clone(app);
         FlinkDeployment current = ReconciliationUtils.clone(app);
-        ReconciliationUtils.updateStatusBeforeSpecUpgrade(current, new Configuration());
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(current, new Configuration());
 
         UpdateControl<FlinkDeployment> updateControl =
                 ReconciliationUtils.toUpdateControl(operatorConfiguration, current, previous, true);

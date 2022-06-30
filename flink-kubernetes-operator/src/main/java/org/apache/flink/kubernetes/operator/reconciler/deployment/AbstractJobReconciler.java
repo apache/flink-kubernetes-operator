@@ -108,14 +108,14 @@ public abstract class AbstractJobReconciler<
             currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.get());
             cancelJob(resource, availableUpgradeMode.get(), observeConfig);
             if (desiredJobState == JobState.RUNNING) {
-                ReconciliationUtils.updateStatusBeforeSpecUpgrade(resource, deployConfig);
+                ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig);
             } else {
                 ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig);
             }
         }
         if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
             // We record the target spec into an upgrading state before deploying
-            ReconciliationUtils.updateStatusBeforeSpecUpgrade(resource, deployConfig);
+            ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig);
             statusRecorder.patchAndCacheStatus(resource);
 
             restoreJob(

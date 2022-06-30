@@ -63,13 +63,33 @@ public class ReconciliationUtils {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * Update status after successful deployment of a new resource spec. Existing reconciliation
+     * errors will be cleared, lastReconciled spec will be updated and for suspended jobs it will
+     * also be marked stable.
+     *
+     * <p>For Application deployments TaskManager info will also be updated.
+     *
+     * @param target Target Flink resource.
+     * @param conf Deployment configuration.
+     */
     public static <SPEC extends AbstractFlinkSpec> void updateStatusForDeployedSpec(
             AbstractFlinkResource<SPEC, ?> target, Configuration conf) {
         var job = target.getSpec().getJob();
         updateStatusForSpecReconciliation(target, job != null ? job.getState() : null, conf, false);
     }
 
-    public static <SPEC extends AbstractFlinkSpec> void updateStatusBeforeSpecUpgrade(
+    /**
+     * Update status before deployment attempt of a new resource spec. Existing reconciliation
+     * errors will be cleared, lastReconciled spec will be updated and reconciliation status marked
+     * UPGRADING.
+     *
+     * <p>For Application deployments TaskManager info will also be updated.
+     *
+     * @param target Target Flink resource.
+     * @param conf Deployment configuration.
+     */
+    public static <SPEC extends AbstractFlinkSpec> void updateStatusBeforeDeploymentAttempt(
             AbstractFlinkResource<SPEC, ?> target, Configuration conf) {
         updateStatusForSpecReconciliation(target, JobState.SUSPENDED, conf, true);
     }
