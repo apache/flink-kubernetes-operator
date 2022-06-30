@@ -22,24 +22,23 @@ RBAC rules used to create the operator (cluster)role based on the scope
 {{- define "flink-operator.rbacRules" }}
 rules:
   - apiGroups:
-      - flink-operator
-    resources:
-      - "*"
-    verbs:
-      - "*"
-  - apiGroups:
       - ""
     resources:
       - pods
       - services
-      - endpoints
-      - persistentvolumeclaims
       - events
       - configmaps
       - secrets
-      - nodes
     verbs:
       - "*"
+{{- if .Values.rbac.nodesRule.create }}
+  - apiGroups:
+    - ""
+    resources:
+      - nodes
+    verbs:
+      - list
+{{- end }}
   - apiGroups:
       - apps
     resources:

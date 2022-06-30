@@ -29,6 +29,11 @@ image:
 
 rbac:
   create: true
+  # kubernetes.rest-service.exposed.type: NodePort requires
+  # list permission for nodes at the cluster scope.
+  # Set create to true if you are using NodePort type.
+  nodesRule:
+    create: false
 
 operatorPod:
   annotations: {}
