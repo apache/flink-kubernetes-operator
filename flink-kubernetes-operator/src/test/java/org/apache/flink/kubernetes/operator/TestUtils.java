@@ -434,10 +434,8 @@ public class TestUtils {
     public static FlinkDeploymentController createTestController(
             FlinkConfigManager configManager,
             KubernetesClient kubernetesClient,
-            TestingFlinkService flinkService) {
-
-        var statusRecorder =
-                new StatusRecorder<FlinkDeploymentStatus>(kubernetesClient, (r, s) -> {});
+            TestingFlinkService flinkService,
+            StatusRecorder statusRecorder) {
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
         return new FlinkDeploymentController(
                 configManager,

@@ -117,6 +117,7 @@ public class FlinkDeploymentController
                         previousDeployment,
                         false);
             }
+            statusRecorder.patchAndCacheStatus(flinkApp);
             reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context);
         } catch (DeploymentFailedException dfe) {
             handleDeploymentFailed(flinkApp, dfe);
