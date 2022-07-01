@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -57,8 +58,9 @@ public class SessionReconciler
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            EventRecorder eventRecorder) {
-        super(kubernetesClient, flinkService, configManager, eventRecorder);
+            EventRecorder eventRecorder,
+            StatusRecorder<FlinkDeploymentStatus> statusRecorder) {
+        super(kubernetesClient, flinkService, configManager, eventRecorder, statusRecorder);
     }
 
     @Override
@@ -82,16 +84,23 @@ public class SessionReconciler
     protected void reconcileSpecChange(
             FlinkDeployment deployment, Configuration observeConfig, Configuration deployConfig)
             throws Exception {
-        upgradeSessionCluster(deployment, deployment.getSpec(), deployConfig);
-        ReconciliationUtils.updateForSpecReconciliationSuccess(deployment, null, deployConfig);
+        deleteSessionCluster(deployment, observeConfig);
+
+        // We record the target spec into an upgrading state before deploying
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(deployment, deployConfig);
+        statusRecorder.patchAndCacheStatus(deployment);
+
+        deploy(
+                deployment,
+                deployment.getSpec(),
+                deployment.getStatus(),
+                deployConfig,
+                Optional.empty(),
+                false);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, deployConfig);
     }
 
-    private void upgradeSessionCluster(
-            FlinkDeployment deployment,
-            FlinkDeploymentSpec deploySpec,
-            Configuration effectiveConfig)
-            throws Exception {
-        LOG.info("Upgrading session cluster");
+    private void deleteSessionCluster(FlinkDeployment deployment, Configuration effectiveConfig) {
         flinkService.deleteClusterDeployment(
                 deployment.getMetadata(), deployment.getStatus(), false);
         FlinkUtils.waitForClusterShutdown(
@@ -101,13 +110,6 @@ public class SessionReconciler
                         .getOperatorConfiguration()
                         .getFlinkShutdownClusterTimeout()
                         .toSeconds());
-        deploy(
-                deployment,
-                deploySpec,
-                deployment.getStatus(),
-                effectiveConfig,
-                Optional.empty(),
-                false);
     }
 
     @Override
@@ -133,7 +135,16 @@ public class SessionReconciler
         FlinkDeploymentSpec rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
         Configuration rollbackConfig =
                 configManager.getDeployConfig(deployment.getMetadata(), rollbackSpec);
-        upgradeSessionCluster(deployment, rollbackSpec, rollbackConfig);
+
+        deleteSessionCluster(deployment, observeConfig);
+        deploy(
+                deployment,
+                rollbackSpec,
+                deployment.getStatus(),
+                rollbackConfig,
+                Optional.empty(),
+                false);
+
         reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
     }
 

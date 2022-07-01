@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -49,8 +50,9 @@ public class SessionJobReconciler
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            EventRecorder eventRecorder) {
-        super(kubernetesClient, flinkService, configManager, eventRecorder);
+            EventRecorder eventRecorder,
+            StatusRecorder<FlinkSessionJobStatus> statusRecorder) {
+        super(kubernetesClient, flinkService, configManager, eventRecorder, statusRecorder);
     }
 
     @Override

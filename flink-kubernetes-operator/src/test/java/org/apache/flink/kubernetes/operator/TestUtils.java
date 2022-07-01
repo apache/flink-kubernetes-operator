@@ -442,7 +442,12 @@ public class TestUtils {
         return new FlinkDeploymentController(
                 configManager,
                 ValidatorUtils.discoverValidators(configManager),
-                new ReconcilerFactory(kubernetesClient, flinkService, configManager, eventRecorder),
+                new ReconcilerFactory(
+                        kubernetesClient,
+                        flinkService,
+                        configManager,
+                        eventRecorder,
+                        statusRecorder),
                 new ObserverFactory(flinkService, configManager, statusRecorder, eventRecorder),
                 new MetricManager<>(new MetricListener().getMetricGroup()),
                 statusRecorder,

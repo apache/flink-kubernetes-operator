@@ -51,13 +51,18 @@ public class SessionJobObserverTest {
 
     @BeforeEach
     public void before() {
+        kubernetesClient.resource(TestUtils.buildSessionJob()).createOrReplace();
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        TestingStatusRecorder<FlinkSessionJobStatus> statusRecorder = new TestingStatusRecorder<>();
+        var statusRecorder = new TestingStatusRecorder<FlinkSessionJobStatus>();
         observer =
                 new SessionJobObserver(flinkService, configManager, statusRecorder, eventRecorder);
         reconciler =
                 new SessionJobReconciler(
-                        kubernetesClient, flinkService, configManager, eventRecorder);
+                        kubernetesClient,
+                        flinkService,
+                        configManager,
+                        eventRecorder,
+                        statusRecorder);
     }
 
     @Test

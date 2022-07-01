@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -55,8 +56,9 @@ public abstract class AbstractJobReconciler<
             KubernetesClient kubernetesClient,
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            EventRecorder eventRecorder) {
-        super(kubernetesClient, flinkService, configManager, eventRecorder);
+            EventRecorder eventRecorder,
+            StatusRecorder<STATUS> statusRecorder) {
+        super(kubernetesClient, flinkService, configManager, eventRecorder, statusRecorder);
     }
 
     @Override
@@ -87,7 +89,6 @@ public abstract class AbstractJobReconciler<
 
         JobState currentJobState = lastReconciledSpec.getJob().getState();
         JobState desiredJobState = currentDeploySpec.getJob().getState();
-        JobState newState = currentJobState;
         if (currentJobState == JobState.RUNNING) {
             if (desiredJobState == JobState.RUNNING) {
                 LOG.info("Upgrading/Restarting running job, suspending first...");
@@ -106,9 +107,17 @@ public abstract class AbstractJobReconciler<
             // We must record the upgrade mode used to the status later
             currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.get());
             cancelJob(resource, availableUpgradeMode.get(), observeConfig);
-            newState = JobState.SUSPENDED;
+            if (desiredJobState == JobState.RUNNING) {
+                ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig);
+            } else {
+                ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig);
+            }
         }
         if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
+            // We record the target spec into an upgrading state before deploying
+            ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig);
+            statusRecorder.patchAndCacheStatus(resource);
+
             restoreJob(
                     resource,
                     currentDeploySpec,
@@ -116,9 +125,9 @@ public abstract class AbstractJobReconciler<
                     deployConfig,
                     // We decide to enforce HA based on how job was previously suspended
                     lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
-            newState = JobState.RUNNING;
+
+            ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig);
         }
-        ReconciliationUtils.updateForSpecReconciliationSuccess(resource, newState, deployConfig);
     }
 
     protected Optional<UpgradeMode> getAvailableUpgradeMode(
