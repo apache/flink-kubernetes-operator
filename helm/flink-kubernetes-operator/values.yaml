@@ -27,6 +27,8 @@ image:
   pullPolicy: IfNotPresent
   tag: latest
 
+imagePullSecrets: []
+
 rbac:
   create: true
 
@@ -108,7 +110,6 @@ defaultConfiguration:
 metrics:
   port:
 
-imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
