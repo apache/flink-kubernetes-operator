@@ -96,6 +96,7 @@ public class FlinkSessionJobController
         }
 
         try {
+            statusRecorder.patchAndCacheStatus(flinkSessionJob);
             reconciler.reconcile(flinkSessionJob, context);
         } catch (Exception e) {
             throw new ReconciliationException(e);

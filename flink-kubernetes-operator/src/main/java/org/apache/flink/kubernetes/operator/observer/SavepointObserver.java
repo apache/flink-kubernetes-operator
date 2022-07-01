@@ -40,7 +40,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Optional;
 
 /** An observer of savepoint progress. */
 public class SavepointObserver<STATUS extends CommonStatus<?>> {
@@ -69,10 +68,6 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
         var jobStatus = resource.getStatus().getJobStatus();
         var savepointInfo = jobStatus.getSavepointInfo();
         var jobId = jobStatus.getJobId();
-        var previousLastSpPath =
-                Optional.ofNullable(savepointInfo.getLastSavepoint())
-                        .map(Savepoint::getLocation)
-                        .orElse(null);
 
         // If any manual or periodic savepoint is in progress, observe it
         if (SavepointUtils.savepointInProgress(jobStatus)) {
@@ -83,8 +78,6 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
         if (ReconciliationUtils.isJobInTerminalState(resource.getStatus())) {
             observeLatestSavepoint(savepointInfo, jobId, deployedConfig);
         }
-
-        patchStatusOnSavepointChange(resource, savepointInfo, previousLastSpPath);
     }
 
     /**
@@ -199,29 +192,6 @@ public class SavepointObserver<STATUS extends CommonStatus<?>> {
         } catch (Exception e) {
             LOG.error("Could not observe latest savepoint information.", e);
             throw new ReconciliationException(e);
-        }
-    }
-
-    /**
-     * Patch the Kubernetes Flink resource status if we observed a new last savepoint. This is
-     * crucial to not lose this information once the reconciler shuts down the cluster.
-     */
-    private void patchStatusOnSavepointChange(
-            AbstractFlinkResource<?, STATUS> resource,
-            SavepointInfo savepointInfo,
-            String previousLastSpPath) {
-        var currentLastSpPath =
-                Optional.ofNullable(savepointInfo.getLastSavepoint())
-                        .map(Savepoint::getLocation)
-                        .orElse(null);
-
-        // If the last savepoint information changes we need to patch the status
-        // to avoid losing this in case of an operator failure after the cluster was shut down
-        if (currentLastSpPath != null && !currentLastSpPath.equals(previousLastSpPath)) {
-            LOG.info(
-                    "Updating resource status after observing new last savepoint {}",
-                    currentLastSpPath);
-            statusRecorder.patchAndCacheStatus(resource);
         }
     }
 }

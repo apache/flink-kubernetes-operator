@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.util.function.ThrowingRunnable;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -70,7 +71,8 @@ public class RollbackTest {
                 TestUtils.createTestController(
                         new FlinkConfigManager(new Configuration()),
                         kubernetesClient,
-                        flinkService);
+                        flinkService,
+                        new StatusRecorder<>(kubernetesClient, (a, c) -> {}));
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
     }
 

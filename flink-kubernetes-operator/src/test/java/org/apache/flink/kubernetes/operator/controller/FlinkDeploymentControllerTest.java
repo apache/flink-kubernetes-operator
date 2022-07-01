@@ -24,12 +24,14 @@ import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
@@ -38,6 +40,7 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.api.model.EventBuilder;
@@ -60,6 +63,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -82,24 +86,41 @@ public class FlinkDeploymentControllerTest {
 
     private KubernetesMockServer mockServer;
     private KubernetesClient kubernetesClient;
+    private StatusUpdateCounter statusUpdateCounter = new StatusUpdateCounter();
 
     @BeforeEach
     public void setup() {
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         testController =
-                TestUtils.createTestController(configManager, kubernetesClient, flinkService);
+                TestUtils.createTestController(
+                        configManager,
+                        kubernetesClient,
+                        flinkService,
+                        new StatusRecorder<>(kubernetesClient, statusUpdateCounter));
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
     }
 
     @ParameterizedTest
     @EnumSource(FlinkVersion.class)
     public void verifyBasicReconcileLoop(FlinkVersion flinkVersion) throws Exception {
-        FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
 
         UpdateControl<FlinkDeployment> updateControl;
 
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster(FlinkVersion.v1_16);
+        assertEquals(
+                JobManagerDeploymentStatus.MISSING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertNull(appCluster.getStatus().getJobStatus().getState());
+
         updateControl = testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
+                appCluster.getStatus().getJobStatus().getState());
+        assertEquals(2, statusUpdateCounter.getCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -117,6 +138,13 @@ public class FlinkDeploymentControllerTest {
         assertNull(appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
 
         updateControl = testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
+                appCluster.getStatus().getJobStatus().getState());
+        assertEquals(3, statusUpdateCounter.getCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -124,6 +152,28 @@ public class FlinkDeploymentControllerTest {
                 updateControl.getScheduleDelay());
 
         updateControl = testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getJobStatus().getState());
+        assertEquals(4, statusUpdateCounter.getCount());
+        assertFalse(updateControl.isUpdateStatus());
+        assertEquals(
+                Optional.of(
+                        configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
+                updateControl.getScheduleDelay());
+
+        // Stable loop
+        updateControl = testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getJobStatus().getState());
+        assertEquals(4, statusUpdateCounter.getCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -143,6 +193,13 @@ public class FlinkDeploymentControllerTest {
         // Send in invalid update
         appCluster.getSpec().setJob(null);
         updateControl = testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getJobStatus().getState());
+        assertEquals(5, statusUpdateCounter.getCount());
         assertFalse(updateControl.isUpdateStatus());
 
         reconciliationStatus = appCluster.getStatus().getReconciliationStatus();
@@ -807,5 +864,23 @@ public class FlinkDeploymentControllerTest {
             }
         }
         return args.stream();
+    }
+
+    private static class StatusUpdateCounter
+            implements BiConsumer<
+                    AbstractFlinkResource<?, FlinkDeploymentStatus>, FlinkDeploymentStatus> {
+        private int counter;
+
+        @Override
+        public void accept(
+                AbstractFlinkResource<?, FlinkDeploymentStatus>
+                        flinkDeploymentStatusAbstractFlinkResource,
+                FlinkDeploymentStatus flinkDeploymentStatus) {
+            counter++;
+        }
+
+        public int getCount() {
+            return counter;
+        }
     }
 }
