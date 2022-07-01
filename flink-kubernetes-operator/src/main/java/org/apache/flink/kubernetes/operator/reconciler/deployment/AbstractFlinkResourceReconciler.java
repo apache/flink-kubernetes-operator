@@ -90,6 +90,7 @@ public abstract class AbstractFlinkResourceReconciler<
         var spec = cr.getSpec();
         var deployConfig = getDeployConfig(cr.getMetadata(), spec, ctx);
         var status = cr.getStatus();
+        var reconciliationStatus = cr.getStatus().getReconciliationStatus();
 
         // If the resource is not ready for reconciliation we simply return
         if (!readyToReconcile(cr, ctx, deployConfig)) {
@@ -97,11 +98,9 @@ public abstract class AbstractFlinkResourceReconciler<
             return;
         }
 
-        var firstDeployment = status.getReconciliationStatus().getLastReconciledSpec() == null;
-
         // If this is the first deployment for the resource we simply submit the job and return.
         // No further logic is required at this point.
-        if (firstDeployment) {
+        if (reconciliationStatus.isFirstDeployment()) {
             LOG.info("Deploying for the first time");
 
             // Before we try to submit the job we record the current spec in the status so we can
@@ -120,7 +119,6 @@ public abstract class AbstractFlinkResourceReconciler<
             return;
         }
 
-        var reconciliationStatus = cr.getStatus().getReconciliationStatus();
         SPEC lastReconciledSpec =
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();

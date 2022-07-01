@@ -204,7 +204,7 @@ public class ApplicationReconciler
     @SneakyThrows
     protected DeleteControl cleanupInternal(FlinkDeployment deployment, Context context) {
         var status = deployment.getStatus();
-        if (status.getReconciliationStatus().getLastReconciledSpec() == null) {
+        if (status.getReconciliationStatus().isFirstDeployment()) {
             flinkService.deleteClusterDeployment(deployment.getMetadata(), status, true);
         } else {
             flinkService.cancelJob(

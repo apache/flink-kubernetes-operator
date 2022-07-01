@@ -263,7 +263,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
      */
     private void checkIfAlreadyUpgraded(FlinkDeployment flinkDep, Context context) {
         var status = flinkDep.getStatus();
-        if (status.getReconciliationStatus().getLastReconciledSpec() == null) {
+        if (status.getReconciliationStatus().isFirstDeployment()) {
             return;
         }
         Optional<Deployment> depOpt = context.getSecondaryResource(Deployment.class);

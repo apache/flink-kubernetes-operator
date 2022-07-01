@@ -94,4 +94,9 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
         }
         return lastReconciledSpec.equals(lastStableSpec);
     }
+
+    @JsonIgnore
+    public boolean isFirstDeployment() {
+        return lastReconciledSpec == null;
+    }
 }
