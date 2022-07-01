@@ -29,7 +29,22 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Utility for checking backward CRD compatibility. */
+/**
+ * Utility for checking backward CRD compatibility.
+ *
+ * <p>The aim is to provide a very strict compatibility check logic initially that can be improved
+ * over time with compatible type changes if necessary by CRD updates
+ *
+ * <p>It performs the following checks:
+ *
+ * <ul>
+ *   <li>No property removed from any object
+ *   <li>No enum value removed from enums (changing enum to string is allowed)
+ *   <li>No type changes for fields
+ *   <li>No type changes for array/map items
+ *   <li>No change in extra properties of field schema definitions
+ * </ul>
+ */
 public class CrdCompatibilityChecker {
 
     private static final Logger logger = LoggerFactory.getLogger(CrdCompatibilityChecker.class);
