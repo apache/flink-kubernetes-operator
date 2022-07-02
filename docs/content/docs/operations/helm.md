@@ -64,6 +64,7 @@ The configurable parameters of the Helm chart and which default values as detail
 | image.pullPolicy | The image pull policy of flink-kubernetes-operator. | IfNotPresent |
 | image.tag | The image tag of flink-kubernetes-operator. | latest |
 | rbac.create | Whether to enable RBAC to create for said namespaces. | true |
+| rbac.nodesRule.create | Whether to add RBAC rule to list nodes which is needed for rest-service exposed as NodePort type. | false |
 | operatorPod.annotations | Custom annotations to be added to the operator pod (but not the deployment). | |
 | operatorPod.labels | Custom labels to be added to the operator pod (but not the deployment). | |
 | operatorServiceAccount.create | Whether to enable operator service account to create for flink-kubernetes-operator. | true |
