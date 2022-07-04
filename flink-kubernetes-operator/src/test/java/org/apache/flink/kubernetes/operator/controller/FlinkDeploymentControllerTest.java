@@ -66,6 +66,7 @@ import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -562,7 +563,7 @@ public class FlinkDeploymentControllerTest {
             FlinkVersion flinkVersion, UpgradeMode upgradeMode) throws Exception {
         var appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(upgradeMode);
-        testUpgradeNotReadyCluster(appCluster);
+        testUpgradeNotReadyCluster(ReconciliationUtils.clone(appCluster));
     }
 
     @Test
@@ -738,6 +739,34 @@ public class FlinkDeploymentControllerTest {
                         .getUpgradeMode());
         flinkService.setPortReady(true);
 
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getJobStatus().getState());
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        // triggering upgrade with no last-state fallback on non-healthy app
+        flinkService.setPortReady(false);
+        appCluster
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED.key(), "false");
+        appCluster.getSpec().setServiceAccount(appCluster.getSpec().getServiceAccount() + "-5");
+        // not upgrading the cluster with no last-state fallback
+        testController.reconcile(appCluster, context);
+        assertNotEquals(
+                appCluster.getSpec(),
+                appCluster.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
+
+        // once the job is ready however the upgrade continues
+        flinkService.setPortReady(true);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
