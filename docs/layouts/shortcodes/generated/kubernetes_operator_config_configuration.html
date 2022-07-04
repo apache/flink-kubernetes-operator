@@ -75,6 +75,12 @@
             <td>Whether to ignore pending savepoint during job upgrade.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.job.upgrade.last-state-fallback.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Enables last-state fallback for savepoint upgrade mode. When the job is not running thus savepoint cannot be triggered but HA metadata is available for last state restore the operator can initiate the upgrade process when the flag is enabled.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.observer.progress-check.interval</h5></td>
             <td style="word-wrap: break-word;">10 s</td>
             <td>Duration</td>

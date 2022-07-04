@@ -230,4 +230,11 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(10)
                     .withDescription(
                             "Max attempts of automatic reconcile retries on recoverable errors.");
+
+    public static final ConfigOption<Boolean> OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED =
+            ConfigOptions.key("kubernetes.operator.job.upgrade.last-state-fallback.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Enables last-state fallback for savepoint upgrade mode. When the job is not running thus savepoint cannot be triggered but HA metadata is available for last state restore the operator can initiate the upgrade process when the flag is enabled.");
 }
