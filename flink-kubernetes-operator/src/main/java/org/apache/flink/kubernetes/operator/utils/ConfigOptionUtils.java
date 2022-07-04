@@ -34,6 +34,7 @@ public class ConfigOptionUtils {
      * @param config The effective config
      * @param configOption The config option.
      * @param configThreshold The config threshold.
+     * @param <T> Type of the config value.
      * @return The value of {@link ConfigOption} with threshold.
      */
     public static <T extends Comparable<T>> T getValueWithThreshold(

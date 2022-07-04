@@ -31,7 +31,7 @@ public interface ArtifactFetcher {
      * @param flinkConfiguration Flink configuration.
      * @param targetDir The target dir to put the artifact.
      * @return The path of the fetched artifact.
-     * @throws Exception
+     * @throws Exception Error during fetching the artifact.
      */
     File fetch(String uri, Configuration flinkConfiguration, File targetDir) throws Exception;
 }

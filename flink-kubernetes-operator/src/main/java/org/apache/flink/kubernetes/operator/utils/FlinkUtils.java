@@ -151,7 +151,14 @@ public class FlinkUtils {
         status.getJobStatus().setState(JobStatus.FINISHED.name());
     }
 
-    /** Wait until the FLink cluster has completely shut down. */
+    /**
+     * Wait until the FLink cluster has completely shut down.
+     *
+     * @param kubernetesClient Kubernetes client.
+     * @param namespace Resource namespace.
+     * @param clusterId Flink clusterId.
+     * @param shutdownTimeout Max time allowed for shutdown.
+     */
     public static void waitForClusterShutdown(
             KubernetesClient kubernetesClient,
             String namespace,
@@ -200,7 +207,13 @@ public class FlinkUtils {
         LOG.info("Cluster shutdown completed.");
     }
 
-    /** Wait until the FLink cluster has completely shut down. */
+    /**
+     * Wait until the FLink cluster has completely shut down.
+     *
+     * @param kubernetesClient Kubernetes client.
+     * @param conf Flink configuration.
+     * @param shutdownTimeout Max time allowed for shutdown.
+     */
     public static void waitForClusterShutdown(
             KubernetesClient kubernetesClient, Configuration conf, long shutdownTimeout) {
         FlinkUtils.waitForClusterShutdown(

@@ -216,9 +216,9 @@ public abstract class AbstractJobReconciler<
      * Cancel the job for the given resource using the specified upgrade mode.
      *
      * @param resource Related Flink resource.
-     * @param upgradeMode
+     * @param upgradeMode Upgrade mode used during cancel.
      * @param observeConfig Observe configuration.
-     * @throws Exception
+     * @throws Exception Error during cancellation.
      */
     protected abstract void cancelJob(
             CR resource, UpgradeMode upgradeMode, Configuration observeConfig) throws Exception;

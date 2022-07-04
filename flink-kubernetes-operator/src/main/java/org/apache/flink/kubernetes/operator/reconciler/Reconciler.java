@@ -33,6 +33,7 @@ public interface Reconciler<CR> {
      *
      * @param cr the custom resource that has been created or updated
      * @param context the context with which the operation is executed
+     * @throws Exception Error during reconciliation.
      */
     void reconcile(CR cr, Context context) throws Exception;
 

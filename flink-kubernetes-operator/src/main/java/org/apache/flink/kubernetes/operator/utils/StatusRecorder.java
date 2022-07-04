@@ -66,6 +66,7 @@ public class StatusRecorder<STATUS extends CommonStatus<?>> {
      * operator behavior.
      *
      * @param resource Resource for which status update should be performed
+     * @param <T> Resource type.
      */
     @SneakyThrows
     public <T extends AbstractFlinkResource<?, STATUS>> void patchAndCacheStatus(T resource) {
@@ -121,6 +122,7 @@ public class StatusRecorder<STATUS extends CommonStatus<?>> {
      * reconciles a resource for the first time after a restart.
      *
      * @param resource Resource for which the status should be updated from the cache
+     * @param <T> Custom resource type.
      */
     public <T extends CustomResource<?, STATUS>> void updateStatusFromCache(T resource) {
         var key = getKey(resource);
@@ -136,7 +138,12 @@ public class StatusRecorder<STATUS extends CommonStatus<?>> {
         }
     }
 
-    /** Remove cached status for Flink resource. */
+    /**
+     * Remove cached status for Flink resource.
+     *
+     * @param resource Flink resource.
+     * @param <T> Resource type.
+     */
     public <T extends CustomResource<?, STATUS>> void removeCachedStatus(T resource) {
         statusCache.remove(getKey(resource));
     }

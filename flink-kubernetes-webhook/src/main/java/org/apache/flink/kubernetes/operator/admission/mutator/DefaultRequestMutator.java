@@ -40,7 +40,7 @@ import java.util.Base64;
  * io.javaoperatorsdk.admissioncontroller.mutation.DefaultRequestMutator} with a modified path diff
  * util to serialize out include non-null.
  *
- * @param <T>
+ * @param <T> Resource type.
  */
 public class DefaultRequestMutator<T extends KubernetesResource> implements RequestHandler {
     private static final ObjectMapper mapper =

@@ -100,8 +100,9 @@ public class ConfigOptionsDocGenerator {
      * are annotated with {@link Documentation.Section}.
      *
      * @param args [0] output directory for the generated files [1] project root directory
+     * @throws Exception Error during doc generation.
      */
-    public static void main(String[] args) throws IOException, ClassNotFoundException {
+    public static void main(String[] args) throws Exception {
         String outputDirectory = args[0];
         String rootDir = args[1];
         LOG.info(

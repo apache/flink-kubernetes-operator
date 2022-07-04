@@ -196,7 +196,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param cr Related Flink resource.
      * @param observeConfig Observe configuration.
      * @param deployConfig Deployment configuration.
-     * @throws Exception
+     * @throws Exception Error during spec upgrade.
      */
     protected abstract void reconcileSpecChange(
             CR cr, Configuration observeConfig, Configuration deployConfig) throws Exception;
@@ -207,7 +207,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param cr Related Flink resource.
      * @param ctx Reconciliation context.
      * @param observeConfig Observe configuration.
-     * @throws Exception
+     * @throws Exception Error during rollback.
      */
     protected abstract void rollback(CR cr, Context ctx, Configuration observeConfig)
             throws Exception;
@@ -219,7 +219,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param cr Related Flink resource.
      * @param observeConfig Observe configuration.
      * @return True if any further reconciliation action was taken.
-     * @throws Exception
+     * @throws Exception Error during reconciliation.
      */
     protected abstract boolean reconcileOtherChanges(CR cr, Configuration observeConfig)
             throws Exception;
@@ -238,7 +238,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param deployConfig Flink conf for the deployment.
      * @param savepoint Optional savepoint path for applications and session jobs.
      * @param requireHaMetadata Flag used by application deployments to validate HA metadata
-     * @throws Exception
+     * @throws Exception Error during deployment.
      */
     protected abstract void deploy(
             CR relatedResource,
@@ -286,7 +286,7 @@ public abstract class AbstractFlinkResourceReconciler<
      *
      * @param reconciliationStatus ReconciliationStatus of the resource.
      * @param configuration Flink cluster configuration.
-     * @return
+     * @return True if the resource should be rolled back.
      */
     private boolean shouldRollBack(
             ReconciliationStatus<SPEC> reconciliationStatus, Configuration configuration) {
