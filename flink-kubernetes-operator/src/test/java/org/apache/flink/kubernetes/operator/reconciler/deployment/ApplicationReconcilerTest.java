@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -511,5 +512,34 @@ public class ApplicationReconcilerTest {
         String path2 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path2.startsWith(haStoragePath));
         assertNotEquals(path1, path2);
+    }
+
+    @Test
+    public void testAlwaysSavepointOnFlinkVersionChange() throws Exception {
+        var deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_14);
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+
+        var ctx = flinkService.getContext();
+        reconciler.reconcile(deployment, ctx);
+
+        deployment.getSpec().setFlinkVersion(FlinkVersion.v1_15);
+
+        var reconStatus = deployment.getStatus().getReconciliationStatus();
+
+        // Do not trigger update until running
+        reconciler.reconcile(deployment, ctx);
+        assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
+
+        deployment.getStatus().getJobStatus().setState(JobState.RUNNING.name());
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setJobId(flinkService.listJobs().get(0).f1.getJobId().toHexString());
+
+        reconciler.reconcile(deployment, ctx);
+        assertEquals(ReconciliationState.UPGRADING, reconStatus.getState());
+        assertEquals(
+                UpgradeMode.SAVEPOINT,
+                reconStatus.deserializeLastReconciledSpec().getJob().getUpgradeMode());
     }
 }

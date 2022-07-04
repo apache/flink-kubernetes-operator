@@ -91,7 +91,9 @@ public class ApplicationReconciler
                                 .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED)
                 && FlinkUtils.isKubernetesHAActivated(deployConfig)
                 && FlinkUtils.isKubernetesHAActivated(observeConfig)
-                && flinkService.isHaMetadataAvailable(deployConfig)) {
+                && flinkService.isHaMetadataAvailable(deployConfig)
+                && !flinkVersionChanged(
+                        ReconciliationUtils.getDeployedSpec(deployment), deployment.getSpec())) {
             LOG.info(
                     "Job is not running but HA metadata is available for last state restore, ready for upgrade");
             return Optional.of(UpgradeMode.LAST_STATE);

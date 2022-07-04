@@ -98,6 +98,7 @@ public abstract class AbstractJobReconciler<
             if (availableUpgradeMode.isEmpty()) {
                 return;
             }
+
             eventRecorder.triggerEvent(
                     resource,
                     EventRecorder.Type.Normal,
@@ -140,7 +141,7 @@ public abstract class AbstractJobReconciler<
 
         if (upgradeMode == UpgradeMode.STATELESS) {
             LOG.info("Stateless job, ready for upgrade");
-            return Optional.of(upgradeMode);
+            return Optional.of(UpgradeMode.STATELESS);
         }
 
         if (ReconciliationUtils.isJobInTerminalState(status)) {
@@ -155,9 +156,15 @@ public abstract class AbstractJobReconciler<
                 LOG.info(
                         "Using savepoint upgrade mode when switching to last-state without HA previously enabled");
                 return Optional.of(UpgradeMode.SAVEPOINT);
-            } else {
-                return Optional.of(upgradeMode);
             }
+
+            if (flinkVersionChanged(
+                    ReconciliationUtils.getDeployedSpec(resource), resource.getSpec())) {
+                LOG.info("Using savepoint upgrade mode when upgrading Flink version");
+                return Optional.of(UpgradeMode.SAVEPOINT);
+            }
+
+            return Optional.of(upgradeMode);
         }
 
         return Optional.empty();

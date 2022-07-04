@@ -23,12 +23,12 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -140,7 +140,7 @@ public abstract class AbstractFlinkResourceReconciler<
                     EventRecorder.Component.JobManagerDeployment,
                     MSG_SPEC_CHANGED);
             reconcileSpecChange(cr, observeConfig, deployConfig);
-        } else if (shouldRollBack(reconciliationStatus, observeConfig)) {
+        } else if (shouldRollBack(cr, observeConfig)) {
             // Rollbacks are executed in two steps, we initiate it first then return
             if (initiateRollBack(status)) {
                 return;
@@ -284,13 +284,14 @@ public abstract class AbstractFlinkResourceReconciler<
      *
      * <p>Rollbacks are only supported to previously running resource specs with HA enabled.
      *
-     * @param reconciliationStatus ReconciliationStatus of the resource.
+     * @param resource Resource being reconciled.
      * @param configuration Flink cluster configuration.
      * @return True if the resource should be rolled back.
      */
     private boolean shouldRollBack(
-            ReconciliationStatus<SPEC> reconciliationStatus, Configuration configuration) {
+            AbstractFlinkResource<SPEC, STATUS> resource, Configuration configuration) {
 
+        var reconciliationStatus = resource.getStatus().getReconciliationStatus();
         if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
             return true;
         }
@@ -302,10 +303,19 @@ public abstract class AbstractFlinkResourceReconciler<
         }
 
         var lastStableSpec = reconciliationStatus.deserializeLastStableSpec();
-        if (lastStableSpec != null
-                && lastStableSpec.getJob() != null
+        if (lastStableSpec == null) {
+            // Nothing to roll back to yet
+            return false;
+        }
+
+        if (lastStableSpec.getJob() != null
                 && lastStableSpec.getJob().getState() == JobState.SUSPENDED) {
             // Should not roll back to suspended state
+            return false;
+        }
+
+        if (flinkVersionChanged(resource.getSpec(), lastStableSpec)) {
+            // Should not roll back Flink version changes
             return false;
         }
 
@@ -374,5 +384,13 @@ public abstract class AbstractFlinkResourceReconciler<
         return (deployedJob == null || deployedJob.getState() == JobState.RUNNING)
                 && (deployment.getStatus().getJobManagerDeploymentStatus()
                         == JobManagerDeploymentStatus.MISSING);
+    }
+
+    protected boolean flinkVersionChanged(SPEC oldSpec, SPEC newSpec) {
+        if (oldSpec instanceof FlinkDeploymentSpec) {
+            return ((FlinkDeploymentSpec) oldSpec).getFlinkVersion()
+                    != ((FlinkDeploymentSpec) newSpec).getFlinkVersion();
+        }
+        return false;
     }
 }
