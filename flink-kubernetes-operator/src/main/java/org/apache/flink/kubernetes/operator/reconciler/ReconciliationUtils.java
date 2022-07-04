@@ -72,6 +72,7 @@ public class ReconciliationUtils {
      *
      * @param target Target Flink resource.
      * @param conf Deployment configuration.
+     * @param <SPEC> Spec type.
      */
     public static <SPEC extends AbstractFlinkSpec> void updateStatusForDeployedSpec(
             AbstractFlinkResource<SPEC, ?> target, Configuration conf) {
@@ -88,6 +89,7 @@ public class ReconciliationUtils {
      *
      * @param target Target Flink resource.
      * @param conf Deployment configuration.
+     * @param <SPEC> Spec type.
      */
     public static <SPEC extends AbstractFlinkSpec> void updateStatusBeforeDeploymentAttempt(
             AbstractFlinkResource<SPEC, ?> target, Configuration conf) {
@@ -265,6 +267,7 @@ public class ReconciliationUtils {
      * @param specWithMetaString JSON string.
      * @param specClass Spec class for deserialization.
      * @return Tuple2 of spec and meta.
+     * @param <T> Spec type.
      */
     public static <T extends AbstractFlinkSpec> Tuple2<T, ObjectNode> deserializeSpecWithMeta(
             @Nullable String specWithMetaString, Class<T> specClass) {
@@ -351,6 +354,7 @@ public class ReconciliationUtils {
      *
      * @param deployment The current deployment to be reconciled
      * @param validationError Validation error encountered for the current spec
+     * @param <SPEC> Spec type.
      * @return True if the spec was reset and reconciliation can continue. False if nothing to
      *     reconcile.
      */
@@ -388,6 +392,8 @@ public class ReconciliationUtils {
      * @param e Exception that caused the retry
      * @param metricManager Metric manager to be updated
      * @param statusRecorder statusRecorder object for patching status
+     * @param <STATUS> Status type.
+     * @param <R> Resource type.
      * @return This always returns Empty optional currently, due to the status update logic
      */
     public static <STATUS extends CommonStatus<?>, R extends AbstractFlinkResource<?, STATUS>>
@@ -470,10 +476,11 @@ public class ReconciliationUtils {
 
     /**
      * Updates status in cases where a previously successful deployment wasn't recorded for any
-     * reason. We simply change the job status from SUSPENDED -> RUNNING and ReconciliationState to
+     * reason. We simply change the job status from SUSPENDED to RUNNING and ReconciliationState to
      * DEPLOYED while keeping the metadata.
      *
      * @param resource Flink resource to be updated.
+     * @param <SPEC> Spec type.
      */
     public static <SPEC extends AbstractFlinkSpec> void updateStatusForAlreadyUpgraded(
             AbstractFlinkResource<SPEC, ?> resource) {

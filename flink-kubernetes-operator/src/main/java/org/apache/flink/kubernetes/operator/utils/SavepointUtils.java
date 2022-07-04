@@ -51,6 +51,7 @@ public class SavepointUtils {
      * @param resource Resource that should be savepointed
      * @param conf Observe config of the resource
      * @return True if a savepoint was triggered
+     * @throws Exception Error during savepoint triggering.
      */
     public static boolean triggerSavepointIfNeeded(
             FlinkService flinkService, AbstractFlinkResource<?, ?> resource, Configuration conf)

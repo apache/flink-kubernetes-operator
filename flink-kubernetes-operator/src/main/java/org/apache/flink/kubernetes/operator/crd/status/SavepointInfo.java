@@ -67,7 +67,7 @@ public class SavepointInfo {
      * Update last savepoint info and add the savepoint to the history if it isn't already the most
      * recent savepoint.
      *
-     * @param savepoint
+     * @param savepoint Savepoint to be added.
      */
     public void updateLastSavepoint(Savepoint savepoint) {
         if (lastSavepoint == null || !lastSavepoint.getLocation().equals(savepoint.getLocation())) {

@@ -51,6 +51,7 @@ public abstract class JobStatusObserver<CTX> {
      *
      * @param resource The custom resource to be observed.
      * @param deployedConfig Deployed job config.
+     * @param ctx Observe context.
      * @return If job found return true, otherwise return false.
      */
     public boolean observe(
@@ -93,7 +94,11 @@ public abstract class JobStatusObserver<CTX> {
         }
     }
 
-    /** Callback when list jobs timeout. */
+    /**
+     * Callback when list jobs timeout.
+     *
+     * @param ctx Observe context.
+     */
     protected abstract void onTimeout(CTX ctx);
 
     /**

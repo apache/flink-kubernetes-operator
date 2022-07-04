@@ -39,6 +39,10 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     /** Error information about the FlinkDeployment/FlinkSessionJob. */
     private String error = "";
 
-    /** Status of the last reconcile operation. */
+    /**
+     * Current reconciliation status of this resource.
+     *
+     * @return Current {@link ReconciliationStatus}.
+     */
     public abstract ReconciliationStatus<SPEC> getReconciliationStatus();
 }

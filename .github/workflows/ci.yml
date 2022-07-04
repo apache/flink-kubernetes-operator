@@ -40,7 +40,7 @@ jobs:
             ${{ runner.os }}-maven-
       - name: Build with Maven
         run: |
-          set -o pipefail; mvn clean install -Pgenerate-docs | tee ./mvn.log; set +o pipefail
+          set -o pipefail; mvn clean install javadoc:javadoc -Pgenerate-docs | tee ./mvn.log; set +o pipefail
           if [[ $(cat ./mvn.log | grep -E -v 'flink-runtime-.*.jar, flink-kubernetes-operator-.*.jar define 2 overlapping classes' | grep -c "overlapping classes" -) -gt 0 ]];then
             echo "Found overlapping classes, please fix"
             exit 1
@@ -153,7 +153,7 @@ jobs:
           sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.version }}/" e2e-tests/data/*.yaml
           git diff HEAD
           echo "Running e2e-tests/$test"
-          bash e2e-tests/${{ matrix.test }} || exit 1          
+          bash e2e-tests/${{ matrix.test }} || exit 1
           git reset --hard
       - name: Stop the operator
         run: |

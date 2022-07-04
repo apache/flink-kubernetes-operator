@@ -37,14 +37,24 @@ public enum FlinkVersion {
         return this.ordinal() > otherVersion.ordinal();
     }
 
-    /** Returns all versions within the defined range, inclusive both start and end. */
+    /**
+     * Returns all versions within the defined range, inclusive both start and end.
+     *
+     * @param start Starting version.
+     * @param end Last version.
+     * @return Versions within the range.
+     */
     public static Set<FlinkVersion> rangeOf(FlinkVersion start, FlinkVersion end) {
         return Stream.of(FlinkVersion.values())
                 .filter(v -> v.ordinal() >= start.ordinal() && v.ordinal() <= end.ordinal())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    /** Returns the current version. */
+    /**
+     * Returns the current version.
+     *
+     * @return The current version.
+     */
     public static FlinkVersion current() {
         return values()[values().length - 1];
     }
