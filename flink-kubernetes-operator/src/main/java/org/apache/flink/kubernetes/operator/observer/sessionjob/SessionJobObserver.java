@@ -94,10 +94,7 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
 
     @Override
     public void observe(FlinkSessionJob flinkSessionJob, Context context) {
-        var lastReconciledSpec =
-                flinkSessionJob.getStatus().getReconciliationStatus().getLastReconciledSpec();
-
-        if (lastReconciledSpec == null) {
+        if (flinkSessionJob.getStatus().getReconciliationStatus().isFirstDeployment()) {
             return;
         }
 
