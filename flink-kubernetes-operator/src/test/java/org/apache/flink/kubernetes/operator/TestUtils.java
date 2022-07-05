@@ -21,8 +21,6 @@ import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -38,13 +36,6 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
-import org.apache.flink.kubernetes.operator.metrics.MetricManager;
-import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
-import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
-import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
-import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
-import org.apache.flink.metrics.testutils.MetricListener;
 
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -60,7 +51,6 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.mockwebserver.utils.ResponseProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -429,27 +419,6 @@ public class TestUtils {
         } catch (Exception e1) {
             throw new RuntimeException(e1);
         }
-    }
-
-    public static FlinkDeploymentController createTestController(
-            FlinkConfigManager configManager,
-            KubernetesClient kubernetesClient,
-            TestingFlinkService flinkService,
-            StatusRecorder statusRecorder) {
-        var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        return new FlinkDeploymentController(
-                configManager,
-                ValidatorUtils.discoverValidators(configManager),
-                new ReconcilerFactory(
-                        kubernetesClient,
-                        flinkService,
-                        configManager,
-                        eventRecorder,
-                        statusRecorder),
-                new ObserverFactory(flinkService, configManager, statusRecorder, eventRecorder),
-                new MetricManager<>(new MetricListener().getMetricGroup()),
-                statusRecorder,
-                eventRecorder);
     }
 
     /** Testing ResponseProvider. */

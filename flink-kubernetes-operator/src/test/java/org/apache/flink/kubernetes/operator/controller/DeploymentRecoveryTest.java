@@ -26,7 +26,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -52,7 +51,7 @@ public class DeploymentRecoveryTest {
 
     private TestingFlinkService flinkService;
     private Context context;
-    private FlinkDeploymentController testController;
+    private TestingFlinkDeploymentController testController;
 
     private KubernetesClient kubernetesClient;
 
@@ -61,11 +60,7 @@ public class DeploymentRecoveryTest {
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         testController =
-                TestUtils.createTestController(
-                        configManager,
-                        kubernetesClient,
-                        flinkService,
-                        new StatusRecorder<>(kubernetesClient, (a, c) -> {}));
+                new TestingFlinkDeploymentController(configManager, kubernetesClient, flinkService);
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
     }
 
