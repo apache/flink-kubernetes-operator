@@ -21,9 +21,12 @@ under the License.
 
 ## Overview
 
-This is an end-to-end example of running Flink SQL scripts directly using the Flink Kubernetes Operator.
+This is an end-to-end example of running Flink SQL scripts using the Flink Kubernetes Operator.
 
-SQL script submission might one day become a top level feature of the operator but due to current limitations some manual work is required to customise the logic for the given user environment.
+It is only intended to serve as a showcase of how Flink SQL can be executed on the operator and users are expected to extend the implementation and dependencies based on their production needs. 
+
+Currently, it is not planned to add direct API support for SQL submission to the Kubernetes operator due to the complexity of image and dependency management that is specific to each use-case.
+At the same time we are confident that using these examples as a starting point the operator would cover all user needs. If Apache Flink itself extends the SQL support for Application mode in the future, the operator will aim to support that.
 
 *What's in this example?*
 
