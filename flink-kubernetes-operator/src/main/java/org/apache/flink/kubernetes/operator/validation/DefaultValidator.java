@@ -178,7 +178,7 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.empty();
         }
 
-        if (job.getJarURI() == null) {
+        if (StringUtils.isNullOrWhitespaceOnly(job.getJarURI())) {
             return Optional.of("Jar URI must be defined");
         }
 
