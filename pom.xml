@@ -55,6 +55,7 @@ under the License.
         <module>flink-kubernetes-operator</module>
         <module>flink-kubernetes-webhook</module>
         <module>flink-kubernetes-docs</module>
+        <module>examples/flink-sql-runner-example</module>
     </modules>
 
     <properties>
