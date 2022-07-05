@@ -76,6 +76,9 @@ public class DefaultValidatorTest {
 
         // Test job validation
         testError(dep -> dep.getSpec().getJob().setJarURI(null), "Jar URI must be defined");
+        testError(dep -> dep.getSpec().getJob().setJarURI(""), "Jar URI must be defined");
+        testError(dep -> dep.getSpec().getJob().setJarURI("  "), "Jar URI must be defined");
+
         testError(
                 dep -> dep.getSpec().getJob().setState(JobState.SUSPENDED),
                 "Job must start in running state");
