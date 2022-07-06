@@ -18,14 +18,21 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
+import org.apache.flink.metrics.testutils.MetricListener;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.Test;
 
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.METRIC_GROUP_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.MetricManager.NS_SCOPE_KEY;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for {@link StatusRecorder}. */
@@ -37,7 +44,11 @@ public class StatusRecorderTest {
 
     @Test
     public void testPatchOnlyWhenChanged() throws InterruptedException {
-        var helper = new StatusRecorder<FlinkDeploymentStatus>(kubernetesClient, (e, s) -> {});
+        var helper =
+                new StatusRecorder<FlinkDeploymentStatus>(
+                        kubernetesClient,
+                        new MetricManager<>(new MetricListener().getMetricGroup()),
+                        (e, s) -> {});
         var deployment = TestUtils.buildApplicationCluster();
         kubernetesClient.resource(deployment).createOrReplace();
         var lastRequest = mockServer.getLastRequest();
@@ -55,5 +66,53 @@ public class StatusRecorderTest {
         // No update
         helper.patchAndCacheStatus(deployment);
         assertTrue(mockServer.getLastRequest() == lastRequest);
+    }
+
+    @Test
+    public void testFlinkDeploymentMetrics() throws InterruptedException {
+        var metricListener = new MetricListener();
+        var helper =
+                new StatusRecorder<FlinkDeploymentStatus>(
+                        kubernetesClient,
+                        new MetricManager<>(metricListener.getMetricGroup()),
+                        (e, s) -> {});
+
+        var deployment = TestUtils.buildApplicationCluster();
+        kubernetesClient.resource(deployment).createOrReplace();
+
+        helper.updateStatusFromCache(deployment);
+        assertEquals(1, metricListener.getGauge(totalIdentifier(deployment)).get().getValue());
+        assertEquals(1, metricListener.getGauge(perStatusIdentifier(deployment)).get().getValue());
+
+        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
+            deployment.getStatus().setJobManagerDeploymentStatus(status);
+            helper.patchAndCacheStatus(deployment);
+            assertEquals(1, metricListener.getGauge(totalIdentifier(deployment)).get().getValue());
+            assertEquals(
+                    1, metricListener.getGauge(perStatusIdentifier(deployment)).get().getValue());
+        }
+
+        helper.removeCachedStatus(deployment);
+        assertEquals(0, metricListener.getGauge(totalIdentifier(deployment)).get().getValue());
+        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
+            assertEquals(
+                    0, metricListener.getGauge(perStatusIdentifier(deployment)).get().getValue());
+        }
+    }
+
+    private String[] totalIdentifier(FlinkDeployment deployment) {
+        return new String[] {
+            NS_SCOPE_KEY, deployment.getMetadata().getNamespace(), METRIC_GROUP_NAME, "Count"
+        };
+    }
+
+    private String[] perStatusIdentifier(FlinkDeployment deployment) {
+        return new String[] {
+            NS_SCOPE_KEY,
+            deployment.getMetadata().getNamespace(),
+            METRIC_GROUP_NAME,
+            deployment.getStatus().getJobManagerDeploymentStatus().name(),
+            "Count"
+        };
     }
 }

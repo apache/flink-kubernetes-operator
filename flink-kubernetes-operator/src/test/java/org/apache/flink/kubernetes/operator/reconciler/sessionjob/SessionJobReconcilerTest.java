@@ -22,6 +22,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
+import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
@@ -84,7 +85,7 @@ public class SessionJobReconcilerTest {
                 new SessionJobReconciler(
                         null, flinkService, configManager, eventRecorder, statusRecoder);
         kubernetesClient.resource(TestUtils.buildSessionJob()).createOrReplace();
-        statusRecoder = new StatusRecorder<FlinkSessionJobStatus>(kubernetesClient, (r, e) -> {});
+        statusRecoder = new TestingStatusRecorder<>();
         reconciler =
                 new SessionJobReconciler(
                         null, flinkService, configManager, eventRecorder, statusRecoder);

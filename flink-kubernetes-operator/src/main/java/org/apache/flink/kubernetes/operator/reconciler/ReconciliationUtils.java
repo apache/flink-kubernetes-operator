@@ -32,7 +32,6 @@ import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.util.Preconditions;
@@ -390,7 +389,6 @@ public class ReconciliationUtils {
      * @param resource Flink Resource to be updated
      * @param retryInfo Current RetryInformation
      * @param e Exception that caused the retry
-     * @param metricManager Metric manager to be updated
      * @param statusRecorder statusRecorder object for patching status
      * @param <STATUS> Status type.
      * @param <R> Resource type.
@@ -401,7 +399,6 @@ public class ReconciliationUtils {
                     R resource,
                     Optional<RetryInfo> retryInfo,
                     Exception e,
-                    MetricManager<R> metricManager,
                     StatusRecorder<STATUS> statusRecorder) {
 
         retryInfo.ifPresent(
@@ -416,7 +413,6 @@ public class ReconciliationUtils {
         ReconciliationUtils.updateForReconciliationError(
                 resource,
                 (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
-        metricManager.onUpdate(resource);
         statusRecorder.patchAndCacheStatus(resource);
 
         // Status was updated already, no need to return anything

@@ -25,11 +25,11 @@ import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.api.model.HasMetadata;
-import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import lombok.SneakyThrows;
 import org.slf4j.Logger;
@@ -50,13 +50,16 @@ public class StatusRecorder<STATUS extends CommonStatus<?>> {
             new ConcurrentHashMap<>();
 
     private final KubernetesClient client;
+    private final MetricManager<AbstractFlinkResource<?, STATUS>> metricManager;
     private final BiConsumer<AbstractFlinkResource<?, STATUS>, STATUS> statusUpdateListener;
 
     public StatusRecorder(
             KubernetesClient client,
+            MetricManager<AbstractFlinkResource<?, STATUS>> metricManager,
             BiConsumer<AbstractFlinkResource<?, STATUS>, STATUS> statusUpdateListener) {
         this.client = client;
         this.statusUpdateListener = statusUpdateListener;
+        this.metricManager = metricManager;
     }
 
     /**
@@ -103,6 +106,7 @@ public class StatusRecorder<STATUS extends CommonStatus<?>> {
                         .withName(name)
                         .patchStatus(resource);
                 statusUpdateListener.accept(resource, prevStatus);
+                metricManager.onUpdate(resource);
                 return;
             } catch (Exception e) {
                 LOG.error("Error while patching status, retrying {}/3...", (i + 1), e);
@@ -124,7 +128,7 @@ public class StatusRecorder<STATUS extends CommonStatus<?>> {
      * @param resource Resource for which the status should be updated from the cache
      * @param <T> Custom resource type.
      */
-    public <T extends CustomResource<?, STATUS>> void updateStatusFromCache(T resource) {
+    public <T extends AbstractFlinkResource<?, STATUS>> void updateStatusFromCache(T resource) {
         var key = getKey(resource);
         var cachedStatus = statusCache.get(key);
         if (cachedStatus != null) {
@@ -136,6 +140,7 @@ public class StatusRecorder<STATUS extends CommonStatus<?>> {
             // Initialize cache with current status copy
             statusCache.put(key, objectMapper.convertValue(resource.getStatus(), ObjectNode.class));
         }
+        metricManager.onUpdate(resource);
     }
 
     /**
@@ -144,8 +149,9 @@ public class StatusRecorder<STATUS extends CommonStatus<?>> {
      * @param resource Flink resource.
      * @param <T> Resource type.
      */
-    public <T extends CustomResource<?, STATUS>> void removeCachedStatus(T resource) {
+    public <T extends AbstractFlinkResource<?, STATUS>> void removeCachedStatus(T resource) {
         statusCache.remove(getKey(resource));
+        metricManager.onRemove(resource);
     }
 
     protected static Tuple2<String, String> getKey(HasMetadata resource) {
@@ -153,7 +159,9 @@ public class StatusRecorder<STATUS extends CommonStatus<?>> {
     }
 
     public static <S extends CommonStatus<?>> StatusRecorder<S> create(
-            KubernetesClient kubernetesClient, Collection<FlinkResourceListener> listeners) {
+            KubernetesClient kubernetesClient,
+            MetricManager<AbstractFlinkResource<?, S>> metricManager,
+            Collection<FlinkResourceListener> listeners) {
         BiConsumer<AbstractFlinkResource<?, S>, S> consumer =
                 (resource, previousStatus) -> {
                     var ctx =
@@ -183,6 +191,6 @@ public class StatusRecorder<STATUS extends CommonStatus<?>> {
                                 }
                             });
                 };
-        return new StatusRecorder<>(kubernetesClient, consumer);
+        return new StatusRecorder<>(kubernetesClient, metricManager, consumer);
     }
 }

@@ -64,8 +64,11 @@ public class TestingFlinkDeploymentController
             KubernetesClient kubernetesClient,
             TestingFlinkService flinkService) {
         eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        statusRecorder = new StatusRecorder<>(kubernetesClient, statusUpdateCounter);
-
+        statusRecorder =
+                new StatusRecorder<>(
+                        kubernetesClient,
+                        new MetricManager<>(new MetricListener().getMetricGroup()),
+                        statusUpdateCounter);
         flinkDeploymentController =
                 new FlinkDeploymentController(
                         configManager,
@@ -78,7 +81,6 @@ public class TestingFlinkDeploymentController
                                 statusRecorder),
                         new ObserverFactory(
                                 flinkService, configManager, statusRecorder, eventRecorder),
-                        new MetricManager<>(new MetricListener().getMetricGroup()),
                         statusRecorder,
                         eventRecorder);
     }
