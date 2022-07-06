@@ -36,6 +36,8 @@ public class SqlRunner {
     private static final String STATEMENT_DELIMITER = ";"; // a statement should end with `;`
     private static final String LINE_DELIMITER = "\n";
 
+    private static final String COMMENT_PATTERN = "(--.*)|(((\\/\\*)+?[\\w\\W]+?(\\*\\/)+))";
+
     public static void main(String[] args) throws Exception {
         if (args.length != 1) {
             throw new Exception("Exactly one argument is expected.");
@@ -52,7 +54,7 @@ public class SqlRunner {
     }
 
     public static List<String> parseStatements(String script) {
-        var formatted = formatSqlFile(script);
+        var formatted = formatSqlFile(script).replaceAll(COMMENT_PATTERN, "");
         var statements = new ArrayList<String>();
 
         StringBuilder current = null;
@@ -72,9 +74,9 @@ public class SqlRunner {
             current.append("\n");
             if (trimmed.endsWith(STATEMENT_DELIMITER)) {
                 if (!statementSet || trimmed.equals("END;")) {
-                    current.deleteCharAt(current.length() - 1);
                     statements.add(current.toString());
                     current = null;
+                    statementSet = false;
                 }
             }
         }
