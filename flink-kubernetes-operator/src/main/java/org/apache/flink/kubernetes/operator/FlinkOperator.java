@@ -112,7 +112,9 @@ public class FlinkOperator {
     }
 
     private void registerDeploymentController() {
-        var statusRecorder = StatusRecorder.<FlinkDeploymentStatus>create(client, listeners);
+        var statusRecorder =
+                StatusRecorder.<FlinkDeploymentStatus>create(
+                        client, new MetricManager<>(metricGroup), listeners);
         var eventRecorder = EventRecorder.create(client, listeners);
         var reconcilerFactory =
                 new ReconcilerFactory(
@@ -126,7 +128,6 @@ public class FlinkOperator {
                         validators,
                         reconcilerFactory,
                         observerFactory,
-                        new MetricManager<>(metricGroup),
                         statusRecorder,
                         eventRecorder);
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
@@ -134,7 +135,9 @@ public class FlinkOperator {
 
     private void registerSessionJobController() {
         var eventRecorder = EventRecorder.create(client, listeners);
-        var statusRecorder = StatusRecorder.<FlinkSessionJobStatus>create(client, listeners);
+        var statusRecorder =
+                StatusRecorder.<FlinkSessionJobStatus>create(
+                        client, new MetricManager<>(metricGroup), listeners);
         var reconciler =
                 new SessionJobReconciler(
                         client, flinkService, configManager, eventRecorder, statusRecorder);
@@ -142,13 +145,7 @@ public class FlinkOperator {
                 new SessionJobObserver(flinkService, configManager, statusRecorder, eventRecorder);
         var controller =
                 new FlinkSessionJobController(
-                        configManager,
-                        validators,
-                        reconciler,
-                        observer,
-                        new MetricManager<>(metricGroup),
-                        statusRecorder);
-
+                        configManager, validators, reconciler, observer, statusRecorder);
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 

@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Metric manager for Operator managed custom resources. */
 public class MetricManager<CR extends CustomResource<?, ?>> {
-    private static final String NS_SCOPE_KEY = "resourcens";
+    public static final String NS_SCOPE_KEY = "resourcens";
     private final MetricGroup metricGroup;
     private final Map<String, CustomResourceMetrics> metrics = new ConcurrentHashMap<>();
 

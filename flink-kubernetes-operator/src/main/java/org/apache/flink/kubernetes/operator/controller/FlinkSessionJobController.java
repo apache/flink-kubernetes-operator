@@ -22,7 +22,6 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -61,7 +60,6 @@ public class FlinkSessionJobController
     private final Set<FlinkResourceValidator> validators;
     private final Reconciler<FlinkSessionJob> reconciler;
     private final Observer<FlinkSessionJob> observer;
-    private final MetricManager<FlinkSessionJob> metricManager;
     private final StatusRecorder<FlinkSessionJobStatus> statusRecorder;
 
     public FlinkSessionJobController(
@@ -69,13 +67,11 @@ public class FlinkSessionJobController
             Set<FlinkResourceValidator> validators,
             Reconciler<FlinkSessionJob> reconciler,
             Observer<FlinkSessionJob> observer,
-            MetricManager<FlinkSessionJob> metricManager,
             StatusRecorder<FlinkSessionJobStatus> statusRecorder) {
         this.configManager = configManager;
         this.validators = validators;
         this.reconciler = reconciler;
         this.observer = observer;
-        this.metricManager = metricManager;
         this.statusRecorder = statusRecorder;
     }
 
@@ -89,7 +85,6 @@ public class FlinkSessionJobController
 
         observer.observe(flinkSessionJob, context);
         if (!validateSessionJob(flinkSessionJob, context)) {
-            metricManager.onUpdate(flinkSessionJob);
             statusRecorder.patchAndCacheStatus(flinkSessionJob);
             return ReconciliationUtils.toUpdateControl(
                     configManager.getOperatorConfiguration(), flinkSessionJob, previousJob, false);
@@ -101,7 +96,6 @@ public class FlinkSessionJobController
         } catch (Exception e) {
             throw new ReconciliationException(e);
         }
-        metricManager.onUpdate(flinkSessionJob);
         statusRecorder.patchAndCacheStatus(flinkSessionJob);
         return ReconciliationUtils.toUpdateControl(
                 configManager.getOperatorConfiguration(), flinkSessionJob, previousJob, true);
@@ -110,7 +104,6 @@ public class FlinkSessionJobController
     @Override
     public DeleteControl cleanup(FlinkSessionJob sessionJob, Context context) {
         LOG.info("Deleting FlinkSessionJob");
-        metricManager.onRemove(sessionJob);
         statusRecorder.removeCachedStatus(sessionJob);
         return reconciler.cleanup(sessionJob, context);
     }
@@ -119,7 +112,7 @@ public class FlinkSessionJobController
     public ErrorStatusUpdateControl<FlinkSessionJob> updateErrorStatus(
             FlinkSessionJob sessionJob, Context<FlinkSessionJob> context, Exception e) {
         return ReconciliationUtils.toErrorStatusUpdateControl(
-                sessionJob, context.getRetryInfo(), e, metricManager, statusRecorder);
+                sessionJob, context.getRetryInfo(), e, statusRecorder);
     }
 
     @Override
