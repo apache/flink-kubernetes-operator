@@ -23,8 +23,22 @@ import org.apache.flink.configuration.ConfigOptions;
 /** Configuration options for metrics. */
 public class KubernetesOperatorMetricOptions {
     public static final ConfigOption<String> SCOPE_NAMING_KUBERNETES_OPERATOR =
-            ConfigOptions.key("metrics.scope.k8soperator")
-                    .defaultValue("<host>.k8soperator.<namespace>.<name>")
+            ConfigOptions.key("metrics.scope.k8soperator.system")
+                    .defaultValue("<host>.k8soperator.<namespace>.<name>.system")
+                    .withDeprecatedKeys("metrics.scope.k8soperator")
                     .withDescription(
                             "Defines the scope format string that is applied to all metrics scoped to the kubernetes operator.");
+
+    public static final ConfigOption<String> SCOPE_NAMING_KUBERNETES_OPERATOR_RESOURCENS =
+            ConfigOptions.key("metrics.scope.k8soperator.resourcens")
+                    .defaultValue("<host>.k8soperator.<namespace>.<name>.namespace.<resourcens>.")
+                    .withDescription(
+                            "Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource namespace.");
+
+    public static final ConfigOption<String> SCOPE_NAMING_KUBERNETES_OPERATOR_RESOURCE =
+            ConfigOptions.key("metrics.scope.k8soperator.resource")
+                    .defaultValue(
+                            "<host>.k8soperator.<namespace>.<name>.resource.<resourcens>.<resourcename>")
+                    .withDescription(
+                            "Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource.");
 }

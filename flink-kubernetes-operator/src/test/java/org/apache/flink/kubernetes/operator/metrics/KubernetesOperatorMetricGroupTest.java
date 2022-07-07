@@ -44,10 +44,12 @@ public class KubernetesOperatorMetricGroupTest {
                         "flink-kubernetes-operator",
                         "localhost");
         assertArrayEquals(
-                new String[] {"localhost", "k8soperator", "default", "flink-kubernetes-operator"},
+                new String[] {
+                    "localhost", "k8soperator", "default", "flink-kubernetes-operator", "system"
+                },
                 group.getScopeComponents());
         assertEquals(
-                "localhost.k8soperator.default.flink-kubernetes-operator.test",
+                "localhost.k8soperator.default.flink-kubernetes-operator.system.test",
                 group.getMetricIdentifier("test"));
 
         assertEquals(
@@ -93,6 +95,48 @@ public class KubernetesOperatorMetricGroupTest {
                         "flink-kubernetes-operator"),
                 group.getAllVariables());
 
+        registry.shutdown().get();
+    }
+
+    @Test
+    public void testSubGroupVariables() throws Exception {
+        var configuration = new Configuration();
+        var registry = new MetricRegistryImpl(fromConfiguration(configuration));
+        var operatorMetricGroup =
+                KubernetesOperatorMetricGroup.create(
+                        registry,
+                        configuration,
+                        "default",
+                        "flink-kubernetes-operator",
+                        "localhost");
+
+        var namespaceGroup = operatorMetricGroup.createResourceNamespaceGroup(configuration, "rns");
+        var resourceGroup = namespaceGroup.createResourceNamespaceGroup(configuration, "rn");
+
+        assertEquals(
+                ImmutableMap.of(
+                        "<host>",
+                        "localhost",
+                        "<namespace>",
+                        "default",
+                        "<name>",
+                        "flink-kubernetes-operator",
+                        "<resourcens>",
+                        "rns"),
+                namespaceGroup.getAllVariables());
+        assertEquals(
+                ImmutableMap.of(
+                        "<host>",
+                        "localhost",
+                        "<namespace>",
+                        "default",
+                        "<name>",
+                        "flink-kubernetes-operator",
+                        "<resourcens>",
+                        "rns",
+                        "<resourcename>",
+                        "rn"),
+                resourceGroup.getAllVariables());
         registry.shutdown().get();
     }
 

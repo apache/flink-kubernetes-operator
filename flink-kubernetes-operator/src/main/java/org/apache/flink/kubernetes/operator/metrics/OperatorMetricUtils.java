@@ -43,7 +43,7 @@ public class OperatorMetricUtils {
     private static final String OPERATOR_METRICS_PREFIX = "kubernetes.operator.metrics.";
     private static final String METRICS_PREFIX = "metrics.";
 
-    public static MetricGroup initOperatorMetrics(Configuration defaultConfig) {
+    public static KubernetesOperatorMetricGroup initOperatorMetrics(Configuration defaultConfig) {
         Configuration metricConfig = createMetricConfig(defaultConfig);
         LOG.info("Initializing operator metrics using conf: {}", metricConfig);
         PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(metricConfig);

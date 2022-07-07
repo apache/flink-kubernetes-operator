@@ -26,14 +26,12 @@ import org.apache.flink.runtime.metrics.scope.ScopeFormat;
 
 import java.util.Map;
 
-/** Flink based operator metric group. */
-public class KubernetesOperatorMetricGroup
-        extends AbstractMetricGroup<KubernetesOperatorMetricGroup> {
+/** Base metric group for Flink Operator System metrics. */
+public class KubernetesOperatorMetricGroup extends AbstractMetricGroup<AbstractMetricGroup<?>> {
 
-    private static final String GROUP_NAME = "k8soperator";
-    private final String namespace;
-    private final String name;
-    private final String hostname;
+    protected final String namespace;
+    protected final String name;
+    protected final String hostname;
 
     private KubernetesOperatorMetricGroup(
             MetricRegistry registry,
@@ -45,6 +43,16 @@ public class KubernetesOperatorMetricGroup
         this.namespace = namespace;
         this.name = name;
         this.hostname = hostname;
+    }
+
+    public KubernetesResourceNamespaceMetricGroup createResourceNamespaceGroup(
+            Configuration config, String resourceNs) {
+        return new KubernetesResourceNamespaceMetricGroup(
+                registry,
+                this,
+                KubernetesResourceNamespaceScopeFormat.fromConfig(config)
+                        .formatScope(namespace, name, hostname, resourceNs),
+                resourceNs);
     }
 
     public static KubernetesOperatorMetricGroup create(
@@ -71,7 +79,7 @@ public class KubernetesOperatorMetricGroup
 
     @Override
     protected final String getGroupName(CharacterFilter filter) {
-        return GROUP_NAME;
+        return "k8soperator";
     }
 
     @Override
