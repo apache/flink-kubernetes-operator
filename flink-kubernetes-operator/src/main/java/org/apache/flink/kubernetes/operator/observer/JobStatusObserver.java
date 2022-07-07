@@ -183,7 +183,8 @@ public abstract class JobStatusObserver<CTX> {
             } catch (Exception e) {
                 LOG.warn("Failed to request the job result", e);
             }
-        } else if (jobState == org.apache.flink.api.common.JobStatus.FINISHED || jobState == org.apache.flink.api.common.JobStatus.RUNNING) {
+        } else if (jobState == org.apache.flink.api.common.JobStatus.FINISHED
+                || jobState == org.apache.flink.api.common.JobStatus.RUNNING) {
             resource.getStatus().setError("");
         }
     }
