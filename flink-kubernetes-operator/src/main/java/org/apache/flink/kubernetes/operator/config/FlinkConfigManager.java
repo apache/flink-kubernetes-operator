@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import org.apache.flink.shaded.guava30.com.google.common.cache.Cache;
@@ -72,7 +73,7 @@ public class FlinkConfigManager {
     }
 
     public FlinkConfigManager(Consumer<Set<String>> namespaceListener) {
-        this(GlobalConfiguration.loadConfiguration(), namespaceListener);
+        this(loadGlobalConfiguration(), namespaceListener);
     }
 
     public FlinkConfigManager(
@@ -211,11 +212,27 @@ public class FlinkConfigManager {
         return cache;
     }
 
+    private static Configuration loadGlobalConfiguration() {
+        return loadGlobalConfiguration(EnvUtils.get(EnvUtils.ENV_CONF_OVERRIDE_DIR));
+    }
+
+    @VisibleForTesting
+    protected static Configuration loadGlobalConfiguration(Optional<String> confOverrideDir) {
+        if (confOverrideDir.isPresent()) {
+            Configuration configOverrides =
+                    GlobalConfiguration.loadConfiguration(confOverrideDir.get());
+            LOG.debug("Loading default configuration with overrides from " + confOverrideDir.get());
+            return GlobalConfiguration.loadConfiguration(configOverrides);
+        }
+        LOG.debug("Loading default configuration");
+        return GlobalConfiguration.loadConfiguration();
+    }
+
     private class ConfigUpdater implements Runnable {
         public void run() {
             try {
                 LOG.debug("Checking for config update changes...");
-                updateDefaultConfig(GlobalConfiguration.loadConfiguration());
+                updateDefaultConfig(loadGlobalConfiguration());
             } catch (Exception e) {
                 LOG.error("Error while updating operator configuration", e);
             }

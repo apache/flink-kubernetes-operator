@@ -39,7 +39,6 @@ import org.apache.flink.shaded.netty4.io.netty.handler.ssl.SupportedCipherSuiteF
 import org.apache.flink.shaded.netty4.io.netty.handler.stream.ChunkedWriteHandler;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -129,9 +128,9 @@ public class FlinkOperatorWebhook {
     }
 
     private static SslContext createSslContext() throws Exception {
-        String keystorePath = EnvUtils.get(EnvUtils.ENV_WEBHOOK_KEYSTORE_FILE);
+        var keystorePathOpt = EnvUtils.get(EnvUtils.ENV_WEBHOOK_KEYSTORE_FILE);
 
-        if (StringUtils.isEmpty(keystorePath)) {
+        if (keystorePathOpt.isEmpty()) {
             LOG.info(
                     "No keystore path is defined in "
                             + EnvUtils.ENV_WEBHOOK_KEYSTORE_FILE
@@ -142,7 +141,8 @@ public class FlinkOperatorWebhook {
         String keystorePassword = EnvUtils.getRequired(EnvUtils.ENV_WEBHOOK_KEYSTORE_PASSWORD);
         String keystoreType = EnvUtils.getRequired(EnvUtils.ENV_WEBHOOK_KEYSTORE_TYPE);
         KeyStore keyStore = KeyStore.getInstance(keystoreType);
-        try (InputStream keyStoreFile = Files.newInputStream(new File(keystorePath).toPath())) {
+        try (InputStream keyStoreFile =
+                Files.newInputStream(new File(keystorePathOpt.get()).toPath())) {
             keyStore.load(keyStoreFile, keystorePassword.toCharArray());
         }
         final KeyManagerFactory kmf =
