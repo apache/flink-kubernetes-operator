@@ -16,23 +16,22 @@
  * limitations under the License.
  */
 
-CREATE TABLE blackhole_table (
-  name STRING,
-  age INT
+CREATE TABLE orders (
+  order_number BIGINT,
+  price        DECIMAL(32,2),
+  buyer        ROW<first_name STRING, last_name STRING>,
+  order_time   TIMESTAMP(3)
 ) WITH (
-  'connector' = 'blackhole'
+  'connector' = 'datagen'
 );
-CREATE TABLE blackhole_table2 (
-  name STRING,
-  age INT
-) WITH (
-  'connector' = 'blackhole'
-);
+
+CREATE TABLE print_table WITH ('connector' = 'print')
+    LIKE orders;
+CREATE TABLE blackhole_table WITH ('connector' = 'blackhole')
+    LIKE orders;
 
 EXECUTE STATEMENT SET
 BEGIN
-INSERT INTO blackhole_table
-  VALUES ('fred flintstone', 35), ('barney rubble', 32);
-INSERT INTO blackhole_table2
-  VALUES ('fred flintstone', 35), ('barney rubble', 32);
+INSERT INTO print_table SELECT * FROM orders;
+INSERT INTO blackhole_table SELECT * FROM orders;
 END;
