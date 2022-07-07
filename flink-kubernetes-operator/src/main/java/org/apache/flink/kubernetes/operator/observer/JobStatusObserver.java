@@ -157,7 +157,9 @@ public abstract class JobStatusObserver<CTX> {
             AbstractFlinkResource<?, ?> resource,
             JobStatusMessage clusterJobStatus,
             Configuration deployedConfig) {
-        if (clusterJobStatus.getJobState() == org.apache.flink.api.common.JobStatus.FAILED) {
+        var jobState = clusterJobStatus.getJobState();
+
+        if (jobState == org.apache.flink.api.common.JobStatus.FAILED) {
             try {
                 var result =
                         flinkService.requestJobResult(deployedConfig, clusterJobStatus.getJobId());
@@ -181,6 +183,8 @@ public abstract class JobStatusObserver<CTX> {
             } catch (Exception e) {
                 LOG.warn("Failed to request the job result", e);
             }
+        } else if (jobState == org.apache.flink.api.common.JobStatus.FINISHED || jobState == org.apache.flink.api.common.JobStatus.RUNNING) {
+            resource.getStatus().setError("");
         }
     }
 
