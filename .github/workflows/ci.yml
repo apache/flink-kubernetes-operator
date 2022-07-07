@@ -49,6 +49,9 @@ jobs:
             echo "Please generate the java doc via 'mvn clean install -DskipTests -Pgenerate-docs' again"
             exit 1
           fi
+      - name: Validate helm chart linting
+        run: |
+          helm lint helm/flink-kubernetes-operator
       - name: Start minikube
         run: |
           source e2e-tests/utils.sh
