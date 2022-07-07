@@ -21,6 +21,7 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
+import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -31,11 +32,18 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
 import io.fabric8.kubernetes.api.model.Pod;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -162,5 +170,19 @@ public class FlinkConfigManagerTest {
                 configManager
                         .getObserveConfig(deployment)
                         .get(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));
+    }
+
+    @Test
+    public void testConfigOverrides(@TempDir Path confOverrideDir) throws IOException {
+
+        assertEquals(
+                0, FlinkConfigManager.loadGlobalConfiguration(Optional.empty()).keySet().size());
+
+        Files.write(
+                confOverrideDir.resolve(GlobalConfiguration.FLINK_CONF_FILENAME),
+                Arrays.asList("foo: 1", "bar: 2"));
+        var conf =
+                FlinkConfigManager.loadGlobalConfiguration(Optional.of(confOverrideDir.toString()));
+        Assertions.assertEquals(Map.of("foo", "1", "bar", "2"), conf.toMap());
     }
 }

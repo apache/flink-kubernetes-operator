@@ -30,12 +30,10 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.Arrays;
-import java.util.HashSet;
+import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.Properties;
-import java.util.Set;
 
-import static io.javaoperatorsdk.operator.api.reconciler.Constants.DEFAULT_NAMESPACES_SET;
 import static org.apache.flink.runtime.util.EnvironmentInformation.UNKNOWN;
 import static org.apache.flink.runtime.util.EnvironmentInformation.UNKNOWN_COMMIT_ID_ABBREV;
 import static org.apache.flink.runtime.util.EnvironmentInformation.getJvmStartupOptionsArray;
@@ -48,11 +46,12 @@ public class EnvUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(EnvUtils.class);
 
+    public static final String ENV_KUBERNETES_SERVICE_HOST = "KUBERNETES_SERVICE_HOST";
     public static final String ENV_WEBHOOK_KEYSTORE_FILE = "WEBHOOK_KEYSTORE_FILE";
     public static final String ENV_WEBHOOK_KEYSTORE_PASSWORD = "WEBHOOK_KEYSTORE_PASSWORD";
     public static final String ENV_WEBHOOK_KEYSTORE_TYPE = "WEBHOOK_KEYSTORE_TYPE";
     public static final String ENV_WEBHOOK_SERVER_PORT = "WEBHOOK_SERVER_PORT";
-    public static final String ENV_WATCHED_NAMESPACES = "FLINK_OPERATOR_WATCH_NAMESPACES";
+    public static final String ENV_CONF_OVERRIDE_DIR = "CONF_OVERRIDE_DIR";
     public static final String ENV_HOSTNAME = "HOSTNAME";
     public static final String ENV_OPERATOR_NAME = "OPERATOR_NAME";
     public static final String ENV_OPERATOR_NAMESPACE = "OPERATOR_NAMESPACE";
@@ -70,8 +69,8 @@ public class EnvUtils {
      * @param key the target key
      * @return the value value provided by environments.
      */
-    public static String get(String key) {
-        return System.getenv().get(key);
+    public static Optional<String> get(String key) {
+        return Optional.ofNullable(StringUtils.getIfBlank(System.getenv().get(key), () -> null));
     }
 
     /**
@@ -92,11 +91,10 @@ public class EnvUtils {
      * @return the value provided by environments.
      */
     public static String getRequired(String key) {
-        String value = System.getenv().get(key);
-        if (StringUtils.isEmpty(value)) {
-            throw new RuntimeException("Environments: " + key + " cannot be empty");
-        }
-        return value;
+        return get(key).orElseThrow(
+                        () ->
+                                new NoSuchElementException(
+                                        "Environments: " + key + " cannot be empty"));
     }
 
     /**
@@ -204,17 +202,5 @@ public class EnvUtils {
             return defaultValue;
         }
         return value;
-    }
-
-    private static final String NAMESPACES_SPLITTER_KEY = ",";
-
-    public static Set<String> getWatchedNamespaces() {
-        String watchedNamespaces = get(EnvUtils.ENV_WATCHED_NAMESPACES);
-
-        if (StringUtils.isEmpty(watchedNamespaces)) {
-            return DEFAULT_NAMESPACES_SET;
-        } else {
-            return new HashSet<>(Arrays.asList(watchedNamespaces.split(NAMESPACES_SPLITTER_KEY)));
-        }
     }
 }

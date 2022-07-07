@@ -16,15 +16,32 @@
 # limitations under the License.
 ################################################################################
 
-rootLogger.level = INFO
-rootLogger.appenderRef.console.ref = ConsoleAppender
-
-# Log all infos to the console
-appender.console.name = ConsoleAppender
-appender.console.type = CONSOLE
-appender.console.layout.type = PatternLayout
-appender.console.layout.pattern = %style{%d}{yellow} %style{%-30c{1.}}{cyan} %highlight{[%-5level]%notEmpty{[%X{resource.namespace}/}%notEmpty{%X{resource.name}]} %msg%n%throwable}
-
-# Do not log config loading
-logger.conf.name = org.apache.flink.configuration.GlobalConfiguration
-logger.conf.level = WARN
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: not-important
+spec:
+  template:
+    spec:
+      containers:
+        - name: flink-kubernetes-operator
+          env:
+            - name: CONF_OVERRIDE_DIR
+              value: /opt/flink/conf-override
+          volumeMounts:
+            - name: flink-operator-config-override-volume
+              mountPath: /opt/flink/conf-override
+        - name: flink-webhook
+          env:
+            - name: CONF_OVERRIDE_DIR
+              value: /opt/flink/conf-override
+          volumeMounts:
+            - name: flink-operator-config-override-volume
+              mountPath: /opt/flink/conf-override
+      volumes:
+        - name: flink-operator-config-override-volume
+          configMap:
+            name: flink-operator-config-override
+            items:
+              - key: flink-conf.yaml
+                path: flink-conf.yaml

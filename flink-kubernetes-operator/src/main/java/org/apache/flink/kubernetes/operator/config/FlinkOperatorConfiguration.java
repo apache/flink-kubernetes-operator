@@ -91,11 +91,10 @@ public class FlinkOperatorConfiguration {
                                 .OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD);
 
         String flinkServiceHostOverride = null;
-        if (EnvUtils.get("KUBERNETES_SERVICE_HOST") == null) {
+        if (EnvUtils.get(EnvUtils.ENV_KUBERNETES_SERVICE_HOST).isEmpty()) {
             // not running in k8s, simplify local development
             flinkServiceHostOverride = "localhost";
         }
-
         var watchedNamespaces =
                 new HashSet<>(
                         Arrays.asList(
