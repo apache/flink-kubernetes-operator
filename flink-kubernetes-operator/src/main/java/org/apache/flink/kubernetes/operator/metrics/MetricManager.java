@@ -17,9 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.metrics;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
-import org.apache.flink.metrics.MetricGroup;
 
 import io.fabric8.kubernetes.client.CustomResource;
 
@@ -28,12 +28,13 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Metric manager for Operator managed custom resources. */
 public class MetricManager<CR extends CustomResource<?, ?>> {
-    public static final String NS_SCOPE_KEY = "resourcens";
-    private final MetricGroup metricGroup;
+    private final KubernetesOperatorMetricGroup opMetricGroup;
+    private final Configuration conf;
     private final Map<String, CustomResourceMetrics> metrics = new ConcurrentHashMap<>();
 
-    public MetricManager(MetricGroup metricGroup) {
-        this.metricGroup = metricGroup;
+    public MetricManager(KubernetesOperatorMetricGroup opMetricGroup, Configuration conf) {
+        this.opMetricGroup = opMetricGroup;
+        this.conf = conf;
     }
 
     public void onUpdate(CR cr) {
@@ -50,12 +51,12 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
     }
 
     private CustomResourceMetrics getCustomResourceMetricsImpl(CR cr) {
+        var namespaceMg =
+                opMetricGroup.createResourceNamespaceGroup(conf, cr.getMetadata().getNamespace());
         if (cr instanceof FlinkDeployment) {
-            return new FlinkDeploymentMetrics(
-                    metricGroup.addGroup(NS_SCOPE_KEY, cr.getMetadata().getNamespace()));
+            return new FlinkDeploymentMetrics(namespaceMg);
         } else if (cr instanceof FlinkSessionJob) {
-            return new FlinkSessionJobMetrics(
-                    metricGroup.addGroup(NS_SCOPE_KEY, cr.getMetadata().getNamespace()));
+            return new FlinkSessionJobMetrics(namespaceMg);
         } else {
             throw new IllegalArgumentException("Unknown CustomResource");
         }

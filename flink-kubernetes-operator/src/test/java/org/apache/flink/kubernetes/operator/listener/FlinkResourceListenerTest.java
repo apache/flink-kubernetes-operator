@@ -17,14 +17,13 @@
 
 package org.apache.flink.kubernetes.operator.listener;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
-import org.apache.flink.metrics.testutils.MetricListener;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -56,7 +55,7 @@ public class FlinkResourceListenerTest {
         var statusRecorder =
                 StatusRecorder.<FlinkDeploymentStatus>create(
                         kubernetesClient,
-                        new MetricManager<>(new MetricListener().getMetricGroup()),
+                        TestUtils.createTestMetricManager(new Configuration()),
                         listeners);
         var eventRecorder = EventRecorder.create(kubernetesClient, listeners);
 

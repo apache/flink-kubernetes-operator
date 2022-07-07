@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.listener.ListenerUtils;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
@@ -40,7 +41,6 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
-import org.apache.flink.metrics.MetricGroup;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -70,7 +70,7 @@ public class FlinkOperator {
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
     private final Set<RegisteredController> registeredControllers = new HashSet<>();
-    private final MetricGroup metricGroup;
+    private final KubernetesOperatorMetricGroup metricGroup;
     private final Collection<FlinkResourceListener> listeners;
 
     public FlinkOperator(@Nullable Configuration conf) {
@@ -114,7 +114,9 @@ public class FlinkOperator {
     private void registerDeploymentController() {
         var statusRecorder =
                 StatusRecorder.<FlinkDeploymentStatus>create(
-                        client, new MetricManager<>(metricGroup), listeners);
+                        client,
+                        new MetricManager<>(metricGroup, configManager.getDefaultConfig()),
+                        listeners);
         var eventRecorder = EventRecorder.create(client, listeners);
         var reconcilerFactory =
                 new ReconcilerFactory(
@@ -137,7 +139,9 @@ public class FlinkOperator {
         var eventRecorder = EventRecorder.create(client, listeners);
         var statusRecorder =
                 StatusRecorder.<FlinkSessionJobStatus>create(
-                        client, new MetricManager<>(metricGroup), listeners);
+                        client,
+                        new MetricManager<>(metricGroup, configManager.getDefaultConfig()),
+                        listeners);
         var reconciler =
                 new SessionJobReconciler(
                         client, flinkService, configManager, eventRecorder, statusRecorder);

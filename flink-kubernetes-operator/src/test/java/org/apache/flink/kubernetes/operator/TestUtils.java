@@ -18,9 +18,11 @@
 package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -36,6 +38,10 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
+import org.apache.flink.runtime.metrics.MetricRegistry;
+import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
 
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -419,6 +425,28 @@ public class TestUtils {
         } catch (Exception e1) {
             throw new RuntimeException(e1);
         }
+    }
+
+    public static <T extends AbstractFlinkResource<?, ?>> MetricManager<T> createTestMetricManager(
+            Configuration conf) {
+        return createTestMetricManager(
+                TestingMetricRegistry.builder()
+                        .setDelimiter(".".charAt(0))
+                        .setRegisterConsumer((metric, name, group) -> {})
+                        .build(),
+                conf);
+    }
+
+    public static <T extends AbstractFlinkResource<?, ?>> MetricManager<T> createTestMetricManager(
+            MetricRegistry metricRegistry, Configuration conf) {
+
+        return new MetricManager<>(createTestMetricGroup(metricRegistry, conf), conf);
+    }
+
+    public static KubernetesOperatorMetricGroup createTestMetricGroup(
+            MetricRegistry metricRegistry, Configuration conf) {
+        return KubernetesOperatorMetricGroup.create(
+                metricRegistry, conf, TEST_NAMESPACE, "testopname", "testhost");
     }
 
     /** Testing ResponseProvider. */
