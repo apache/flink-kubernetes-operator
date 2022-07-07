@@ -28,7 +28,6 @@ under the License.
 
 The Flink Kubernetes Operator (Operator) extends the [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/) that allows gathering and exposing metrics to centralized monitoring solutions. 
 
-
 ## Deployment Metrics
 The Operator gathers aggregates metrics about managed resources.
 
@@ -39,7 +38,7 @@ The Operator gathers aggregates metrics about managed resources.
 | Namespace | FlinkSessionJob.Count          | Number of managed FlinkSessionJob instances per namespace                                                                                                   | Gauge |
 
 ## System Metrics
-The Operator gathers metrics about the JVM process and exposes it similarly to core Flink [System metrics](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/#system-metrics). The list of metrics are not repeated in this document. 
+The Operator gathers metrics about the JVM process and exposes it similarly to core Flink [System metrics](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/#system-metrics). The list of metrics are not repeated in this document.
 
 ## Metric Reporters
 

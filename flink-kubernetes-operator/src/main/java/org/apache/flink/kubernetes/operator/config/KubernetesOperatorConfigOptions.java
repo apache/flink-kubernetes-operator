@@ -210,6 +210,13 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(false)
                     .withDescription("Enables dynamic change of watched/monitored namespaces.");
 
+    public static final ConfigOption<Boolean> OPERATOR_JOSDK_METRICS_ENABLED =
+            ConfigOptions.key("kubernetes.operator.josdk.metrics.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Enable forwarding of Java Operator SDK metrics to the Flink metric registry.");
+
     public static final ConfigOption<Duration> OPERATOR_RETRY_INITIAL_INTERVAL =
             ConfigOptions.key("kubernetes.operator.retry.initial.interval")
                     .durationType()
