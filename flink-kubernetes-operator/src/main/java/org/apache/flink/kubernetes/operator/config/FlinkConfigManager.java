@@ -132,7 +132,7 @@ public class FlinkConfigManager {
                         .orElse(Set.of());
         this.operatorConfiguration = FlinkOperatorConfiguration.fromConfiguration(newConf);
         var newNs = this.operatorConfiguration.getWatchedNamespaces();
-        if (this.operatorConfiguration.getDynamicNamespacesEnabled() && !oldNs.equals(newNs)) {
+        if (this.operatorConfiguration.isDynamicNamespacesEnabled() && !oldNs.equals(newNs)) {
             this.namespaceListener.accept(operatorConfiguration.getWatchedNamespaces());
         }
         this.defaultConfig = newConf.clone();

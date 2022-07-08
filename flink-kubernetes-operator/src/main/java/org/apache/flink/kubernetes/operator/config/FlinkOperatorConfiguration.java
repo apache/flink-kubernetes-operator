@@ -19,6 +19,7 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
 import io.javaoperatorsdk.operator.api.config.RetryConfiguration;
@@ -42,8 +43,8 @@ public class FlinkOperatorConfiguration {
     Duration flinkClientTimeout;
     String flinkServiceHostOverride;
     Set<String> watchedNamespaces;
-    Boolean dynamicNamespacesEnabled;
-    Boolean josdkMetricsEnabled;
+    boolean dynamicNamespacesEnabled;
+    boolean josdkMetricsEnabled;
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
     String artifactsBaseDir;
@@ -110,7 +111,7 @@ public class FlinkOperatorConfiguration {
                         KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_NAMESPACES_ENABLED);
 
         boolean josdkMetricsEnabled =
-                operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_JOSDK_METRICS_ENABLED);
+                operatorConfig.get(KubernetesOperatorMetricOptions.OPERATOR_JOSDK_METRICS_ENABLED);
 
         RetryConfiguration retryConfiguration = new FlinkOperatorRetryConfiguration(operatorConfig);
 

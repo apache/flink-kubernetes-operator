@@ -52,7 +52,7 @@ To learn more about metrics and logging configuration please refer to the dedica
 
 ## Dynamic Operator Configuration
 
-The Kubernetes operator supports dynamic config changes through the operator ConfigMaps. Dynamic operator configuration is enabled by default, and can be disabled by setting `kubernetes.operator.dynamic.config.enabled`  to false. Time interval for checking dynamic config changes is specified by `kubernetes.operator.dynamic.config.check.interval` of which default value is 5 minutes. 
+The Kubernetes operator supports dynamic config changes through the operator ConfigMaps. Dynamic operator configuration is enabled by default, and can be disabled by setting `kubernetes.operator.dynamic.config.enabled`  to false. Time interval for checking dynamic config changes is specified by `kubernetes.operator.dynamic.config.check.interval` of which default value is 5 minutes.
 
 Verify whether dynamic operator configuration updates is enabled via the `deploy/flink-kubernetes-operator` log has:
 
@@ -70,14 +70,26 @@ Verify whether the config value of `kubernetes.operator.reconcile.interval` is u
 
 ## Operator Configuration Reference
 
-{{< generated/kubernetes_operator_config_configuration >}}
+### System Configuration
 
-## Job Specific Configuration Reference
+General operator system configuration. Cannot be overridden on a per-resource basis.
 
-Job specific configuration can be configured under `spec.flinkConfiguration` and it will override flink configurations defined in `flink-conf.yaml`.
+{{< generated/system_section >}}
 
-- For application clusters, `spec.flinkConfiguration` will be located in `FlinkDeployment` CustomResource.
-- For session clusters, configuring `spec.flinkConfiguration` in parent `FlinkDeployment` will be applied to all session jobs within the session cluster.
-  - You can configure some additional job specific supplemental configuration through `spec.flinkConfiguration` in `FlinkSessionJob` CustomResource. 
-  Those session job level configurations will override the parent session cluster's Flink configuration. Please note only the following configurations are considered to be valid configurations.
-    - `kubernetes.operator.user.artifacts.http.header`
+### Resource/User Configuration
+
+These options can be configured on both an operator and a per-resource level. When set under `spec.flinkConfiguration` for the Flink resources it will override the default value provided in the operator default configuration (`flink-conf.yaml`).
+
+{{< generated/dynamic_section >}}
+
+### System Metrics Configuration
+
+Operator system metrics configuration. Cannot be overridden on a per-resource basis.
+
+{{< generated/kubernetes_operator_metric_configuration >}}
+
+### Advanced System Configuration
+
+Advanced operator system configuration. Cannot be overridden on a per-resource basis.
+
+{{< generated/system_advanced_section >}}

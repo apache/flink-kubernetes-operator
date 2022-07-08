@@ -22,6 +22,14 @@ import org.apache.flink.configuration.ConfigOptions;
 
 /** Configuration options for metrics. */
 public class KubernetesOperatorMetricOptions {
+
+    public static final ConfigOption<Boolean> OPERATOR_JOSDK_METRICS_ENABLED =
+            ConfigOptions.key("kubernetes.operator.josdk.metrics.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Enable forwarding of Java Operator SDK metrics to the Flink metric registry.");
+
     public static final ConfigOption<String> SCOPE_NAMING_KUBERNETES_OPERATOR =
             ConfigOptions.key("metrics.scope.k8soperator.system")
                     .defaultValue("<host>.k8soperator.<namespace>.<name>.system")
