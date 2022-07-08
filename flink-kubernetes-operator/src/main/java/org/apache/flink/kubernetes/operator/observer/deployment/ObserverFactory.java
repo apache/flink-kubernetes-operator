@@ -22,28 +22,28 @@ import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.observer.Observer;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** The factory to create the observer based ob the {@link FlinkDeployment} mode. */
+/** The factory to create the observer based on the {@link FlinkDeployment} mode. */
 public class ObserverFactory {
 
-    private final FlinkService flinkService;
+    private final FlinkServiceFactory flinkServiceFactory;
     private final FlinkConfigManager configManager;
     private final StatusRecorder<FlinkDeploymentStatus> statusRecorder;
     private final EventRecorder eventRecorder;
     private final Map<Mode, Observer<FlinkDeployment>> observerMap;
 
     public ObserverFactory(
-            FlinkService flinkService,
+            FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
             StatusRecorder<FlinkDeploymentStatus> statusRecorder,
             EventRecorder eventRecorder) {
-        this.flinkService = flinkService;
+        this.flinkServiceFactory = flinkServiceFactory;
         this.configManager = configManager;
         this.statusRecorder = statusRecorder;
         this.eventRecorder = eventRecorder;
@@ -56,10 +56,16 @@ public class ObserverFactory {
                 mode -> {
                     switch (mode) {
                         case SESSION:
-                            return new SessionObserver(flinkService, configManager, eventRecorder);
+                            return new SessionObserver(
+                                    flinkServiceFactory.getOrCreate(flinkApp),
+                                    configManager,
+                                    eventRecorder);
                         case APPLICATION:
                             return new ApplicationObserver(
-                                    flinkService, configManager, statusRecorder, eventRecorder);
+                                    flinkServiceFactory.getOrCreate(flinkApp),
+                                    configManager,
+                                    statusRecorder,
+                                    eventRecorder);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", mode));

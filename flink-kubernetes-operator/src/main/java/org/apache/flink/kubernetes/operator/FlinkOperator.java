@@ -37,8 +37,7 @@ import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.observer.sessionjob.SessionJobObserver;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.service.NativeFlinkService;
+import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
@@ -69,7 +68,7 @@ public class FlinkOperator {
     private final Operator operator;
 
     private final KubernetesClient client;
-    private final FlinkService flinkService;
+    private final FlinkServiceFactory flinkServiceFactory;
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
     @VisibleForTesting final Set<RegisteredController> registeredControllers = new HashSet<>();
@@ -87,7 +86,7 @@ public class FlinkOperator {
                 KubernetesClientUtils.getKubernetesClient(
                         configManager.getOperatorConfiguration(), this.metricGroup);
         this.operator = new Operator(client, this::overrideOperatorConfigs);
-        this.flinkService = new NativeFlinkService(client, configManager);
+        this.flinkServiceFactory = new FlinkServiceFactory(client, configManager);
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.listeners = ListenerUtils.discoverListeners(configManager);
         PluginManager pluginManager =
@@ -127,9 +126,10 @@ public class FlinkOperator {
         var eventRecorder = EventRecorder.create(client, listeners);
         var reconcilerFactory =
                 new ReconcilerFactory(
-                        client, flinkService, configManager, eventRecorder, statusRecorder);
+                        client, flinkServiceFactory, configManager, eventRecorder, statusRecorder);
         var observerFactory =
-                new ObserverFactory(flinkService, configManager, statusRecorder, eventRecorder);
+                new ObserverFactory(
+                        flinkServiceFactory, configManager, statusRecorder, eventRecorder);
 
         var controller =
                 new FlinkDeploymentController(
@@ -150,9 +150,10 @@ public class FlinkOperator {
                         client, new MetricManager<>(metricGroup, configManager), listeners);
         var reconciler =
                 new SessionJobReconciler(
-                        client, flinkService, configManager, eventRecorder, statusRecorder);
+                        client, flinkServiceFactory, configManager, eventRecorder, statusRecorder);
         var observer =
-                new SessionJobObserver(flinkService, configManager, statusRecorder, eventRecorder);
+                new SessionJobObserver(
+                        flinkServiceFactory, configManager, statusRecorder, eventRecorder);
         var controller =
                 new FlinkSessionJobController(
                         configManager, validators, reconciler, observer, statusRecorder);

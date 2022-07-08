@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.observer.context.VoidObserverContext
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -52,52 +53,51 @@ import java.util.stream.Collectors;
 public class SessionJobObserver implements Observer<FlinkSessionJob> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionJobObserver.class);
+    private final FlinkServiceFactory flinkServiceFactory;
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
-    private final SavepointObserver<FlinkSessionJobStatus> savepointObserver;
-    private final JobStatusObserver<VoidObserverContext> jobStatusObserver;
-    private final FlinkService flinkService;
+    private final StatusRecorder<FlinkSessionJobStatus> statusRecorder;
 
     public SessionJobObserver(
-            FlinkService flinkService,
+            FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
             StatusRecorder<FlinkSessionJobStatus> statusRecorder,
             EventRecorder eventRecorder) {
+        this.flinkServiceFactory = flinkServiceFactory;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
-        this.flinkService = flinkService;
-        this.savepointObserver =
-                new SavepointObserver<>(flinkService, configManager, statusRecorder, eventRecorder);
-        this.jobStatusObserver =
-                new JobStatusObserver<>(flinkService, eventRecorder) {
-                    @Override
-                    protected void onTimeout(VoidObserverContext sessionJobObserverContext) {}
+        this.statusRecorder = statusRecorder;
+    }
 
-                    @Override
-                    protected Optional<JobStatusMessage> filterTargetJob(
-                            JobStatus status, List<JobStatusMessage> clusterJobStatuses) {
-                        var jobId =
-                                Preconditions.checkNotNull(
-                                        status.getJobId(),
-                                        "The jobID to be observed should not be null");
-                        var matchedList =
-                                clusterJobStatuses.stream()
-                                        .filter(job -> job.getJobId().toHexString().equals(jobId))
-                                        .collect(Collectors.toList());
-                        Preconditions.checkArgument(
-                                matchedList.size() <= 1,
-                                String.format(
-                                        "Expected one job for JobID: %s, but %d founded",
-                                        status.getJobId(), matchedList.size()));
+    private JobStatusObserver<VoidObserverContext> getJobStatusObserver(FlinkService flinkService) {
+        return new JobStatusObserver<>(flinkService, eventRecorder) {
+            @Override
+            protected void onTimeout(VoidObserverContext sessionJobObserverContext) {}
 
-                        if (matchedList.size() == 0) {
-                            LOG.info("No job found for JobID: {}", jobId);
-                            return Optional.empty();
-                        } else {
-                            return Optional.of(matchedList.get(0));
-                        }
-                    }
-                };
+            @Override
+            protected Optional<JobStatusMessage> filterTargetJob(
+                    JobStatus status, List<JobStatusMessage> clusterJobStatuses) {
+                var jobId =
+                        Preconditions.checkNotNull(
+                                status.getJobId(), "The jobID to be observed should not be null");
+                var matchedList =
+                        clusterJobStatuses.stream()
+                                .filter(job -> job.getJobId().toHexString().equals(jobId))
+                                .collect(Collectors.toList());
+                Preconditions.checkArgument(
+                        matchedList.size() <= 1,
+                        String.format(
+                                "Expected one job for JobID: %s, but %d founded",
+                                status.getJobId(), matchedList.size()));
+
+                if (matchedList.size() == 0) {
+                    LOG.info("No job found for JobID: {}", jobId);
+                    return Optional.empty();
+                } else {
+                    return Optional.of(matchedList.get(0));
+                }
+            }
+        };
     }
 
     @Override
@@ -112,11 +112,13 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
             return;
         }
 
+        FlinkService flinkService = flinkServiceFactory.getOrCreate(flinkDepOpt.get());
+        var jobStatusObserver = getJobStatusObserver(flinkService);
         var deployedConfig =
                 configManager.getSessionJobConfig(flinkDepOpt.get(), flinkSessionJob.getSpec());
         var reconciliationStatus = flinkSessionJob.getStatus().getReconciliationStatus();
         if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
-            checkIfAlreadyUpgraded(flinkSessionJob, deployedConfig);
+            checkIfAlreadyUpgraded(flinkSessionJob, deployedConfig, flinkService);
             if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
                 return;
             }
@@ -127,13 +129,18 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
                         flinkSessionJob, deployedConfig, VoidObserverContext.INSTANCE);
 
         if (jobFound) {
+            SavepointObserver savepointObserver =
+                    new SavepointObserver<>(
+                            flinkService, configManager, statusRecorder, eventRecorder);
             savepointObserver.observeSavepointStatus(flinkSessionJob, deployedConfig);
         }
         SavepointUtils.resetTriggerIfJobNotRunning(flinkSessionJob, eventRecorder);
     }
 
     private void checkIfAlreadyUpgraded(
-            FlinkSessionJob flinkSessionJob, Configuration deployedConfig) {
+            FlinkSessionJob flinkSessionJob,
+            Configuration deployedConfig,
+            FlinkService flinkService) {
         var uid = flinkSessionJob.getMetadata().getUid();
         Collection<JobStatusMessage> jobStatusMessages;
         try {

@@ -9047,6 +9047,11 @@ spec:
                 additionalProperties:
                   type: string
                 type: object
+              mode:
+                enum:
+                - native
+                - standalone
+                type: string
               job:
                 properties:
                   jarURI:
