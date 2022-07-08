@@ -1,0 +1,36 @@
+<table class="configuration table table-bordered">
+    <thead>
+        <tr>
+            <th class="text-left" style="width: 20%">Key</th>
+            <th class="text-left" style="width: 15%">Default</th>
+            <th class="text-left" style="width: 10%">Type</th>
+            <th class="text-left" style="width: 55%">Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><h5>kubernetes.operator.josdk.metrics.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Enable forwarding of Java Operator SDK metrics to the Flink metric registry.</td>
+        </tr>
+        <tr>
+            <td><h5>metrics.scope.k8soperator.resource</h5></td>
+            <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.resource.&lt;resourcens&gt;.&lt;resourcename&gt;"</td>
+            <td>String</td>
+            <td>Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource.</td>
+        </tr>
+        <tr>
+            <td><h5>metrics.scope.k8soperator.resourcens</h5></td>
+            <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.namespace.&lt;resourcens&gt;"</td>
+            <td>String</td>
+            <td>Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource namespace.</td>
+        </tr>
+        <tr>
+            <td><h5>metrics.scope.k8soperator.system</h5></td>
+            <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.system"</td>
+            <td>String</td>
+            <td>Defines the scope format string that is applied to all metrics scoped to the kubernetes operator.</td>
+        </tr>
+    </tbody>
+</table>

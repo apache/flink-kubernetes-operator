@@ -18,6 +18,7 @@
 
 package org.apache.flink.kubernetes.operator.config;
 
+import org.apache.flink.annotation.docs.Documentation;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 
@@ -30,6 +31,11 @@ import java.util.Map;
 /** This class holds configuration constants used by flink operator. */
 public class KubernetesOperatorConfigOptions {
 
+    public static final String SECTION_SYSTEM = "system";
+    public static final String SECTION_ADVANCED = "system_advanced";
+    public static final String SECTION_DYNAMIC = "dynamic";
+
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Duration> OPERATOR_RECONCILE_INTERVAL =
             ConfigOptions.key("kubernetes.operator.reconcile.interval")
                     .durationType()
@@ -38,6 +44,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The interval for the controller to reschedule the reconcile process.");
 
+    @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_REST_READY_DELAY =
             ConfigOptions.key("kubernetes.operator.observer.rest-ready.delay")
                     .durationType()
@@ -45,6 +52,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Final delay before deployment is marked ready after port becomes accessible.");
 
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Integer> OPERATOR_RECONCILE_PARALLELISM =
             ConfigOptions.key("kubernetes.operator.reconcile.parallelism")
                     .intType()
@@ -53,6 +61,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The maximum number of threads running the reconciliation loop. Use -1 for infinite.");
 
+    @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> OPERATOR_OBSERVER_PROGRESS_CHECK_INTERVAL =
             ConfigOptions.key("kubernetes.operator.observer.progress-check.interval")
                     .durationType()
@@ -60,6 +69,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The interval for observing status for in-progress operations such as deployment and savepoints.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_TRIGGER_GRACE_PERIOD =
             ConfigOptions.key("kubernetes.operator.savepoint.trigger.grace-period")
                     .durationType()
@@ -69,6 +79,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The interval before a savepoint trigger attempt is marked as unsuccessful.");
 
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Duration> OPERATOR_FLINK_CLIENT_TIMEOUT =
             ConfigOptions.key("kubernetes.operator.flink.client.timeout")
                     .durationType()
@@ -77,6 +88,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The timeout for the observer to wait the flink rest client to return.");
 
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Duration> OPERATOR_FLINK_CLIENT_CANCEL_TIMEOUT =
             ConfigOptions.key("kubernetes.operator.flink.client.cancel.timeout")
                     .durationType()
@@ -85,6 +97,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The timeout for the reconciler to wait for flink to cancel job.");
 
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Duration> OPERATOR_RESOURCE_CLEANUP_TIMEOUT =
             ConfigOptions.key("kubernetes.operator.resource.cleanup.timeout")
                     .durationType()
@@ -94,12 +107,14 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "The timeout for the resource clean up to wait for flink to shutdown cluster.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> DEPLOYMENT_ROLLBACK_ENABLED =
             ConfigOptions.key("kubernetes.operator.deployment.rollback.enabled")
                     .booleanType()
                     .defaultValue(false)
                     .withDescription("Whether to enable rolling back failed deployment upgrades.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Duration> DEPLOYMENT_READINESS_TIMEOUT =
             ConfigOptions.key("kubernetes.operator.deployment.readiness.timeout")
                     .durationType()
@@ -108,18 +123,21 @@ public class KubernetesOperatorConfigOptions {
                             "The timeout for deployments to become ready/stable "
                                     + "before being rolled back if rollback is enabled.");
 
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<String> OPERATOR_USER_ARTIFACTS_BASE_DIR =
             ConfigOptions.key("kubernetes.operator.user.artifacts.base.dir")
                     .stringType()
                     .defaultValue("/opt/flink/artifacts")
                     .withDescription("The base dir to put the session job artifacts.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT =
             ConfigOptions.key("kubernetes.operator.job.upgrade.ignore-pending-savepoint")
                     .booleanType()
                     .defaultValue(false)
                     .withDescription("Whether to ignore pending savepoint during job upgrade.");
 
+    @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_CONFIG_ENABLED =
             ConfigOptions.key("kubernetes.operator.dynamic.config.enabled")
                     .booleanType()
@@ -127,24 +145,28 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Whether to enable on-the-fly config changes through the operator configmap.");
 
+    @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL =
             ConfigOptions.key("kubernetes.operator.dynamic.config.check.interval")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(5))
                     .withDescription("Time interval for checking config changes.");
 
+    @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> OPERATOR_CONFIG_CACHE_TIMEOUT =
             ConfigOptions.key("kubernetes.operator.config.cache.timeout")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(10))
                     .withDescription("Expiration time for cached configs.");
 
+    @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Integer> OPERATOR_CONFIG_CACHE_SIZE =
             ConfigOptions.key("kubernetes.operator.config.cache.size")
                     .intType()
                     .defaultValue(1000)
                     .withDescription("Max config cache size.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED =
             ConfigOptions.key("kubernetes.operator.jm-deployment-recovery.enabled")
                     .booleanType()
@@ -154,12 +176,14 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Whether to enable recovery of missing/deleted jobmanager deployments.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Integer> OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT =
             ConfigOptions.key("kubernetes.operator.savepoint.history.max.count")
                     .intType()
                     .defaultValue(10)
                     .withDescription("Maximum number of savepoint history entries to retain.");
 
+    @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Integer> OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT_THRESHOLD =
             ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT.key() + ".threshold")
                     .intType()
@@ -167,6 +191,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum number threshold of savepoint history entries to retain.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE =
             ConfigOptions.key("kubernetes.operator.savepoint.history.max.age")
                     .durationType()
@@ -174,6 +199,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum age for savepoint history entries to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.");
 
+    @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD =
             ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE.key() + ".threshold")
                     .durationType()
@@ -181,6 +207,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum age threshold for savepoint history entries to retain.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Map<String, String>> JAR_ARTIFACT_HTTP_HEADER =
             ConfigOptions.key("kubernetes.operator.user.artifacts.http.header")
                     .mapType()
@@ -189,6 +216,7 @@ public class KubernetesOperatorConfigOptions {
                             "Custom HTTP header for HttpArtifactFetcher. The header will be applied when getting the session job artifacts. "
                                     + "Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Duration> PERIODIC_SAVEPOINT_INTERVAL =
             ConfigOptions.key("kubernetes.operator.periodic.savepoint.interval")
                     .durationType()
@@ -197,6 +225,7 @@ public class KubernetesOperatorConfigOptions {
                             "Interval at which periodic savepoints will be triggered. "
                                     + "The triggering schedule is not guaranteed, savepoints will be triggered as part of the regular reconcile loop.");
 
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<String> OPERATOR_WATCHED_NAMESPACES =
             ConfigOptions.key("kubernetes.operator.watched.namespaces")
                     .stringType()
@@ -204,19 +233,14 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Comma separated list of namespaces the operator monitors for custom resources.");
 
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_NAMESPACES_ENABLED =
             ConfigOptions.key("kubernetes.operator.dynamic.namespaces.enabled")
                     .booleanType()
                     .defaultValue(false)
                     .withDescription("Enables dynamic change of watched/monitored namespaces.");
 
-    public static final ConfigOption<Boolean> OPERATOR_JOSDK_METRICS_ENABLED =
-            ConfigOptions.key("kubernetes.operator.josdk.metrics.enabled")
-                    .booleanType()
-                    .defaultValue(true)
-                    .withDescription(
-                            "Enable forwarding of Java Operator SDK metrics to the Flink metric registry.");
-
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Duration> OPERATOR_RETRY_INITIAL_INTERVAL =
             ConfigOptions.key("kubernetes.operator.retry.initial.interval")
                     .durationType()
@@ -224,6 +248,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Initial interval of automatic reconcile retries on recoverable errors.");
 
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Double> OPERATOR_RETRY_INTERVAL_MULTIPLIER =
             ConfigOptions.key("kubernetes.operator.retry.interval.multiplier")
                     .doubleType()
@@ -231,6 +256,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Interval multiplier of automatic reconcile retries on recoverable errors.");
 
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Integer> OPERATOR_RETRY_MAX_ATTEMPTS =
             ConfigOptions.key("kubernetes.operator.retry.max.attempts")
                     .intType()
@@ -238,6 +264,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Max attempts of automatic reconcile retries on recoverable errors.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED =
             ConfigOptions.key("kubernetes.operator.job.upgrade.last-state-fallback.enabled")
                     .booleanType()

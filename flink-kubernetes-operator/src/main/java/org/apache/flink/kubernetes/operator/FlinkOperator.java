@@ -110,7 +110,7 @@ public class FlinkOperator {
             LOG.info("Configuring operator with {} reconciliation threads.", parallelism);
             overrider.withConcurrentReconciliationThreads(parallelism);
         }
-        if (configManager.getOperatorConfiguration().getJosdkMetricsEnabled()) {
+        if (configManager.getOperatorConfiguration().isJosdkMetricsEnabled()) {
             overrider.withMetrics(
                     new OperatorJosdkMetrics(metricGroup, configManager.getDefaultConfig()));
         }
