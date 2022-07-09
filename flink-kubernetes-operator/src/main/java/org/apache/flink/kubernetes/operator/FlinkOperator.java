@@ -39,11 +39,11 @@ import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReco
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
-import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.RegisteredController;
@@ -75,13 +75,15 @@ public class FlinkOperator {
     private final Collection<FlinkResourceListener> listeners;
 
     public FlinkOperator(@Nullable Configuration conf) {
-        this.client = new DefaultKubernetesClient();
         this.configManager =
                 conf != null
                         ? new FlinkConfigManager(conf) // For testing only
                         : new FlinkConfigManager(this::handleNamespaceChanges);
         this.metricGroup =
                 OperatorMetricUtils.initOperatorMetrics(configManager.getDefaultConfig());
+        this.client =
+                KubernetesClientUtils.getKubernetesClient(
+                        configManager.getOperatorConfiguration(), this.metricGroup);
         this.operator = new Operator(client, this::overrideOperatorConfigs);
         this.flinkService = new FlinkService(client, configManager);
         this.validators = ValidatorUtils.discoverValidators(configManager);

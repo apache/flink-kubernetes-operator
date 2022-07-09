@@ -37,6 +37,22 @@ The Operator gathers aggregates metrics about managed resources.
 | Namespace | FlinkDeployment.JmDeploymentStatus.<Status>.Count | Number of managed FlinkDeployment resources per <Status> per namespace. <Status> can take values from: READY, DEPLOYED_NOT_READY, DEPLOYING, MISSING, ERROR | Gauge |
 | Namespace | FlinkSessionJob.Count                             | Number of managed FlinkSessionJob instances per namespace                                                                                                   | Gauge |
 
+## Kubernetes Client Metrics
+
+The Operator gathers various metrics related to Kubernetes API server access. The Kubernetes client metrics can be enabled by the configuration `kubernetes.operator.kubernetes.client.metrics.enabled` (default: `true`).
+
+| Scope  | Metrics                                      | Description                                                                                                                                            | Type      |
+|--------|----------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
+| System | KubeClient.HttpRequest.Count                 | Number of HTTP request sent to the Kubernetes API Server                                                                                               | Counter   |
+| System | KubeClient.HttpRequest.<RequestMethod>.Count | Number of HTTP request sent to the Kubernetes API Server per request method. <RequestMethod> can take values from: GET, POST, PUT, PATCH, DELETE, etc. | Counter   |
+| System | KubeClient.HttpRequest.Failed.Count          | Number of failed HTTP requests that has no response from the Kubernetes API Server                                                                     | Counter   |
+| System | KubeClient.HttpResponse.Count                | Number of HTTP responses received from the Kubernetes API Server                                                                                       | Counter   |
+| System | KubeClient.HttpResponse.<ResponseCode>.Count | Number of HTTP responses received from the Kubernetes API Server per response code. <ResponseCode> can take values from: 200, 404, 503, etc.           | Counter   |
+| System | KubeClient.HttpRequest.NumPerSecond          | Number of HTTP requests sent to the Kubernetes API Server per second                                                                                   | Meter     |
+| System | KubeClient.HttpRequest.Failed.NumPerSecond   | Number of failed HTTP requests sent to the Kubernetes API Server per second                                                                            | Meter     |
+| System | KubeClient.HttpResponse.NumPerSecond         | Number of HTTP responses received from the Kubernetes API Server per second                                                                            | Meter     |
+| System | KubeClient.HttpResponse.TimeNanos            | Latency statistics obtained from the HTTP responses received from the Kubernetes API Server                                                            | Histogram |
+
 ## System Metrics
 The Operator gathers metrics about the JVM process and exposes it similarly to core Flink [System metrics](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/#system-metrics). The list of metrics are not repeated in this document.
 
