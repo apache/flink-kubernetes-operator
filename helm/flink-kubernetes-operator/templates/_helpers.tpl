@@ -74,7 +74,7 @@ Create the name of the operator service account to use
 {{- if .Values.operatorServiceAccount.create }}
 {{- default (include "flink-operator.fullname" .) .Values.operatorServiceAccount.name }}
 {{- else }}
-{{- default "default" .Values.serviceAccount.name }}
+{{- default "default" .Values.operatorServiceAccount.name }}
 {{- end }}
 {{- end }}
 
