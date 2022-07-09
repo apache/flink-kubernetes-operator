@@ -1,8 +1,6 @@
 <!--
 *Thank you very much for contributing to the Apache Flink Kubernetes Operator - we are happy that you want to help us improve the project. To help the community review your contribution in the best possible way, please go through the checklist below, which will get the contribution into a shape in which it can be best reviewed.*
 
-*Please understand that we do not do this to make contributions to the project a hassle. In order to uphold a high standard of quality for code contributions, while at the same time managing a large number of contributions, we need contributors to prepare the contributions well, and give reviewers enough contextual information for the review. Please also understand that contributions that do not follow this guide will take longer to review and thus typically be picked up with lower priority by the community.*
-
 ## Contribution Checklist
 
   - Make sure that the pull request corresponds to a [JIRA issue](https://issues.apache.org/jira/projects/FLINK/issues). Exceptions are made for typos in JavaDoc or documentation files, which need no JIRA issue.
@@ -37,9 +35,9 @@
   - *The JobManager's dispose savepoint API is used to clean up obsolete savepoints*
 
 ## Verifying this change
-
+<!--
 Please make sure both new and modified tests in this PR follows the conventions defined in our code quality guide: https://flink.apache.org/contributing/code-style-and-quality-common.html#testing
-
+-->
 *(Please pick either of the following options)*
 
 This change is a trivial rework / code cleanup without any test coverage.
@@ -61,6 +59,7 @@ This change added tests and can be verified as follows:
 
   - Dependencies (does it add or upgrade a dependency): (yes / no)
   - The public API, i.e., is any changes to the `CustomResourceDescriptors`: (yes / no)
+  - Core observer or reconciler logic that is regularly executed: (yes / no)
 
 ## Documentation
 
