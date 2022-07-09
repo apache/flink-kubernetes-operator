@@ -15,6 +15,18 @@
             <td>Enable forwarding of Java Operator SDK metrics to the Flink metric registry.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.kubernetes.client.metrics.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Enable KubernetesClient metrics for measuring the HTTP traffic to the Kubernetes API Server.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.metrics.histogram.sample.size</h5></td>
+            <td style="word-wrap: break-word;">1000</td>
+            <td>Integer</td>
+            <td>Defines the number of measured samples when calculating statistics.</td>
+        </tr>
+        <tr>
             <td><h5>metrics.scope.k8soperator.resource</h5></td>
             <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.resource.&lt;resourcens&gt;.&lt;resourcename&gt;"</td>
             <td>String</td>

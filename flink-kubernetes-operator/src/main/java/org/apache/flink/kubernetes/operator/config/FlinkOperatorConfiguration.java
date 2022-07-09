@@ -45,6 +45,8 @@ public class FlinkOperatorConfiguration {
     Set<String> watchedNamespaces;
     boolean dynamicNamespacesEnabled;
     boolean josdkMetricsEnabled;
+    int metricsHistogramSampleSize;
+    boolean kubernetesClientMetricsEnabled;
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
     String artifactsBaseDir;
@@ -113,6 +115,14 @@ public class FlinkOperatorConfiguration {
         boolean josdkMetricsEnabled =
                 operatorConfig.get(KubernetesOperatorMetricOptions.OPERATOR_JOSDK_METRICS_ENABLED);
 
+        boolean kubernetesClientMetricsEnabled =
+                operatorConfig.get(
+                        KubernetesOperatorMetricOptions.OPERATOR_KUBERNETES_CLIENT_METRICS_ENABLED);
+
+        int metricsHistogramSampleSize =
+                operatorConfig.get(
+                        KubernetesOperatorMetricOptions.OPERATOR_METRICS_HISTOGRAM_SAMPLE_SIZE);
+
         RetryConfiguration retryConfiguration = new FlinkOperatorRetryConfiguration(operatorConfig);
 
         return new FlinkOperatorConfiguration(
@@ -125,6 +135,8 @@ public class FlinkOperatorConfiguration {
                 watchedNamespaces,
                 dynamicNamespacesEnabled,
                 josdkMetricsEnabled,
+                metricsHistogramSampleSize,
+                kubernetesClientMetricsEnabled,
                 flinkCancelJobTimeout,
                 flinkShutdownClusterTimeout,
                 artifactsBaseDir,
