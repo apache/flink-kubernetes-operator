@@ -208,12 +208,11 @@ public class SessionJobObserverTest {
                     throw new RuntimeException("Failed after submitted job");
                 });
         // submit job
-        try {
-            reconciler.reconcile(sessionJob, readyContext);
-            Assertions.fail("Expect an exception here");
-        } catch (Exception ignore) {
-
-        }
+        Assertions.assertThrows(
+                RuntimeException.class,
+                () -> {
+                    reconciler.reconcile(sessionJob, readyContext);
+                });
         Assertions.assertNotNull(sessionJob.getStatus().getReconciliationStatus());
         Assertions.assertEquals(
                 ReconciliationState.UPGRADING,
@@ -256,15 +255,14 @@ public class SessionJobObserverTest {
         sessionJob.getMetadata().setGeneration(11L);
 
         // upgrade
-        try {
-            // suspend
-            reconciler.reconcile(sessionJob, readyContext);
-            // upgrade
-            reconciler.reconcile(sessionJob, readyContext);
-            Assertions.fail("Expect an exception here");
-        } catch (Exception ignore) {
-
-        }
+        Assertions.assertThrows(
+                RuntimeException.class,
+                () -> {
+                    // suspend
+                    reconciler.reconcile(sessionJob, readyContext);
+                    // upgrade
+                    reconciler.reconcile(sessionJob, readyContext);
+                });
 
         Assertions.assertEquals(
                 ReconciliationState.UPGRADING,
@@ -307,15 +305,14 @@ public class SessionJobObserverTest {
         sessionJob.getSpec().getJob().setParallelism(10);
         sessionJob.getMetadata().setGeneration(11L);
         // upgrade
-        try {
-            // suspend
-            reconciler.reconcile(sessionJob, readyContext);
-            // upgrade
-            reconciler.reconcile(sessionJob, readyContext);
-            Assertions.fail("Expect an exception here");
-        } catch (Exception ignore) {
-
-        }
+        Assertions.assertThrows(
+                RuntimeException.class,
+                () -> {
+                    // suspend
+                    reconciler.reconcile(sessionJob, readyContext);
+                    // upgrade
+                    reconciler.reconcile(sessionJob, readyContext);
+                });
 
         Assertions.assertEquals(
                 ReconciliationState.UPGRADING,
