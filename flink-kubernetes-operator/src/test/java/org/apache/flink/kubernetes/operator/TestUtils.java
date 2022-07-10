@@ -82,6 +82,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -146,6 +147,8 @@ public class TestUtils {
                         .withName(TEST_SESSION_JOB_NAME)
                         .withNamespace(TEST_NAMESPACE)
                         .withCreationTimestamp(Instant.now().toString())
+                        .withUid(UUID.randomUUID().toString())
+                        .withGeneration(1L)
                         .build());
         sessionJob.setSpec(
                 FlinkSessionJobSpec.builder()

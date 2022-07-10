@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
@@ -31,6 +32,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
+import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -314,5 +316,17 @@ public class FlinkUtils {
                                 .orElse(Collections.emptyMap()));
         labels.put(CR_GENERATION_LABEL, generation.toString());
         conf.set(KubernetesConfigOptions.JOB_MANAGER_ANNOTATIONS, labels);
+    }
+
+    /**
+     * The jobID's lower part is the resource uid, the higher part is the resource generation.
+     *
+     * @param meta the meta of the resource.
+     * @return the generated jobID.
+     */
+    public static JobID generateSessionJobFixedJobID(ObjectMeta meta) {
+        return new JobID(
+                Preconditions.checkNotNull(meta.getUid()).hashCode(),
+                Preconditions.checkNotNull(meta.getGeneration()));
     }
 }

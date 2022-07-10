@@ -93,6 +93,7 @@ public class TestingFlinkService extends FlinkService {
     private boolean isPortReady = true;
     private boolean haDataAvailable = true;
     private boolean deployFailure = false;
+    private Runnable sessionJobSubmittedCallback;
     private PodList podList = new PodList();
     private Consumer<Configuration> listJobConsumer = conf -> {};
     private List<String> disposedSavepoints = new ArrayList<>();
@@ -180,6 +181,10 @@ public class TestingFlinkService extends FlinkService {
         this.deployFailure = deployFailure;
     }
 
+    public void setSessionJobSubmittedCallback(Runnable sessionJobSubmittedCallback) {
+        this.sessionJobSubmittedCallback = sessionJobSubmittedCallback;
+    }
+
     @Override
     public void submitSessionCluster(Configuration conf) {
         sessions.add(conf.get(KubernetesConfigOptions.CLUSTER_ID));
@@ -196,7 +201,7 @@ public class TestingFlinkService extends FlinkService {
         if (deployFailure) {
             throw new Exception("Deployment failure");
         }
-        JobID jobID = new JobID();
+        JobID jobID = FlinkUtils.generateSessionJobFixedJobID(meta);
         JobStatusMessage jobStatusMessage =
                 new JobStatusMessage(
                         jobID,
@@ -205,6 +210,9 @@ public class TestingFlinkService extends FlinkService {
                         System.currentTimeMillis());
 
         jobs.add(Tuple2.of(savepoint, jobStatusMessage));
+        if (sessionJobSubmittedCallback != null) {
+            sessionJobSubmittedCallback.run();
+        }
         return jobID;
     }
 
