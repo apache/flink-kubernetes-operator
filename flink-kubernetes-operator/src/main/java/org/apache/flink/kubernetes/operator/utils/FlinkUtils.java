@@ -325,8 +325,18 @@ public class FlinkUtils {
      * @return the generated jobID.
      */
     public static JobID generateSessionJobFixedJobID(ObjectMeta meta) {
+        return generateSessionJobFixedJobID(meta.getUid(), meta.getGeneration());
+    }
+
+    /**
+     * The jobID's lower part is the resource uid, the higher part is the resource generation.
+     *
+     * @param uid the uid of the resource.
+     * @param generation the generation of the resource.
+     * @return the generated jobID.
+     */
+    public static JobID generateSessionJobFixedJobID(String uid, Long generation) {
         return new JobID(
-                Preconditions.checkNotNull(meta.getUid()).hashCode(),
-                Preconditions.checkNotNull(meta.getGeneration()));
+                Preconditions.checkNotNull(uid).hashCode(), Preconditions.checkNotNull(generation));
     }
 }
