@@ -17,67 +17,96 @@
 
 package org.apache.flink.kubernetes.operator.metrics;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.metrics.testutils.MetricListener;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
+import org.apache.flink.metrics.Gauge;
+import org.apache.flink.metrics.Metric;
+import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.Test;
 
-import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.METRIC_GROUP_NAME;
+import java.util.HashMap;
+
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.COUNTER_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.FLINK_DEPLOYMENT_GROUP_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.JM_DEPLOYMENT_STATUS_GROUP_NAME;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link FlinkDeploymentMetrics tests. */
+@EnableKubernetesMockClient(crud = true)
 public class FlinkDeploymentMetricsTest {
+    private KubernetesClient kubernetesClient;
 
     @Test
-    public void testMetrics() {
-        MetricListener metricListener = new MetricListener();
-        FlinkDeploymentMetrics metrics =
-                new FlinkDeploymentMetrics(metricListener.getMetricGroup());
+    public void testFlinkDeploymentMetrics() throws InterruptedException {
+        var metrics = new HashMap<String, Metric>();
+        TestingMetricRegistry registry =
+                TestingMetricRegistry.builder()
+                        .setDelimiter(".".charAt(0))
+                        .setRegisterConsumer(
+                                (metric, name, group) -> {
+                                    metrics.put(group.getMetricIdentifier(name), metric);
+                                })
+                        .build();
 
-        assertTrue(metricListener.getGauge(METRIC_GROUP_NAME, "Count").isPresent());
+        var metricManager =
+                (MetricManager) TestUtils.createTestMetricManager(registry, new Configuration());
+        var helper =
+                new StatusRecorder<FlinkDeploymentStatus>(
+                        kubernetesClient, metricManager, (e, s) -> {});
+
+        var deployment = TestUtils.buildApplicationCluster();
+        kubernetesClient.resource(deployment).createOrReplace();
+
+        helper.updateStatusFromCache(deployment);
+        assertEquals(1, ((Gauge) metrics.get(totalIdentifier(deployment))).getValue());
+        assertEquals(1, ((Gauge) metrics.get(perStatusIdentifier(deployment))).getValue());
+
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
-            assertTrue(
-                    metricListener
-                            .getGauge(METRIC_GROUP_NAME, status.toString(), "Count")
-                            .isPresent());
+            deployment.getStatus().setJobManagerDeploymentStatus(status);
+            helper.patchAndCacheStatus(deployment);
+            assertEquals(1, ((Gauge) metrics.get(totalIdentifier(deployment))).getValue());
+            assertEquals(1, ((Gauge) metrics.get(perStatusIdentifier(deployment))).getValue());
         }
 
-        assertEquals(0, metricListener.getGauge(METRIC_GROUP_NAME, "Count").get().getValue());
+        helper.removeCachedStatus(deployment);
+        assertEquals(0, ((Gauge) metrics.get(totalIdentifier(deployment))).getValue());
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
-            assertEquals(
-                    0,
-                    metricListener
-                            .getGauge(METRIC_GROUP_NAME, status.toString(), "Count")
-                            .get()
-                            .getValue());
+            assertEquals(0, ((Gauge) metrics.get(perStatusIdentifier(deployment))).getValue());
         }
+    }
 
-        FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+    private String totalIdentifier(FlinkDeployment deployment) {
+        String baseScope = "testhost.k8soperator.flink-operator-test.testopname.";
+        String[] metricScope =
+                new String[] {
+                    "namespace",
+                    deployment.getMetadata().getNamespace(),
+                    FLINK_DEPLOYMENT_GROUP_NAME,
+                    COUNTER_NAME
+                };
+        return baseScope + String.join(".", metricScope);
+    }
 
-        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
-            flinkDeployment.getStatus().setJobManagerDeploymentStatus(status);
-            metrics.onUpdate(flinkDeployment);
-            assertEquals(
-                    1,
-                    metricListener
-                            .getGauge(METRIC_GROUP_NAME, status.toString(), "Count")
-                            .get()
-                            .getValue());
-            assertEquals(1, metricListener.getGauge(METRIC_GROUP_NAME, "Count").get().getValue());
-        }
+    private String perStatusIdentifier(FlinkDeployment deployment) {
 
-        metrics.onRemove(flinkDeployment);
-        assertEquals(0, metricListener.getGauge(METRIC_GROUP_NAME, "Count").get().getValue());
-        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
-            assertEquals(
-                    0,
-                    metricListener
-                            .getGauge(METRIC_GROUP_NAME, status.toString(), "Count")
-                            .get()
-                            .getValue());
-        }
+        String baseScope = "testhost.k8soperator.flink-operator-test.testopname.";
+        String[] metricScope =
+                new String[] {
+                    "namespace",
+                    deployment.getMetadata().getNamespace(),
+                    FLINK_DEPLOYMENT_GROUP_NAME,
+                    JM_DEPLOYMENT_STATUS_GROUP_NAME,
+                    deployment.getStatus().getJobManagerDeploymentStatus().name(),
+                    COUNTER_NAME
+                };
+
+        return baseScope + String.join(".", metricScope);
     }
 }

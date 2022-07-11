@@ -31,11 +31,11 @@ The Flink Kubernetes Operator (Operator) extends the [Flink Metric System](https
 ## Deployment Metrics
 The Operator gathers aggregates metrics about managed resources.
 
-| Scope     | Metrics                        | Description                                                                                                                                                 | Type  |
-|-----------|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|
-| Namespace | FlinkDeployment.Count          | Number of managed FlinkDeployment instances per namespace                                                                                                   | Gauge |
-| Namespace | FlinkDeployment.<Status>.Count | Number of managed FlinkDeployment resources per <Status> per namespace. <Status> can take values from: READY, DEPLOYED_NOT_READY, DEPLOYING, MISSING, ERROR | Gauge |
-| Namespace | FlinkSessionJob.Count          | Number of managed FlinkSessionJob instances per namespace                                                                                                   | Gauge |
+| Scope     | Metrics                                           | Description                                                                                                                                                 | Type  |
+|-----------|---------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|
+| Namespace | FlinkDeployment.Count                             | Number of managed FlinkDeployment instances per namespace                                                                                                   | Gauge |
+| Namespace | FlinkDeployment.JmDeploymentStatus.<Status>.Count | Number of managed FlinkDeployment resources per <Status> per namespace. <Status> can take values from: READY, DEPLOYED_NOT_READY, DEPLOYING, MISSING, ERROR | Gauge |
+| Namespace | FlinkSessionJob.Count                             | Number of managed FlinkSessionJob instances per namespace                                                                                                   | Gauge |
 
 ## System Metrics
 The Operator gathers metrics about the JVM process and exposes it similarly to core Flink [System metrics](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/#system-metrics). The list of metrics are not repeated in this document.

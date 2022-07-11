@@ -31,20 +31,26 @@ import java.util.concurrent.ConcurrentHashMap;
 public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeployment> {
 
     private final Map<JobManagerDeploymentStatus, Set<String>> statuses = new HashMap<>();
-    public static final String METRIC_GROUP_NAME = "FlinkDeployment";
+    public static final String FLINK_DEPLOYMENT_GROUP_NAME = "FlinkDeployment";
+    public static final String JM_DEPLOYMENT_STATUS_GROUP_NAME = "JmDeploymentStatus";
+    public static final String COUNTER_NAME = "Count";
 
     public FlinkDeploymentMetrics(MetricGroup parentMetricGroup) {
-        MetricGroup flinkDeploymentMetrics = parentMetricGroup.addGroup(METRIC_GROUP_NAME);
+        MetricGroup flinkDeploymentMetrics =
+                parentMetricGroup.addGroup(FLINK_DEPLOYMENT_GROUP_NAME);
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
             statuses.put(status, ConcurrentHashMap.newKeySet());
         }
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
             statuses.put(status, new HashSet<>());
-            MetricGroup metricGroup = flinkDeploymentMetrics.addGroup(status.toString());
-            metricGroup.gauge("Count", () -> statuses.get(status).size());
+            MetricGroup metricGroup =
+                    flinkDeploymentMetrics
+                            .addGroup(JM_DEPLOYMENT_STATUS_GROUP_NAME)
+                            .addGroup(status.toString());
+            metricGroup.gauge(COUNTER_NAME, () -> statuses.get(status).size());
         }
         flinkDeploymentMetrics.gauge(
-                "Count", () -> statuses.values().stream().mapToInt(Set::size).sum());
+                COUNTER_NAME, () -> statuses.values().stream().mapToInt(Set::size).sum());
     }
 
     public void onUpdate(FlinkDeployment flinkApp) {
