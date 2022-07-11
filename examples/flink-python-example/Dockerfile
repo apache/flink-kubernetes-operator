@@ -38,6 +38,7 @@ rm -rf /var/lib/apt/lists/*
 # install PyFlink
 RUN pip3 install apache-flink==1.15.0
 
-# ddd python script
+# add python script
+USER flink
 RUN mkdir /opt/flink/usrlib
 ADD python_demo.py /opt/flink/usrlib/python_demo.py
