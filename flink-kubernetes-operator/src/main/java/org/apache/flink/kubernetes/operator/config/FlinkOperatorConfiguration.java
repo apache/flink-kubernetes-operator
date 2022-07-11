@@ -53,6 +53,7 @@ public class FlinkOperatorConfiguration {
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
     RetryConfiguration retryConfiguration;
+    String labelSelector;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -125,6 +126,9 @@ public class FlinkOperatorConfiguration {
 
         RetryConfiguration retryConfiguration = new FlinkOperatorRetryConfiguration(operatorConfig);
 
+        String labelSelector =
+                operatorConfig.getString(KubernetesOperatorConfigOptions.OPERATOR_LABEL_SELECTOR);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -142,7 +146,8 @@ public class FlinkOperatorConfiguration {
                 artifactsBaseDir,
                 savepointHistoryCountThreshold,
                 savepointHistoryAgeThreshold,
-                retryConfiguration);
+                retryConfiguration,
+                labelSelector);
     }
 
     /** Enables configurable retry mechanism for reconciliation errors. */

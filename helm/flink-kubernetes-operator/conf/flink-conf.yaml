@@ -40,6 +40,7 @@ parallelism.default: 2
 # kubernetes.operator.user.artifacts.base.dir: /opt/flink/artifacts
 # kubernetes.operator.job.upgrade.ignore-pending-savepoint: false
 # kubernetes.operator.watched.namespaces: ns1,ns2
+# kubernetes.operator.label.selector: flink=enabled
 # kubernetes.operator.dynamic.namespaces.enabled: false
 # kubernetes.operator.retry.initial.interval: 5 s
 # kubernetes.operator.retry.interval.multiplier: 2

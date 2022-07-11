@@ -20,41 +20,58 @@ package org.apache.flink.kubernetes.operator;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
+import io.javaoperatorsdk.operator.RegisteredController;
 import io.javaoperatorsdk.operator.api.config.ConfigurationServiceProvider;
+import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadPoolExecutor;
 
-/** @link FlinkOperator unit tests. */
+/**
+ * @link FlinkOperator unit tests. Since at the time of writing this the JOSDK does not support
+ *     overriding the configuration multiple times (has a singleton @link
+ *     ConfigurationServiceProvider) we write multiple tests as a single function, please provide
+ *     ample comments.
+ */
 public class FlinkOperatorTest {
 
     @Test
-    public void testExecutorServiceUsesReconciliationMaxParallelismFromConfig() {
-        checkExecutorServiceThreadCount(Optional.of(42), 42);
-        // TODO: cannot override the operator configs twice in java-operator-sdk v3
-        Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> checkExecutorServiceThreadCount(Optional.of(-1), 1));
-    }
-
-    private void checkExecutorServiceThreadCount(
-            Optional<Integer> parallelism, int expectedThreadCount) {
-        var es = getExecutorForParallelismConfig(parallelism);
-        Assertions.assertInstanceOf(ThreadPoolExecutor.class, es);
-        ThreadPoolExecutor threadPoolExecutor = (ThreadPoolExecutor) es;
-        Assertions.assertEquals(expectedThreadCount, threadPoolExecutor.getMaximumPoolSize());
-    }
-
-    private ExecutorService getExecutorForParallelismConfig(Optional<Integer> parallelism) {
+    public void testConfigurationPassedToJOSDK() {
+        var testParallelism = 42;
+        var testSelector = "flink=enabled";
         var operatorConfig = new Configuration();
-        parallelism.ifPresent(
-                p ->
-                        operatorConfig.setInteger(
-                                KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_PARALLELISM, p));
-        new FlinkOperator(operatorConfig);
-        return ConfigurationServiceProvider.instance().getExecutorService();
+
+        operatorConfig.setInteger(
+                KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_PARALLELISM, testParallelism);
+        operatorConfig.set(KubernetesOperatorConfigOptions.OPERATOR_LABEL_SELECTOR, testSelector);
+
+        var testOperator = new FlinkOperator(operatorConfig);
+        testOperator.registerDeploymentController();
+        testOperator.registerSessionJobController();
+
+        // Test parallelism being passed
+        var executorService = ConfigurationServiceProvider.instance().getExecutorService();
+        Assertions.assertInstanceOf(ThreadPoolExecutor.class, executorService);
+        ThreadPoolExecutor threadPoolExecutor = (ThreadPoolExecutor) executorService;
+        Assertions.assertEquals(threadPoolExecutor.getMaximumPoolSize(), testParallelism);
+
+        // Test label selector being passed
+        // We have a label selector for each controller
+        var labelSelectors =
+                testOperator.registeredControllers.stream()
+                        .map(RegisteredController::getConfiguration)
+                        .map(ControllerConfiguration::getLabelSelector);
+
+        labelSelectors.forEach(selector -> Assertions.assertEquals(testSelector, selector));
+
+        // TODO: Overriding operator configuration twice in JOSDK v3 yields IllegalStateException
+        var secondParallelism = 420;
+        var secondConfig = new Configuration();
+
+        secondConfig.setInteger(
+                KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_PARALLELISM, secondParallelism);
+
+        Assertions.assertThrows(IllegalStateException.class, () -> new FlinkOperator(secondConfig));
     }
 }
