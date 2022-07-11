@@ -17,15 +17,19 @@
 
 package org.apache.flink.kubernetes.operator.observer.sessionjob;
 
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.VoidObserverContext;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -38,6 +42,8 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -50,6 +56,7 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
     private final EventRecorder eventRecorder;
     private final SavepointObserver<FlinkSessionJobStatus> savepointObserver;
     private final JobStatusObserver<VoidObserverContext> jobStatusObserver;
+    private final FlinkService flinkService;
 
     public SessionJobObserver(
             FlinkService flinkService,
@@ -58,8 +65,9 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
             EventRecorder eventRecorder) {
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
+        this.flinkService = flinkService;
         this.savepointObserver =
-                new SavepointObserver(flinkService, configManager, statusRecorder, eventRecorder);
+                new SavepointObserver<>(flinkService, configManager, statusRecorder, eventRecorder);
         this.jobStatusObserver =
                 new JobStatusObserver<>(flinkService, eventRecorder) {
                     @Override
@@ -106,6 +114,14 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
 
         var deployedConfig =
                 configManager.getSessionJobConfig(flinkDepOpt.get(), flinkSessionJob.getSpec());
+        var reconciliationStatus = flinkSessionJob.getStatus().getReconciliationStatus();
+        if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+            checkIfAlreadyUpgraded(flinkSessionJob, deployedConfig);
+            if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+                return;
+            }
+        }
+
         var jobFound =
                 jobStatusObserver.observe(
                         flinkSessionJob, deployedConfig, VoidObserverContext.INSTANCE);
@@ -114,5 +130,62 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
             savepointObserver.observeSavepointStatus(flinkSessionJob, deployedConfig);
         }
         SavepointUtils.resetTriggerIfJobNotRunning(flinkSessionJob, eventRecorder);
+    }
+
+    private void checkIfAlreadyUpgraded(
+            FlinkSessionJob flinkSessionJob, Configuration deployedConfig) {
+        var uid = flinkSessionJob.getMetadata().getUid();
+        Collection<JobStatusMessage> jobStatusMessages;
+        try {
+            jobStatusMessages = flinkService.listJobs(deployedConfig);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to list jobs", e);
+        }
+        var matchedJobs = new ArrayList<JobID>();
+        for (JobStatusMessage jobStatusMessage : jobStatusMessages) {
+            var jobId = jobStatusMessage.getJobId();
+            if (jobId.getLowerPart() == uid.hashCode()
+                    && !jobStatusMessage.getJobState().isGloballyTerminalState()) {
+                matchedJobs.add(jobId);
+            }
+        }
+
+        if (matchedJobs.isEmpty()) {
+            return;
+        } else if (matchedJobs.size() > 1) {
+            // this indicates a bug, which means we have more than one running job for a single
+            // SessionJob CR.
+            throw new RuntimeException(
+                    String.format(
+                            "Unexpected case: %d job found for the resource with uid: %s",
+                            matchedJobs.size(), flinkSessionJob.getMetadata().getUid()));
+        } else {
+            var matchedJobID = matchedJobs.get(0);
+            Long upgradeTargetGeneration =
+                    ReconciliationUtils.getUpgradeTargetGeneration(flinkSessionJob);
+            long deployedGeneration = matchedJobID.getUpperPart();
+            var oldJobID = flinkSessionJob.getStatus().getJobStatus().getJobId();
+
+            if (upgradeTargetGeneration == deployedGeneration) {
+                LOG.info(
+                        "Pending upgrade is already deployed, updating status. Old jobID:{}, new jobID:{}",
+                        oldJobID,
+                        matchedJobID.toHexString());
+                ReconciliationUtils.updateStatusForAlreadyUpgraded(flinkSessionJob);
+                flinkSessionJob
+                        .getStatus()
+                        .getJobStatus()
+                        .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+                flinkSessionJob.getStatus().getJobStatus().setJobId(matchedJobID.toHexString());
+            } else {
+                var msg =
+                        String.format(
+                                "Running job %s's generation %s doesn't match upgrade target generation %s.",
+                                matchedJobID.toHexString(),
+                                deployedGeneration,
+                                upgradeTargetGeneration);
+                throw new RuntimeException(msg);
+            }
+        }
     }
 }

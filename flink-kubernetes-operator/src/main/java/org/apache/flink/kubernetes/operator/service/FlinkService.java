@@ -235,19 +235,21 @@ public class FlinkService {
             Configuration conf,
             @Nullable String savepoint)
             throws Exception {
-        var jarRunResponseBody =
-                runJar(spec.getJob(), uploadJar(meta, spec, conf), conf, savepoint);
-        var jobID = jarRunResponseBody.getJobId();
+        // we generate jobID in advance to help deduplicate job submission.
+        var jobID = FlinkUtils.generateSessionJobFixedJobID(meta);
+        runJar(spec.getJob(), jobID, uploadJar(meta, spec, conf), conf, savepoint);
         LOG.info("Submitted job: {} to session cluster.", jobID);
         return jobID;
     }
 
     private JarRunResponseBody runJar(
-            JobSpec job, JarUploadResponseBody response, Configuration conf, String savepoint) {
+            JobSpec job,
+            JobID jobID,
+            JarUploadResponseBody response,
+            Configuration conf,
+            String savepoint) {
         String jarId =
                 response.getFilename().substring(response.getFilename().lastIndexOf("/") + 1);
-        // we generate jobID in advance to help deduplicate job submission.
-        JobID jobID = new JobID();
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
             JarRunHeaders headers = JarRunHeaders.getInstance();

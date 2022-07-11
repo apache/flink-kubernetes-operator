@@ -115,6 +115,7 @@ public abstract class AbstractFlinkResourceReconciler<
                     deployConfig,
                     Optional.ofNullable(spec.getJob()).map(JobSpec::getInitialSavepointPath),
                     false);
+
             ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig);
             return;
         }
