@@ -100,6 +100,76 @@ spec:
     parallelism: 2
 ```
 
+package remotely(artifact-fetcher), which can avoid you repeating the packaging image every time" -> "package remotely to avoid repeating the image packaging on each iteration.
+```yaml
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: pod-template-example
+spec:
+  image: flink:1.15
+  flinkVersion: v1_15
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+  serviceAccount: flink
+  podTemplate:
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: pod-template
+    spec:
+      containers:
+        # Do not change the main container name
+        - name: flink-main-container
+          volumeMounts:
+            - mountPath: /opt/flink/log
+              name: flink-logs
+            - mountPath: /opt/flink/downloads
+              name: downloads
+        # Sample sidecar container for log forwarding
+        - name: fluentbit
+          image: fluent/fluent-bit:1.9.6-debug
+          command: [ 'sh','-c','/fluent-bit/bin/fluent-bit -i tail -p path=/flink-logs/*.log -p multiline.parser=java -o stdout' ]
+          volumeMounts:
+            - mountPath: /flink-logs
+              name: flink-logs
+      volumes:
+        - name: flink-logs
+          emptyDir: { }
+        - name: downloads
+          emptyDir: { }
+  jobManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+    podTemplate:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: task-manager-pod-template
+      spec:
+        initContainers:
+          # Sample init container for fetching remote artifacts
+          - name: busybox
+            image: busybox:latest
+            volumeMounts:
+              - mountPath: /opt/flink/downloads
+                name: downloads
+            command:
+              - /bin/sh
+              - -c
+              - "wget -O /opt/flink/downloads/flink-examples-streaming.jar \
+              https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.1/flink-examples-streaming_2.12-1.15.1.jar"
+  taskManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
+  job:
+    jarURI: local:///opt/flink/downloads/flink-examples-streaming.jar
+    entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample
+    parallelism: 2
+```
+
 {{< hint info >}}
 When using the operator with Flink native Kubernetes integration, please refer to [pod template field precedence](
 https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/resource-providers/native_kubernetes/#fields-overwritten-by-flink).
