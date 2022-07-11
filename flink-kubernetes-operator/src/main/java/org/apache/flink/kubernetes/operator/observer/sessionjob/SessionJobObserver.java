@@ -33,7 +33,6 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -179,23 +178,13 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
                         .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
                 flinkSessionJob.getStatus().getJobStatus().setJobId(matchedJobID.toHexString());
             } else {
-                LOG.warn(
-                        "Running job {}'s generation {} doesn't match upgrade target generation {}.",
-                        matchedJobID.toHexString(),
-                        deployedGeneration,
-                        upgradeTargetGeneration);
-                if (!matchedJobID.toHexString().equals(oldJobID)) {
-                    var msg =
-                            String.format(
-                                    "The founded Job: %s neither match the old JobID: %s nor the new "
-                                            + "generated JobID: %s. This indicates it's an orphaned job.",
-                                    matchedJobID,
-                                    oldJobID,
-                                    FlinkUtils.generateSessionJobFixedJobID(
-                                            uid, upgradeTargetGeneration));
-                    LOG.error(msg);
-                    throw new RuntimeException(msg);
-                }
+                var msg =
+                        String.format(
+                                "Running job %s's generation %s doesn't match upgrade target generation %s.",
+                                matchedJobID.toHexString(),
+                                deployedGeneration,
+                                upgradeTargetGeneration);
+                throw new RuntimeException(msg);
             }
         }
     }

@@ -339,6 +339,6 @@ public class SessionJobObserverTest {
                 Assertions.assertThrows(
                         RuntimeException.class, () -> observer.observe(sessionJob, readyContext));
         Assertions.assertTrue(
-                exception.getMessage().contains("This indicates it's an orphaned job"));
+                exception.getMessage().contains("doesn't match upgrade target generation"));
     }
 }
