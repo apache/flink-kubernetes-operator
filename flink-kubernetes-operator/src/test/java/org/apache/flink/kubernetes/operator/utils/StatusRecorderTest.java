@@ -19,24 +19,14 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
-import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.metrics.MetricManager;
-import org.apache.flink.metrics.Gauge;
-import org.apache.flink.metrics.Metric;
-import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
-
-import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.METRIC_GROUP_NAME;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for {@link StatusRecorder}. */
@@ -70,68 +60,5 @@ public class StatusRecorderTest {
         // No update
         helper.patchAndCacheStatus(deployment);
         assertTrue(mockServer.getLastRequest() == lastRequest);
-    }
-
-    @Test
-    public void testFlinkDeploymentMetrics() throws InterruptedException {
-        var metrics = new HashMap<String, Metric>();
-        TestingMetricRegistry registry =
-                TestingMetricRegistry.builder()
-                        .setDelimiter(".".charAt(0))
-                        .setRegisterConsumer(
-                                (metric, name, group) -> {
-                                    metrics.put(group.getMetricIdentifier(name), metric);
-                                })
-                        .build();
-
-        var metricManager =
-                (MetricManager) TestUtils.createTestMetricManager(registry, new Configuration());
-        var helper =
-                new StatusRecorder<FlinkDeploymentStatus>(
-                        kubernetesClient, metricManager, (e, s) -> {});
-
-        var deployment = TestUtils.buildApplicationCluster();
-        kubernetesClient.resource(deployment).createOrReplace();
-
-        helper.updateStatusFromCache(deployment);
-        assertEquals(1, ((Gauge) metrics.get(totalIdentifier(deployment))).getValue());
-        assertEquals(1, ((Gauge) metrics.get(perStatusIdentifier(deployment))).getValue());
-
-        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
-            deployment.getStatus().setJobManagerDeploymentStatus(status);
-            helper.patchAndCacheStatus(deployment);
-            assertEquals(1, ((Gauge) metrics.get(totalIdentifier(deployment))).getValue());
-            assertEquals(1, ((Gauge) metrics.get(perStatusIdentifier(deployment))).getValue());
-        }
-
-        helper.removeCachedStatus(deployment);
-        assertEquals(0, ((Gauge) metrics.get(totalIdentifier(deployment))).getValue());
-        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
-            assertEquals(0, ((Gauge) metrics.get(perStatusIdentifier(deployment))).getValue());
-        }
-    }
-
-    private String totalIdentifier(FlinkDeployment deployment) {
-        String baseScope = "testhost.k8soperator.flink-operator-test.testopname.";
-        String[] metricScope =
-                new String[] {
-                    "namespace", deployment.getMetadata().getNamespace(), METRIC_GROUP_NAME, "Count"
-                };
-        return baseScope + String.join(".", metricScope);
-    }
-
-    private String perStatusIdentifier(FlinkDeployment deployment) {
-
-        String baseScope = "testhost.k8soperator.flink-operator-test.testopname.";
-        String[] metricScope =
-                new String[] {
-                    "namespace",
-                    deployment.getMetadata().getNamespace(),
-                    METRIC_GROUP_NAME,
-                    deployment.getStatus().getJobManagerDeploymentStatus().name(),
-                    "Count"
-                };
-
-        return baseScope + String.join(".", metricScope);
     }
 }
