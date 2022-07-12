@@ -20,8 +20,12 @@ package org.apache.flink.kubernetes.operator.metrics;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.runtime.metrics.DescriptiveStatisticsHistogram;
 import org.apache.flink.runtime.metrics.MetricRegistry;
+import org.apache.flink.util.clock.Clock;
+import org.apache.flink.util.clock.SystemClock;
 
 import io.javaoperatorsdk.operator.api.monitoring.Metrics;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
@@ -43,21 +47,41 @@ public class OperatorJosdkMetrics implements Metrics {
     private static final String RECONCILIATION = "Reconciliation";
     private static final String RESOURCE = "Resource";
     private static final String EVENT = "Event";
+    private static final int WINDOW_SIZE = 1000;
 
     private final KubernetesOperatorMetricGroup operatorMetricGroup;
     private final Configuration conf;
+    private final Clock clock;
 
     private final Map<ResourceID, KubernetesResourceNamespaceMetricGroup> resourceNsMetricGroups =
             new ConcurrentHashMap<>();
     private final Map<ResourceID, KubernetesResourceMetricGroup> resourceMetricGroups =
             new ConcurrentHashMap<>();
 
+    private final Map<String, Histogram> histograms = new ConcurrentHashMap<>();
     private final Map<String, Counter> counters = new ConcurrentHashMap<>();
 
     public OperatorJosdkMetrics(
             KubernetesOperatorMetricGroup operatorMetricGroup, Configuration conf) {
         this.operatorMetricGroup = operatorMetricGroup;
         this.conf = conf;
+        this.clock = SystemClock.getInstance();
+    }
+
+    @Override
+    public <T> T timeControllerExecution(ControllerExecution<T> execution) throws Exception {
+        long startTime = clock.relativeTimeNanos();
+        try {
+            T result = execution.execute();
+            String successType = execution.successTypeName(result);
+            histogram(execution.controllerName(), execution.name(), successType)
+                    .update(clock.relativeTimeNanos() - startTime);
+            return result;
+        } catch (Exception e) {
+            histogram(execution.controllerName(), execution.name(), "failed")
+                    .update(clock.relativeTimeNanos() - startTime);
+            throw e;
+        }
     }
 
     @Override
@@ -111,6 +135,19 @@ public class OperatorJosdkMetrics implements Metrics {
     public <T extends Map<?, ?>> T monitorSizeOf(T map, String name) {
         operatorMetricGroup.addGroup(name).gauge("size", map::size);
         return map;
+    }
+
+    private Histogram histogram(String... names) {
+        MetricGroup group = operatorMetricGroup.addGroup(OPERATOR_SDK_GROUP);
+        for (String name : names) {
+            group = group.addGroup(name);
+        }
+        var finalGroup = group;
+        return histograms.computeIfAbsent(
+                String.join(".", group.getScopeComponents()),
+                s ->
+                        finalGroup.histogram(
+                                "Nanos", new DescriptiveStatisticsHistogram(WINDOW_SIZE)));
     }
 
     private Counter counter(
