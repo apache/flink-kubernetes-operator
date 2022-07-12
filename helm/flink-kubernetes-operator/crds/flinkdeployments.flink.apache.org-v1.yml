@@ -9133,6 +9133,12 @@ spec:
                     type: string
                   updateTime:
                     type: string
+                  endTime:
+                    type: string
+                  duration:
+                    type: string
+                  jobPlan:
+                    type: string
                   savepointInfo:
                     properties:
                       lastSavepoint:
