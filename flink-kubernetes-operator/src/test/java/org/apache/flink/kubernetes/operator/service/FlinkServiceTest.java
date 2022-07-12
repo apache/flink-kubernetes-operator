@@ -292,15 +292,11 @@ public class FlinkServiceTest {
                 "{\"refresh-interval\":3000,\"timezone-name\":\"Coordinated Universal Time\",\"timezone-offset\":0,\"flink-version\":\"1.13.6\",\"flink-revision\":\"b2ca390 @ 2022-02-03T14:54:22+01:00\",\"features\":{\"web-submit\":false}}";
         String flink14Response =
                 "{\"refresh-interval\":3000,\"timezone-name\":\"Coordinated Universal Time\",\"timezone-offset\":0,\"flink-version\":\"1.14.4\",\"flink-revision\":\"895c609 @ 2022-02-25T11:57:14+01:00\",\"features\":{\"web-submit\":false,\"web-cancel\":false}}";
-        String flink15Response =
-                "{\"refresh-interval\":3000,\"timezone-name\":\"Coordinated Universal Time\",\"timezone-offset\":0,\"flink-version\":\"1.15.0\",\"flink-revision\":\"3a4c113 @ 2022-04-20T19:50:32+02:00\",\"features\":{\"web-submit\":false,\"web-cancel\":false}}";
 
         var dashboardConfiguration =
                 objectMapper.readValue(flink13Response, CustomDashboardConfiguration.class);
         dashboardConfiguration =
                 objectMapper.readValue(flink14Response, CustomDashboardConfiguration.class);
-        dashboardConfiguration =
-                objectMapper.readValue(flink15Response, CustomDashboardConfiguration.class);
     }
 
     @Test
