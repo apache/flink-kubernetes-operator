@@ -239,6 +239,9 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | state | java.lang.String | Last observed state of the job. |
 | startTime | java.lang.String | Start time of the job. |
 | updateTime | java.lang.String | Update time of the job. |
+| endTime | java.lang.String | End time of the job. |
+| duration | java.lang.String | Duration of the job. |
+| jobPlan | java.lang.String | Job plan. |
 | savepointInfo | org.apache.flink.kubernetes.operator.crd.status.SavepointInfo | Information about pending and last savepoint for the job. |
 
 ### ReconciliationState
