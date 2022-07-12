@@ -155,7 +155,7 @@ public class ApplicationReconciler
         flinkService.submitApplicationCluster(spec.getJob(), deployConfig, requireHaMetadata);
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-
+        status.getJobStatus().setJobId(null);
         IngressUtils.updateIngressRules(
                 relatedResource.getMetadata(), spec, deployConfig, kubernetesClient);
     }

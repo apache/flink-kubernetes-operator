@@ -67,6 +67,7 @@ import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointInfo;
@@ -371,6 +372,20 @@ public class FlinkService {
                             EmptyMessageParameters.getInstance(),
                             EmptyRequestBody.getInstance())
                     .thenApply(FlinkService::toJobStatusMessage)
+                    .get(
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkClientTimeout()
+                                    .toSeconds(),
+                            TimeUnit.SECONDS);
+        }
+    }
+
+    public JobDetailsInfo getJobDetailsInfo(JobID jobID, Configuration conf) throws Exception {
+        try (RestClusterClient<String> clusterClient =
+                (RestClusterClient<String>) getClusterClient(conf)) {
+            return clusterClient
+                    .getJobDetails(jobID)
                     .get(
                             configManager
                                     .getOperatorConfiguration()

@@ -17,15 +17,18 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 
+import java.util.Collection;
 import java.util.concurrent.TimeoutException;
 
 /** The observer of the {@link org.apache.flink.kubernetes.operator.config.Mode#SESSION} cluster. */
@@ -43,7 +46,19 @@ public class SessionObserver extends AbstractDeploymentObserver {
             FlinkDeployment deployment, Context context, Configuration deployedConfig) {
         // Check if session cluster can serve rest calls following our practice in JobObserver
         try {
-            flinkService.listJobs(deployedConfig);
+            Collection<JobStatusMessage> jobStatusMessages;
+            if (deployment.getStatus().getJobStatus().getJobId() == null) {
+                jobStatusMessages = flinkService.listJobs(deployedConfig);
+                if (jobStatusMessages.size() > 0) {
+                    flinkService.getJobDetailsInfo(
+                            jobStatusMessages.stream().findFirst().get().getJobId(),
+                            deployedConfig);
+                }
+            } else {
+                flinkService.getJobDetailsInfo(
+                        JobID.fromHexString(deployment.getStatus().getJobStatus().getJobId()),
+                        deployedConfig);
+            }
             var rs = deployment.getStatus().getReconciliationStatus();
             if (rs.getState() == ReconciliationState.DEPLOYED) {
                 rs.markReconciledSpecAsStable();

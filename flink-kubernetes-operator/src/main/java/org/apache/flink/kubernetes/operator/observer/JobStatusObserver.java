@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
@@ -24,6 +25,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,32 +61,65 @@ public abstract class JobStatusObserver<CTX> {
         var jobStatus = resource.getStatus().getJobStatus();
         LOG.info("Observing job status");
         var previousJobStatus = jobStatus.getState();
-        List<JobStatusMessage> clusterJobStatuses;
-        try {
-            clusterJobStatuses = new ArrayList<>(flinkService.listJobs(deployedConfig));
-        } catch (Exception e) {
-            LOG.error("Exception while listing jobs", e);
-            ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-            if (e instanceof TimeoutException) {
-                onTimeout(ctx);
-            }
-            return false;
-        }
 
-        if (!clusterJobStatuses.isEmpty()) {
-            Optional<JobStatusMessage> targetJobStatusMessage =
-                    filterTargetJob(jobStatus, clusterJobStatuses);
-            if (targetJobStatusMessage.isEmpty()) {
-                jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        if (jobStatus == null || jobStatus.getJobId() == null) {
+            List<JobStatusMessage> clusterJobStatuses;
+            try {
+                clusterJobStatuses = new ArrayList<>(flinkService.listJobs(deployedConfig));
+            } catch (Exception e) {
+                LOG.error("Exception while listing jobs", e);
+                ifRunningMoveToReconciling(jobStatus, previousJobStatus);
+                if (e instanceof TimeoutException) {
+                    onTimeout(ctx);
+                }
                 return false;
-            } else {
-                updateJobStatus(resource, targetJobStatusMessage.get(), deployedConfig);
             }
-            ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
-            return true;
+
+            if (!clusterJobStatuses.isEmpty()) {
+                Optional<JobStatusMessage> targetJobStatusMessage =
+                        filterTargetJob(jobStatus, clusterJobStatuses);
+                if (targetJobStatusMessage.isEmpty()) {
+                    jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+                    return false;
+                } else {
+                    JobDetailsInfo targetJobDetailsInfo;
+                    try {
+                        targetJobDetailsInfo =
+                                flinkService.getJobDetailsInfo(
+                                        targetJobStatusMessage.get().getJobId(), deployedConfig);
+                    } catch (Exception e) {
+                        LOG.error("Exception while getting job details", e);
+                        ifRunningMoveToReconciling(jobStatus, previousJobStatus);
+                        if (e instanceof TimeoutException) {
+                            onTimeout(ctx);
+                        }
+                        return false;
+                    }
+                    updateJobStatus(resource, targetJobDetailsInfo, deployedConfig);
+                }
+                ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
+                return true;
+            } else {
+                ifRunningMoveToReconciling(jobStatus, previousJobStatus);
+                return false;
+            }
         } else {
-            ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-            return false;
+            try {
+                JobDetailsInfo targetJobDetailsInfo =
+                        flinkService.getJobDetailsInfo(
+                                JobID.fromHexString(resource.getStatus().getJobStatus().getJobId()),
+                                deployedConfig);
+                updateJobStatus(resource, targetJobDetailsInfo, deployedConfig);
+                ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
+                return true;
+            } catch (Exception e) {
+                LOG.error("Exception while getting job details", e);
+                jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+                if (e instanceof TimeoutException) {
+                    onTimeout(ctx);
+                }
+                return false;
+            }
         }
     }
 
@@ -121,15 +156,18 @@ public abstract class JobStatusObserver<CTX> {
      */
     private void updateJobStatus(
             AbstractFlinkResource<?, ?> resource,
-            JobStatusMessage clusterJobStatus,
+            JobDetailsInfo clusterJobStatus,
             Configuration deployedConfig) {
         var jobStatus = resource.getStatus().getJobStatus();
         var previousJobStatus = jobStatus.getState();
 
-        jobStatus.setState(clusterJobStatus.getJobState().name());
-        jobStatus.setJobName(clusterJobStatus.getJobName());
+        jobStatus.setState(clusterJobStatus.getJobStatus().name());
+        jobStatus.setJobName(clusterJobStatus.getName());
         jobStatus.setJobId(clusterJobStatus.getJobId().toHexString());
         jobStatus.setStartTime(String.valueOf(clusterJobStatus.getStartTime()));
+        jobStatus.setEndTime(String.valueOf(clusterJobStatus.getEndTime()));
+        jobStatus.setJobPlan(clusterJobStatus.getJsonPlan());
+        jobStatus.setDuration(String.valueOf(clusterJobStatus.getDuration()));
 
         if (jobStatus.getState().equals(previousJobStatus)) {
             LOG.info("Job status ({}) unchanged", previousJobStatus);
@@ -155,9 +193,9 @@ public abstract class JobStatusObserver<CTX> {
 
     private void setErrorIfPresent(
             AbstractFlinkResource<?, ?> resource,
-            JobStatusMessage clusterJobStatus,
+            JobDetailsInfo clusterJobStatus,
             Configuration deployedConfig) {
-        if (clusterJobStatus.getJobState() == org.apache.flink.api.common.JobStatus.FAILED) {
+        if (clusterJobStatus.getJobStatus() == org.apache.flink.api.common.JobStatus.FAILED) {
             try {
                 var result =
                         flinkService.requestJobResult(deployedConfig, clusterJobStatus.getJobId());
