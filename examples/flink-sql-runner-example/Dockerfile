@@ -16,7 +16,7 @@
 # limitations under the License.
 ################################################################################
 
-FROM flink:1.15.0
+FROM flink:1.15.1
 
 RUN mkdir /opt/flink/usrlib
 ADD target/flink-sql-runner-example-*.jar /opt/flink/usrlib/sql-runner.jar
