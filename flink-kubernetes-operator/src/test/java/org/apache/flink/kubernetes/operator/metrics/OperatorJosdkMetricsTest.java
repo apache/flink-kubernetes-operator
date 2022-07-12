@@ -19,11 +19,15 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
+import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
+import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.Metric;
 import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
 
+import io.javaoperatorsdk.operator.api.monitoring.Metrics;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.controller.ResourceAction;
@@ -35,15 +39,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /** {@link OperatorJosdkMetrics} tests. */
 public class OperatorJosdkMetricsTest {
 
     private final ResourceID resourceId = new ResourceID("testns", "testname");
+    private final String controllerName = FlinkDeploymentController.class.getSimpleName();
     private final String resourcePrefix =
             "testhost.k8soperator.flink-operator-test.testopname.resource.testname.testns.JOSDK.";
     private final String systemPrefix =
             "testhost.k8soperator.flink-operator-test.testopname.system.";
+    private final String executionPrefix = systemPrefix + "JOSDK.FlinkDeployment.";
 
     private Map<String, Metric> metrics = new HashMap<>();
     private OperatorJosdkMetrics operatorMetrics;
@@ -62,6 +69,87 @@ public class OperatorJosdkMetricsTest {
                 new OperatorJosdkMetrics(
                         TestUtils.createTestMetricGroup(registry, new Configuration()),
                         new Configuration());
+    }
+
+    @Test
+    public void testTimeControllerExecution() throws Exception {
+        Metrics.ControllerExecution<Object> successExecution =
+                new Metrics.ControllerExecution<>() {
+                    @Override
+                    public String name() {
+                        return "reconcile";
+                    }
+
+                    @Override
+                    public String controllerName() {
+                        return controllerName;
+                    }
+
+                    @Override
+                    public String successTypeName(Object o) {
+                        return "resource";
+                    }
+
+                    @Override
+                    public Object execute() throws Exception {
+                        Thread.sleep(1000);
+                        return null;
+                    }
+                };
+        operatorMetrics.timeControllerExecution(successExecution);
+        assertEquals(1, metrics.size());
+        assertEquals(1, getHistogram("reconcile", "resource").getCount());
+        assertEquals(1, getHistogram("reconcile", "resource").getStatistics().getMin());
+        operatorMetrics.timeControllerExecution(successExecution);
+        operatorMetrics.timeControllerExecution(successExecution);
+        assertEquals(1, metrics.size());
+        assertEquals(3, getHistogram("reconcile", "resource").getCount());
+        assertEquals(1, getHistogram("reconcile", "resource").getStatistics().getMin());
+
+        Metrics.ControllerExecution<Object> failureExecution =
+                new Metrics.ControllerExecution<>() {
+                    @Override
+                    public String name() {
+                        return "cleanup";
+                    }
+
+                    @Override
+                    public String controllerName() {
+                        return controllerName;
+                    }
+
+                    @Override
+                    public String successTypeName(Object o) {
+                        return null;
+                    }
+
+                    @Override
+                    public Object execute() throws Exception {
+                        Thread.sleep(1000);
+                        throw new ReconciliationException(new RuntimeException());
+                    }
+                };
+        try {
+            operatorMetrics.timeControllerExecution(failureExecution);
+            fail();
+        } catch (Exception e) {
+            assertEquals(2, metrics.size());
+            assertEquals(1, getHistogram("cleanup", "failed").getCount());
+            assertEquals(1, getHistogram("cleanup", "failed").getStatistics().getMin());
+        }
+        try {
+            operatorMetrics.timeControllerExecution(failureExecution);
+            fail();
+        } catch (Exception ignored) {
+        }
+        try {
+            operatorMetrics.timeControllerExecution(failureExecution);
+            fail();
+        } catch (Exception e) {
+            assertEquals(2, metrics.size());
+            assertEquals(3, getHistogram("cleanup", "failed").getCount());
+            assertEquals(1, getHistogram("cleanup", "failed").getStatistics().getMin());
+        }
     }
 
     @Test
@@ -111,6 +199,11 @@ public class OperatorJosdkMetricsTest {
         operatorMetrics.monitorSizeOf(Map.of("a", "b", "c", "d"), "mymap");
         assertEquals(8, metrics.size());
         assertEquals(2, ((Gauge<Integer>) metrics.get(systemPrefix + "mymap.size")).getValue());
+    }
+
+    private Histogram getHistogram(String... names) {
+        return ((Histogram)
+                metrics.get(executionPrefix + String.join(".", names) + ".TimeSeconds"));
     }
 
     private long getCount(String name) {

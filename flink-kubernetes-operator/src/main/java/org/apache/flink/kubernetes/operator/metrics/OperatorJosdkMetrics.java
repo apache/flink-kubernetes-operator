@@ -19,9 +19,15 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.runtime.metrics.DescriptiveStatisticsHistogram;
 import org.apache.flink.runtime.metrics.MetricRegistry;
+import org.apache.flink.util.clock.Clock;
+import org.apache.flink.util.clock.SystemClock;
 
 import io.javaoperatorsdk.operator.api.monitoring.Metrics;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
@@ -29,10 +35,12 @@ import io.javaoperatorsdk.operator.processing.event.Event;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.controller.ResourceEvent;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Implementation of {@link Metrics} to monitor and forward JOSDK metrics to {@link MetricRegistry}.
@@ -43,21 +51,45 @@ public class OperatorJosdkMetrics implements Metrics {
     private static final String RECONCILIATION = "Reconciliation";
     private static final String RESOURCE = "Resource";
     private static final String EVENT = "Event";
+    private static final int WINDOW_SIZE = 1000;
 
     private final KubernetesOperatorMetricGroup operatorMetricGroup;
     private final Configuration conf;
+    private final Clock clock;
 
     private final Map<ResourceID, KubernetesResourceNamespaceMetricGroup> resourceNsMetricGroups =
             new ConcurrentHashMap<>();
     private final Map<ResourceID, KubernetesResourceMetricGroup> resourceMetricGroups =
             new ConcurrentHashMap<>();
 
+    private final Map<String, Histogram> histograms = new ConcurrentHashMap<>();
     private final Map<String, Counter> counters = new ConcurrentHashMap<>();
+
+    private static final Map<String, String> CONTROLLERS =
+            Map.of(
+                    FlinkDeploymentController.class.getSimpleName().toLowerCase(),
+                    "FlinkDeployment",
+                    FlinkSessionJob.class.getSimpleName().toLowerCase(),
+                    "FlinkSessionJob");
 
     public OperatorJosdkMetrics(
             KubernetesOperatorMetricGroup operatorMetricGroup, Configuration conf) {
         this.operatorMetricGroup = operatorMetricGroup;
         this.conf = conf;
+        this.clock = SystemClock.getInstance();
+    }
+
+    @Override
+    public <T> T timeControllerExecution(ControllerExecution<T> execution) throws Exception {
+        long startTime = clock.relativeTimeNanos();
+        try {
+            T result = execution.execute();
+            histogram(execution, execution.successTypeName(result)).update(toSeconds(startTime));
+            return result;
+        } catch (Exception e) {
+            histogram(execution, "failed").update(toSeconds(startTime));
+            throw e;
+        }
     }
 
     @Override
@@ -111,6 +143,27 @@ public class OperatorJosdkMetrics implements Metrics {
     public <T extends Map<?, ?>> T monitorSizeOf(T map, String name) {
         operatorMetricGroup.addGroup(name).gauge("size", map::size);
         return map;
+    }
+
+    private Histogram histogram(ControllerExecution<?> execution, String name) {
+        MetricGroup group = operatorMetricGroup.addGroup(OPERATOR_SDK_GROUP);
+        for (String metricGroup :
+                Arrays.asList(
+                        CONTROLLERS.get(execution.controllerName().toLowerCase()),
+                        execution.name(),
+                        name)) {
+            group = group.addGroup(metricGroup);
+        }
+        var finalGroup = group;
+        return histograms.computeIfAbsent(
+                String.join(".", group.getScopeComponents()),
+                s ->
+                        finalGroup.histogram(
+                                "TimeSeconds", new DescriptiveStatisticsHistogram(WINDOW_SIZE)));
+    }
+
+    private long toSeconds(long startTime) {
+        return TimeUnit.NANOSECONDS.toSeconds(clock.relativeTimeNanos() - startTime);
     }
 
     private Counter counter(
