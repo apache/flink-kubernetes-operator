@@ -19,6 +19,8 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.MetricGroup;
@@ -33,10 +35,12 @@ import io.javaoperatorsdk.operator.processing.event.Event;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.controller.ResourceEvent;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Implementation of {@link Metrics} to monitor and forward JOSDK metrics to {@link MetricRegistry}.
@@ -61,6 +65,13 @@ public class OperatorJosdkMetrics implements Metrics {
     private final Map<String, Histogram> histograms = new ConcurrentHashMap<>();
     private final Map<String, Counter> counters = new ConcurrentHashMap<>();
 
+    private static final Map<String, String> CONTROLLERS =
+            Map.of(
+                    FlinkDeploymentController.class.getSimpleName().toLowerCase(),
+                    "FlinkDeployment",
+                    FlinkSessionJob.class.getSimpleName().toLowerCase(),
+                    "FlinkSessionJob");
+
     public OperatorJosdkMetrics(
             KubernetesOperatorMetricGroup operatorMetricGroup, Configuration conf) {
         this.operatorMetricGroup = operatorMetricGroup;
@@ -73,13 +84,10 @@ public class OperatorJosdkMetrics implements Metrics {
         long startTime = clock.relativeTimeNanos();
         try {
             T result = execution.execute();
-            String successType = execution.successTypeName(result);
-            histogram(execution.controllerName(), execution.name(), successType)
-                    .update(clock.relativeTimeNanos() - startTime);
+            histogram(execution, execution.successTypeName(result)).update(toSeconds(startTime));
             return result;
         } catch (Exception e) {
-            histogram(execution.controllerName(), execution.name(), "failed")
-                    .update(clock.relativeTimeNanos() - startTime);
+            histogram(execution, "failed").update(toSeconds(startTime));
             throw e;
         }
     }
@@ -137,17 +145,25 @@ public class OperatorJosdkMetrics implements Metrics {
         return map;
     }
 
-    private Histogram histogram(String... names) {
+    private Histogram histogram(ControllerExecution<?> execution, String name) {
         MetricGroup group = operatorMetricGroup.addGroup(OPERATOR_SDK_GROUP);
-        for (String name : names) {
-            group = group.addGroup(name);
+        for (String metricGroup :
+                Arrays.asList(
+                        CONTROLLERS.get(execution.controllerName().toLowerCase()),
+                        execution.name(),
+                        name)) {
+            group = group.addGroup(metricGroup);
         }
         var finalGroup = group;
         return histograms.computeIfAbsent(
                 String.join(".", group.getScopeComponents()),
                 s ->
                         finalGroup.histogram(
-                                "Nanos", new DescriptiveStatisticsHistogram(WINDOW_SIZE)));
+                                "TimeSeconds", new DescriptiveStatisticsHistogram(WINDOW_SIZE)));
+    }
+
+    private long toSeconds(long startTime) {
+        return TimeUnit.NANOSECONDS.toSeconds(clock.relativeTimeNanos() - startTime);
     }
 
     private Counter counter(

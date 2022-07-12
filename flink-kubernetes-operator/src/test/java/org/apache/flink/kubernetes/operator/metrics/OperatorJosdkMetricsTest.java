@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
@@ -38,19 +39,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /** {@link OperatorJosdkMetrics} tests. */
 public class OperatorJosdkMetricsTest {
 
     private final ResourceID resourceId = new ResourceID("testns", "testname");
-    private final String controllerName = "testController";
+    private final String controllerName = FlinkDeploymentController.class.getSimpleName();
     private final String resourcePrefix =
             "testhost.k8soperator.flink-operator-test.testopname.resource.testname.testns.JOSDK.";
     private final String systemPrefix =
             "testhost.k8soperator.flink-operator-test.testopname.system.";
-    private final String executionPrefix = systemPrefix + "JOSDK." + controllerName + ".";
+    private final String executionPrefix = systemPrefix + "JOSDK.FlinkDeployment.";
 
     private Map<String, Metric> metrics = new HashMap<>();
     private OperatorJosdkMetrics operatorMetrics;
@@ -92,18 +92,19 @@ public class OperatorJosdkMetricsTest {
 
                     @Override
                     public Object execute() throws Exception {
+                        Thread.sleep(1000);
                         return null;
                     }
                 };
         operatorMetrics.timeControllerExecution(successExecution);
         assertEquals(1, metrics.size());
         assertEquals(1, getHistogram("reconcile", "resource").getCount());
-        assertTrue(getHistogram("reconcile", "resource").getStatistics().getMin() > 0);
+        assertEquals(1, getHistogram("reconcile", "resource").getStatistics().getMin());
         operatorMetrics.timeControllerExecution(successExecution);
         operatorMetrics.timeControllerExecution(successExecution);
         assertEquals(1, metrics.size());
         assertEquals(3, getHistogram("reconcile", "resource").getCount());
-        assertTrue(getHistogram("reconcile", "resource").getStatistics().getMin() > 0);
+        assertEquals(1, getHistogram("reconcile", "resource").getStatistics().getMin());
 
         Metrics.ControllerExecution<Object> failureExecution =
                 new Metrics.ControllerExecution<>() {
@@ -124,6 +125,7 @@ public class OperatorJosdkMetricsTest {
 
                     @Override
                     public Object execute() throws Exception {
+                        Thread.sleep(1000);
                         throw new ReconciliationException(new RuntimeException());
                     }
                 };
@@ -133,7 +135,7 @@ public class OperatorJosdkMetricsTest {
         } catch (Exception e) {
             assertEquals(2, metrics.size());
             assertEquals(1, getHistogram("cleanup", "failed").getCount());
-            assertTrue(getHistogram("cleanup", "failed").getStatistics().getMin() > 0);
+            assertEquals(1, getHistogram("cleanup", "failed").getStatistics().getMin());
         }
         try {
             operatorMetrics.timeControllerExecution(failureExecution);
@@ -146,7 +148,7 @@ public class OperatorJosdkMetricsTest {
         } catch (Exception e) {
             assertEquals(2, metrics.size());
             assertEquals(3, getHistogram("cleanup", "failed").getCount());
-            assertTrue(getHistogram("cleanup", "failed").getStatistics().getMin() > 0);
+            assertEquals(1, getHistogram("cleanup", "failed").getStatistics().getMin());
         }
     }
 
@@ -200,7 +202,8 @@ public class OperatorJosdkMetricsTest {
     }
 
     private Histogram getHistogram(String... names) {
-        return ((Histogram) metrics.get(executionPrefix + String.join(".", names) + ".Nanos"));
+        return ((Histogram)
+                metrics.get(executionPrefix + String.join(".", names) + ".TimeSeconds"));
     }
 
     private long getCount(String name) {
