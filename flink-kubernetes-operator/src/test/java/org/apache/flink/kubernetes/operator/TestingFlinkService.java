@@ -41,6 +41,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.Acknowledge;
@@ -48,7 +49,11 @@ import org.apache.flink.runtime.messages.webmonitor.JobDetails;
 import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
+import org.apache.flink.runtime.rest.messages.JobMessageParameters;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
+import org.apache.flink.runtime.rest.messages.job.metrics.IOMetricsInfo;
 import org.apache.flink.util.SerializedThrowable;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -61,14 +66,7 @@ import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedDepen
 
 import javax.annotation.Nullable;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
@@ -224,6 +222,14 @@ public class TestingFlinkService extends FlinkService {
         return super.listJobs(conf);
     }
 
+    @Override
+    public JobDetailsInfo getJobDetailsInfo(JobID jobID, Configuration conf) throws Exception {
+        if (!isPortReady) {
+            throw new TimeoutException("JM port is unavailable");
+        }
+        return super.getJobDetailsInfo(jobID, conf);
+    }
+
     public void setListJobConsumer(Consumer<Configuration> listJobConsumer) {
         this.listJobConsumer = listJobConsumer;
     }
@@ -313,10 +319,96 @@ public class TestingFlinkService extends FlinkService {
                 (messageHeaders, messageParameters, requestBody) -> {
                     if (messageHeaders instanceof JobsOverviewHeaders) {
                         return CompletableFuture.completedFuture(getMultipleJobsDetails());
+                    } else if (messageHeaders instanceof JobDetailsHeaders) {
+                        JobID jobID =
+                                ((JobMessageParameters) messageParameters)
+                                        .jobPathParameter.getValue();
+
+                        Optional<Tuple2<String, JobStatusMessage>> jobOpt =
+                                jobs.stream()
+                                        .filter(js -> js.f1.getJobId().equals(jobID))
+                                        .findAny();
+
+                        if (!jobOpt.isPresent()) {
+                            return CompletableFuture.failedFuture(new Exception("Job not found"));
+                        }
+
+                        final Random random = new Random();
+                        final int numJobVertexDetailsInfos = 4;
+                        final String jsonPlan = "{\"id\":\"1234\"}";
+
+                        final Map<JobStatus, Long> timestamps =
+                                new HashMap<>(JobStatus.values().length);
+                        final Collection<JobDetailsInfo.JobVertexDetailsInfo> jobVertexInfos =
+                                new ArrayList<>(numJobVertexDetailsInfos);
+                        final Map<ExecutionState, Integer> jobVerticesPerState =
+                                new HashMap<>(ExecutionState.values().length);
+
+                        for (JobStatus jobStatus : JobStatus.values()) {
+                            timestamps.put(jobStatus, random.nextLong());
+                        }
+
+                        for (int i = 0; i < numJobVertexDetailsInfos; i++) {
+                            jobVertexInfos.add(createJobVertexDetailsInfo(random));
+                        }
+
+                        for (ExecutionState executionState : ExecutionState.values()) {
+                            jobVerticesPerState.put(executionState, random.nextInt());
+                        }
+
+                        JobDetailsInfo jobDetailsInfo =
+                                new JobDetailsInfo(
+                                        jobOpt.get().f1.getJobId(),
+                                        jobOpt.get().f1.getJobName(),
+                                        true,
+                                        jobOpt.get().f1.getJobState(),
+                                        jobOpt.get().f1.getStartTime(),
+                                        -1L,
+                                        1L,
+                                        8888L,
+                                        1984L,
+                                        timestamps,
+                                        jobVertexInfos,
+                                        jobVerticesPerState,
+                                        jsonPlan);
+
+                        return CompletableFuture.completedFuture(jobDetailsInfo);
                     }
                     return CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
                 });
         return clusterClient;
+    }
+
+    private JobDetailsInfo.JobVertexDetailsInfo createJobVertexDetailsInfo(Random random) {
+        final Map<ExecutionState, Integer> tasksPerState =
+                new HashMap<>(ExecutionState.values().length);
+        final IOMetricsInfo jobVertexMetrics =
+                new IOMetricsInfo(
+                        random.nextLong(),
+                        random.nextBoolean(),
+                        random.nextLong(),
+                        random.nextBoolean(),
+                        random.nextLong(),
+                        random.nextBoolean(),
+                        random.nextLong(),
+                        random.nextBoolean());
+
+        for (ExecutionState executionState : ExecutionState.values()) {
+            tasksPerState.put(executionState, random.nextInt());
+        }
+
+        int parallelism = 1 + (random.nextInt() / 3);
+        return new JobDetailsInfo.JobVertexDetailsInfo(
+                new JobVertexID(),
+                "jobVertex" + random.nextLong(),
+                2 * parallelism,
+                parallelism,
+                ExecutionState.values()[random.nextInt(ExecutionState.values().length)],
+                random.nextLong(),
+                random.nextLong(),
+                random.nextLong(),
+                tasksPerState,
+                jobVertexMetrics);
     }
 
     private MultipleJobsDetails getMultipleJobsDetails() {

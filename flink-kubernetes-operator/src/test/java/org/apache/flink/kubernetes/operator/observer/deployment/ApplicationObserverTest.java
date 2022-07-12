@@ -411,7 +411,7 @@ public class ApplicationObserverTest {
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
         JobStatus jobStatus = new JobStatus();
         jobStatus.setJobName("jobname");
-        jobStatus.setJobId("0000000000");
+        jobStatus.setJobId(null);
         jobStatus.setState(JobState.RUNNING.name());
         deployment.getStatus().setJobStatus(jobStatus);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
