@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -43,7 +44,9 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.junit.jupiter.api.Assertions;
 
+import java.util.LinkedList;
 import java.util.Map;
+import java.util.Queue;
 import java.util.function.BiConsumer;
 
 /** A wrapper around {@link FlinkDeploymentController} used by unit tests. */
@@ -55,6 +58,8 @@ public class TestingFlinkDeploymentController
 
     private FlinkDeploymentController flinkDeploymentController;
     private StatusUpdateCounter statusUpdateCounter = new StatusUpdateCounter();
+    private EventCollector eventCollector = new EventCollector();
+
     private EventRecorder eventRecorder;
     private StatusRecorder statusRecorder;
 
@@ -62,7 +67,7 @@ public class TestingFlinkDeploymentController
             FlinkConfigManager configManager,
             KubernetesClient kubernetesClient,
             TestingFlinkService flinkService) {
-        eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
+        eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
         statusRecorder =
                 new StatusRecorder<>(
                         kubernetesClient,
@@ -115,6 +120,19 @@ public class TestingFlinkDeploymentController
     public Map<String, EventSource> prepareEventSources(
             EventSourceContext<FlinkDeployment> eventSourceContext) {
         throw new UnsupportedOperationException();
+    }
+
+    private static class EventCollector implements BiConsumer<AbstractFlinkResource<?, ?>, Event> {
+        private Queue<Event> events = new LinkedList<>();
+
+        @Override
+        public void accept(AbstractFlinkResource<?, ?> abstractFlinkResource, Event event) {
+            events.add(event);
+        }
+    }
+
+    public Queue<Event> events() {
+        return eventCollector.events;
     }
 
     private static class StatusUpdateCounter

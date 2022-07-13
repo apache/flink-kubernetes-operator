@@ -134,12 +134,14 @@ public abstract class AbstractFlinkResourceReconciler<
                 return;
             }
             LOG.info(MSG_SPEC_CHANGED);
-            eventRecorder.triggerEvent(
-                    cr,
-                    EventRecorder.Type.Normal,
-                    EventRecorder.Reason.SpecChanged,
-                    EventRecorder.Component.JobManagerDeployment,
-                    MSG_SPEC_CHANGED);
+            if (reconciliationStatus.getState() != ReconciliationState.UPGRADING) {
+                eventRecorder.triggerEvent(
+                        cr,
+                        EventRecorder.Type.Normal,
+                        EventRecorder.Reason.SpecChanged,
+                        EventRecorder.Component.JobManagerDeployment,
+                        MSG_SPEC_CHANGED);
+            }
             reconcileSpecChange(cr, observeConfig, deployConfig);
         } else if (shouldRollBack(cr, observeConfig)) {
             // Rollbacks are executed in two steps, we initiate it first then return
