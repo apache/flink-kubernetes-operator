@@ -150,6 +150,8 @@ kubectl apply -f basic-checkpoint-ha.yaml
 #### Horizontal Pod Autoscaler
 
 It is possible to provide the Horizontal Pod Autoscaler configuration through the yaml files.
+To run this example Kubernetes 1.23 or newer is needed, so the `autoscaling/v2` is available.
+
 The feature is experimental so use it with caution but here is an example configuration:
 ```bash
 kubectl apply -f hpa/basic-hpa.yaml
