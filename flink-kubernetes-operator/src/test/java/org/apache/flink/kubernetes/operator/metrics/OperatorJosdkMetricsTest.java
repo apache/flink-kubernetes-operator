@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.metrics.Counter;
@@ -68,7 +69,7 @@ public class OperatorJosdkMetricsTest {
         operatorMetrics =
                 new OperatorJosdkMetrics(
                         TestUtils.createTestMetricGroup(registry, new Configuration()),
-                        new Configuration());
+                        new FlinkConfigManager(new Configuration()));
     }
 
     @Test

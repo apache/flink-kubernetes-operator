@@ -37,6 +37,20 @@ public class KubernetesOperatorMetricOptions {
                     .withDescription(
                             "Enable KubernetesClient metrics for measuring the HTTP traffic to the Kubernetes API Server.");
 
+    public static final ConfigOption<Boolean> OPERATOR_LIFECYCLE_METRICS_ENABLED =
+            ConfigOptions.key("kubernetes.operator.resource.lifecycle.metrics.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Enable resource lifecycle state metrics. This enables both state and transition counts/histograms.");
+
+    public static final ConfigOption<Boolean> OPERATOR_LIFECYCLE_NAMESPACE_HISTOGRAMS_ENABLED =
+            ConfigOptions.key("kubernetes.operator.resource.lifecycle.namespace.histograms.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "In addition to the system level histograms, enable per namespace tracking of state and transition times.");
+
     public static final ConfigOption<Integer> OPERATOR_METRICS_HISTOGRAM_SAMPLE_SIZE =
             ConfigOptions.key("kubernetes.operator.metrics.histogram.sample.size")
                     .intType()

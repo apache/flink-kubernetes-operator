@@ -27,6 +27,18 @@
             <td>Defines the number of measured samples when calculating statistics.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.resource.lifecycle.metrics.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Enable resource lifecycle state metrics. This enables both state and transition counts/histograms.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.resource.lifecycle.namespace.histograms.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>In addition to the system level histograms, enable per namespace tracking of state and transition times.</td>
+        </tr>
+        <tr>
             <td><h5>metrics.scope.k8soperator.resource</h5></td>
             <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.resource.&lt;resourcens&gt;.&lt;resourcename&gt;"</td>
             <td>String</td>

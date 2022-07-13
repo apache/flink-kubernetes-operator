@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
@@ -443,7 +444,8 @@ public class TestUtils {
     public static <T extends AbstractFlinkResource<?, ?>> MetricManager<T> createTestMetricManager(
             MetricRegistry metricRegistry, Configuration conf) {
 
-        return new MetricManager<>(createTestMetricGroup(metricRegistry, conf), conf);
+        var confManager = new FlinkConfigManager(conf);
+        return new MetricManager<>(createTestMetricGroup(metricRegistry, conf), confManager);
     }
 
     public static KubernetesOperatorMetricGroup createTestMetricGroup(

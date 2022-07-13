@@ -113,7 +113,7 @@ public class FlinkConfigManager {
     }
 
     public Configuration getDefaultConfig() {
-        return defaultConfig;
+        return defaultConfig.clone();
     }
 
     @VisibleForTesting

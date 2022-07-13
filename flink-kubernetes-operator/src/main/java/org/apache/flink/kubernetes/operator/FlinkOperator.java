@@ -113,17 +113,14 @@ public class FlinkOperator {
             overrider.withConcurrentReconciliationThreads(parallelism);
         }
         if (configManager.getOperatorConfiguration().isJosdkMetricsEnabled()) {
-            overrider.withMetrics(
-                    new OperatorJosdkMetrics(metricGroup, configManager.getDefaultConfig()));
+            overrider.withMetrics(new OperatorJosdkMetrics(metricGroup, configManager));
         }
     }
 
     private void registerDeploymentController() {
         var statusRecorder =
                 StatusRecorder.<FlinkDeploymentStatus>create(
-                        client,
-                        new MetricManager<>(metricGroup, configManager.getDefaultConfig()),
-                        listeners);
+                        client, new MetricManager<>(metricGroup, configManager), listeners);
         var eventRecorder = EventRecorder.create(client, listeners);
         var reconcilerFactory =
                 new ReconcilerFactory(
@@ -146,9 +143,7 @@ public class FlinkOperator {
         var eventRecorder = EventRecorder.create(client, listeners);
         var statusRecorder =
                 StatusRecorder.<FlinkSessionJobStatus>create(
-                        client,
-                        new MetricManager<>(metricGroup, configManager.getDefaultConfig()),
-                        listeners);
+                        client, new MetricManager<>(metricGroup, configManager), listeners);
         var reconciler =
                 new SessionJobReconciler(
                         client, flinkService, configManager, eventRecorder, statusRecorder);
