@@ -21,14 +21,14 @@ under the License.
 
 ## Overview
 
-This directory contains few examples for Flink Kubernetes Operator.
+This directory contains few examples for the Flink Kubernetes Operator.
 These examples should only serve as starting points when familiarizing yourself with the
 Flink Kubernetes Operator and users are expected to extend these based on their production needs.
 
 ## Usage
 
 Please refer to the [Quick Start](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/try-flink-kubernetes-operator/quick-start)
-to run the examples.
+for setting up your environment to run the examples.
 
 ## Examples
 
@@ -42,7 +42,6 @@ The configuration contains the following:
 
 To run the job submit the yaml file using kubectl:
 ```bash
-cd examples
 kubectl apply -f basic.yaml
 ```
 
@@ -66,7 +65,6 @@ The Flink Deployment configuration does __NOT__ contain the following:
 
 To create a Flink Deployment with the specific resources without any jobs run the following command:
 ```bash
-cd examples
 kubectl apply -f basic-session-deployment-only.yaml
 ```
 
@@ -81,7 +79,6 @@ This configuration should contain the following:
 If the Flink Deployment is created by `basic-session-deployment-only.yaml` new job could be added
 by the following command:
 ```bash
-cd examples
 kubectl apply -f basic-session-job-only.yaml
 ```
 
@@ -91,13 +88,12 @@ Alternatively the Flink Deployment and the Flink Session Job configurations can 
 
 To try out this run the following command:
 ```bash
-cd examples
 kubectl apply -f basic-session-deployment-and-job.yaml
 ```
 
 ### SQL runner
 
-For running Flink SQL scripts check this [example](https://github.com/apache/flink-kubernetes-operator/tree/main/examples/flink-sql-runner-example).
+For running Flink SQL scripts check this [example](flink-sql-runner-example/README.md).
 
 ### Advanced examples
 
@@ -109,7 +105,6 @@ showing how to archive some of these.
 This example adds specific logging configuration for the Flink Deployment using the
 `logConfiguration` property. To try out this run the following command:
 ```bash
-cd examples
 kubectl apply -f custom-logging.yaml
 ```
 
@@ -120,7 +115,6 @@ Flink Kubernetes Operator provides the possibility to simplify the deployment de
 
 This example shows how these templates are created and used. To try out this run the following command:
 ```bash
-cd examples
 kubectl apply -f pod-template.yaml
 ```
 
@@ -134,7 +128,6 @@ entries.
 
 Simple domain based ingress configuration could be tried out by running this command:
 ```bash
-cd examples
 kubectl apply -f basic-ingress.yaml
 ```
 
@@ -142,7 +135,6 @@ kubectl apply -f basic-ingress.yaml
 
 It is possible to generate path based routing. To try out this run the following command:
 ```bash
-cd examples
 kubectl apply -f advanced-ingress.yaml
 ```
 
@@ -152,7 +144,6 @@ Basic example to configure Flink Deployments in
 [HA mode](https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/ha/overview/).
 The example shows how to set savepoint directory, checkpoint directory and HA. To try out this run the following command:
 ```bash
-cd examples
 kubectl apply -f basic-checkpoint-ha.yaml
 ```
 
@@ -161,13 +152,12 @@ kubectl apply -f basic-checkpoint-ha.yaml
 It is possible to provide the Horizontal Pod Autoscaler configuration through the yaml files.
 The feature is experimental so use it with caution but here is an example configuration:
 ```bash
-cd examples/hpa
-kubectl apply -f basic-hpa.yaml
+kubectl apply -f hpa/basic-hpa.yaml
 ```
 
 #### Using Kustomize
 
-[This](https://github.com/apache/flink-kubernetes-operator/tree/main/examples/kustomize) example shows
+[This](kustomize) example shows
 how to override default values using [kustomize](https://kustomize.io/)
 
 For the detailed description of advanced configuration techniques follow this 
