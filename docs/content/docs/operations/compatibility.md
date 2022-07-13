@@ -32,7 +32,7 @@ It is very important for users to clearly understand the compatibility guarantee
 
 The main user facing api of the operator are the Flink [custom resources]({{< ref "docs/custom-resource/overview" >}}).
 
-Starting from `v1beta1` (operator version 1.0.0) we aim to provide backward compatibility for the already deployed Flink custom resources (`FlinkDeployment` ,`FlinkSessionJob`).
+Starting from `v1beta1` (operator version 1.0.0) we aim to provide backward compatibility for the already deployed Flink custom resources (`FlinkDeployment`, `FlinkSessionJob`).
 
 This means that if you have Flink resources deployed (and Flink applications running), you can still safely upgrade to newer versions of the operator and CRD without any problems.
 This should ensure a smooth operational experience where you can always benefit from the latest fixes and improvements without risking current deployments.

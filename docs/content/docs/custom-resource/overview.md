@@ -147,7 +147,7 @@ Session clusters use a similar spec to application clusters with the only differ
 For Session clusters the operator only provides very basic management and monitoring that cover:
  - Start Session cluster
  - Monitor overall cluster health
- - Stop / Delete Session clsuter
+ - Stop / Delete Session cluster
 
 ## FlinkSessionJob
 
