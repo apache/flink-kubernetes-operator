@@ -28,14 +28,40 @@ under the License.
 
 The Flink Kubernetes Operator (Operator) extends the [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/) that allows gathering and exposing metrics to centralized monitoring solutions. 
 
-## Deployment Metrics
+## Flink Resource Metrics
 The Operator gathers aggregates metrics about managed resources.
 
-| Scope     | Metrics                                           | Description                                                                                                                                                 | Type  |
-|-----------|---------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|-------|
-| Namespace | FlinkDeployment.Count                             | Number of managed FlinkDeployment instances per namespace                                                                                                   | Gauge |
-| Namespace | FlinkDeployment.JmDeploymentStatus.<Status>.Count | Number of managed FlinkDeployment resources per <Status> per namespace. <Status> can take values from: READY, DEPLOYED_NOT_READY, DEPLOYING, MISSING, ERROR | Gauge |
-| Namespace | FlinkSessionJob.Count                             | Number of managed FlinkSessionJob instances per namespace                                                                                                   | Gauge |
+| Scope            | Metrics                                                                       | Description                                                                                                                                                                            | Type      |
+|------------------|-------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
+| Namespace        | FlinkDeployment/FlinkSessionJob.Count                                         | Number of managed FlinkDeployment/SessionJob instances per namespace                                                                                                                   | Gauge     |
+| Namespace        | FlinkDeployment.JmDeploymentStatus.<Status>.Count                             | Number of managed FlinkDeployment resources per <Status> per namespace. <Status> can take values from: READY, DEPLOYED_NOT_READY, DEPLOYING, MISSING, ERROR                            | Gauge     |
+| Namespace        | FlinkDeployment/FlinkSessionJob.Lifecycle.State.<State>.Count                 | Number of managed resources currently in state <State> per namespace. <State> can take values from: CREATED, SUSPENDED, UPGRADING, DEPLOYED, STABLE, ROLLING_BACK, ROLLED_BACK, FAILED | Gauge     |
+| System/Namespace | FlinkDeployment/FlinkSessionJob.Lifecycle.State.<State>.TimeSeconds           | Time spent in state <State> for a given resource. <State> can take values from: CREATED, SUSPENDED, UPGRADING, DEPLOYED, STABLE, ROLLING_BACK, ROLLED_BACK, FAILED                     | Histogram |
+| System/Namespace | FlinkDeployment/FlinkSessionJob.Lifecycle.Transition.<Transition>.TimeSeconds | Time statistics for selected lifecycle state transitions. <Transition> can take values from: Resume, Upgrade, Suspend, Stabilization, Rollback, Submission                             | Histogram |
+
+### Lifecycle metrics
+
+Based on the resource status the operator tracks the following resource lifecycle states:
+
+ - CREATED : The resource was created in Kubernetes but not yet handled by the operator
+ - SUSPENDED : The (job) resource has been suspended
+ - UPGRADING : The resource is suspended before upgrading to a new spec
+ - DEPLOYED : The resource is deployed/submitted to Kubernetes, but it's not yet considered to be stable and might be rolled back in the future
+ - STABLE : The resource deployment is considered to be stable and won't be rolled back
+ - ROLLING_BACK : The resource is being rolled back to the last stable spec
+ - ROLLED_BACK : The resource is deployed with the last stable spec
+ - FAILED : The job terminally failed
+
+The number of resources and time spend in each of these states at any given time is tracked by the `Lifecycle.<STATE>.Count` and `Lifecycle.<STATE>.TimeSeconds` metrics.
+
+In addition to the simple counts we further track a few selected state transitions:
+
+ - Upgrade : End-to-end resource upgrade time from stable to stable
+ - Resume : Time from suspended to stable
+ - Suspend : Time for any suspend operation
+ - Stabilization : Time from deployed to stable state
+ - Rollback : Time from deployed to rolled_back state if the resource was rolled back
+ - Submission: Flink resource submission time
 
 ## Kubernetes Client Metrics
 

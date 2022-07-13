@@ -21,8 +21,16 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
+import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.Histogram;
+import org.apache.flink.metrics.HistogramStatistics;
+import org.apache.flink.metrics.Meter;
+import org.apache.flink.metrics.MeterView;
 import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.metrics.View;
+import org.apache.flink.runtime.metrics.DescriptiveStatisticsHistogram;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.MetricRegistryConfiguration;
 import org.apache.flink.runtime.metrics.MetricRegistryImpl;
@@ -84,5 +92,118 @@ public class OperatorMetricUtils {
         return new MetricRegistryImpl(
                 MetricRegistryConfiguration.fromConfiguration(configuration, Long.MAX_VALUE),
                 ReporterSetup.fromConfiguration(configuration, pluginManager));
+    }
+
+    public static Histogram synchronizedHistogram(Histogram histogram) {
+        return new SynchronizedHistogram(histogram);
+    }
+
+    public static Counter synchronizedCounter(Counter counter) {
+        return new SynchronizedCounter(counter);
+    }
+
+    public static SynchronizedMeterView synchronizedMeterView(MeterView meterView) {
+        return new SynchronizedMeterView(meterView);
+    }
+
+    public static Histogram createHistogram(FlinkOperatorConfiguration operatorConfiguration) {
+        return synchronizedHistogram(
+                new DescriptiveStatisticsHistogram(
+                        operatorConfiguration.getMetricsHistogramSampleSize()));
+    }
+
+    /** Thread safe {@link Histogram} wrapper. */
+    public static class SynchronizedHistogram implements Histogram {
+
+        private final Histogram delegate;
+
+        public SynchronizedHistogram(Histogram delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public synchronized void update(long l) {
+            delegate.update(l);
+        }
+
+        @Override
+        public synchronized long getCount() {
+            return delegate.getCount();
+        }
+
+        @Override
+        public synchronized HistogramStatistics getStatistics() {
+            return delegate.getStatistics();
+        }
+    }
+
+    /** Thread safe {@link Counter} wrapper. */
+    public static class SynchronizedCounter implements Counter {
+
+        private final Counter delegate;
+
+        public SynchronizedCounter(Counter delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public synchronized void inc() {
+            delegate.inc();
+        }
+
+        @Override
+        public synchronized void inc(long l) {
+            delegate.inc(l);
+        }
+
+        @Override
+        public synchronized void dec() {
+            delegate.dec();
+        }
+
+        @Override
+        public synchronized void dec(long l) {
+            delegate.dec(l);
+        }
+
+        @Override
+        public synchronized long getCount() {
+            return delegate.getCount();
+        }
+    }
+
+    /** Thread safe {@link MeterView} wrapper. */
+    public static class SynchronizedMeterView implements Meter, View {
+
+        private final MeterView delegate;
+
+        public SynchronizedMeterView(MeterView delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public synchronized void markEvent() {
+            delegate.markEvent();
+        }
+
+        @Override
+        public synchronized void markEvent(long l) {
+            delegate.markEvent(l);
+        }
+
+        @Override
+        public synchronized double getRate() {
+            return delegate.getRate();
+        }
+
+        @Override
+        public synchronized long getCount() {
+            return delegate.getCount();
+        }
+
+        @Override
+        public synchronized void update() {
+            delegate.update();
+        }
     }
 }

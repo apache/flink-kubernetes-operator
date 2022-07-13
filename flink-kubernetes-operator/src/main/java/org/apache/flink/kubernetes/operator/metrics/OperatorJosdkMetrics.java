@@ -18,13 +18,12 @@
 package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.MetricGroup;
-import org.apache.flink.runtime.metrics.DescriptiveStatisticsHistogram;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.util.clock.Clock;
 import org.apache.flink.util.clock.SystemClock;
@@ -51,10 +50,9 @@ public class OperatorJosdkMetrics implements Metrics {
     private static final String RECONCILIATION = "Reconciliation";
     private static final String RESOURCE = "Resource";
     private static final String EVENT = "Event";
-    private static final int WINDOW_SIZE = 1000;
 
     private final KubernetesOperatorMetricGroup operatorMetricGroup;
-    private final Configuration conf;
+    private final FlinkConfigManager configManager;
     private final Clock clock;
 
     private final Map<ResourceID, KubernetesResourceNamespaceMetricGroup> resourceNsMetricGroups =
@@ -73,9 +71,9 @@ public class OperatorJosdkMetrics implements Metrics {
                     "FlinkSessionJob");
 
     public OperatorJosdkMetrics(
-            KubernetesOperatorMetricGroup operatorMetricGroup, Configuration conf) {
+            KubernetesOperatorMetricGroup operatorMetricGroup, FlinkConfigManager configManager) {
         this.operatorMetricGroup = operatorMetricGroup;
-        this.conf = conf;
+        this.configManager = configManager;
         this.clock = SystemClock.getInstance();
     }
 
@@ -87,6 +85,7 @@ public class OperatorJosdkMetrics implements Metrics {
             histogram(execution, execution.successTypeName(result)).update(toSeconds(startTime));
             return result;
         } catch (Exception e) {
+            var h = histogram(execution, "failed");
             histogram(execution, "failed").update(toSeconds(startTime));
             throw e;
         }
@@ -159,7 +158,9 @@ public class OperatorJosdkMetrics implements Metrics {
                 String.join(".", group.getScopeComponents()),
                 s ->
                         finalGroup.histogram(
-                                "TimeSeconds", new DescriptiveStatisticsHistogram(WINDOW_SIZE)));
+                                "TimeSeconds",
+                                OperatorMetricUtils.createHistogram(
+                                        configManager.getOperatorConfiguration())));
     }
 
     private long toSeconds(long startTime) {
@@ -177,7 +178,8 @@ public class OperatorJosdkMetrics implements Metrics {
         }
         var finalGroup = group;
         return counters.computeIfAbsent(
-                String.join(".", group.getScopeComponents()), s -> finalGroup.counter("Count"));
+                String.join(".", group.getScopeComponents()),
+                s -> OperatorMetricUtils.synchronizedCounter(finalGroup.counter("Count")));
     }
 
     private KubernetesResourceNamespaceMetricGroup getResourceNsMg(ResourceID resourceID) {
@@ -185,12 +187,16 @@ public class OperatorJosdkMetrics implements Metrics {
                 resourceID,
                 rid ->
                         operatorMetricGroup.createResourceNamespaceGroup(
-                                conf, rid.getNamespace().orElse("default")));
+                                configManager.getDefaultConfig(),
+                                rid.getNamespace().orElse("default")));
     }
 
     private KubernetesResourceMetricGroup getResourceMg(ResourceID resourceID) {
         return resourceMetricGroups.computeIfAbsent(
                 resourceID,
-                rid -> getResourceNsMg(rid).createResourceNamespaceGroup(conf, rid.getName()));
+                rid ->
+                        getResourceNsMg(rid)
+                                .createResourceNamespaceGroup(
+                                        configManager.getDefaultConfig(), rid.getName()));
     }
 }

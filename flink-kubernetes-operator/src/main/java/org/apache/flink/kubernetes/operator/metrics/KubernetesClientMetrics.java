@@ -19,11 +19,11 @@
 package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils.SynchronizedMeterView;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.MeterView;
 import org.apache.flink.metrics.MetricGroup;
-import org.apache.flink.runtime.metrics.DescriptiveStatisticsHistogram;
 
 import okhttp3.Interceptor;
 import okhttp3.Request;
@@ -55,9 +55,9 @@ public class KubernetesClientMetrics implements Interceptor {
     private final Counter failedRequestCounter;
     private final Counter responseCounter;
 
-    private final MeterView requestRateMeter;
-    private final MeterView requestFailedRateMeter;
-    private final MeterView responseRateMeter;
+    private final SynchronizedMeterView requestRateMeter;
+    private final SynchronizedMeterView requestFailedRateMeter;
+    private final SynchronizedMeterView responseRateMeter;
 
     private final Map<Integer, Counter> responseCodeCounters = new ConcurrentHashMap<>();
     private final Map<String, Counter> requestMethodCounter = new ConcurrentHashMap<>();
@@ -70,20 +70,26 @@ public class KubernetesClientMetrics implements Interceptor {
         this.failedRequestMetricGroup = requestMetricGroup.addGroup(HTTP_REQUEST_FAILED_GROUP);
         this.responseMetricGroup = metricGroup.addGroup(HTTP_RESPONSE_GROUP);
 
-        this.requestCounter = requestMetricGroup.counter(COUNTER);
-        this.failedRequestCounter = failedRequestMetricGroup.counter(COUNTER);
-        this.responseCounter = responseMetricGroup.counter(COUNTER);
+        this.requestCounter =
+                OperatorMetricUtils.synchronizedCounter(requestMetricGroup.counter(COUNTER));
+        this.failedRequestCounter =
+                OperatorMetricUtils.synchronizedCounter(failedRequestMetricGroup.counter(COUNTER));
+        this.responseCounter =
+                OperatorMetricUtils.synchronizedCounter(responseMetricGroup.counter(COUNTER));
 
-        this.requestRateMeter = requestMetricGroup.meter(METER, new MeterView(requestCounter));
+        this.requestRateMeter =
+                OperatorMetricUtils.synchronizedMeterView(
+                        requestMetricGroup.meter(METER, new MeterView(requestCounter)));
         this.requestFailedRateMeter =
-                failedRequestMetricGroup.meter(METER, new MeterView(failedRequestCounter));
-        this.responseRateMeter = responseMetricGroup.meter(METER, new MeterView(responseCounter));
+                OperatorMetricUtils.synchronizedMeterView(
+                        failedRequestMetricGroup.meter(METER, new MeterView(failedRequestCounter)));
+        this.responseRateMeter =
+                OperatorMetricUtils.synchronizedMeterView(
+                        responseMetricGroup.meter(METER, new MeterView(responseCounter)));
 
         this.responseLatency =
                 responseMetricGroup.histogram(
-                        HISTO,
-                        new DescriptiveStatisticsHistogram(
-                                flinkOperatorConfiguration.getMetricsHistogramSampleSize()));
+                        HISTO, OperatorMetricUtils.createHistogram(flinkOperatorConfiguration));
 
         Executors.newSingleThreadScheduledExecutor()
                 .scheduleAtFixedRate(this::updateMeters, 0, 1, TimeUnit.SECONDS);
@@ -121,12 +127,18 @@ public class KubernetesClientMetrics implements Interceptor {
 
     private Counter getCounterByRequestMethod(String method) {
         return requestMethodCounter.computeIfAbsent(
-                method, key -> requestMetricGroup.addGroup(key).counter(COUNTER));
+                method,
+                key ->
+                        OperatorMetricUtils.synchronizedCounter(
+                                requestMetricGroup.addGroup(key).counter(COUNTER)));
     }
 
     private Counter getCounterByResponseCode(int code) {
         return responseCodeCounters.computeIfAbsent(
-                code, key -> responseMetricGroup.addGroup(key).counter(COUNTER));
+                code,
+                key ->
+                        OperatorMetricUtils.synchronizedCounter(
+                                responseMetricGroup.addGroup(key).counter(COUNTER)));
     }
 
     private void updateMeters() {

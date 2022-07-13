@@ -17,32 +17,52 @@
 
 package org.apache.flink.kubernetes.operator.metrics;
 
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.metrics.lifecycle.LifecycleMetrics;
 
-import io.fabric8.kubernetes.client.CustomResource;
-
+import java.time.Clock;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Metric manager for Operator managed custom resources. */
-public class MetricManager<CR extends CustomResource<?, ?>> {
+public class MetricManager<CR extends AbstractFlinkResource<?, ?>> {
     private final KubernetesOperatorMetricGroup opMetricGroup;
-    private final Configuration conf;
+    private final FlinkConfigManager configManager;
     private final Map<String, CustomResourceMetrics> metrics = new ConcurrentHashMap<>();
 
-    public MetricManager(KubernetesOperatorMetricGroup opMetricGroup, Configuration conf) {
+    private final LifecycleMetrics<CR> lifeCycleMetrics;
+
+    public MetricManager(
+            KubernetesOperatorMetricGroup opMetricGroup, FlinkConfigManager configManager) {
         this.opMetricGroup = opMetricGroup;
-        this.conf = conf;
+        this.configManager = configManager;
+
+        if (configManager
+                .getDefaultConfig()
+                .get(KubernetesOperatorMetricOptions.OPERATOR_LIFECYCLE_METRICS_ENABLED)) {
+            this.lifeCycleMetrics =
+                    new LifecycleMetrics<>(configManager, Clock.systemDefaultZone(), opMetricGroup);
+        } else {
+            this.lifeCycleMetrics = null;
+        }
     }
 
     public void onUpdate(CR cr) {
         getCustomResourceMetrics(cr).onUpdate(cr);
+        if (lifeCycleMetrics != null) {
+            lifeCycleMetrics.onUpdate(cr);
+        }
     }
 
     public void onRemove(CR cr) {
         getCustomResourceMetrics(cr).onRemove(cr);
+        if (lifeCycleMetrics != null) {
+            lifeCycleMetrics.onRemove(cr);
+        }
     }
 
     private CustomResourceMetrics getCustomResourceMetrics(CR cr) {
@@ -52,7 +72,8 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
 
     private CustomResourceMetrics getCustomResourceMetricsImpl(CR cr) {
         var namespaceMg =
-                opMetricGroup.createResourceNamespaceGroup(conf, cr.getMetadata().getNamespace());
+                opMetricGroup.createResourceNamespaceGroup(
+                        configManager.getDefaultConfig(), cr.getMetadata().getNamespace());
         if (cr instanceof FlinkDeployment) {
             return new FlinkDeploymentMetrics(namespaceMg);
         } else if (cr instanceof FlinkSessionJob) {
@@ -60,5 +81,10 @@ public class MetricManager<CR extends CustomResource<?, ?>> {
         } else {
             throw new IllegalArgumentException("Unknown CustomResource");
         }
+    }
+
+    @VisibleForTesting
+    public LifecycleMetrics<CR> getLifeCycleMetrics() {
+        return lifeCycleMetrics;
     }
 }
