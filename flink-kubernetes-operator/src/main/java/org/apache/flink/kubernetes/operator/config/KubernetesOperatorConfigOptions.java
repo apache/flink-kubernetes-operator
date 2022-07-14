@@ -234,6 +234,15 @@ public class KubernetesOperatorConfigOptions {
                             "Comma separated list of namespaces the operator monitors for custom resources.");
 
     @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<String> OPERATOR_LABEL_SELECTOR =
+            ConfigOptions.key("kubernetes.operator.label.selector")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Label selector of the custom resources to be watched. Please see "
+                                    + "https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors for the format supported.");
+
+    @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_NAMESPACES_ENABLED =
             ConfigOptions.key("kubernetes.operator.dynamic.namespaces.enabled")
                     .booleanType()

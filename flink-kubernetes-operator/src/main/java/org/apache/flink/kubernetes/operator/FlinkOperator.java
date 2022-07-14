@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.plugin.PluginManager;
@@ -70,7 +71,7 @@ public class FlinkOperator {
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
-    private final Set<RegisteredController> registeredControllers = new HashSet<>();
+    @VisibleForTesting final Set<RegisteredController> registeredControllers = new HashSet<>();
     private final KubernetesOperatorMetricGroup metricGroup;
     private final Collection<FlinkResourceListener> listeners;
 
@@ -117,7 +118,8 @@ public class FlinkOperator {
         }
     }
 
-    private void registerDeploymentController() {
+    @VisibleForTesting
+    void registerDeploymentController() {
         var statusRecorder =
                 StatusRecorder.<FlinkDeploymentStatus>create(
                         client, new MetricManager<>(metricGroup, configManager), listeners);
@@ -139,7 +141,8 @@ public class FlinkOperator {
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 
-    private void registerSessionJobController() {
+    @VisibleForTesting
+    void registerSessionJobController() {
         var eventRecorder = EventRecorder.create(client, listeners);
         var statusRecorder =
                 StatusRecorder.<FlinkSessionJobStatus>create(
@@ -156,11 +159,20 @@ public class FlinkOperator {
     }
 
     private void overrideControllerConfigs(ControllerConfigurationOverrider<?> overrider) {
+        var watchNamespaces = configManager.getOperatorConfiguration().getWatchedNamespaces();
+        LOG.info("Configuring operator to watch the following namespaces: {}.", watchNamespaces);
         overrider.settingNamespaces(
                 configManager.getOperatorConfiguration().getWatchedNamespaces());
+
         overrider.withRetry(
                 GenericRetry.fromConfiguration(
                         configManager.getOperatorConfiguration().getRetryConfiguration()));
+
+        var labelSelector = configManager.getOperatorConfiguration().getLabelSelector();
+        LOG.info(
+                "Configuring operator to select custom resources with the {} labels.",
+                labelSelector);
+        overrider.withLabelSelector(labelSelector);
     }
 
     public void run() {
