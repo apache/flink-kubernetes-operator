@@ -15,44 +15,14 @@
 #  See the License for the specific language governing permissions and
 # limitations under the License.
 ################################################################################
-
-apiVersion: flink.apache.org/v1beta1
-kind: FlinkDeployment
-metadata:
-  name: basic-session-cluster
-spec:
-  image: flink:1.15
-  flinkVersion: v1_15
-  jobManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
-  taskManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
-  serviceAccount: flink
----
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkSessionJob
 metadata:
-  name: basic-session-job-example
+  name: basic-session-job-only-example
 spec:
-  deploymentName: basic-session-cluster
+  deploymentName: basic-session-deployment-only-example
   job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.1/flink-examples-streaming_2.12-1.15.1-TopSpeedWindowing.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.0/flink-examples-streaming_2.12-1.15.0-TopSpeedWindowing.jar
     parallelism: 4
     upgradeMode: stateless
 
----
-apiVersion: flink.apache.org/v1beta1
-kind: FlinkSessionJob
-metadata:
-  name: basic-session-job-example2
-spec:
-  deploymentName: basic-session-cluster
-  job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.1/flink-examples-streaming_2.12-1.15.1.jar
-    parallelism: 2
-    upgradeMode: stateless
-    entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample

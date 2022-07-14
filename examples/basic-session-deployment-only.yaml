@@ -19,7 +19,7 @@
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
-  name: basic-session-example
+  name: basic-session-deployment-only-example
 spec:
   image: flink:1.15
   flinkVersion: v1_15
