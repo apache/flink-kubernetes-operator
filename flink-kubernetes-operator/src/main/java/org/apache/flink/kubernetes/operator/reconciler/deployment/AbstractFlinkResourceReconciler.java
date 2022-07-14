@@ -268,6 +268,10 @@ public abstract class AbstractFlinkResourceReconciler<
      * @return True if desired spec was already deployed.
      */
     private boolean checkNewSpecAlreadyDeployed(CR resource, Configuration deployConf) {
+        if (resource.getStatus().getReconciliationStatus().getState()
+                == ReconciliationState.UPGRADING) {
+            return false;
+        }
         AbstractFlinkSpec deployedSpec = ReconciliationUtils.getDeployedSpec(resource);
         if (resource.getSpec().equals(deployedSpec)) {
             LOG.info(

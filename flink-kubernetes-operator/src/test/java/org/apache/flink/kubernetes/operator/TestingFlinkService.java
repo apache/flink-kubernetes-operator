@@ -144,6 +144,10 @@ public class TestingFlinkService extends FlinkService {
         sessions.clear();
     }
 
+    public Set<String> getSessions() {
+        return sessions;
+    }
+
     @Override
     public void submitApplicationCluster(
             JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
@@ -186,7 +190,10 @@ public class TestingFlinkService extends FlinkService {
     }
 
     @Override
-    public void submitSessionCluster(Configuration conf) {
+    public void submitSessionCluster(Configuration conf) throws Exception {
+        if (deployFailure) {
+            throw new Exception("Deployment failure");
+        }
         sessions.add(conf.get(KubernetesConfigOptions.CLUSTER_ID));
     }
 
