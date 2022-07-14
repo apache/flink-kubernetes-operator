@@ -95,6 +95,10 @@ kubectl apply -f basic-session-deployment-and-job.yaml
 
 For running Flink SQL scripts check this [example](flink-sql-runner-example/README.md).
 
+### Python example
+
+For running Flink Python jobs check this [example](flink-python-example/README.md).
+
 ### Advanced examples
 
 There are typical requirements for production systems and the examples below contain configuration files
