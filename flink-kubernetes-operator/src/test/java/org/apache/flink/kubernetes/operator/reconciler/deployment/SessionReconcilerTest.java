@@ -23,16 +23,20 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Tests for {@link org.apache.flink.kubernetes.operator.reconciler.deployment.SessionReconciler}.
@@ -41,17 +45,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class SessionReconcilerTest {
 
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
-    private final EventRecorder eventRecorder = new EventRecorder(null, (r, e) -> {});
     private KubernetesClient kubernetesClient;
+    private EventRecorder eventRecorder;
+
+    @BeforeEach
+    public void before() {
+        eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
+    }
 
     @Test
     public void testStartSession() throws Exception {
-        Context context = TestUtils.createEmptyContext();
         var count = new AtomicInteger(0);
         TestingFlinkService flinkService =
                 new TestingFlinkService() {
                     @Override
-                    public void submitSessionCluster(Configuration conf) {
+                    public void submitSessionCluster(Configuration conf) throws Exception {
                         super.submitSessionCluster(conf);
                         count.addAndGet(1);
                     }
@@ -66,7 +74,56 @@ public class SessionReconcilerTest {
                         new TestingStatusRecorder<>());
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         kubernetesClient.resource(deployment).createOrReplace();
-        reconciler.reconcile(deployment, context);
+        reconciler.reconcile(deployment, flinkService.getContext());
         assertEquals(1, count.get());
+    }
+
+    @Test
+    public void testFailedUpgrade() throws Exception {
+        var flinkService = new TestingFlinkService();
+        var reconciler =
+                new SessionReconciler(
+                        kubernetesClient,
+                        flinkService,
+                        configManager,
+                        eventRecorder,
+                        new TestingStatusRecorder<>());
+
+        FlinkDeployment deployment = TestUtils.buildSessionCluster();
+        kubernetesClient.resource(deployment).createOrReplace();
+        reconciler.reconcile(deployment, flinkService.getContext());
+
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
+
+        deployment.getSpec().setRestartNonce(1234L);
+
+        flinkService.setDeployFailure(true);
+        try {
+            reconciler.reconcile(deployment, flinkService.getContext());
+            fail();
+        } catch (Exception expected) {
+        }
+
+        assertEquals(
+                ReconciliationState.UPGRADING,
+                deployment.getStatus().getReconciliationStatus().getState());
+        flinkService.setDeployFailure(false);
+        flinkService.clear();
+        assertTrue(flinkService.getSessions().isEmpty());
+        reconciler.reconcile(deployment, flinkService.getContext());
+
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
+        assertEquals(
+                1234L,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getRestartNonce());
+        assertEquals(Set.of(deployment.getMetadata().getName()), flinkService.getSessions());
     }
 }
