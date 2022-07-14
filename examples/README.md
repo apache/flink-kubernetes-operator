@@ -45,6 +45,15 @@ To run the job submit the yaml file using kubectl:
 kubectl apply -f basic.yaml
 ```
 
+### Checkpointing & High Availability
+
+Basic example to configure Flink Deployments in
+[HA mode](https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/ha/overview/).
+The example shows how to set savepoint directory, checkpoint directory and HA. To try out this run the following command:
+```bash
+kubectl apply -f basic-checkpoint-ha.yaml
+```
+
 ### Basic Session Deployment example
 
 This example shows how to create a basic Session Cluster and then how to submit specific jobs to this cluster if needed.
@@ -140,15 +149,6 @@ kubectl apply -f basic-ingress.yaml
 It is possible to generate path based routing. To try out this run the following command:
 ```bash
 kubectl apply -f advanced-ingress.yaml
-```
-
-#### High availability
-
-Basic example to configure Flink Deployments in
-[HA mode](https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/ha/overview/).
-The example shows how to set savepoint directory, checkpoint directory and HA. To try out this run the following command:
-```bash
-kubectl apply -f basic-checkpoint-ha.yaml
 ```
 
 #### Horizontal Pod Autoscaler
