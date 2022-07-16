@@ -107,9 +107,8 @@ public class OperatorMetricUtils {
     }
 
     public static Histogram createHistogram(FlinkOperatorConfiguration operatorConfiguration) {
-        return synchronizedHistogram(
-                new DescriptiveStatisticsHistogram(
-                        operatorConfiguration.getMetricsHistogramSampleSize()));
+        return new DescriptiveStatisticsHistogram(
+                operatorConfiguration.getMetricsHistogramSampleSize());
     }
 
     /** Thread safe {@link Histogram} wrapper. */
