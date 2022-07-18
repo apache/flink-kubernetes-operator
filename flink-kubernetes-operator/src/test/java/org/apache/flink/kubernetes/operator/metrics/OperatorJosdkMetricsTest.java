@@ -45,10 +45,10 @@ import static org.junit.jupiter.api.Assertions.fail;
 /** {@link OperatorJosdkMetrics} tests. */
 public class OperatorJosdkMetricsTest {
 
-    private final ResourceID resourceId = new ResourceID("testns", "testname");
+    private final ResourceID resourceId = new ResourceID("testname", "testns");
     private final String controllerName = FlinkDeploymentController.class.getSimpleName();
     private final String resourcePrefix =
-            "testhost.k8soperator.flink-operator-test.testopname.resource.testname.testns.JOSDK.";
+            "testhost.k8soperator.flink-operator-test.testopname.resource.testns.testname.JOSDK.";
     private final String systemPrefix =
             "testhost.k8soperator.flink-operator-test.testopname.system.";
     private final String executionPrefix = systemPrefix + "JOSDK.FlinkDeployment.";
@@ -200,6 +200,15 @@ public class OperatorJosdkMetricsTest {
         operatorMetrics.monitorSizeOf(Map.of("a", "b", "c", "d"), "mymap");
         assertEquals(8, metrics.size());
         assertEquals(2, ((Gauge<Integer>) metrics.get(systemPrefix + "mymap.size")).getValue());
+
+        operatorMetrics.reconcileCustomResource(new ResourceID("other", "otherns"), null);
+        assertEquals(9, metrics.size());
+        assertEquals(
+                1,
+                ((Counter)
+                                metrics.get(
+                                        "testhost.k8soperator.flink-operator-test.testopname.resource.otherns.other.JOSDK.Reconciliation.Count"))
+                        .getCount());
     }
 
     private Histogram getHistogram(String... names) {
