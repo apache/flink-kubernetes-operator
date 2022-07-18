@@ -23,6 +23,12 @@ import org.apache.flink.configuration.ConfigOptions;
 /** Configuration options for metrics. */
 public class KubernetesOperatorMetricOptions {
 
+    public static final ConfigOption<Boolean> OPERATOR_JVM_METRICS_ENABLED =
+            ConfigOptions.key("kubernetes.operator.jvm.metrics.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription("Enable Kubernetes Operator JVM metrics.");
+
     public static final ConfigOption<Boolean> OPERATOR_JOSDK_METRICS_ENABLED =
             ConfigOptions.key("kubernetes.operator.josdk.metrics.enabled")
                     .booleanType()

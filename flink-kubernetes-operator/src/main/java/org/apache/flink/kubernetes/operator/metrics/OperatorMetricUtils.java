@@ -64,8 +64,12 @@ public class OperatorMetricUtils {
                         EnvUtils.getOrDefault(
                                 EnvUtils.ENV_OPERATOR_NAME, "flink-kubernetes-operator"),
                         EnvUtils.getOrDefault(EnvUtils.ENV_HOSTNAME, "localhost"));
-        MetricGroup statusGroup = operatorMetricGroup.addGroup("Status");
-        MetricUtils.instantiateStatusMetrics(statusGroup);
+
+        if (defaultConfig.getBoolean(
+                KubernetesOperatorMetricOptions.OPERATOR_JVM_METRICS_ENABLED)) {
+            MetricGroup statusGroup = operatorMetricGroup.addGroup("Status");
+            MetricUtils.instantiateStatusMetrics(statusGroup);
+        }
         return operatorMetricGroup;
     }
 

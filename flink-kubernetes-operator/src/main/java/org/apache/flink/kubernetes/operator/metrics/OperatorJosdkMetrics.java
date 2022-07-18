@@ -33,6 +33,7 @@ import io.javaoperatorsdk.operator.processing.event.Event;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.controller.ResourceEvent;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -137,7 +138,7 @@ public class OperatorJosdkMetrics implements Metrics {
         var groups = getHistoGroups(execution, name);
         return histograms.computeIfAbsent(
                 groups,
-                s -> {
+                k -> {
                     var group = operatorMetricGroup.addGroup(OPERATOR_SDK_GROUP);
                     for (String mg : groups) {
                         group = group.addGroup(mg);
@@ -160,9 +161,12 @@ public class OperatorJosdkMetrics implements Metrics {
     }
 
     private Counter counter(MetricGroup parent, String... names) {
-        var groupList = Arrays.asList(names);
+        var key = new ArrayList<String>(parent.getScopeComponents().length + names.length);
+        Arrays.stream(parent.getScopeComponents()).forEach(key::add);
+        Arrays.stream(names).forEach(key::add);
+
         return counters.computeIfAbsent(
-                groupList,
+                key,
                 s -> {
                     MetricGroup group = parent.addGroup(OPERATOR_SDK_GROUP);
                     for (String name : names) {
