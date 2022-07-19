@@ -1,9 +1,9 @@
 ---
-title: "Custom Resource Validators"
+title: "Custom Operator Plugins"
 weight: 5
 type: docs
 aliases:
-- /operations/validator.html
+- /operations/plugins.html
 ---
 <!--
 Licensed to the Apache Software Foundation (ASF) under one
@@ -24,7 +24,11 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# Custom `FlinkResourceValidator` implementation
+# Custom Operator Plugins
+
+The operator provides a customizable platform for Flink resource management. Users can develop plugins to tailor the operator behaviour to their own needs.
+
+## Custom Flink Resource Validators
 
 `FlinkResourceValidator`, an interface for validating the resources of `FlinkDeployment` and `FlinkSessionJob`,  is a pluggable component based on the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism. During development, we can customize the implementation of `FlinkResourceValidator` and make sure to retain the service definition in `META-INF/services`.
 The following steps demonstrate how to develop and use a custom validator.
@@ -89,3 +93,19 @@ The following steps demonstrate how to develop and use a custom validator.
     ```text
     2022-05-04 14:01:46,551 o.a.f.k.o.u.FlinkUtils         [INFO ] Discovered resource validator from plugin directory[/opt/flink/plugins]: org.apache.flink.kubernetes.operator.validation.CustomValidator.
     ```
+
+## Custom Flink Resource Listeners
+
+The Flink Kubernetes Operator allows users to listen to events and status updates triggered for the Flink Resources managed by the operator.
+This feature enables tighter integration with the user's own data platform.
+
+By implementing the `FlinkResourceListener` interface users can listen to both events and status updates per resource type (`FlinkDeployment` / `FlinkSessionJob`). These methods will be called after the respective events have been triggered by the system.
+Using the context provided on each listener method users can also get access to the related Flink resource and the `KubernetesClient` itself in order to trigger any further events etc on demand.
+
+Similar to custom validator implementations, resource listeners are loaded via the Flink [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism.
+
+In order to enable your custom `FlinkResourceListener` you need to:
+
+ 1. Implement the interface
+ 2. Add your listener class to `org.apache.flink.kubernetes.operator.listener.FlinkResourceListener` in `META-INF/services`
+ 3. Package your JAR and add it to the plugins directory of your operator image (`/opt/flink/plugins`)

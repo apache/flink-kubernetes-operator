@@ -27,7 +27,7 @@ under the License.
 # Accessing Flink’s Web UI
 The Flink Kubernetes Operator, by default, does not change the way the native kubernetes integration [exposes](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#accessing-flinks-web-ui) the Flink Web UI.
 
-# Ingress
+## Ingress
 Beyond the native options, the Operator also supports creating [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/) entries for external UI access. 
 Ingress generation can be turned on by defining the `ingress` field in the `FlinkDeployment`:
 ```yaml

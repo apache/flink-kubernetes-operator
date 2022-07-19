@@ -24,33 +24,28 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# Metrics
+# Metrics and Logging
 
-The Flink Kubernetes Operator (Operator) extends the [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/) that allows gathering and exposing metrics to centralized monitoring solutions. 
+## Metrics
 
-## Flink Resource Metrics
+The Flink Kubernetes Operator (Operator) extends the [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/) that allows gathering and exposing metrics to centralized monitoring solutions.
+
+Different operator metrics can be turned on/off individually using the configuration. For details check the [metrics config reference]({{< ref "docs/operations/configuration#system-metrics-configuration" >}}).
+
+### Flink Resource Metrics
 The Operator gathers aggregates metrics about managed resources.
 
-| Scope            | Metrics                                                                             | Description                                                                                                                                                                                        | Type      |
-|------------------|-------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
-| Namespace        | FlinkDeployment/FlinkSessionJob.Count                                               | Number of managed FlinkDeployment/SessionJob instances per namespace                                                                                                                               | Gauge     |
-| Namespace        | FlinkDeployment.JmDeploymentStatus.&lt;Status&gt;.Count                             | Number of managed FlinkDeployment resources per &lt;Status&gt; per namespace. &lt;Status&gt; can take values from: READY, DEPLOYED_NOT_READY, DEPLOYING, MISSING, ERROR                            | Gauge     |
-| Namespace        | FlinkDeployment/FlinkSessionJob.Lifecycle.State.&lt;State&gt;.Count                 | Number of managed resources currently in state &lt;State&gt; per namespace. &lt;State&gt; can take values from: CREATED, SUSPENDED, UPGRADING, DEPLOYED, STABLE, ROLLING_BACK, ROLLED_BACK, FAILED | Gauge     |
-| System/Namespace | FlinkDeployment/FlinkSessionJob.Lifecycle.State.&lt;State&gt;.TimeSeconds           | Time spent in state &lt;State$gt for a given resource. &lt;State&gt; can take values from: CREATED, SUSPENDED, UPGRADING, DEPLOYED, STABLE, ROLLING_BACK, ROLLED_BACK, FAILED                      | Histogram |
-| System/Namespace | FlinkDeployment/FlinkSessionJob.Lifecycle.Transition.&lt;Transition&gt;.TimeSeconds | Time statistics for selected lifecycle state transitions. &lt;Transition&gt; can take values from: Resume, Upgrade, Suspend, Stabilization, Rollback, Submission                                   | Histogram |
+| Scope              | Metrics                                                                                   | Description                                                                                                                                                                                        | Type      |
+|--------------------|-------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
+| Namespace          | FlinkDeployment/FlinkSessionJob.Count                                                     | Number of managed resources per namespace                                                                                                                               | Gauge     |
+| Namespace          | FlinkDeployment.JmDeploymentStatus.&lt;Status&gt;.Count                                   | Number of managed FlinkDeployment resources per &lt;Status&gt; per namespace. &lt;Status&gt; can take values from: READY, DEPLOYED_NOT_READY, DEPLOYING, MISSING, ERROR                            | Gauge     |
+| Namespace          | FlinkDeployment/FlinkSessionJob.Lifecycle.State.&lt;State&gt;.Count                       | Number of managed resources currently in state &lt;State&gt; per namespace. &lt;State&gt; can take values from: CREATED, SUSPENDED, UPGRADING, DEPLOYED, STABLE, ROLLING_BACK, ROLLED_BACK, FAILED | Gauge     |
+| System/Namespace   | FlinkDeployment/FlinkSessionJob.Lifecycle.State.&lt;State&gt;.TimeSeconds                 | Time spent in state &lt;State$gt for a given resource. &lt;State&gt; can take values from: CREATED, SUSPENDED, UPGRADING, DEPLOYED, STABLE, ROLLING_BACK, ROLLED_BACK, FAILED                      | Histogram |
+| System/Namespace   | FlinkDeployment/FlinkSessionJob.Lifecycle.Transition.&lt;Transition&gt;.TimeSeconds       | Time statistics for selected lifecycle state transitions. &lt;Transition&gt; can take values from: Resume, Upgrade, Suspend, Stabilization, Rollback, Submission                                   | Histogram |
 
-### Lifecycle metrics
+#### Lifecycle metrics
 
-Based on the resource status the operator tracks the following resource lifecycle states:
-
- - CREATED : The resource was created in Kubernetes but not yet handled by the operator
- - SUSPENDED : The (job) resource has been suspended
- - UPGRADING : The resource is suspended before upgrading to a new spec
- - DEPLOYED : The resource is deployed/submitted to Kubernetes, but it's not yet considered to be stable and might be rolled back in the future
- - STABLE : The resource deployment is considered to be stable and won't be rolled back
- - ROLLING_BACK : The resource is being rolled back to the last stable spec
- - ROLLED_BACK : The resource is deployed with the last stable spec
- - FAILED : The job terminally failed
+Based on the resource status the operator monitors [resource lifecycle states]({{< ref "docs/concepts/architecture#flink-resource-lifecycle" >}}).
 
 The number of resources and time spend in each of these states at any given time is tracked by the `Lifecycle.<STATE>.Count` and `Lifecycle.<STATE>.TimeSeconds` metrics.
 
@@ -63,9 +58,9 @@ In addition to the simple counts we further track a few selected state transitio
  - Rollback : Time from deployed to rolled_back state if the resource was rolled back
  - Submission: Flink resource submission time
 
-## Kubernetes Client Metrics
+### Kubernetes Client Metrics
 
-The Operator gathers various metrics related to Kubernetes API server access. The Kubernetes client metrics can be enabled by the configuration `kubernetes.operator.kubernetes.client.metrics.enabled` (default: `true`).
+The Operator gathers various metrics related to Kubernetes API server access.
 
 | Scope  | Metrics                                            | Description                                                                                                                                                  | Type      |
 |--------|----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
@@ -79,8 +74,14 @@ The Operator gathers various metrics related to Kubernetes API server access. Th
 | System | KubeClient.HttpResponse.NumPerSecond               | Number of HTTP responses received from the Kubernetes API Server per second                                                                                  | Meter     |
 | System | KubeClient.HttpResponse.TimeNanos                  | Latency statistics obtained from the HTTP responses received from the Kubernetes API Server                                                                  | Histogram |
 
-## System Metrics
+### JVM Metrics
+
 The Operator gathers metrics about the JVM process and exposes it similarly to core Flink [System metrics](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics/#system-metrics). The list of metrics are not repeated in this document.
+
+### JOSDK Metrics
+
+The Flink operator also forwards metrics created by the Java Operator SDK framework itself under the `JOSDK` metric name prefix.
+Some of these metrics are on system, namespace and resource level.
 
 ## Metric Reporters
 
@@ -90,7 +91,7 @@ In order to specify metrics configuration for the operator, simply prefix them w
 
 Let's look at a few examples.
 
-## Slf4j
+### Slf4j
 The default metrics reporter in the operator is Slf4j. It does not require any external monitoring systems, and it is enabled in the `values.yaml` file by default, mainly for demonstrating purposes.
 ```yaml
 defaultConfiguration:
@@ -102,7 +103,7 @@ defaultConfiguration:
 ```
 To use a more robust production grade monitoring solution the configuration needs to be changed.
 
-## How to Enable Prometheus (Example)
+### How to Enable Prometheus (Example)
 The following example shows how to enable the Prometheus metric reporter:
 ```yaml
 defaultConfiguration:
@@ -120,7 +121,7 @@ metrics:
 ```
 or using the option `--set metrics.port=9999` in the command line.
 
-### Set up Prometheus locally
+#### Set up Prometheus locally
 The Prometheus Operator among other options provides an elegant, declarative way to specify how group of pods should be monitored using custom resources.
 
 To install the Prometheus operator via Helm run:
@@ -154,7 +155,7 @@ kubectl create -f pod-monitor.yaml
 ```
 Once the custom resource is created in the Kubernetes environment the operator metrics are ready to explore [http://localhost:3000/explore](http://localhost:3000/explore).
 
-# Logging
+## Logging
 The Operator controls the logging behaviour for Flink applications and the Operator itself using configuration files mounted externally via ConfigMaps. [Configuration files](https://github.com/apache/flink-kubernetes-operator/tree/main/helm/flink-kubernetes-operator/conf) with default values are shipped in the Helm chart. It is recommended to review and adjust them if needed in the `values.yaml` file before deploying the Operator in production environments.
 
 To append/override the default log configuration properties for the operator and Flink deployments define the `log4j-operator.properties` and `log4j-console.properties` keys respectively:

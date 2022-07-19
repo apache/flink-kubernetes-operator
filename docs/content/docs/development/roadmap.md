@@ -31,11 +31,6 @@ It's not a comprehensive list and might be slightly outdated at any given time. 
 
 ## What’s Next?
 
-Our intention is to advance further on the [Operator Maturity Model](https://operatorframework.io/operator-capabilities/)
-by adding more dynamic/automatic features
-
 - Standalone deployment mode support [FLIP-225](https://cwiki.apache.org/confluence/display/FLINK/FLIP-225%3A+Implement+standalone+mode+support+in+the+kubernetes+operator)
-- Auto-scaling using Horizontal Pod AutoScaler
-- Dynamic change of watched namespaces
-- Pluggable Status and Event reporters (Making it easier to integrate with proprietary control planes)
-- Improved Savepoint management & periodic triggering
+- Improved scaling and autoscaling support
+- Improved rollback mechanism and stability conditions
