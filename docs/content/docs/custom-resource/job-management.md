@@ -32,7 +32,7 @@ What is covered:
  - Running, suspending and deleting applications
  - Stateful and stateless application upgrades
  - Triggering and managing savepoints
- - Handling errors, rolling-back broken upgrades 
+ - Handling errors, rolling-back broken upgrades
 
 The behaviour is always controlled by the respective configuration fields of the `JobSpec` object as introduced in the [FlinkDeployment/FlinkSessionJob overview]({{< ref "docs/custom-resource/overview" >}}).
 
@@ -169,9 +169,13 @@ Restarts work exactly the same way as other application upgrades and follow the 
 
 ## Savepoint management
 
-Savepoints are triggered automatically by the system during savepoint upgrades as we have seen in the previous questions.
+Savepoints are triggered automatically by the system during the upgrade process as we have seen in the previous sections.
 
-Savepoints can also be triggered manually by defining a new (different/random) value to the variable `savepointTriggerNonce` in the job specification:
+For backup, job forking and other purposes savepoints can be triggered manually or periodically by the operator, however generally speaking these will not be used during upgrades and are not required for the correct operation.
+
+### Manual Savepoint Triggering
+
+Users can trigger savepoints manually by defining a new (different/random) value to the variable `savepointTriggerNonce` in the job specification:
 
 ```yaml
  job:
@@ -181,9 +185,21 @@ Savepoints can also be triggered manually by defining a new (different/random) v
 
 Changing the nonce value will trigger a new savepoint. Information about pending and last savepoint is stored in the resource status.
 
+### Periodic Savepoint Triggering
+
+The operator also supports periodic savepoint triggering through the following config option which can be configured on a per job level:
+
+```yaml
+ flinkConfiguration:
+    ...
+    kubernetes.operator.periodic.savepoint.interval: 6h
+```
+
+There is no guarantee on the timely execution of the periodic savepoints as they might be delayed by unhealthy job status or other interfering user operation.
+
 ### Savepoint History
 
-The operator automatically keeps track of the savepoint history triggered by upgrade or manual savepoint operations. 
+The operator automatically keeps track of the savepoint history triggered by upgrade or manual savepoint operations.
 This is necessary so cleanup can be performed by the operator for old savepoints.
 
 Users can control the cleanup behaviour by specifying a maximum age and maximum count for the savepoints in the history.
@@ -194,7 +210,7 @@ kubernetes.operator.savepoint.history.max.count: 5
 ```
 
 {{< hint info >}}
-Savepoint cleanup happens lazily and only when the application is running. 
+Savepoint cleanup happens lazily and only when the application is running.
 It is therefore very likely that savepoints live beyond the max age configuration.  
 {{< /hint >}}
 
@@ -203,7 +219,7 @@ It is therefore very likely that savepoints live beyond the max age configuratio
 When Kubernetes HA is enabled, the operator can recover the Flink cluster deployments in cases when it was accidentally deleted
 by the user or some external process. Deployment recovery can be turned off in the configuration by setting `kubernetes.operator.jm-deployment-recovery.enabled` to `false`, however it is recommended to keep this setting on the default `true` value.
 
-This is not something that would usually happen during normal operation and can also indicate a deeper problem, 
+This is not something that would usually happen during normal operation and can also indicate a deeper problem,
 therefore an Error event is also triggered by the system when it detects a missing deployment.
 
 One scenario which could lead to a loss of jobmanager deployment in Flink versions before 1.15 is the job entering a terminal state:
@@ -219,7 +235,7 @@ Please check the [manual Recovery section](#manual-recovery) to understand how t
 ## Application upgrade rollbacks (Experimental)
 
 The operator supports upgrade rollbacks as an experimental feature.
-The rollback feature works based on the concept of stable deployments specs. 
+The rollback feature works based on the concept of stable deployments specs.
 
 When an application is upgraded, the new spec is initially considered unstable. Once the operator successfully observes the new job in a healthy running state, the spec is marked as stable.
 If a new upgrade is not marked stable within a certain configurable time period (`kubernetes.operator.deployment.readiness.timeout`) then a rollback operation will be performed, rolling back to the last stable spec.
@@ -257,7 +273,7 @@ Fortunately almost any issue can be recovered by the user manually by using the 
  3. Check that you have the current savepoint, and that your `FlinkDeployment` is deleted completely
  4. Modify your `FlinkDeployment` JobSpec and set the `initialSavepointPath` to your last checkpoint location
  5. Recreate the deployment
- 
+
 These steps ensure that the operator will start completely fresh from the user defined savepoint path and can hopefully fully recover.
 Keep an eye on your job to see what could have cause the problem in the first place.
 
