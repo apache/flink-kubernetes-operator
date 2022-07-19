@@ -83,8 +83,10 @@ webhookSecurityContext: {}
 
 webhook:
   create: true
-  mutator:
-    create: true
+  # validator:
+  #   create: true
+  # mutator:
+  #   create: true
   keystore:
     useDefaultPassword: true
   # passwordSecretRef:

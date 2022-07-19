@@ -67,6 +67,7 @@ The configurable parameters of the Helm chart and which default values as detail
 | rbac.nodesRule.create | Whether to add RBAC rule to list nodes which is needed for rest-service exposed as NodePort type. | false |
 | operatorPod.annotations | Custom annotations to be added to the operator pod (but not the deployment). | |
 | operatorPod.labels | Custom labels to be added to the operator pod (but not the deployment). | |
+| operatorPod.env | Custom env to be added to the operator pod. | |
 | operatorServiceAccount.create | Whether to enable operator service account to create for flink-kubernetes-operator. | true |
 | operatorServiceAccount.annotations | The annotations of operator service account. | |
 | operatorServiceAccount.name | The name of operator service account. | flink-operator |
@@ -80,15 +81,16 @@ The configurable parameters of the Helm chart and which default values as detail
 | podSecurityContext | Defines privilege and access control settings for a pod or container for pod security context.  | runAsUser: 9999<br/>runAsGroup: 9999 |
 | operatorSecurityContext | Defines privilege and access control settings for a pod or container for operator security context.  | |
 | webhookSecurityContext | Defines privilege and access control settings for a pod or container for webhook security context. | |
-| webhook.create | Whether to enable webhook validator to create for flink-kubernetes-operator.                        | true |
-| webhook.mutator.create | Whether to enable webhook mutator to create for flink-kubernetes-operator. | true |
+| webhook.create | Whether to enable validating and mutating webhooks for flink-kubernetes-operator.                        | true |
+| webhook.mutator.create | Enable or disable mutating webhook, overrides `webhook.create` | |
+| webhook.validator.create | Enable or disable validating webhook, overrides `webhook.create` | |
 | webhook.keystore | The ConfigMap of webhook key store. | useDefaultPassword: true |
 | defaultConfiguration.create | Whether to enable default configuration to create for flink-kubernetes-operator. | true |
 | defaultConfiguration.append | Whether to append configuration files with configs.  | true |
 | defaultConfiguration.flink-conf.yaml | The default configuration of flink-conf.yaml. | kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory<br/>kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE<br/>kubernetes.operator.reconcile.interval: 15 s<br/>kubernetes.operator.observer.progress-check.interval: 5 s |
 | defaultConfiguration.log4j-operator.properties | The default configuration of log4j-operator.properties. | |
 | defaultConfiguration.log4j-console.properties | The default configuration of log4j-console.properties. | |
-| defaultConfiguration.metrics.port | The metrics port on the container for default configuration. | |
+| metrics.port | The metrics port on the container for default configuration. | |
 | imagePullSecrets | The image pull secrets of flink-kubernetes-operator. | |
 | nameOverride | Overrides the name with the specified name. | |
 | fullnameOverride | Overrides the fullname with the specified full name. | |
@@ -97,14 +99,14 @@ The configurable parameters of the Helm chart and which default values as detail
 
 For more information check the [Helm documentation](https://helm.sh/docs/helm/helm_install/).
 
-## Validating webhook
+## Operator webhooks
 
-In order to use the webhook for FlinkDeployment validation, you must install the cert-manager on the Kubernetes cluster:
+In order to use the webhooks in the operator, you must install the cert-manager on the Kubernetes cluster:
 ```
-kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.7.1/cert-manager.yaml
+kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.2/cert-manager.yaml
 ```
 
-The webhook can be disabled during helm install by passing the `--set webhook.create=false` parameter or editing the `values.yaml` directly.
+The webhooks can be disabled during helm install by passing the `--set webhook.create=false` parameter or editing the `values.yaml` directly.
 
 ## Watching only specific namespaces
 
@@ -120,7 +122,7 @@ As a result, for users who run the flink kubernetes operator with older k8s vers
 kubectl label namespace <target namespace name> kubernetes.io/metadata.name=<target namespace name>
 ```
 
-Besides, users can define their own namespaceSelector to filter the requests due to customized requirements. 
+Besides, users can define their own namespaceSelector to filter the requests due to customized requirements.
 
 For example, if users label their namespace with key-value pair {customized_namespace_key: &lt;target namespace name&gt; }
 the corresponding namespaceSelector that only accepts requests from this namespace could be:
