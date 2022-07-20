@@ -56,6 +56,7 @@ public class NativeFlinkService extends AbstractFlinkService {
 
     @Override
     protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
+        LOG.info("Deploying application cluster");
         final ClusterClientServiceLoader clusterClientServiceLoader =
                 new DefaultClusterClientServiceLoader();
         final ApplicationDeployer deployer =

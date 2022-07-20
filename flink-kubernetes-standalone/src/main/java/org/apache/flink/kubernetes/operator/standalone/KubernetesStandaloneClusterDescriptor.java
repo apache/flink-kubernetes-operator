@@ -120,7 +120,7 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
 
         try (ClusterClient<String> clusterClient = clusterClientProvider.getClusterClient()) {
             LOG.info(
-                    "Created flink session cluster {} successfully, JobManager Web Interface: {}",
+                    "Created flink application cluster {} successfully, JobManager Web Interface: {}",
                     clusterId,
                     clusterClient.getWebInterfaceURL());
         }
