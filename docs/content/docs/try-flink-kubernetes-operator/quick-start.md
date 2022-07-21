@@ -73,11 +73,14 @@ kubectl create -f https://github.com/jetstack/cert-manager/releases/download/v1.
 In case the cert manager installation failed for any reason you can disable the webhook by passing `--set webhook.create=false` to the helm install command for the operator.
 {{< /hint >}}
 
-Now you can deploy the latest stable Flink Kubernetes Operator version using the included Helm chart:
+Now you can deploy the selected stable Flink Kubernetes Operator version using the included Helm chart:
+
 ```bash
-helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-1.0.1/
+helm repo add flink-operator-repo https://downloads.apache.org/flink/flink-kubernetes-operator-{{< stable >}}{{< version >}}{{< /stable >}}{{< unstable >}}&lt;OPERATOR-VERSION&gt;{{< /unstable >}}/
 helm install flink-kubernetes-operator flink-operator-repo/flink-kubernetes-operator
 ```
+
+To find the list of stable versions please visit https://flink.apache.org/downloads.html
 
 {{< hint info >}}
 The Helm chart by default points to the `ghcr.io/apache/flink-kubernetes-operator` image repository.
@@ -92,14 +95,14 @@ flink-kubernetes-operator-fb5d46f94-ghd8b 2/2 Running 0 4m21s
 
 helm list
 NAME NAMESPACE REVISION UPDATED STATUS CHART APP VERSION
-flink-kubernetes-operator default 1 2022-03-09 17 (tel:12022030917):39:55.461359 +0100 CET deployed flink-kubernetes-operator-1.0.1 1.0.1
+flink-kubernetes-operator default 1 2022-03-09 17 (tel:12022030917):39:55.461359 +0100 CET deployed flink-kubernetes-operator-{{< version >}} {{< version >}}
 ```
 
 ## Submitting a Flink job
 
 Once the operator is running as seen in the previous step you are ready to submit a Flink job:
 ```bash
-kubectl create -f https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0/examples/basic.yaml
+kubectl create -f https://raw.githubusercontent.com/apache/flink-kubernetes-operator/{{< stable_branch >}}/examples/basic.yaml
 ```
 You may follow the logs of your job, after a successful startup (which can take on the order of a minute in a fresh environment, seconds afterwards) you can:
 
