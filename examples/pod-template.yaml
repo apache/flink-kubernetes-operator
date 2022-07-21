@@ -38,9 +38,11 @@ spec:
           volumeMounts:
             - mountPath: /opt/flink/log
               name: flink-logs
-        # Sample sidecar container
+            - mountPath: /opt/flink/downloads
+              name: downloads
+        # Sample sidecar container for log forwarding
         - name: fluentbit
-          image: fluent/fluent-bit:1.8.12-debug
+          image: fluent/fluent-bit:1.9.6-debug
           command: [ 'sh','-c','/fluent-bit/bin/fluent-bit -i tail -p path=/flink-logs/*.log -p multiline.parser=java -o stdout' ]
           volumeMounts:
             - mountPath: /flink-logs
@@ -48,11 +50,9 @@ spec:
       volumes:
         - name: flink-logs
           emptyDir: { }
+        - name: downloads
+          emptyDir: { }
   jobManager:
-    resource:
-      memory: "2048m"
-      cpu: 1
-  taskManager:
     resource:
       memory: "2048m"
       cpu: 1
@@ -63,10 +63,22 @@ spec:
         name: task-manager-pod-template
       spec:
         initContainers:
-          # Sample sidecar container
+          # Sample init container for fetching remote artifacts
           - name: busybox
             image: busybox:latest
-            command: [ 'sh','-c','echo hello from task manager' ]
+            volumeMounts:
+              - mountPath: /opt/flink/downloads
+                name: downloads
+            command:
+            - /bin/sh
+            - -c
+            - "wget -O /opt/flink/downloads/flink-examples-streaming.jar \
+              https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.1/flink-examples-streaming_2.12-1.15.1.jar"
+  taskManager:
+    resource:
+      memory: "2048m"
+      cpu: 1
   job:
-    jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
+    jarURI: local:///opt/flink/downloads/flink-examples-streaming.jar
+    entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample
     parallelism: 2
