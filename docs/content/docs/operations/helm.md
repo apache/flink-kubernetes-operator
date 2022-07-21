@@ -47,7 +47,7 @@ Helm provides different ways to override the default installation parameters (co
 
 To override single parameters you can use `--set`, for example:
 ```
-helm install --set image.repository=apache/flink-kubernetes-operator --set image.tag=1.0.1 flink-kubernetes-operator helm/flink-kubernetes-operator
+helm install --set image.repository=apache/flink-kubernetes-operator --set image.tag={{< stable >}}{{< version >}}{{< /stable >}}{{< unstable >}}latest{{< /unstable >}} flink-kubernetes-operator helm/flink-kubernetes-operator
 ```
 
 You can also provide your custom values file by using the `-f` flag:
