@@ -73,6 +73,29 @@ under the License.
             <version>${flink.version}</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- okhttp -->
+        <!--
+            Regarding the okhttp explicit version
+            see https://github.com/fabric8io/kubernetes-client/issues/4290
+            and https://issues.apache.org/jira/browse/FLINK-28637
+            -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>${okhttp.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>logging-interceptor</artifactId>
+            <version>${okhttp.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>mockwebserver</artifactId>
+            <version>${okhttp.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
