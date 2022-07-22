@@ -81,6 +81,8 @@ under the License.
 
         <spotless.version>2.4.2</spotless.version>
         <it.skip>true</it.skip>
+
+        <okhttp.version>4.10.0</okhttp.version>
     </properties>
 
     <dependencyManagement>
