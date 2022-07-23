@@ -19,94 +19,161 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
-import org.apache.flink.metrics.Gauge;
-import org.apache.flink.metrics.Metric;
-import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
-
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.COUNTER_NAME;
-import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.FLINK_DEPLOYMENT_GROUP_NAME;
-import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.JM_DEPLOYMENT_STATUS_GROUP_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.DEPLOYMENT_GROUP_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.STATUS_GROUP_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link FlinkDeploymentMetrics tests. */
-@EnableKubernetesMockClient(crud = true)
 public class FlinkDeploymentMetricsTest {
-    private KubernetesClient kubernetesClient;
+
+    private final Configuration configuration = new Configuration();
+    private TestingMetricListener listener;
+    private MetricManager<FlinkDeployment> metricManager;
+
+    @BeforeEach
+    public void init() {
+        listener = new TestingMetricListener(configuration);
+        metricManager =
+                MetricManager.createFlinkDeploymentMetricManager(
+                        new FlinkConfigManager(configuration), listener.getMetricGroup());
+    }
 
     @Test
-    public void testFlinkDeploymentMetrics() throws InterruptedException {
-        var metrics = new HashMap<String, Metric>();
-        TestingMetricRegistry registry =
-                TestingMetricRegistry.builder()
-                        .setDelimiter(".".charAt(0))
-                        .setRegisterConsumer(
-                                (metric, name, group) -> {
-                                    metrics.put(group.getMetricIdentifier(name), metric);
-                                })
-                        .build();
+    public void testMetricsSameNamespace() {
+        var namespace = TestUtils.TEST_NAMESPACE;
+        var deployment1 = TestUtils.buildApplicationCluster("deployment1", namespace);
+        var deployment2 = TestUtils.buildApplicationCluster("deployment2", namespace);
 
+        var counterId =
+                listener.getNamespaceMetricId(namespace, DEPLOYMENT_GROUP_NAME, COUNTER_NAME);
+        assertTrue(listener.getGauge(counterId).isEmpty());
+        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
+            var statusId =
+                    listener.getNamespaceMetricId(
+                            namespace, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+            assertTrue(listener.getGauge(statusId).isEmpty());
+        }
+
+        metricManager.onUpdate(deployment1);
+        metricManager.onUpdate(deployment2);
+        assertEquals(2, listener.getGauge(counterId).get().getValue());
+        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
+            deployment1.getStatus().setJobManagerDeploymentStatus(status);
+            deployment2.getStatus().setJobManagerDeploymentStatus(status);
+            metricManager.onUpdate(deployment1);
+            metricManager.onUpdate(deployment2);
+
+            var statusId =
+                    listener.getNamespaceMetricId(
+                            namespace, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+            assertEquals(2, listener.getGauge(statusId).get().getValue());
+        }
+
+        metricManager.onRemove(deployment1);
+        metricManager.onRemove(deployment2);
+        assertEquals(0, listener.getGauge(counterId).get().getValue());
+        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
+            var statusId =
+                    listener.getNamespaceMetricId(
+                            namespace, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+            assertEquals(0, listener.getGauge(statusId).get().getValue());
+        }
+    }
+
+    @Test
+    public void testMetricsMultiNamespace() {
+        var namespace1 = "ns1";
+        var namespace2 = "ns2";
+        var deployment1 = TestUtils.buildApplicationCluster("deployment", namespace1);
+        var deployment2 = TestUtils.buildApplicationCluster("deployment", namespace2);
+
+        var counterId1 =
+                listener.getNamespaceMetricId(namespace1, DEPLOYMENT_GROUP_NAME, COUNTER_NAME);
+        var counterId2 =
+                listener.getNamespaceMetricId(namespace2, DEPLOYMENT_GROUP_NAME, COUNTER_NAME);
+        assertTrue(listener.getGauge(counterId1).isEmpty());
+        assertTrue(listener.getGauge(counterId2).isEmpty());
+        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
+            var statusId1 =
+                    listener.getNamespaceMetricId(
+                            namespace1, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+            var statusId2 =
+                    listener.getNamespaceMetricId(
+                            namespace2, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+            assertTrue(listener.getGauge(statusId1).isEmpty());
+            assertTrue(listener.getGauge(statusId2).isEmpty());
+        }
+
+        metricManager.onUpdate(deployment1);
+        metricManager.onUpdate(deployment2);
+        assertEquals(1, listener.getGauge(counterId1).get().getValue());
+        assertEquals(1, listener.getGauge(counterId2).get().getValue());
+        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
+            deployment1.getStatus().setJobManagerDeploymentStatus(status);
+            deployment2.getStatus().setJobManagerDeploymentStatus(status);
+            metricManager.onUpdate(deployment1);
+            metricManager.onUpdate(deployment2);
+            var statusId1 =
+                    listener.getNamespaceMetricId(
+                            namespace1, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+            var statusId2 =
+                    listener.getNamespaceMetricId(
+                            namespace2, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+            assertEquals(1, listener.getGauge(statusId1).get().getValue());
+            assertEquals(1, listener.getGauge(statusId2).get().getValue());
+        }
+
+        metricManager.onRemove(deployment1);
+        metricManager.onRemove(deployment2);
+
+        assertEquals(0, listener.getGauge(counterId1).get().getValue());
+        assertEquals(0, listener.getGauge(counterId2).get().getValue());
+        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
+            deployment1.getStatus().setJobManagerDeploymentStatus(status);
+            deployment2.getStatus().setJobManagerDeploymentStatus(status);
+            var statusId1 =
+                    listener.getNamespaceMetricId(
+                            namespace1, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+            var statusId2 =
+                    listener.getNamespaceMetricId(
+                            namespace2, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+            assertEquals(0, listener.getGauge(statusId1).get().getValue());
+            assertEquals(0, listener.getGauge(statusId2).get().getValue());
+        }
+    }
+
+    @Test
+    public void testMetricsDisabled() {
+
+        var conf = new Configuration();
+        conf.set(OPERATOR_RESOURCE_METRICS_ENABLED, false);
+        var listener = new TestingMetricListener(conf);
         var metricManager =
-                (MetricManager) TestUtils.createTestMetricManager(registry, new Configuration());
-        var helper =
-                new StatusRecorder<FlinkDeploymentStatus>(
-                        kubernetesClient, metricManager, (e, s) -> {});
+                MetricManager.createFlinkDeploymentMetricManager(
+                        new FlinkConfigManager(conf), listener.getMetricGroup());
 
-        var deployment = TestUtils.buildApplicationCluster();
-        kubernetesClient.resource(deployment).createOrReplace();
+        var namespace = TestUtils.TEST_NAMESPACE;
+        var deployment = TestUtils.buildApplicationCluster("deployment", namespace);
 
-        helper.updateStatusFromCache(deployment);
-        assertEquals(1, ((Gauge) metrics.get(totalIdentifier(deployment))).getValue());
-        assertEquals(1, ((Gauge) metrics.get(perStatusIdentifier(deployment))).getValue());
-
+        var counterId =
+                listener.getNamespaceMetricId(namespace, DEPLOYMENT_GROUP_NAME, COUNTER_NAME);
+        metricManager.onUpdate(deployment);
+        assertTrue(listener.getGauge(counterId).isEmpty());
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
-            deployment.getStatus().setJobManagerDeploymentStatus(status);
-            helper.patchAndCacheStatus(deployment);
-            assertEquals(1, ((Gauge) metrics.get(totalIdentifier(deployment))).getValue());
-            assertEquals(1, ((Gauge) metrics.get(perStatusIdentifier(deployment))).getValue());
+            var statusId =
+                    listener.getNamespaceMetricId(
+                            namespace, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+            assertTrue(listener.getGauge(statusId).isEmpty());
         }
-
-        helper.removeCachedStatus(deployment);
-        assertEquals(0, ((Gauge) metrics.get(totalIdentifier(deployment))).getValue());
-        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
-            assertEquals(0, ((Gauge) metrics.get(perStatusIdentifier(deployment))).getValue());
-        }
-    }
-
-    private String totalIdentifier(FlinkDeployment deployment) {
-        String baseScope = "testhost.k8soperator.flink-operator-test.testopname.";
-        String[] metricScope =
-                new String[] {
-                    "namespace",
-                    deployment.getMetadata().getNamespace(),
-                    FLINK_DEPLOYMENT_GROUP_NAME,
-                    COUNTER_NAME
-                };
-        return baseScope + String.join(".", metricScope);
-    }
-
-    private String perStatusIdentifier(FlinkDeployment deployment) {
-
-        String baseScope = "testhost.k8soperator.flink-operator-test.testopname.";
-        String[] metricScope =
-                new String[] {
-                    "namespace",
-                    deployment.getMetadata().getNamespace(),
-                    FLINK_DEPLOYMENT_GROUP_NAME,
-                    JM_DEPLOYMENT_STATUS_GROUP_NAME,
-                    deployment.getStatus().getJobManagerDeploymentStatus().name(),
-                    COUNTER_NAME
-                };
-
-        return baseScope + String.join(".", metricScope);
     }
 }

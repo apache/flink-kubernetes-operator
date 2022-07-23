@@ -64,7 +64,7 @@ public class FlinkDeploymentController
     private final Set<FlinkResourceValidator> validators;
     private final ReconcilerFactory reconcilerFactory;
     private final ObserverFactory observerFactory;
-    private final StatusRecorder<FlinkDeploymentStatus> statusRecorder;
+    private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
     private final EventRecorder eventRecorder;
 
     public FlinkDeploymentController(
@@ -72,7 +72,7 @@ public class FlinkDeploymentController
             Set<FlinkResourceValidator> validators,
             ReconcilerFactory reconcilerFactory,
             ObserverFactory observerFactory,
-            StatusRecorder<FlinkDeploymentStatus> statusRecorder,
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
             EventRecorder eventRecorder) {
         this.configManager = configManager;
         this.validators = validators;

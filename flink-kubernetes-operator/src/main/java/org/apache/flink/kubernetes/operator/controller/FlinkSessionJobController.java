@@ -60,14 +60,14 @@ public class FlinkSessionJobController
     private final Set<FlinkResourceValidator> validators;
     private final Reconciler<FlinkSessionJob> reconciler;
     private final Observer<FlinkSessionJob> observer;
-    private final StatusRecorder<FlinkSessionJobStatus> statusRecorder;
+    private final StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder;
 
     public FlinkSessionJobController(
             FlinkConfigManager configManager,
             Set<FlinkResourceValidator> validators,
             Reconciler<FlinkSessionJob> reconciler,
             Observer<FlinkSessionJob> observer,
-            StatusRecorder<FlinkSessionJobStatus> statusRecorder) {
+            StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder) {
         this.configManager = configManager;
         this.validators = validators;
         this.reconciler = reconciler;

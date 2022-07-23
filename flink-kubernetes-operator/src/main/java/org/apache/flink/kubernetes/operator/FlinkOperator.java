@@ -25,8 +25,6 @@ import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
-import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.listener.ListenerUtils;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
@@ -120,9 +118,9 @@ public class FlinkOperator {
 
     @VisibleForTesting
     void registerDeploymentController() {
-        var statusRecorder =
-                StatusRecorder.<FlinkDeploymentStatus>create(
-                        client, new MetricManager<>(metricGroup, configManager), listeners);
+        var metricManager =
+                MetricManager.createFlinkDeploymentMetricManager(configManager, metricGroup);
+        var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
         var eventRecorder = EventRecorder.create(client, listeners);
         var reconcilerFactory =
                 new ReconcilerFactory(
@@ -145,9 +143,9 @@ public class FlinkOperator {
     @VisibleForTesting
     void registerSessionJobController() {
         var eventRecorder = EventRecorder.create(client, listeners);
-        var statusRecorder =
-                StatusRecorder.<FlinkSessionJobStatus>create(
-                        client, new MetricManager<>(metricGroup, configManager), listeners);
+        var metricManager =
+                MetricManager.createFlinkSessionJobMetricManager(configManager, metricGroup);
+        var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
         var reconciler =
                 new SessionJobReconciler(
                         client, flinkServiceFactory, configManager, eventRecorder, statusRecorder);

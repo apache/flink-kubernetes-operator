@@ -17,30 +17,117 @@
 
 package org.apache.flink.kubernetes.operator.metrics;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
-import org.apache.flink.metrics.testutils.MetricListener;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.apache.flink.kubernetes.operator.metrics.FlinkSessionJobMetrics.COUNTER_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkSessionJobMetrics.METRIC_GROUP_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** @link FlinkSessionJobMetrics tests. */
 public class FlinkSessionJobMetricsTest {
 
+    private final Configuration configuration = new Configuration();
+    private TestingMetricListener listener;
+    private MetricManager<FlinkSessionJob> metricManager;
+
+    @BeforeEach
+    public void init() {
+        listener = new TestingMetricListener(configuration);
+        metricManager =
+                MetricManager.createFlinkSessionJobMetricManager(
+                        new FlinkConfigManager(configuration), listener.getMetricGroup());
+    }
+
     @Test
-    public void testMetrics() {
-        MetricListener metricListener = new MetricListener();
-        FlinkSessionJobMetrics metrics =
-                new FlinkSessionJobMetrics(metricListener.getMetricGroup());
-        assertTrue(metricListener.getGauge(METRIC_GROUP_NAME, "Count").isPresent());
-        assertEquals(0, metricListener.getGauge(METRIC_GROUP_NAME, "Count").get().getValue());
-        FlinkSessionJob flinkSessionJob = TestUtils.buildSessionJob();
-        metrics.onUpdate(flinkSessionJob);
-        assertEquals(1, metricListener.getGauge(METRIC_GROUP_NAME, "Count").get().getValue());
-        metrics.onRemove(flinkSessionJob);
-        assertEquals(0, metricListener.getGauge(METRIC_GROUP_NAME, "Count").get().getValue());
+    public void testMetricsSameNamespace() {
+        var namespace = "test-ns";
+        var job1 = TestUtils.buildSessionJob("job1", namespace);
+        var job2 = TestUtils.buildSessionJob("job2", namespace);
+        var metricId = listener.getNamespaceMetricId(namespace, METRIC_GROUP_NAME, COUNTER_NAME);
+        assertTrue(listener.getGauge(namespace).isEmpty());
+
+        metricManager.onUpdate(job1);
+        metricManager.onUpdate(job2);
+        assertEquals(2, listener.getGauge(metricId).get().getValue());
+
+        metricManager.onUpdate(job1);
+        metricManager.onUpdate(job2);
+        assertEquals(2, listener.getGauge(metricId).get().getValue());
+
+        metricManager.onRemove(job1);
+        metricManager.onRemove(job2);
+        assertEquals(0, listener.getGauge(metricId).get().getValue());
+
+        metricManager.onRemove(job1);
+        metricManager.onRemove(job2);
+        assertEquals(0, listener.getGauge(metricId).get().getValue());
+    }
+
+    @Test
+    public void testMetricsMultiNamespace() {
+        var namespace1 = "ns1";
+        var namespace2 = "ns2";
+        var job1 = TestUtils.buildSessionJob("job", namespace1);
+        var job2 = TestUtils.buildSessionJob("job", namespace2);
+
+        var metricId1 = listener.getNamespaceMetricId(namespace1, METRIC_GROUP_NAME, COUNTER_NAME);
+        var metricId2 = listener.getNamespaceMetricId(namespace2, METRIC_GROUP_NAME, COUNTER_NAME);
+
+        assertTrue(listener.getGauge(metricId1).isEmpty());
+        assertTrue(listener.getGauge(metricId2).isEmpty());
+
+        metricManager.onUpdate(job1);
+        metricManager.onUpdate(job2);
+        assertEquals(1, listener.getGauge(metricId1).get().getValue());
+        assertEquals(1, listener.getGauge(metricId2).get().getValue());
+
+        metricManager.onUpdate(job1);
+        metricManager.onUpdate(job2);
+        assertEquals(1, listener.getGauge(metricId1).get().getValue());
+        assertEquals(1, listener.getGauge(metricId2).get().getValue());
+
+        metricManager.onRemove(job1);
+        metricManager.onRemove(job2);
+        assertEquals(0, listener.getGauge(metricId1).get().getValue());
+        assertEquals(0, listener.getGauge(metricId2).get().getValue());
+
+        metricManager.onRemove(job1);
+        metricManager.onRemove(job2);
+        assertEquals(0, listener.getGauge(metricId1).get().getValue());
+        assertEquals(0, listener.getGauge(metricId2).get().getValue());
+    }
+
+    @Test
+    public void testMetricsDisabled() {
+        var flinkSessionJob = TestUtils.buildSessionJob();
+
+        var conf = new Configuration();
+        conf.set(OPERATOR_RESOURCE_METRICS_ENABLED, false);
+        var listener = new TestingMetricListener(conf);
+        var metricManager =
+                MetricManager.createFlinkSessionJobMetricManager(
+                        new FlinkConfigManager(conf), listener.getMetricGroup());
+
+        var metricId =
+                listener.getNamespaceMetricId(
+                        flinkSessionJob.getMetadata().getNamespace(),
+                        METRIC_GROUP_NAME,
+                        COUNTER_NAME);
+
+        assertTrue(listener.getGauge(metricId).isEmpty());
+
+        metricManager.onUpdate(flinkSessionJob);
+        assertTrue(listener.getGauge(metricId).isEmpty());
+
+        metricManager.onRemove(flinkSessionJob);
+        assertTrue(listener.getGauge(metricId).isEmpty());
     }
 }

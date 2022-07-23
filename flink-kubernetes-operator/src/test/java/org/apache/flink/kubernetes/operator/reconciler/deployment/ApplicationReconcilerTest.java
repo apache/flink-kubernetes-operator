@@ -77,7 +77,7 @@ public class ApplicationReconcilerTest {
     public void before() {
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        var statusRecoder = new TestingStatusRecorder<FlinkDeploymentStatus>();
+        var statusRecoder = new TestingStatusRecorder<FlinkDeployment, FlinkDeploymentStatus>();
         reconciler =
                 new ApplicationReconciler(
                         kubernetesClient,

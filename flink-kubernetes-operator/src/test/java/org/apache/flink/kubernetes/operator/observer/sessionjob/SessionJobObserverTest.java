@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingFlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
@@ -59,7 +60,7 @@ public class SessionJobObserverTest {
     public void before() {
         kubernetesClient.resource(TestUtils.buildSessionJob()).createOrReplace();
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        var statusRecorder = new TestingStatusRecorder<FlinkSessionJobStatus>();
+        var statusRecorder = new TestingStatusRecorder<FlinkSessionJob, FlinkSessionJobStatus>();
         flinkService = new TestingFlinkService();
         FlinkServiceFactory flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
         observer =

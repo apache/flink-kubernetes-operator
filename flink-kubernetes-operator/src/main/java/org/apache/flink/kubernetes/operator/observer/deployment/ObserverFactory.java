@@ -36,7 +36,7 @@ public class ObserverFactory {
 
     private final FlinkServiceFactory flinkServiceFactory;
     private final FlinkConfigManager configManager;
-    private final StatusRecorder<FlinkDeploymentStatus> statusRecorder;
+    private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
     private final EventRecorder eventRecorder;
     private final Map<Tuple2<Mode, KubernetesDeploymentMode>, Observer<FlinkDeployment>>
             observerMap;
@@ -44,7 +44,7 @@ public class ObserverFactory {
     public ObserverFactory(
             FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
-            StatusRecorder<FlinkDeploymentStatus> statusRecorder,
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
             EventRecorder eventRecorder) {
         this.flinkServiceFactory = flinkServiceFactory;
         this.configManager = configManager;

@@ -22,8 +22,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -40,7 +38,6 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
-import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
 
@@ -109,20 +106,38 @@ public class TestUtils {
     }
 
     public static FlinkDeployment buildSessionCluster(FlinkVersion version) {
+        return buildSessionCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version);
+    }
+
+    public static FlinkDeployment buildSessionCluster(
+            String name, String namespace, FlinkVersion version) {
         FlinkDeployment deployment = new FlinkDeployment();
         deployment.setStatus(new FlinkDeploymentStatus());
         deployment.setMetadata(
                 new ObjectMetaBuilder()
-                        .withName(TEST_DEPLOYMENT_NAME)
-                        .withNamespace(TEST_NAMESPACE)
+                        .withName(name)
+                        .withNamespace(namespace)
                         .withCreationTimestamp(Instant.now().toString())
                         .build());
         deployment.setSpec(getTestFlinkDeploymentSpec(version));
         return deployment;
     }
 
+    public static FlinkDeployment buildApplicationCluster() {
+        return buildApplicationCluster(FlinkVersion.v1_15);
+    }
+
+    public static FlinkDeployment buildApplicationCluster(String name, String namespace) {
+        return buildApplicationCluster(name, namespace, FlinkVersion.v1_15);
+    }
+
     public static FlinkDeployment buildApplicationCluster(FlinkVersion version) {
-        FlinkDeployment deployment = buildSessionCluster(version);
+        return buildApplicationCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version);
+    }
+
+    public static FlinkDeployment buildApplicationCluster(
+            String name, String namespace, FlinkVersion version) {
+        FlinkDeployment deployment = buildSessionCluster(name, namespace, version);
         deployment
                 .getSpec()
                 .setJob(
@@ -136,17 +151,13 @@ public class TestUtils {
         return deployment;
     }
 
-    public static FlinkDeployment buildApplicationCluster() {
-        return buildApplicationCluster(FlinkVersion.v1_15);
-    }
-
-    public static FlinkSessionJob buildSessionJob() {
+    public static FlinkSessionJob buildSessionJob(String name, String namespace) {
         FlinkSessionJob sessionJob = new FlinkSessionJob();
         sessionJob.setStatus(new FlinkSessionJobStatus());
         sessionJob.setMetadata(
                 new ObjectMetaBuilder()
-                        .withName(TEST_SESSION_JOB_NAME)
-                        .withNamespace(TEST_NAMESPACE)
+                        .withName(name)
+                        .withNamespace(namespace)
                         .withCreationTimestamp(Instant.now().toString())
                         .withUid(UUID.randomUUID().toString())
                         .withGeneration(1L)
@@ -163,6 +174,10 @@ public class TestUtils {
                                         .build())
                         .build());
         return sessionJob;
+    }
+
+    public static FlinkSessionJob buildSessionJob() {
+        return buildSessionJob(TEST_SESSION_JOB_NAME, TEST_NAMESPACE);
     }
 
     public static FlinkDeploymentSpec getTestFlinkDeploymentSpec(FlinkVersion version) {
@@ -431,27 +446,22 @@ public class TestUtils {
         }
     }
 
-    public static <T extends AbstractFlinkResource<?, ?>> MetricManager<T> createTestMetricManager(
-            Configuration conf) {
-        return createTestMetricManager(
-                TestingMetricRegistry.builder()
-                        .setDelimiter(".".charAt(0))
-                        .setRegisterConsumer((metric, name, group) -> {})
-                        .build(),
-                conf);
-    }
-
-    public static <T extends AbstractFlinkResource<?, ?>> MetricManager<T> createTestMetricManager(
-            MetricRegistry metricRegistry, Configuration conf) {
-
-        var confManager = new FlinkConfigManager(conf);
-        return new MetricManager<>(createTestMetricGroup(metricRegistry, conf), confManager);
+    public static KubernetesOperatorMetricGroup createTestMetricGroup(Configuration conf) {
+        return createTestMetricGroup(createTestMetricRegistry(), conf);
     }
 
     public static KubernetesOperatorMetricGroup createTestMetricGroup(
             MetricRegistry metricRegistry, Configuration conf) {
         return KubernetesOperatorMetricGroup.create(
                 metricRegistry, conf, TEST_NAMESPACE, "testopname", "testhost");
+    }
+
+    public static TestingMetricRegistry createTestMetricRegistry() {
+
+        return TestingMetricRegistry.builder()
+                .setDelimiter(".".charAt(0))
+                .setRegisterConsumer((metric, name, group) -> {})
+                .build();
     }
 
     /** Testing ResponseProvider. */

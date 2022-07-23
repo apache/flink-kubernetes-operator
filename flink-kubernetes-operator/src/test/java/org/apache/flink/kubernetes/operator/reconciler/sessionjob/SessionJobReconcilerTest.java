@@ -67,7 +67,7 @@ public class SessionJobReconcilerTest {
     private TestingFlinkService flinkService = new TestingFlinkService();
     private EventRecorder eventRecorder;
     private SessionJobReconciler reconciler;
-    private StatusRecorder<FlinkSessionJobStatus> statusRecoder;
+    private StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecoder;
 
     @BeforeEach
     public void before() {
