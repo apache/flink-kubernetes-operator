@@ -55,7 +55,7 @@ public abstract class AbstractJobReconciler<
             KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<STATUS> statusRecorder) {
+            StatusRecorder<CR, STATUS> statusRecorder) {
         super(kubernetesClient, configManager, eventRecorder, statusRecorder);
     }
 

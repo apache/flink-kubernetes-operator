@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.metrics.CustomResourceMetrics;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
@@ -53,7 +54,8 @@ import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLif
  *
  * @param <CR> Flink resource type.
  */
-public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>> {
+public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
+        implements CustomResourceMetrics<CR> {
 
     private static final String TRANSITION_RESUME = "Resume";
     private static final String TRANSITION_UPGRADE = "Upgrade";
@@ -79,11 +81,9 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>> {
     private Function<MetricGroup, MetricGroup> metricGroupFunction;
 
     public LifecycleMetrics(
-            FlinkConfigManager configManager,
-            Clock clock,
-            KubernetesOperatorMetricGroup operatorMetricGroup) {
+            FlinkConfigManager configManager, KubernetesOperatorMetricGroup operatorMetricGroup) {
         this.configManager = configManager;
-        this.clock = clock;
+        this.clock = Clock.systemDefaultZone();
         this.operatorMetricGroup = operatorMetricGroup;
         this.namespaceHistosEnabled =
                 configManager
@@ -93,10 +93,12 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>> {
                                         .OPERATOR_LIFECYCLE_NAMESPACE_HISTOGRAMS_ENABLED);
     }
 
+    @Override
     public void onUpdate(CR cr) {
         getLifecycleMetricTracker(cr).onUpdate(cr.getStatus().getLifecycleState(), clock.instant());
     }
 
+    @Override
     public void onRemove(CR cr) {
         lifecycleTrackers.remove(
                 Tuple2.of(cr.getMetadata().getNamespace(), cr.getMetadata().getName()));

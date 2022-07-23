@@ -60,7 +60,7 @@ public class SessionReconciler
             FlinkService flinkService,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkDeploymentStatus> statusRecorder) {
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder) {
         super(kubernetesClient, configManager, eventRecorder, statusRecorder);
         this.flinkService = flinkService;
     }

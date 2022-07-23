@@ -17,12 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.metrics;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.metrics.MetricGroup;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,40 +28,68 @@ import java.util.concurrent.ConcurrentHashMap;
 /** FlinkDeployment metrics. */
 public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeployment> {
 
-    private final Map<JobManagerDeploymentStatus, Set<String>> statuses = new HashMap<>();
-    public static final String FLINK_DEPLOYMENT_GROUP_NAME = "FlinkDeployment";
-    public static final String JM_DEPLOYMENT_STATUS_GROUP_NAME = "JmDeploymentStatus";
+    private final KubernetesOperatorMetricGroup parentMetricGroup;
+    private final Configuration configuration;
+    private final Map<String, Map<JobManagerDeploymentStatus, Set<String>>> deployments =
+            new ConcurrentHashMap<>();
+    public static final String DEPLOYMENT_GROUP_NAME = FlinkDeployment.class.getSimpleName();
+    public static final String STATUS_GROUP_NAME = "JmDeploymentStatus";
     public static final String COUNTER_NAME = "Count";
 
-    public FlinkDeploymentMetrics(MetricGroup parentMetricGroup) {
-        MetricGroup flinkDeploymentMetrics =
-                parentMetricGroup.addGroup(FLINK_DEPLOYMENT_GROUP_NAME);
-        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
-            statuses.put(status, ConcurrentHashMap.newKeySet());
-        }
-        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
-            statuses.put(status, new HashSet<>());
-            MetricGroup metricGroup =
-                    flinkDeploymentMetrics
-                            .addGroup(JM_DEPLOYMENT_STATUS_GROUP_NAME)
-                            .addGroup(status.toString());
-            metricGroup.gauge(COUNTER_NAME, () -> statuses.get(status).size());
-        }
-        flinkDeploymentMetrics.gauge(
-                COUNTER_NAME, () -> statuses.values().stream().mapToInt(Set::size).sum());
+    public FlinkDeploymentMetrics(
+            KubernetesOperatorMetricGroup parentMetricGroup, Configuration configuration) {
+        this.parentMetricGroup = parentMetricGroup;
+        this.configuration = configuration;
     }
 
     public void onUpdate(FlinkDeployment flinkApp) {
         onRemove(flinkApp);
-        statuses.get(flinkApp.getStatus().getJobManagerDeploymentStatus())
+        deployments
+                .computeIfAbsent(
+                        flinkApp.getMetadata().getNamespace(),
+                        ns -> {
+                            initNamespaceDeploymentCounts(ns);
+                            initNamespaceStatusCounts(ns);
+                            return createDeploymentStatusMap();
+                        })
+                .get(flinkApp.getStatus().getJobManagerDeploymentStatus())
                 .add(flinkApp.getMetadata().getName());
     }
 
     public void onRemove(FlinkDeployment flinkApp) {
-        statuses.values()
-                .forEach(
-                        deployments -> {
-                            deployments.remove(flinkApp.getMetadata().getName());
-                        });
+        if (!deployments.containsKey(flinkApp.getMetadata().getNamespace())) {
+            return;
+        }
+        deployments
+                .get(flinkApp.getMetadata().getNamespace())
+                .values()
+                .forEach(names -> names.remove(flinkApp.getMetadata().getName()));
+    }
+
+    private void initNamespaceDeploymentCounts(String ns) {
+        parentMetricGroup
+                .createResourceNamespaceGroup(configuration, ns)
+                .addGroup(DEPLOYMENT_GROUP_NAME)
+                .gauge(
+                        COUNTER_NAME,
+                        () -> deployments.get(ns).values().stream().mapToInt(Set::size).sum());
+    }
+
+    private void initNamespaceStatusCounts(String ns) {
+        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
+            parentMetricGroup
+                    .createResourceNamespaceGroup(configuration, ns)
+                    .addGroup(STATUS_GROUP_NAME)
+                    .addGroup(status.toString())
+                    .gauge(COUNTER_NAME, () -> deployments.get(ns).get(status).size());
+        }
+    }
+
+    private Map<JobManagerDeploymentStatus, Set<String>> createDeploymentStatusMap() {
+        Map<JobManagerDeploymentStatus, Set<String>> statuses = new ConcurrentHashMap<>();
+        for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
+            statuses.put(status, ConcurrentHashMap.newKeySet());
+        }
+        return statuses;
     }
 }

@@ -63,7 +63,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
     protected final FlinkConfigManager configManager;
     protected final EventRecorder eventRecorder;
-    protected final StatusRecorder<STATUS> statusRecorder;
+    protected final StatusRecorder<CR, STATUS> statusRecorder;
     protected final KubernetesClient kubernetesClient;
 
     public static final String MSG_SUSPENDED = "Suspending existing deployment.";
@@ -75,7 +75,7 @@ public abstract class AbstractFlinkResourceReconciler<
             KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<STATUS> statusRecorder) {
+            StatusRecorder<CR, STATUS> statusRecorder) {
         this.kubernetesClient = kubernetesClient;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;

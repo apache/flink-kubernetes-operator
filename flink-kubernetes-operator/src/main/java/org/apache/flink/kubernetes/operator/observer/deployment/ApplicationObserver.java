@@ -38,13 +38,13 @@ import java.util.Optional;
 /** The observer of {@link org.apache.flink.kubernetes.operator.config.Mode#APPLICATION} cluster. */
 public class ApplicationObserver extends AbstractDeploymentObserver {
 
-    private final SavepointObserver<FlinkDeploymentStatus> savepointObserver;
+    private final SavepointObserver<FlinkDeployment, FlinkDeploymentStatus> savepointObserver;
     private final JobStatusObserver<ApplicationObserverContext> jobStatusObserver;
 
     public ApplicationObserver(
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            StatusRecorder<FlinkDeploymentStatus> statusRecorder,
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
             EventRecorder eventRecorder) {
         super(flinkService, configManager, eventRecorder);
         this.savepointObserver =

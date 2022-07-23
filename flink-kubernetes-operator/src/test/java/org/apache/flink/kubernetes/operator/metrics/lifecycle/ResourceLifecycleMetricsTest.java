@@ -21,10 +21,14 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.metrics.CustomResourceMetrics;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.metrics.Histogram;
@@ -151,8 +155,10 @@ public class ResourceLifecycleMetricsTest {
         dep3.getMetadata().setName("n3");
 
         var conf = new Configuration();
-        var metricManager = TestUtils.createTestMetricManager(conf);
-        var lifeCycleMetrics = metricManager.getLifeCycleMetrics();
+        var metricManager =
+                MetricManager.createFlinkDeploymentMetricManager(
+                        new FlinkConfigManager(conf), TestUtils.createTestMetricGroup(conf));
+        var lifeCycleMetrics = getLifeCycleMetrics(metricManager);
 
         metricManager.onUpdate(dep1);
         metricManager.onUpdate(dep2);
@@ -184,8 +190,10 @@ public class ResourceLifecycleMetricsTest {
         conf.set(
                 KubernetesOperatorMetricOptions.OPERATOR_LIFECYCLE_NAMESPACE_HISTOGRAMS_ENABLED,
                 false);
-        metricManager = TestUtils.createTestMetricManager(conf);
-        lifeCycleMetrics = metricManager.getLifeCycleMetrics();
+        metricManager =
+                MetricManager.createFlinkDeploymentMetricManager(
+                        new FlinkConfigManager(conf), TestUtils.createTestMetricGroup(conf));
+        lifeCycleMetrics = getLifeCycleMetrics(metricManager);
 
         metricManager.onUpdate(dep1);
         metricManager.onUpdate(dep2);
@@ -200,25 +208,32 @@ public class ResourceLifecycleMetricsTest {
                 trackers.get(Tuple2.of("ns2", "n3")).getTransitionHistos());
         trackers.get(Tuple2.of("ns1", "n1"))
                 .getStateTimeHistos()
-                .forEach(
-                        (k, l) -> {
-                            assertEquals(1, l.size());
-                        });
+                .forEach((k, l) -> assertEquals(1, l.size()));
 
         trackers.get(Tuple2.of("ns1", "n1"))
                 .getTransitionHistos()
-                .forEach(
-                        (k, l) -> {
-                            assertEquals(1, l.size());
-                        });
+                .forEach((k, l) -> assertEquals(1, l.size()));
 
         conf.set(KubernetesOperatorMetricOptions.OPERATOR_LIFECYCLE_METRICS_ENABLED, false);
-        metricManager = TestUtils.createTestMetricManager(conf);
-        assertNull(metricManager.getLifeCycleMetrics());
+        metricManager =
+                MetricManager.createFlinkDeploymentMetricManager(
+                        new FlinkConfigManager(conf), TestUtils.createTestMetricGroup(conf));
+        assertNull(getLifeCycleMetrics(metricManager));
 
         metricManager.onUpdate(dep1);
         metricManager.onUpdate(dep2);
         metricManager.onUpdate(dep3);
+    }
+
+    public static LifecycleMetrics<FlinkDeployment> getLifeCycleMetrics(
+            MetricManager<FlinkDeployment> metricManager) {
+        for (CustomResourceMetrics<FlinkDeployment> metrics :
+                metricManager.getRegisteredMetrics()) {
+            if (metrics instanceof LifecycleMetrics) {
+                return (LifecycleMetrics<FlinkDeployment>) metrics;
+            }
+        }
+        return null;
     }
 
     private void validateTransition(

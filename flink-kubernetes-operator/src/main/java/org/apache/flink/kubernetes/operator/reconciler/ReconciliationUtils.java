@@ -399,7 +399,7 @@ public class ReconciliationUtils {
                     R resource,
                     Optional<RetryInfo> retryInfo,
                     Exception e,
-                    StatusRecorder<STATUS> statusRecorder) {
+                    StatusRecorder<R, STATUS> statusRecorder) {
 
         retryInfo.ifPresent(
                 r -> {

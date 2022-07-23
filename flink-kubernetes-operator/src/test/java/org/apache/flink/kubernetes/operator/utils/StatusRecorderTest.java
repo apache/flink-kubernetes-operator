@@ -17,10 +17,11 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -39,10 +40,8 @@ public class StatusRecorderTest {
     @Test
     public void testPatchOnlyWhenChanged() throws InterruptedException {
         var helper =
-                new StatusRecorder<FlinkDeploymentStatus>(
-                        kubernetesClient,
-                        TestUtils.createTestMetricManager(new Configuration()),
-                        (e, s) -> {});
+                new StatusRecorder<FlinkDeployment, FlinkDeploymentStatus>(
+                        kubernetesClient, new MetricManager<>(), (e, s) -> {});
         var deployment = TestUtils.buildApplicationCluster();
         kubernetesClient.resource(deployment).createOrReplace();
         var lastRequest = mockServer.getLastRequest();

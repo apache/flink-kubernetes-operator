@@ -43,6 +43,13 @@ public class KubernetesOperatorMetricOptions {
                     .withDescription(
                             "Enable KubernetesClient metrics for measuring the HTTP traffic to the Kubernetes API Server.");
 
+    public static final ConfigOption<Boolean> OPERATOR_RESOURCE_METRICS_ENABLED =
+            ConfigOptions.key("kubernetes.operator.resource.metrics.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Enables metrics for FlinkDeployment and FlinkSessionJob custom resources.");
+
     public static final ConfigOption<Boolean> OPERATOR_LIFECYCLE_METRICS_ENABLED =
             ConfigOptions.key("kubernetes.operator.resource.lifecycle.metrics.enabled")
                     .booleanType()

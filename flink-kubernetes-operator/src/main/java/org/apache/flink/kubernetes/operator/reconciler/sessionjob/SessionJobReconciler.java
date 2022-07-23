@@ -53,7 +53,7 @@ public class SessionJobReconciler
             FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkSessionJobStatus> statusRecorder) {
+            StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder) {
         super(kubernetesClient, configManager, eventRecorder, statusRecorder);
         this.flinkServiceFactory = flinkServiceFactory;
     }

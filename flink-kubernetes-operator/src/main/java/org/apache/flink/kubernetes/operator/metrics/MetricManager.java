@@ -24,67 +24,81 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.metrics.lifecycle.LifecycleMetrics;
 
-import java.time.Clock;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Metric manager for Operator managed custom resources. */
 public class MetricManager<CR extends AbstractFlinkResource<?, ?>> {
-    private final KubernetesOperatorMetricGroup opMetricGroup;
-    private final FlinkConfigManager configManager;
-    private final Map<String, CustomResourceMetrics> metrics = new ConcurrentHashMap<>();
-
-    private final LifecycleMetrics<CR> lifeCycleMetrics;
-
-    public MetricManager(
-            KubernetesOperatorMetricGroup opMetricGroup, FlinkConfigManager configManager) {
-        this.opMetricGroup = opMetricGroup;
-        this.configManager = configManager;
-
-        if (configManager
-                .getDefaultConfig()
-                .get(KubernetesOperatorMetricOptions.OPERATOR_LIFECYCLE_METRICS_ENABLED)) {
-            this.lifeCycleMetrics =
-                    new LifecycleMetrics<>(configManager, Clock.systemDefaultZone(), opMetricGroup);
-        } else {
-            this.lifeCycleMetrics = null;
-        }
-    }
+    private final List<CustomResourceMetrics<CR>> registeredMetrics = new ArrayList<>();
 
     public void onUpdate(CR cr) {
-        getCustomResourceMetrics(cr).onUpdate(cr);
-        if (lifeCycleMetrics != null) {
-            lifeCycleMetrics.onUpdate(cr);
-        }
+        registeredMetrics.forEach(m -> m.onUpdate(cr));
     }
 
     public void onRemove(CR cr) {
-        getCustomResourceMetrics(cr).onRemove(cr);
-        if (lifeCycleMetrics != null) {
-            lifeCycleMetrics.onRemove(cr);
+        registeredMetrics.forEach(m -> m.onRemove(cr));
+    }
+
+    public void register(CustomResourceMetrics<CR> metrics) {
+        registeredMetrics.add(metrics);
+    }
+
+    public static MetricManager<FlinkDeployment> createFlinkDeploymentMetricManager(
+            FlinkConfigManager configManager, KubernetesOperatorMetricGroup metricGroup) {
+        MetricManager<FlinkDeployment> metricManager = new MetricManager<>();
+        registerFlinkDeploymentMetrics(configManager, metricGroup, metricManager);
+        registerLifecycleMetrics(configManager, metricGroup, metricManager);
+        return metricManager;
+    }
+
+    public static MetricManager<FlinkSessionJob> createFlinkSessionJobMetricManager(
+            FlinkConfigManager configManager, KubernetesOperatorMetricGroup metricGroup) {
+        MetricManager<FlinkSessionJob> metricManager = new MetricManager<>();
+        registerFlinkSessionJobMetrics(configManager, metricGroup, metricManager);
+        registerLifecycleMetrics(configManager, metricGroup, metricManager);
+        return metricManager;
+    }
+
+    private static void registerFlinkDeploymentMetrics(
+            FlinkConfigManager configManager,
+            KubernetesOperatorMetricGroup metricGroup,
+            MetricManager<FlinkDeployment> metricManager) {
+        if (configManager
+                .getDefaultConfig()
+                .get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)) {
+            metricManager.register(
+                    new FlinkDeploymentMetrics(metricGroup, configManager.getDefaultConfig()));
         }
     }
 
-    private CustomResourceMetrics getCustomResourceMetrics(CR cr) {
-        return metrics.computeIfAbsent(
-                cr.getMetadata().getNamespace(), k -> getCustomResourceMetricsImpl(cr));
+    private static void registerFlinkSessionJobMetrics(
+            FlinkConfigManager configManager,
+            KubernetesOperatorMetricGroup metricGroup,
+            MetricManager<FlinkSessionJob> metricManager) {
+        if (configManager
+                .getDefaultConfig()
+                .get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)) {
+            metricManager.register(
+                    new FlinkSessionJobMetrics(metricGroup, configManager.getDefaultConfig()));
+        }
     }
 
-    private CustomResourceMetrics getCustomResourceMetricsImpl(CR cr) {
-        var namespaceMg =
-                opMetricGroup.createResourceNamespaceGroup(
-                        configManager.getDefaultConfig(), cr.getMetadata().getNamespace());
-        if (cr instanceof FlinkDeployment) {
-            return new FlinkDeploymentMetrics(namespaceMg);
-        } else if (cr instanceof FlinkSessionJob) {
-            return new FlinkSessionJobMetrics(namespaceMg);
-        } else {
-            throw new IllegalArgumentException("Unknown CustomResource");
+    private static <CR extends AbstractFlinkResource<?, ?>> void registerLifecycleMetrics(
+            FlinkConfigManager configManager,
+            KubernetesOperatorMetricGroup metricGroup,
+            MetricManager<CR> metricManager) {
+        if (configManager
+                        .getDefaultConfig()
+                        .get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)
+                && configManager
+                        .getDefaultConfig()
+                        .get(KubernetesOperatorMetricOptions.OPERATOR_LIFECYCLE_METRICS_ENABLED)) {
+            metricManager.register(new LifecycleMetrics<>(configManager, metricGroup));
         }
     }
 
     @VisibleForTesting
-    public LifecycleMetrics<CR> getLifeCycleMetrics() {
-        return lifeCycleMetrics;
+    public List<CustomResourceMetrics<CR>> getRegisteredMetrics() {
+        return registeredMetrics;
     }
 }

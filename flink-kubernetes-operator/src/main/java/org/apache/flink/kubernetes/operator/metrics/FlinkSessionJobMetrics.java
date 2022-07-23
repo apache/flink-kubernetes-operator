@@ -17,28 +17,53 @@
 
 package org.apache.flink.kubernetes.operator.metrics;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
-import org.apache.flink.metrics.MetricGroup;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** FlinkSessionJob metrics. */
 public class FlinkSessionJobMetrics implements CustomResourceMetrics<FlinkSessionJob> {
 
-    private final Set<String> sessionJobs = ConcurrentHashMap.newKeySet();
-    public static final String METRIC_GROUP_NAME = "FlinkSessionJob";
+    private final KubernetesOperatorMetricGroup parentMetricGroup;
+    private final Configuration configuration;
+    private final Map<String, Set<String>> sessionJobs = new ConcurrentHashMap<>();
+    public static final String METRIC_GROUP_NAME = FlinkSessionJob.class.getSimpleName();
+    public static final String COUNTER_NAME = "Count";
 
-    public FlinkSessionJobMetrics(MetricGroup parentMetricGroup) {
-        MetricGroup flinkSessionJobMetrics = parentMetricGroup.addGroup(METRIC_GROUP_NAME);
-        flinkSessionJobMetrics.gauge("Count", () -> sessionJobs.size());
+    public FlinkSessionJobMetrics(
+            KubernetesOperatorMetricGroup parentMetricGroup, Configuration configuration) {
+        this.parentMetricGroup = parentMetricGroup;
+        this.configuration = configuration;
     }
 
     public void onUpdate(FlinkSessionJob sessionJob) {
-        sessionJobs.add(sessionJob.getMetadata().getName());
+        onRemove(sessionJob);
+        sessionJobs
+                .computeIfAbsent(
+                        sessionJob.getMetadata().getNamespace(),
+                        ns -> {
+                            initNamespaceSessionJobCounts(ns);
+                            return ConcurrentHashMap.newKeySet();
+                        })
+                .add(sessionJob.getMetadata().getName());
     }
 
     public void onRemove(FlinkSessionJob sessionJob) {
-        sessionJobs.remove(sessionJob.getMetadata().getName());
+        if (!sessionJobs.containsKey(sessionJob.getMetadata().getNamespace())) {
+            return;
+        }
+        sessionJobs
+                .get(sessionJob.getMetadata().getNamespace())
+                .remove(sessionJob.getMetadata().getName());
+    }
+
+    private void initNamespaceSessionJobCounts(String ns) {
+        parentMetricGroup
+                .createResourceNamespaceGroup(configuration, ns)
+                .addGroup(METRIC_GROUP_NAME)
+                .gauge(COUNTER_NAME, () -> sessionJobs.get(ns).size());
     }
 }

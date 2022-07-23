@@ -42,19 +42,20 @@ import java.util.Iterator;
 import java.util.List;
 
 /** An observer of savepoint progress. */
-public class SavepointObserver<STATUS extends CommonStatus<?>> {
+public class SavepointObserver<
+        CR extends AbstractFlinkResource<?, STATUS>, STATUS extends CommonStatus<?>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SavepointObserver.class);
 
     private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
-    private final StatusRecorder<STATUS> statusRecorder;
+    private final StatusRecorder<CR, STATUS> statusRecorder;
     private final EventRecorder eventRecorder;
 
     public SavepointObserver(
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            StatusRecorder<STATUS> statusRecorder,
+            StatusRecorder<CR, STATUS> statusRecorder,
             EventRecorder eventRecorder) {
         this.flinkService = flinkService;
         this.configManager = configManager;

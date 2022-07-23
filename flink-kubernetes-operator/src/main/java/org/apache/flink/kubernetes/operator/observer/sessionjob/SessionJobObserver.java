@@ -56,12 +56,12 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
     private final FlinkServiceFactory flinkServiceFactory;
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
-    private final StatusRecorder<FlinkSessionJobStatus> statusRecorder;
+    private final StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder;
 
     public SessionJobObserver(
             FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
-            StatusRecorder<FlinkSessionJobStatus> statusRecorder,
+            StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder,
             EventRecorder eventRecorder) {
         this.flinkServiceFactory = flinkServiceFactory;
         this.configManager = configManager;

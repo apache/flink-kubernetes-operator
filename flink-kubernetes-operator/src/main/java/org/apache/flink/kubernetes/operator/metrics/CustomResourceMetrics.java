@@ -20,7 +20,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 import io.fabric8.kubernetes.client.CustomResource;
 
 /** Custom resource metric type. */
-public interface CustomResourceMetrics<CR extends CustomResource> {
+public interface CustomResourceMetrics<CR extends CustomResource<?, ?>> {
     void onUpdate(CR customResource);
 
     void onRemove(CR customResource);

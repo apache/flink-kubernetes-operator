@@ -18,22 +18,24 @@
 
 package org.apache.flink.kubernetes.operator;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /** Testing statusRecorder. */
-public class TestingStatusRecorder<STATUS extends CommonStatus<?>> extends StatusRecorder<STATUS> {
+public class TestingStatusRecorder<
+                CR extends AbstractFlinkResource<?, STATUS>, STATUS extends CommonStatus<?>>
+        extends StatusRecorder<CR, STATUS> {
 
     public TestingStatusRecorder() {
-        super(null, TestUtils.createTestMetricManager(new Configuration()), (r, s) -> {});
+        super(null, new MetricManager<>(), (r, s) -> {});
     }
 
     @Override
-    public <T extends AbstractFlinkResource<?, STATUS>> void patchAndCacheStatus(T resource) {
+    public void patchAndCacheStatus(CR resource) {
         statusCache.put(
                 getKey(resource),
                 objectMapper.convertValue(resource.getStatus(), ObjectNode.class));

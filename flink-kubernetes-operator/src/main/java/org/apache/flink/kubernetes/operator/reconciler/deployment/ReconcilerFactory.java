@@ -40,7 +40,7 @@ public class ReconcilerFactory {
     private final FlinkServiceFactory flinkServiceFactory;
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
-    private final StatusRecorder<FlinkDeploymentStatus> deploymentStatusRecorder;
+    private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder;
     private final Map<Tuple2<Mode, KubernetesDeploymentMode>, Reconciler<FlinkDeployment>>
             reconcilerMap;
 
@@ -49,7 +49,7 @@ public class ReconcilerFactory {
             FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkDeploymentStatus> deploymentStatusRecorder) {
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder) {
         this.kubernetesClient = kubernetesClient;
         this.flinkServiceFactory = flinkServiceFactory;
         this.configManager = configManager;

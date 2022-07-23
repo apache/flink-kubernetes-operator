@@ -17,13 +17,13 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingFlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
@@ -73,10 +73,7 @@ public class TestingFlinkDeploymentController
 
         eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
         statusRecorder =
-                new StatusRecorder<>(
-                        kubernetesClient,
-                        TestUtils.createTestMetricManager(configManager.getDefaultConfig()),
-                        statusUpdateCounter);
+                new StatusRecorder<>(kubernetesClient, new MetricManager<>(), statusUpdateCounter);
         flinkDeploymentController =
                 new FlinkDeploymentController(
                         configManager,
