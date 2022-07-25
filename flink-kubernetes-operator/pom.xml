@@ -292,6 +292,12 @@ under the License.
                             <version>${flink.version}</version>
                             <outputDirectory>${plugins.tmp.dir}/flink-metrics-statsd</outputDirectory>
                         </artifactItem>
+                        <artifactItem>
+                            <groupId>org.apache.flink</groupId>
+                            <artifactId>flink-metrics-jmx</artifactId>
+                            <version>${flink.version}</version>
+                            <outputDirectory>${plugins.tmp.dir}/flink-metrics-jmx</outputDirectory>
+                        </artifactItem>
                     </artifactItems>
                 </configuration>
             </plugin>
