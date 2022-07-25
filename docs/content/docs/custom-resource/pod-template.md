@@ -100,6 +100,71 @@ spec:
     parallelism: 2
 ```
 
+package remotely(artifact-fetcher), which can avoid you repeating the packaging image every time" -> "package remotely to avoid repeating the image packaging on each iteration.
+```yaml
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  namespace: default
+  name: top-speed-windowing
+spec:
+  image: flink:1.15
+  flinkVersion: v1_15
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+  serviceAccount: flink
+  podTemplate:
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: flink-pod-template-artifact-fetcher
+    spec:
+      containers:
+        # Do not change the main container name
+        - name: flink-main-container
+          volumeMounts:
+            - mountPath: /flink-examples-streaming
+              name: flink-examples-streaming
+      initContainers:
+        # Sample sidecar container
+        - name: busybox
+          image: busybox:latest
+          command: [ "/bin/sh","-c" ]
+          args:
+            - wget -P /tmp https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.1/flink-examples-streaming_2.12-1.15.1-TopSpeedWindowing.jar;
+              echo finish get user jar;
+              cp /tmp/flink-examples-streaming_2.12-1.15.1-TopSpeedWindowing.jar /flink-examples-streaming/flink-examples-streaming_2.12-1.15.1-TopSpeedWindowing.jar;
+              echo finish copy to lib;
+          volumeMounts:
+            - mountPath: /flink-examples-streaming
+              name: flink-examples-streaming
+      volumes:
+        - name: flink-examples-streaming
+          emptyDir: { }
+  jobManager:
+    replicas: 1
+    resource:
+      memory: "1g"
+      cpu: 1
+    podTemplate:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: job-manager-pod-template
+      spec:
+        volumes:
+          - name: flink-examples-streaming
+            emptyDir: { }
+  taskManager:
+    resource:
+      memory: "1g"
+      cpu: 1
+  job:
+    jarURI: local:///flink-examples-streaming/flink-examples-streaming_2.12-1.15.1-TopSpeedWindowing.jar
+    parallelism: 1
+    upgradeMode: stateless
+```
+
 {{< hint info >}}
 When using the operator with Flink native Kubernetes integration, please refer to [pod template field precedence](
 https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/resource-providers/native_kubernetes/#fields-overwritten-by-flink).
