@@ -26,15 +26,10 @@ For the complete feature-set please refer to our [documentation](https://nightli
 
 ### Current API version: `v1beta1`
 
+To download the latest stable version please visit the [Flink Downloads Page](https://flink.apache.org/downloads.html).
+The official operator images are also available on [Dockerhub](https://hub.docker.com/r/apache/flink-kubernetes-operator/tags).
+
 Please check out our docs to read about the [upgrade process](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/upgrade/) and our [backward compatibility guarantees](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/operations/compatibility/).
-
-## Version Matrix
-
-| Operator Version     | API Version | Flink Compatibility | Operator Image                           |
-|----------------------|-------------|---------------------|------------------------------------------|
-| `latest` (main HEAD) | `v1beta1`   | 1.13, 1.14, 1.15    |                                          |
-| `release-1.0.1`      | `v1beta1`   | 1.13, 1.14, 1.15    | `apache/flink-kubernetes-operator:1.0.1` |
-| `release-0.1.0`      | `v1alpha1`  | 1.14                | `apache/flink-kubernetes-operator:0.1.0` |
 
 ## Support
 
