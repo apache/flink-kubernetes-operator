@@ -68,6 +68,51 @@ app.kubernetes.io/name: {{ include "flink-operator.name" . }}
 {{- end }}
 
 {{/*
+Create the name of the operator role to use
+*/}}
+{{- define "flink-operator.roleName" -}}
+{{- if .Values.rbac.operatorRole.create }}
+{{- default (include "flink-operator.fullname" .) .Values.rbac.operatorRole.name }}
+{{- else }}
+{{- default "default" .Values.rbac.operatorRole.name }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create the name of the operator role binding to use
+*/}}
+{{- define "flink-operator.roleBindingName" -}}
+{{- if .Values.rbac.operatorRoleBinding.create }}
+{{- default (include "flink-operator.fullname" .) .Values.rbac.operatorRoleBinding.name }}
+{{- else }}
+{{- default "default" .Values.rbac.operatorRoleBinding.name }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create the name of the job role to use
+*/}}
+{{- define "flink-operator.jobRoleName" -}}
+{{- if .Values.rbac.jobRoleBinding.create }}
+{{- default (include "flink-operator.fullname" .) .Values.rbac.jobRole.name }}
+{{- else }}
+{{- default "default" .Values.rbac.jobRole.name }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create the name of the job role to use
+*/}}
+{{- define "flink-operator.jobRoleBindingName" -}}
+{{- if .Values.rbac.jobRole.create }}
+{{- default (include "flink-operator.fullname" .) .Values.rbac.jobRoleBinding.name }}
+{{- else }}
+{{- default "default" .Values.rbac.jobRoleBinding.name }}
+{{- end }}
+{{- end }}
+
+
+{{/*
 Create the name of the operator service account to use
 */}}
 {{- define "flink-operator.serviceAccountName" -}}
