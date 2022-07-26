@@ -100,46 +100,53 @@ Namespaced scoped RBAC.
 */}}
 {{- if .Values.watchNamespaces }}
 {{- range .Values.watchNamespaces }}
+{{- if $.Values.rbac.operatorRole.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: flink-operator
+  name: {{ include "flink-operator.roleName" $ }}
   namespace: {{ . }}
   labels:
     {{- include "flink-operator.labels" $ | nindent 4 }}
 {{- template "flink-operator.rbacRules" $ }}
+{{- end }}
 ---
+{{- if $.Values.rbac.jobRole.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: flink
+  name: {{ include "flink-operator.jobRoleName" $ }}
   namespace: {{ . }}
   labels:
     {{- include "flink-operator.labels" $ | nindent 4 }}
   annotations:
     "helm.sh/resource-policy": keep
 {{- template "flink-operator.jobRbacRules" $ }}
+{{- end }}
 ---
+{{- if $.Values.rbac.operatorRoleBinding.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: flink-operator-role-binding
+  name: {{ include "flink-operator.roleBindingName" $ }}
   namespace: {{ . }}
   labels:
     {{- include "flink-operator.labels" $ | nindent 4 }}
 roleRef:
   kind: Role
-  name: flink-operator
+  name: {{ include "flink-operator.roleName" $ }}
   apiGroup: rbac.authorization.k8s.io
 subjects:
   - kind: ServiceAccount
     name: {{ include "flink-operator.serviceAccountName" $ }}
     namespace: {{ $.Release.Namespace }}
+{{- end }}
 ---
+{{- if $.Values.rbac.jobRoleBinding.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: flink-role-binding
+  name: {{ include "flink-operator.jobRoleBindingName" $ }}
   namespace: {{ . }}
   labels:
     {{- include "flink-operator.labels" $ | nindent 4 }}
@@ -147,12 +154,13 @@ metadata:
     "helm.sh/resource-policy": keep
 roleRef:
   kind: Role
-  name: flink
+  name: {{ include "flink-operator.jobRoleName" $ }}
   apiGroup: rbac.authorization.k8s.io
 subjects:
   - kind: ServiceAccount
     name: {{ include "flink-operator.jobServiceAccountName" $ }}
     namespace: {{ . }}
+{{- end }}
 ---
 {{- end }}
 {{ else }}
@@ -160,46 +168,53 @@ subjects:
 Cluster scoped RBAC.
 */}}
 ---
+{{- if .Values.rbac.operatorRole.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: flink-operator
+  name: {{ include "flink-operator.roleName" $ }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
 {{- template "flink-operator.rbacRules" $ }}
+{{- end }}
 ---
+{{- if .Values.rbac.jobRole.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: flink
+  name: {{ include "flink-operator.jobRoleName" $ }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
   annotations:
     "helm.sh/resource-policy": keep
 {{- template "flink-operator.jobRbacRules" $ }}
+{{- end }}
 ---
+{{- if .Values.rbac.operatorRoleBinding.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: flink-operator-cluster-role-binding
+  name: {{ include "flink-operator.roleBindingName" $ }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
 roleRef:
   kind: ClusterRole
-  name: flink-operator
+  name: {{ include "flink-operator.roleName" $ }}
   apiGroup: rbac.authorization.k8s.io
 subjects:
   - kind: ServiceAccount
     name: {{ include "flink-operator.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
+{{- end }}
 ---
+{{- if .Values.rbac.jobRoleBinding.create }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: flink-role-binding
+  name: {{ include "flink-operator.jobRoleBindingName" $ }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
@@ -207,11 +222,12 @@ metadata:
     "helm.sh/resource-policy": keep
 roleRef:
   kind: Role
-  name: flink
+  name: {{ include "flink-operator.jobRoleName" $ }}
   apiGroup: rbac.authorization.k8s.io
 subjects:
   - kind: ServiceAccount
     name: {{ include "flink-operator.jobServiceAccountName" . }}
     namespace: {{ .Release.Namespace }}
+{{- end }}
 {{- end }}
 {{- end }}

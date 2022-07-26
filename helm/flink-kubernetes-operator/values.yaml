@@ -36,6 +36,18 @@ rbac:
   # Set create to true if you are using NodePort type.
   nodesRule:
     create: false
+  operatorRole:
+    create: true
+    name: "flink-operator"
+  operatorRoleBinding:
+    create: true
+    name: "flink-operator-role-binding"
+  jobRole:
+    create: true
+    name: "flink"
+  jobRoleBinding:
+    create: true
+    name: "flink-role-binding"
 
 operatorPod:
   annotations: {}
