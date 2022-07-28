@@ -93,4 +93,8 @@ public interface FlinkService {
     PodList getJmPodList(FlinkDeployment deployment, Configuration conf);
 
     void waitForClusterShutdown(Configuration conf);
+
+    default boolean scale(ObjectMeta meta, JobSpec jobSpec, Configuration conf) {
+        return false;
+    }
 }

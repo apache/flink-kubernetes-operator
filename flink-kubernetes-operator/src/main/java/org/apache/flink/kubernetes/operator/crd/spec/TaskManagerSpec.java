@@ -22,6 +22,7 @@ import org.apache.flink.annotation.Experimental;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.model.annotation.SpecReplicas;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -30,6 +31,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class TaskManagerSpec {
     /** Resource specification for the TaskManager pods. */
     private Resource resource;

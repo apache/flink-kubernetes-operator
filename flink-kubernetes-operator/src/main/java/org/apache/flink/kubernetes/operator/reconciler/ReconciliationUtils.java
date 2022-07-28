@@ -265,8 +265,8 @@ public class ReconciliationUtils {
      *
      * @param specWithMetaString JSON string.
      * @param specClass Spec class for deserialization.
-     * @return Tuple2 of spec and meta.
      * @param <T> Spec type.
+     * @return Tuple2 of spec and meta.
      */
     public static <T extends AbstractFlinkSpec>
             Tuple2<T, ReconciliationMetadata> deserializeSpecWithMeta(

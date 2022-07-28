@@ -15,29 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.spec;
+package org.apache.flink.kubernetes.operator.reconciler.diff;
 
 import org.apache.flink.annotation.Experimental;
 
-import io.fabric8.kubernetes.api.model.Pod;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-/** JobManager spec. */
+/**
+ * {@link Diffable} classes can be compared with other {@link Diffable} objects for differences.
+ *
+ * <p>Inspired by:
+ * https://github.com/apache/commons-lang/blob/master/src/main/java/org/apache/commons/lang3/builder/Diffable.java
+ */
 @Experimental
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class JobManagerSpec {
-    /** Resource specification for the JobManager pods. */
-    private Resource resource;
-
-    /** Number of JobManager replicas. Must be 1 for non-HA deployments. */
-    private int replicas = 1;
-
-    /** JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
-    private Pod podTemplate;
+@FunctionalInterface
+public interface Diffable<T> {
+    DiffResult<T> diff(T obj);
 }

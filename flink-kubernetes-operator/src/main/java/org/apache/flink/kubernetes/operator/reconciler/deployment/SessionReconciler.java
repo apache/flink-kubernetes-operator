@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.diff.DiffType;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
@@ -92,7 +93,8 @@ public class SessionReconciler
             FlinkDeployment deployment,
             Context<?> ctx,
             Configuration observeConfig,
-            Configuration deployConfig)
+            Configuration deployConfig,
+            DiffType type)
             throws Exception {
         deleteSessionCluster(deployment, observeConfig);
 

@@ -22,6 +22,7 @@ import org.apache.flink.client.deployment.ClusterDeploymentException;
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -33,6 +34,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.kubeclient.Fabric8FlinkStandaloneKubeClient;
 import org.apache.flink.kubernetes.operator.kubeclient.FlinkStandaloneKubeClient;
 import org.apache.flink.kubernetes.operator.standalone.KubernetesStandaloneClusterDescriptor;
+import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
@@ -179,5 +181,41 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                                     clusterId, LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
                     .delete();
         }
+    }
+
+    @Override
+    public boolean scale(ObjectMeta meta, JobSpec jobSpec, Configuration conf) {
+        if (conf.get(JobManagerOptions.SCHEDULER_MODE) == null) {
+            LOG.info("Reactive scaling is not enabled");
+            return false;
+        }
+
+        var clusterId = meta.getName();
+        var namespace = meta.getNamespace();
+        var name = StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId);
+        var deployment =
+                kubernetesClient.apps().deployments().inNamespace(namespace).withName(name);
+
+        if (deployment == null || deployment.get() == null) {
+            LOG.warn("TM Deployment ({}) not found", name);
+            return false;
+        }
+
+        var actualReplicas = deployment.get().getSpec().getReplicas();
+        var desiredReplicas =
+                conf.get(StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS);
+        if (actualReplicas != desiredReplicas) {
+            LOG.info(
+                    "Scaling TM replicas: actual({}) -> desired({})",
+                    actualReplicas,
+                    desiredReplicas);
+            deployment.scale(desiredReplicas);
+        } else {
+            LOG.info(
+                    "Not scaling TM replicas: actual({}) == desired({})",
+                    actualReplicas,
+                    desiredReplicas);
+        }
+        return true;
     }
 }

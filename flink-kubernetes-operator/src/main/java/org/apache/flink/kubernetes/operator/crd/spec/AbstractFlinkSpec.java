@@ -18,6 +18,11 @@
 package org.apache.flink.kubernetes.operator.crd.spec;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.reconciler.diff.DiffResult;
+import org.apache.flink.kubernetes.operator.reconciler.diff.DiffType;
+import org.apache.flink.kubernetes.operator.reconciler.diff.Diffable;
+import org.apache.flink.kubernetes.operator.reconciler.diff.ReflectiveDiffBuilder;
+import org.apache.flink.kubernetes.operator.reconciler.diff.SpecDiff;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -32,7 +37,7 @@ import java.util.Map;
 @AllArgsConstructor
 @NoArgsConstructor
 @SuperBuilder
-public abstract class AbstractFlinkSpec {
+public abstract class AbstractFlinkSpec implements Diffable<AbstractFlinkSpec> {
 
     /** Job specification for application deployments/session job. Null for session clusters. */
     private JobSpec job;
@@ -44,5 +49,15 @@ public abstract class AbstractFlinkSpec {
     private Long restartNonce;
 
     /** Flink configuration overrides for the Flink deployment or Flink session job. */
+    @SpecDiff.Config({
+        @SpecDiff.Entry(prefix = "parallelism.default", type = DiffType.IGNORE),
+        @SpecDiff.Entry(prefix = "kubernetes.operator", type = DiffType.IGNORE),
+        @SpecDiff.Entry(prefix = "metrics.scope.k8soperator", type = DiffType.IGNORE)
+    })
     private Map<String, String> flinkConfiguration;
+
+    @Override
+    public DiffResult<AbstractFlinkSpec> diff(AbstractFlinkSpec spec) {
+        return new ReflectiveDiffBuilder<>(this, spec).build();
+    }
 }

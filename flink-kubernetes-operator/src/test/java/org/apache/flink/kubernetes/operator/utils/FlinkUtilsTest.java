@@ -59,7 +59,7 @@ public class FlinkUtilsTest {
         Container container2 = new Container();
         container2.setName("container2");
 
-        Pod pod1 = TestUtils.getTestPod("pod1 hostname", "pod1 api version", List.of(container2));
+        Pod pod1 = TestUtils.getTestPod("pod1 hostname", "pod1 api version", List.of());
 
         Pod pod2 =
                 TestUtils.getTestPod(

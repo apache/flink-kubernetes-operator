@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -163,6 +164,9 @@ public class TestUtils {
                         .withUid(UUID.randomUUID().toString())
                         .withGeneration(1L)
                         .build());
+
+        Map<String, String> conf = new HashMap<>();
+        conf.put(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(), "header");
         sessionJob.setSpec(
                 FlinkSessionJobSpec.builder()
                         .deploymentName(TEST_DEPLOYMENT_NAME)
@@ -173,6 +177,7 @@ public class TestUtils {
                                         .upgradeMode(UpgradeMode.STATELESS)
                                         .state(JobState.RUNNING)
                                         .build())
+                        .flinkConfiguration(conf)
                         .build());
         return sessionJob;
     }

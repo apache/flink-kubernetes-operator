@@ -18,6 +18,11 @@
 package org.apache.flink.kubernetes.operator.crd.spec;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.reconciler.diff.DiffResult;
+import org.apache.flink.kubernetes.operator.reconciler.diff.DiffType;
+import org.apache.flink.kubernetes.operator.reconciler.diff.Diffable;
+import org.apache.flink.kubernetes.operator.reconciler.diff.ReflectiveDiffBuilder;
+import org.apache.flink.kubernetes.operator.reconciler.diff.SpecDiff;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -31,7 +36,8 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class JobSpec {
+@EqualsAndHashCode
+public class JobSpec implements Diffable<JobSpec> {
 
     /**
      * URI of the job jar within the Flink docker container. For example: Example:
@@ -40,6 +46,7 @@ public class JobSpec {
     private String jarURI;
 
     /** Parallelism of the Flink job. */
+    @SpecDiff(DiffType.SCALE)
     private int parallelism;
 
     /** Fully qualified main class name of the Flink job. */
@@ -55,17 +62,26 @@ public class JobSpec {
      * Nonce used to manually trigger savepoint for the running job. In order to trigger a
      * savepoint, change the number to anything other than the current value.
      */
-    @EqualsAndHashCode.Exclude private Long savepointTriggerNonce;
+    @SpecDiff(DiffType.IGNORE)
+    private Long savepointTriggerNonce;
 
     /**
      * Savepoint path used by the job the first time it is deployed. Upgrades/redeployments will not
      * be affected.
      */
-    @EqualsAndHashCode.Exclude private String initialSavepointPath;
+    @SpecDiff(DiffType.IGNORE)
+    private String initialSavepointPath;
 
     /** Upgrade mode of the Flink job. */
-    @EqualsAndHashCode.Exclude private UpgradeMode upgradeMode = UpgradeMode.STATELESS;
+    @SpecDiff(DiffType.IGNORE)
+    private UpgradeMode upgradeMode = UpgradeMode.STATELESS;
 
     /** Allow checkpoint state that cannot be mapped to any job vertex in tasks. */
-    @EqualsAndHashCode.Exclude private Boolean allowNonRestoredState;
+    @SpecDiff(DiffType.IGNORE)
+    private Boolean allowNonRestoredState;
+
+    @Override
+    public DiffResult<JobSpec> diff(JobSpec spec) {
+        return new ReflectiveDiffBuilder<>(this, spec).build();
+    }
 }
