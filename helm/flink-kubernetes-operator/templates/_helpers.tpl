@@ -134,7 +134,18 @@ Create the name of the job service account to use
 {{- end }}
 {{- end }}
 
-{{- define "validating-webhook-enabled" -}}
+{{/*
+Determine role scope based on name
+*/}}
+{{- define "flink-operator.roleScope" -}}
+{{- if contains ":" .role  }}
+{{- printf "ClusterRole" }}
+{{- else }}
+{{- printf "Role" }}
+{{- end }}
+{{- end }}
+
+{{- define "flink-operator.validating-webhook-enabled" -}}
 {{- if hasKey .Values.webhook "validator" }}
 {{- if .Values.webhook.validator.create }}
 {{- printf "true" }}
@@ -150,7 +161,7 @@ Create the name of the job service account to use
 {{- end }}
 {{- end }}
 
-{{- define "mutating-webhook-enabled" -}}
+{{- define "flink-operator.mutating-webhook-enabled" -}}
 {{- if hasKey .Values.webhook "mutator" }}
 {{- if .Values.webhook.mutator.create }}
 {{- printf "true" }}
@@ -166,8 +177,8 @@ Create the name of the job service account to use
 {{- end }}
 {{- end }}
 
-{{- define "webhook-enabled" -}}
-{{- if or (eq (include "validating-webhook-enabled" .) "true") (eq (include "mutating-webhook-enabled" .) "true") }}
+{{- define "flink-operator.webhook-enabled" -}}
+{{- if or (eq (include "flink-operator.validating-webhook-enabled" .) "true") (eq (include "flink-operator.mutating-webhook-enabled" .) "true") }}
 {{- printf "true" }}
 {{- else }}
 {{- printf "false" }}

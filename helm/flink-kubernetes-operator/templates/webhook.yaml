@@ -16,7 +16,7 @@
 # limitations under the License.
 ################################################################################
 ---
-{{- if eq (include "webhook-enabled" .) "true" }}
+{{- if eq (include "flink-operator.webhook-enabled" .) "true" }}
 ---
 apiVersion: v1
 kind: Service
@@ -76,7 +76,7 @@ metadata:
 spec:
   selfSigned: {}
 {{- end }}
-{{- if eq (include "validating-webhook-enabled" .) "true" }}
+{{- if eq (include "flink-operator.validating-webhook-enabled" .) "true" }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -112,7 +112,7 @@ webhooks:
         values: [{{- range .Values.watchNamespaces }}{{ . | quote }},{{- end}}]
   {{- end }}
 {{- end }}
-{{- if eq (include "mutating-webhook-enabled" .) "true" }}
+{{- if eq (include "flink-operator.mutating-webhook-enabled" .) "true" }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
