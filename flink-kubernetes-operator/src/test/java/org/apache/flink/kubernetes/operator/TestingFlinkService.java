@@ -23,6 +23,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
+import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
@@ -40,6 +41,7 @@ import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
+import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -98,6 +100,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     private Consumer<Configuration> listJobConsumer = conf -> {};
     private List<String> disposedSavepoints = new ArrayList<>();
     private Map<String, Boolean> savepointTriggers = new HashMap<>();
+    private int desiredReplicas = 0;
 
     public TestingFlinkService() {
         super(null, new FlinkConfigManager(new Configuration()));
@@ -475,5 +478,19 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Override
     public Map<String, String> getClusterInfo(Configuration conf) {
         return CLUSTER_INFO;
+    }
+
+    @Override
+    public boolean scale(ObjectMeta meta, JobSpec jobSpec, Configuration conf) {
+        if (conf.get(JobManagerOptions.SCHEDULER_MODE) == null) {
+            return false;
+        }
+        desiredReplicas =
+                conf.get(StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS);
+        return true;
+    }
+
+    public int getDesiredReplicas() {
+        return desiredReplicas;
     }
 }

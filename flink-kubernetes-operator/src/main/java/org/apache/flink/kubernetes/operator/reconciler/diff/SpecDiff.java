@@ -15,29 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.spec;
+package org.apache.flink.kubernetes.operator.reconciler.diff;
 
 import org.apache.flink.annotation.Experimental;
 
-import io.fabric8.kubernetes.api.model.Pod;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-/** JobManager spec. */
+/** Spec diff annotation. */
 @Experimental
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class JobManagerSpec {
-    /** Resource specification for the JobManager pods. */
-    private Resource resource;
+@Target(ElementType.FIELD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface SpecDiff {
+    DiffType value() default DiffType.UPGRADE;
 
-    /** Number of JobManager replicas. Must be 1 for non-HA deployments. */
-    private int replicas = 1;
+    /** Spec diff config annotation. */
+    @Target(ElementType.FIELD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface Config {
+        Entry[] value();
+    }
 
-    /** JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
-    private Pod podTemplate;
+    /** Spec diff config annotation entry. */
+    @Target(ElementType.FIELD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @interface Entry {
+        String prefix();
+
+        DiffType type();
+    }
 }

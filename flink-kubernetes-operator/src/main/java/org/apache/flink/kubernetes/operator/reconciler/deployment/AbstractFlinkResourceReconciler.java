@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.diff.DiffType;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -67,7 +68,8 @@ public abstract class AbstractFlinkResourceReconciler<
     protected final KubernetesClient kubernetesClient;
 
     public static final String MSG_SUSPENDED = "Suspending existing deployment.";
-    public static final String MSG_SPEC_CHANGED = "Detected spec change, starting reconciliation.";
+    public static final String MSG_SPEC_CHANGED =
+            "%s change(s) detected (%s), starting reconciliation.";
     public static final String MSG_ROLLBACK = "Rolling back failed deployment.";
     public static final String MSG_SUBMIT = "Starting deployment";
 
@@ -122,25 +124,33 @@ public abstract class AbstractFlinkResourceReconciler<
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();
 
-        boolean specChanged =
-                reconciliationStatus.getState() == ReconciliationState.UPGRADING
-                        || !currentDeploySpec.equals(lastReconciledSpec);
-        var observeConfig = getObserveConfig(cr, ctx);
+        var specDiff = currentDeploySpec.diff(lastReconciledSpec);
+
         var flinkService = getFlinkService(cr, ctx);
+
+        boolean specChanged =
+                DiffType.IGNORE != specDiff.getType()
+                        || reconciliationStatus.getState() == ReconciliationState.UPGRADING;
+
+        var observeConfig = getObserveConfig(cr, ctx);
+
         if (specChanged) {
+
             if (checkNewSpecAlreadyDeployed(cr, deployConfig)) {
                 return;
             }
-            LOG.info(MSG_SPEC_CHANGED);
+
+            var specChangeMessage = String.format(MSG_SPEC_CHANGED, specDiff.getType(), specDiff);
+            LOG.info(specChangeMessage);
             if (reconciliationStatus.getState() != ReconciliationState.UPGRADING) {
                 eventRecorder.triggerEvent(
                         cr,
                         EventRecorder.Type.Normal,
                         EventRecorder.Reason.SpecChanged,
                         EventRecorder.Component.JobManagerDeployment,
-                        MSG_SPEC_CHANGED);
+                        specChangeMessage);
             }
-            reconcileSpecChange(cr, ctx, observeConfig, deployConfig);
+            reconcileSpecChange(cr, ctx, observeConfig, deployConfig, specDiff.getType());
         } else if (shouldRollBack(cr, observeConfig, flinkService)) {
             // Rollbacks are executed in two steps, we initiate it first then return
             if (initiateRollBack(status)) {
@@ -200,7 +210,11 @@ public abstract class AbstractFlinkResourceReconciler<
      * @throws Exception Error during spec upgrade.
      */
     protected abstract void reconcileSpecChange(
-            CR cr, Context<?> ctx, Configuration observeConfig, Configuration deployConfig)
+            CR cr,
+            Context<?> ctx,
+            Configuration observeConfig,
+            Configuration deployConfig,
+            DiffType diffType)
             throws Exception;
 
     /**

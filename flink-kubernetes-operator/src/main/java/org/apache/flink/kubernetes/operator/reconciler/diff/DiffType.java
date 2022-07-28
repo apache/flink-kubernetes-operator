@@ -15,29 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.spec;
+package org.apache.flink.kubernetes.operator.reconciler.diff;
 
 import org.apache.flink.annotation.Experimental;
 
-import io.fabric8.kubernetes.api.model.Pod;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-/** JobManager spec. */
+/** Spec change type. */
 @Experimental
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class JobManagerSpec {
-    /** Resource specification for the JobManager pods. */
-    private Resource resource;
+public enum DiffType {
 
-    /** Number of JobManager replicas. Must be 1 for non-HA deployments. */
-    private int replicas = 1;
+    /** Ignorable spec change. */
+    IGNORE,
+    /** Scalable spec change. */
+    SCALE,
+    /** Upgradable spec change. */
+    UPGRADE;
 
-    /** JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
-    private Pod podTemplate;
+    public static DiffType max(DiffType left, DiffType right) {
+        return (left.ordinal() >= right.ordinal()) ? left : right;
+    }
 }

@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.diff.DiffType;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -78,12 +79,31 @@ public abstract class AbstractJobReconciler<
 
     @Override
     protected void reconcileSpecChange(
-            CR resource, Context<?> ctx, Configuration observeConfig, Configuration deployConfig)
+            CR resource,
+            Context<?> ctx,
+            Configuration observeConfig,
+            Configuration deployConfig,
+            DiffType diffType)
             throws Exception {
+
         STATUS status = resource.getStatus();
         var reconciliationStatus = status.getReconciliationStatus();
         SPEC lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
         SPEC currentDeploySpec = resource.getSpec();
+
+        if (diffType == DiffType.SCALE) {
+            boolean scaled =
+                    getFlinkService(resource, ctx)
+                            .scale(
+                                    resource.getMetadata(),
+                                    resource.getSpec().getJob(),
+                                    deployConfig);
+            if (scaled) {
+                LOG.info("Reactive scaling succeeded");
+                ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig);
+                return;
+            }
+        }
 
         JobState currentJobState = lastReconciledSpec.getJob().getState();
         JobState desiredJobState = currentDeploySpec.getJob().getState();
