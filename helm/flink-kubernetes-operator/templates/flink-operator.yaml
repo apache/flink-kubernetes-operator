@@ -116,7 +116,7 @@ spec:
               path: /
               port: health-port
           {{- end }}
-        {{- if eq (include "webhook-enabled" .) "true" }}
+        {{- if eq (include "flink-operator.webhook-enabled" .) "true" }}
         - name: flink-webhook
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -179,7 +179,7 @@ spec:
         {{- if .Values.operatorVolumes.create }}
               {{- toYaml .Values.operatorVolumes.data | nindent 8 }}
         {{- end }}
-        {{- if eq (include "webhook-enabled" .) "true" }}
+        {{- if eq (include "flink-operator.webhook-enabled" .) "true" }}
         - name: keystore
           secret:
             secretName: webhook-server-cert

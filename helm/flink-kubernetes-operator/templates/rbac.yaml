@@ -133,7 +133,7 @@ metadata:
   labels:
     {{- include "flink-operator.labels" $ | nindent 4 }}
 roleRef:
-  kind: Role
+  kind: {{ $role := include "flink-operator.roleName" $ }}{{ include "flink-operator.roleScope" (dict "role" $role)}}
   name: {{ include "flink-operator.roleName" $ }}
   apiGroup: rbac.authorization.k8s.io
 subjects:
@@ -153,7 +153,7 @@ metadata:
   annotations:
     "helm.sh/resource-policy": keep
 roleRef:
-  kind: Role
+  kind: {{ $role := include "flink-operator.jobRoleName" $ }}{{ include "flink-operator.roleScope" (dict "role" $role)}}
   name: {{ include "flink-operator.jobRoleName" $ }}
   apiGroup: rbac.authorization.k8s.io
 subjects:
