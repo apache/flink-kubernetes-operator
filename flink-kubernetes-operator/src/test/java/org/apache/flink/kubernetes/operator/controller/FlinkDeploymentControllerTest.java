@@ -79,7 +79,7 @@ public class FlinkDeploymentControllerTest {
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     private TestingFlinkService flinkService;
-    private Context context;
+    private Context<FlinkDeployment> context;
     private TestingFlinkDeploymentController testController;
 
     private KubernetesMockServer mockServer;
@@ -100,7 +100,7 @@ public class FlinkDeploymentControllerTest {
 
         UpdateControl<FlinkDeployment> updateControl;
 
-        FlinkDeployment appCluster = TestUtils.buildApplicationCluster(FlinkVersion.v1_16);
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         assertEquals(
                 JobManagerDeploymentStatus.MISSING,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
@@ -217,12 +217,13 @@ public class FlinkDeploymentControllerTest {
         var submittedEventValidatingResponseProvider =
                 new TestUtils.ValidatingResponseProvider<>(
                         new EventBuilder().withNewMetadata().endMetadata().build(),
-                        r -> {
-                            assertTrue(
-                                    r.getBody()
-                                            .readUtf8()
-                                            .contains(AbstractFlinkResourceReconciler.MSG_SUBMIT));
-                        });
+                        r ->
+                                assertTrue(
+                                        r.getBody()
+                                                .readUtf8()
+                                                .contains(
+                                                        AbstractFlinkResourceReconciler
+                                                                .MSG_SUBMIT)));
         mockServer
                 .expect()
                 .post()
@@ -233,9 +234,11 @@ public class FlinkDeploymentControllerTest {
         var validatingResponseProvider =
                 new TestUtils.ValidatingResponseProvider<>(
                         new EventBuilder().withNewMetadata().endMetadata().build(),
-                        r -> {
-                            assertTrue(r.getBody().readUtf8().contains(TestUtils.DEPLOYMENT_ERROR));
-                        });
+                        r ->
+                                assertTrue(
+                                        r.getBody()
+                                                .readUtf8()
+                                                .contains(TestUtils.DEPLOYMENT_ERROR)));
         mockServer
                 .expect()
                 .post()
@@ -288,12 +291,13 @@ public class FlinkDeploymentControllerTest {
         var submittedEventValidatingResponseProvider =
                 new TestUtils.ValidatingResponseProvider<>(
                         new EventBuilder().withNewMetadata().endMetadata().build(),
-                        r -> {
-                            assertTrue(
-                                    r.getBody()
-                                            .readUtf8()
-                                            .contains(AbstractFlinkResourceReconciler.MSG_SUBMIT));
-                        });
+                        r ->
+                                assertTrue(
+                                        r.getBody()
+                                                .readUtf8()
+                                                .contains(
+                                                        AbstractFlinkResourceReconciler
+                                                                .MSG_SUBMIT)));
         mockServer
                 .expect()
                 .post()
@@ -516,7 +520,7 @@ public class FlinkDeploymentControllerTest {
         testController.reconcile(appCluster, context);
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
-        assertEquals(null, jobs.get(0).f0);
+        assertNull(jobs.get(0).f0);
 
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
@@ -549,7 +553,7 @@ public class FlinkDeploymentControllerTest {
                 EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
-        assertEquals(null, jobs.get(0).f0);
+        assertNull(jobs.get(0).f0);
 
         // Inject validation error in the middle of the upgrade
         appCluster.getSpec().setRestartNonce(123L);

@@ -36,7 +36,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Test class for {@link ValidatorUtils}. */
 public class ValidatorUtilsTest {

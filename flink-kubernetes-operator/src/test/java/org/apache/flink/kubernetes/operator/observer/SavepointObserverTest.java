@@ -23,6 +23,8 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
@@ -49,14 +51,13 @@ public class SavepointObserverTest {
     private KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private final TestingFlinkService flinkService = new TestingFlinkService();
-    private SavepointObserver observer;
-    private final EventRecorder eventRecorder = new EventRecorder(null, (r, e) -> {});
+    private SavepointObserver<FlinkDeployment, FlinkDeploymentStatus> observer;
 
     @BeforeEach
     public void before() {
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
         observer =
-                new SavepointObserver(
+                new SavepointObserver<>(
                         flinkService, configManager, new TestingStatusRecorder<>(), eventRecorder);
     }
 
@@ -132,7 +133,7 @@ public class SavepointObserverTest {
     }
 
     @Test
-    public void testPeriodicSavepoint() throws Exception {
+    public void testPeriodicSavepoint() {
         var conf = new Configuration();
         var deployment = TestUtils.buildApplicationCluster();
         deployment

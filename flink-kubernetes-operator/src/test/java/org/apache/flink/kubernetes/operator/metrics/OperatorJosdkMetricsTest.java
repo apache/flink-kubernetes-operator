@@ -62,9 +62,8 @@ public class OperatorJosdkMetricsTest {
                 TestingMetricRegistry.builder()
                         .setDelimiter(".".charAt(0))
                         .setRegisterConsumer(
-                                (metric, name, group) -> {
-                                    metrics.put(group.getMetricIdentifier(name), metric);
-                                })
+                                (metric, name, group) ->
+                                        metrics.put(group.getMetricIdentifier(name), metric))
                         .build();
         operatorMetrics =
                 new OperatorJosdkMetrics(

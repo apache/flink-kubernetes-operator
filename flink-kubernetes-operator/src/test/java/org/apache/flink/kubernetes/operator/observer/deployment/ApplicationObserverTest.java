@@ -49,8 +49,8 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -59,7 +59,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @EnableKubernetesMockClient(crud = true)
 public class ApplicationObserverTest {
     private KubernetesClient kubernetesClient;
-    private final Context readyContext = TestUtils.createContextWithReadyJobManagerDeployment();
+    private final Context<FlinkDeployment> readyContext =
+            TestUtils.createContextWithReadyJobManagerDeployment();
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private final TestingFlinkService flinkService = new TestingFlinkService();
     private ApplicationObserver observer;
@@ -432,10 +433,10 @@ public class ApplicationObserverTest {
         Exception exception =
                 assertThrows(
                         DeploymentFailedException.class,
-                        () -> {
-                            observer.observe(
-                                    deployment, TestUtils.createContextWithInProgressDeployment());
-                        });
+                        () ->
+                                observer.observe(
+                                        deployment,
+                                        TestUtils.createContextWithInProgressDeployment()));
         assertEquals(podFailedMessage, exception.getMessage());
     }
 

@@ -57,7 +57,6 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -82,8 +81,7 @@ public class FlinkConfigBuilderTest {
         final Container container0 = new Container();
         container0.setName("container0");
         final Pod pod0 =
-                TestUtils.getTestPod(
-                        "pod0 hostname", "pod0 api version", Arrays.asList(container0));
+                TestUtils.getTestPod("pod0 hostname", "pod0 api version", List.of(container0));
 
         flinkDeployment.getSpec().setPodTemplate(pod0);
         flinkDeployment.getSpec().setIngress(IngressSpec.builder().template("test.com").build());

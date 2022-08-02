@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
-import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -35,10 +34,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** @link StandaloneFlinkService unit tests */
 @EnableKubernetesMockClient(crud = true)
@@ -57,10 +54,6 @@ public class StandaloneFlinkServiceTest {
         kubernetesClient = mockServer.createClient().inAnyNamespace();
         flinkStandaloneService =
                 new StandaloneFlinkService(kubernetesClient, new FlinkConfigManager(configuration));
-
-        ExecutorService executorService =
-                Executors.newFixedThreadPool(
-                        1, new ExecutorThreadFactory("flink-kubeclient-io-for-standalone-service"));
     }
 
     @Test
@@ -102,12 +95,11 @@ public class StandaloneFlinkServiceTest {
 
     private Configuration buildConfig(FlinkDeployment flinkDeployment, Configuration configuration)
             throws Exception {
-        return configuration =
-                FlinkConfigBuilder.buildFrom(
-                        flinkDeployment.getMetadata().getNamespace(),
-                        flinkDeployment.getMetadata().getName(),
-                        flinkDeployment.getSpec(),
-                        configuration);
+        return FlinkConfigBuilder.buildFrom(
+                flinkDeployment.getMetadata().getNamespace(),
+                flinkDeployment.getMetadata().getName(),
+                flinkDeployment.getSpec(),
+                configuration);
     }
 
     private void createDeployments() {

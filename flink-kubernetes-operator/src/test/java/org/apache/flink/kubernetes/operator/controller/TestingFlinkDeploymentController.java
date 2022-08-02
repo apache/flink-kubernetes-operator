@@ -63,7 +63,7 @@ public class TestingFlinkDeploymentController
     private EventCollector eventCollector = new EventCollector();
 
     private EventRecorder eventRecorder;
-    private StatusRecorder statusRecorder;
+    private StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
 
     public TestingFlinkDeploymentController(
             FlinkConfigManager configManager,
@@ -137,16 +137,14 @@ public class TestingFlinkDeploymentController
     }
 
     private static class StatusUpdateCounter
-            implements BiConsumer<
-                    AbstractFlinkResource<?, FlinkDeploymentStatus>, FlinkDeploymentStatus> {
+            implements BiConsumer<FlinkDeployment, FlinkDeploymentStatus> {
 
         private FlinkDeployment currentResource;
         private int counter;
 
         @Override
         public void accept(
-                AbstractFlinkResource<?, FlinkDeploymentStatus>
-                        flinkDeploymentStatusAbstractFlinkResource,
+                FlinkDeployment flinkDeploymentStatusAbstractFlinkResource,
                 FlinkDeploymentStatus flinkDeploymentStatus) {
             currentResource.setStatus(flinkDeploymentStatusAbstractFlinkResource.getStatus());
             counter++;

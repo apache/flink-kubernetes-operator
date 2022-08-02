@@ -50,7 +50,7 @@ public class DeploymentRecoveryTest {
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     private TestingFlinkService flinkService;
-    private Context context;
+    private Context<FlinkDeployment> context;
     private TestingFlinkDeploymentController testController;
 
     private KubernetesClient kubernetesClient;

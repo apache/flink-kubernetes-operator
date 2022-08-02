@@ -44,6 +44,7 @@ import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.ContainerStatusBuilder;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -84,7 +85,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Testing utilities. */
 public class TestUtils {
@@ -243,128 +244,64 @@ public class TestUtils {
         return deployment;
     }
 
-    public static Context createContextWithDeployment(@Nullable Deployment deployment) {
-        return new Context() {
+    public static <T extends HasMetadata> Context<T> createContextWithDeployment(
+            @Nullable Deployment deployment) {
+        return new TestingContext<>() {
             @Override
-            public Optional<RetryInfo> getRetryInfo() {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
-                return Optional.ofNullable(deployment);
-            }
-
-            @Override
-            public Set getSecondaryResources(Class expectedType) {
-                return null;
-            }
-
-            @Override
-            public ControllerConfiguration getControllerConfiguration() {
-                return null;
-            }
-
-            @Override
-            public ManagedDependentResourceContext managedDependentResourceContext() {
-                return null;
+            public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
+                return (Optional<T>) Optional.ofNullable(deployment);
             }
         };
     }
 
-    public static Context createEmptyContext() {
+    public static <T extends HasMetadata> Context<T> createEmptyContext() {
         return createContextWithDeployment(null);
     }
 
-    public static Context createContextWithReadyJobManagerDeployment() {
+    public static <T extends HasMetadata> Context<T> createContextWithReadyJobManagerDeployment() {
         return createContextWithDeployment(createDeployment(true));
     }
 
-    public static Context createContextWithInProgressDeployment() {
+    public static <T extends HasMetadata> Context<T> createContextWithInProgressDeployment() {
         return createContextWithDeployment(createDeployment(false));
     }
 
-    public static Context createContextWithReadyFlinkDeployment() {
+    public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment() {
         return createContextWithReadyFlinkDeployment(new HashMap<>());
     }
 
-    public static Context createContextWithReadyFlinkDeployment(
+    public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment(
             Map<String, String> flinkDepConfig) {
-        return new Context() {
+        return new TestingContext<>() {
             @Override
-            public Optional<RetryInfo> getRetryInfo() {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
+            public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
                 var session = buildSessionCluster();
                 session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
                 session.getSpec().getFlinkConfiguration().putAll(flinkDepConfig);
                 session.getStatus()
                         .getReconciliationStatus()
                         .serializeAndSetLastReconciledSpec(session.getSpec(), session);
-                return Optional.of(session);
-            }
-
-            @Override
-            public Set getSecondaryResources(Class expectedType) {
-                return null;
-            }
-
-            @Override
-            public ControllerConfiguration getControllerConfiguration() {
-                return null;
-            }
-
-            @Override
-            public ManagedDependentResourceContext managedDependentResourceContext() {
-                return null;
+                return (Optional<T>) Optional.of(session);
             }
         };
     }
 
-    public static Context createContextWithNotReadyFlinkDeployment() {
-        return new Context() {
+    public static <T extends HasMetadata> Context<T> createContextWithNotReadyFlinkDeployment() {
+        return new TestingContext<>() {
             @Override
-            public Optional<RetryInfo> getRetryInfo() {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
+            public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
                 var session = buildSessionCluster();
                 session.getStatus()
                         .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
-                return Optional.of(session);
-            }
-
-            @Override
-            public Set getSecondaryResources(Class expectedType) {
-                return null;
-            }
-
-            @Override
-            public ControllerConfiguration getControllerConfiguration() {
-                return null;
-            }
-
-            @Override
-            public ManagedDependentResourceContext managedDependentResourceContext() {
-                return null;
+                return (Optional<T>) Optional.of(session);
             }
         };
     }
 
     public static final String DEPLOYMENT_ERROR = "test deployment error message";
 
-    public static Context createContextWithFailedJobManagerDeployment() {
-        return new Context() {
-            @Override
-            public Optional<RetryInfo> getRetryInfo() {
-                return Optional.empty();
-            }
-
+    public static <T extends HasMetadata> Context<T> createContextWithFailedJobManagerDeployment() {
+        return new TestingContext<>() {
             @Override
             public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
                 DeploymentStatus status = new DeploymentStatus();
@@ -386,21 +323,6 @@ public class TestUtils {
                 deployment.setSpec(spec);
                 deployment.setStatus(status);
                 return Optional.of(deployment);
-            }
-
-            @Override
-            public Set getSecondaryResources(Class expectedType) {
-                return null;
-            }
-
-            @Override
-            public ControllerConfiguration getControllerConfiguration() {
-                return null;
-            }
-
-            @Override
-            public ManagedDependentResourceContext managedDependentResourceContext() {
-                return null;
             }
         };
     }
@@ -499,6 +421,38 @@ public class TestUtils {
             validator.accept(recordedRequest);
             validated.set(true);
             return returnValue;
+        }
+    }
+
+    /**
+     * Base context implementation for tests.
+     *
+     * @param <T> Resource type
+     */
+    public static class TestingContext<T extends HasMetadata> implements Context<T> {
+        @Override
+        public Optional<RetryInfo> getRetryInfo() {
+            return Optional.empty();
+        }
+
+        @Override
+        public <T1> Set<T1> getSecondaryResources(Class<T1> aClass) {
+            return null;
+        }
+
+        @Override
+        public <T1> Optional<T1> getSecondaryResource(Class<T1> aClass, String s) {
+            return Optional.empty();
+        }
+
+        @Override
+        public ControllerConfiguration<T> getControllerConfiguration() {
+            return null;
+        }
+
+        @Override
+        public ManagedDependentResourceContext managedDependentResourceContext() {
+            return null;
         }
     }
 }
