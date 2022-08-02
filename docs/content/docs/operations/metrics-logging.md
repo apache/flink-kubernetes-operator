@@ -180,3 +180,17 @@ See the [Java Operator SDK docs](https://javaoperatorsdk.io/docs/features#contex
 {{< /hint >}}
 
 To learn more about accessing the job logs or changing the log level dynamically check the corresponding [section](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#logging) of the core documentation.
+
+### FlinkDeployment Logging Configuration
+
+Users have the freedom to override the default `log4j-console.properties` settings on a per-deployment level by simply putting the entire log configuration into `spec.logConfiguration`:
+
+```yaml
+spec:
+  ...
+  logConfiguration:
+    "log4j-console.properties": |
+      rootLogger.level = DEBUG
+      rootLogger.appenderRef.file.ref = LogFile
+      ...
+```

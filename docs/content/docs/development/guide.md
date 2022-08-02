@@ -75,7 +75,7 @@ docker@minikube:~$ exit
 helm install flink-kubernetes-operator helm/flink-kubernetes-operator --set image.repository=<repo>/flink-kubernetes-operator --set image.tag=latest
 ```
 ### Running the operator locally
-You can run or debug the `FlinkOperator` from your preferred IDE. The operator itself is accessing the deployed Flink clusters through the REST interface. When running locally the `rest.port` and `rest.address` Flink configuration parameters must be modified to a locally accessible value.
+You can run or debug the `FlinkOperator` from your preferred IDE. The operator itself is accessing the deployed Flink clusters through the REST interface. When running locally the `rest.port`, `rest.address` and `kubernetes.rest-service.exposed.type` Flink configuration parameters must be modified.
 
 When using `minikube tunnel` the rest service is exposed on `localhost:8081`
 ```bash
@@ -91,6 +91,7 @@ The operator picks up the default log and flink configurations from `/opt/flink/
 cat /opt/flink/conf/flink-conf.yaml
 rest.port: 8081
 rest.address: localhost
+kubernetes.rest-service.exposed.type: LoadBalancer
 ```
 
 ### Uninstalling the operator locally
