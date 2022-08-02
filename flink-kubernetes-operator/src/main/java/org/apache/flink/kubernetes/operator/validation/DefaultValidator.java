@@ -89,11 +89,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                         deployment.getMetadata().getName(),
                         deployment.getMetadata().getNamespace()),
                 validateLogConfig(spec.getLogConfiguration()),
-                validateJobSpec(
-                        spec.getJob(),
-                        spec.getTaskManager(),
-                        effectiveConfig,
-                        KubernetesDeploymentMode.getDeploymentMode(deployment)),
+                validateJobSpec(spec.getJob(), spec.getTaskManager(), effectiveConfig),
                 validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager()),
                 validateSpecChange(deployment, effectiveConfig),
@@ -178,10 +174,7 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateJobSpec(
-            JobSpec job,
-            @Nullable TaskManagerSpec tm,
-            Map<String, String> confMap,
-            KubernetesDeploymentMode mode) {
+            JobSpec job, @Nullable TaskManagerSpec tm, Map<String, String> confMap) {
         if (job == null) {
             return Optional.empty();
         }
@@ -384,11 +377,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateNotApplicationCluster(sessionCluster),
                 validateSessionClusterId(sessionJob, sessionCluster),
-                validateJobSpec(
-                        sessionJob.getSpec().getJob(),
-                        null,
-                        effectiveConfig,
-                        KubernetesDeploymentMode.getDeploymentMode(sessionCluster)));
+                validateJobSpec(sessionJob.getSpec().getJob(), null, effectiveConfig));
     }
 
     private Optional<String> validateJobNotEmpty(FlinkSessionJob sessionJob) {
