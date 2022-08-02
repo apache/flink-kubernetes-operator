@@ -26,7 +26,7 @@ under the License.
 
 # Operator Upgrade Process
 
-This page details the process of upgrading the operator to a new version. 
+This page details the process of upgrading the operator to a new version.
 
 Please check the [compatibility page]({{< ref "docs/operations/compatibility" >}}) for the complete overview of the backward compatibility guarantees before upgrading to new versions.
 
@@ -35,7 +35,7 @@ Upgrading from the preview/experimental `v1alpha1` release to `v1beta1` requires
 Please check the [related section](#upgrading-from-v1alpha1---v1beta1).
 {{< /hint >}}
 
-## Normal Upgrade Process 
+## Normal Upgrade Process
 
 Normally upgrading the operator to a new release or development version consists of the following two steps:
 1. Upgrading the CRDs
@@ -59,15 +59,22 @@ Please note that we are using the `replace` command here which ensures that runn
 
 ### 2. Upgrading the Helm deployment
 
-Once we have the new CRDs versions we can upgrade the Helm deployment.
+Once we have the new CRDs versions we can upgrade the Helm deployment:
+
 
 ```sh
-# Uninstall running Helm deployment
-helm uninstall flink-kubernetes-operator
-helm install ...
+helm upgrade flink-kubernetes-operator <helm-repo>/flink-kubernetes-operator <custom settings>
 ```
 
-The exact installation command depends on your current environment and settings. Please see the [helm page]({{< ref "docs/operations/helm" >}}) for details.
+or
+
+```sh
+# Uninstall running Helm deployment and install new version
+helm uninstall flink-kubernetes-operator
+helm install flink-kubernetes-operator <helm-repo>/flink-kubernetes-operator <custom settings>
+```
+
+The exact installation/upgrade command depends on your current environment and settings. Please see the [helm page]({{< ref "docs/operations/helm" >}}) for details.
 
 ## Upgrading from v1alpha1 -> v1beta1
 
@@ -142,5 +149,4 @@ The following steps demonstrate the CRD upgrade process from `v1alpha1` to `v1be
 There are some changes or improvement of default values in the fields of the FlinkDeployment in `v1beta1`:
 1. Default value of `crd.spec.Resource#cpu` is `1.0`.
 2. Default value of `crd.spec.JobManagerSpec#replicas` is `1`.
-3. No default value of `crd.spec.FlinkDeploymentSpec#serviceAccount` and users must specify its value explicitly. 
-
+3. No default value of `crd.spec.FlinkDeploymentSpec#serviceAccount` and users must specify its value explicitly.
