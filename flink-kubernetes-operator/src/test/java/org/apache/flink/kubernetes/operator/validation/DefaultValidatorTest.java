@@ -495,6 +495,17 @@ public class DefaultValidatorTest {
                 flinkDeployment -> {},
                 "Invalid session job flinkConfiguration key: kubernetes.operator.reconcile.interval."
                         + " Allowed keys are [kubernetes.operator.user.artifacts.http.header]");
+
+        testSessionJobValidateWithModifier(
+                sessionJob -> {
+                    sessionJob
+                            .getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(sessionJob.getSpec(), sessionJob);
+                    sessionJob.getSpec().setDeploymentName("new-deployment-name");
+                },
+                flinkDeployment -> {},
+                "The deploymentName can't be changed");
     }
 
     private void testSessionJobValidateWithModifier(
