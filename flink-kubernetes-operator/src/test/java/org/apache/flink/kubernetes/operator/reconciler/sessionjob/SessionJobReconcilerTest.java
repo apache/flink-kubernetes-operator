@@ -42,7 +42,6 @@ import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,9 +52,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link SessionJobReconciler}. */
@@ -68,6 +67,7 @@ public class SessionJobReconcilerTest {
     private EventRecorder eventRecorder;
     private SessionJobReconciler reconciler;
     private StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecoder;
+    private FlinkServiceFactory flinkServiceFactory;
 
     @BeforeEach
     public void before() {
@@ -85,18 +85,16 @@ public class SessionJobReconcilerTest {
                         return false;
                     }
                 };
-        reconciler =
-                new SessionJobReconciler(
-                        null, flinkServiceFactory, configManager, eventRecorder, statusRecoder);
-        kubernetesClient.resource(TestUtils.buildSessionJob()).createOrReplace();
         statusRecoder = new TestingStatusRecorder<>();
         reconciler =
                 new SessionJobReconciler(
-                        null, flinkServiceFactory, configManager, eventRecorder, statusRecoder);
+                        kubernetesClient,
+                        flinkServiceFactory,
+                        configManager,
+                        eventRecorder,
+                        statusRecoder);
+        kubernetesClient.resource(TestUtils.buildSessionJob()).createOrReplace();
     }
-
-    private FlinkServiceFactory flinkServiceFactory;
-    private FlinkSessionJob sessionJob;
 
     @Test
     public void testSubmitAndCleanUp() throws Exception {
@@ -437,7 +435,7 @@ public class SessionJobReconcilerTest {
 
     @Test
     public void testJobUpgradeIgnorePendingSavepoint() throws Exception {
-        Context readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
         reconciler.reconcile(sessionJob, readyContext);
         verifyAndSetRunningJobsToStatus(

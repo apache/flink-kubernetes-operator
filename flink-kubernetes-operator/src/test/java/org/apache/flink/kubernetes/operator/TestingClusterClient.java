@@ -76,12 +76,10 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
                     CompletableFuture.completedFuture(
                             new JobResult.Builder().jobId(jobID).netRuntime(1).build());
 
-    private final Configuration configuration;
     private final T clusterId;
 
     public TestingClusterClient(Configuration configuration, T clusterId) throws Exception {
         super(configuration, clusterId, (c, e) -> new StandaloneClientHAServices("localhost"));
-        this.configuration = configuration;
         this.clusterId = clusterId;
     }
 

@@ -214,10 +214,7 @@ public class SessionJobObserverTest {
                 });
         // submit job
         Assertions.assertThrows(
-                RuntimeException.class,
-                () -> {
-                    reconciler.reconcile(sessionJob, readyContext);
-                });
+                RuntimeException.class, () -> reconciler.reconcile(sessionJob, readyContext));
         Assertions.assertNotNull(sessionJob.getStatus().getReconciliationStatus());
         Assertions.assertEquals(
                 ReconciliationState.UPGRADING,

@@ -26,7 +26,6 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -65,8 +64,7 @@ public class FlinkConfigManagerTest {
                                                 .key(),
                                         "false")));
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        ReconciliationStatus reconciliationStatus =
-                deployment.getStatus().getReconciliationStatus();
+        var reconciliationStatus = deployment.getStatus().getReconciliationStatus();
 
         deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "reconciled");
         reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);

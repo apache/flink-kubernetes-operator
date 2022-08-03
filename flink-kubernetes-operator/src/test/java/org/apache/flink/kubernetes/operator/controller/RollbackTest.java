@@ -56,7 +56,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class RollbackTest {
 
     private TestingFlinkService flinkService;
-    private Context context;
+    private Context<FlinkDeployment> context;
 
     private TestingFlinkDeploymentController testController;
 
@@ -193,7 +193,7 @@ public class RollbackTest {
     @ParameterizedTest
     @EnumSource(FlinkVersion.class)
     public void testRollbackStateless(FlinkVersion flinkVersion) throws Exception {
-        var dep = TestUtils.buildApplicationCluster();
+        var dep = TestUtils.buildApplicationCluster(flinkVersion);
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
 
         testRollback(

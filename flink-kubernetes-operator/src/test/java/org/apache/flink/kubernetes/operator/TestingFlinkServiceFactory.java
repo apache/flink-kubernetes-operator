@@ -22,16 +22,9 @@ import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 
-import java.lang.module.Configuration;
-
 /** Flink service factory mock for tests. */
 public class TestingFlinkServiceFactory extends FlinkServiceFactory {
     private final FlinkService flinkService;
-
-    public TestingFlinkServiceFactory() {
-        super(null, null);
-        flinkService = new TestingFlinkService();
-    }
 
     public TestingFlinkServiceFactory(FlinkService flinkService) {
         super(null, null);
@@ -43,10 +36,6 @@ public class TestingFlinkServiceFactory extends FlinkServiceFactory {
     }
 
     public FlinkService getOrCreate(FlinkDeployment deployment) {
-        return flinkService;
-    }
-
-    public FlinkService getOrCreate(Configuration configuration) {
         return flinkService;
     }
 }

@@ -53,13 +53,11 @@ import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.util.SerializedThrowable;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
-import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
-import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedDependentResourceContext;
 
 import javax.annotation.Nullable;
 
@@ -109,34 +107,15 @@ public class TestingFlinkService extends AbstractFlinkService {
         super(kubernetesClient, new FlinkConfigManager(new Configuration()));
     }
 
-    public Context getContext() {
-        return new Context() {
-            @Override
-            public Optional<RetryInfo> getRetryInfo() {
-                return Optional.empty();
-            }
+    public <T extends HasMetadata> Context<T> getContext() {
+        return new TestUtils.TestingContext<>() {
 
             @Override
-            public Optional getSecondaryResource(Class aClass, String s) {
+            public Optional<T> getSecondaryResource(Class aClass, String s) {
                 if (jobs.isEmpty() && sessions.isEmpty()) {
                     return Optional.empty();
                 }
-                return Optional.of(TestUtils.createDeployment(true));
-            }
-
-            @Override
-            public Set getSecondaryResources(Class expectedType) {
-                return null;
-            }
-
-            @Override
-            public ControllerConfiguration getControllerConfiguration() {
-                return null;
-            }
-
-            @Override
-            public ManagedDependentResourceContext managedDependentResourceContext() {
-                return null;
+                return (Optional<T>) Optional.of(TestUtils.createDeployment(true));
             }
         };
     }
@@ -375,7 +354,7 @@ public class TestingFlinkService extends AbstractFlinkService {
         Optional<Tuple2<String, JobStatusMessage>> jobOpt =
                 jobs.stream().filter(js -> js.f1.getJobId().equals(jobID)).findAny();
 
-        if (!jobOpt.isPresent()) {
+        if (jobOpt.isEmpty()) {
             throw new Exception("Job not found");
         }
 
@@ -423,7 +402,7 @@ public class TestingFlinkService extends AbstractFlinkService {
         Optional<Tuple2<String, JobStatusMessage>> jobOpt =
                 jobs.stream().filter(js -> js.f1.getJobId().equals(jobId)).findAny();
 
-        if (!jobOpt.isPresent()) {
+        if (jobOpt.isEmpty()) {
             throw new Exception("Job not found");
         }
 
@@ -464,7 +443,7 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     public void markApplicationJobFailedWithError(JobID jobID, String error) throws Exception {
         var job = jobs.stream().filter(tuple -> tuple.f1.getJobId().equals(jobID)).findFirst();
-        if (!job.isPresent()) {
+        if (job.isEmpty()) {
             throw new Exception("The target job missed");
         }
         var oldStatus = job.get().f1;
@@ -494,7 +473,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public Map<String, String> getClusterInfo(Configuration conf) throws Exception {
+    public Map<String, String> getClusterInfo(Configuration conf) {
         return CLUSTER_INFO;
     }
 }

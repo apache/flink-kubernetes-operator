@@ -87,15 +87,14 @@ public class FlinkOperatorITCase {
 
         await().atMost(1, MINUTES)
                 .untilAsserted(
-                        () -> {
-                            assertThat(
-                                    client.apps()
-                                            .deployments()
-                                            .inNamespace(TEST_NAMESPACE)
-                                            .withName(flinkDeployment.getMetadata().getName())
-                                            .isReady(),
-                                    is(true));
-                        });
+                        () ->
+                                assertThat(
+                                        client.apps()
+                                                .deployments()
+                                                .inNamespace(TEST_NAMESPACE)
+                                                .withName(flinkDeployment.getMetadata().getName())
+                                                .isReady(),
+                                        is(true)));
     }
 
     private static FlinkDeployment buildSessionCluster() {

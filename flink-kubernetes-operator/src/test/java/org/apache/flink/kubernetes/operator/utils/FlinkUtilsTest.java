@@ -36,8 +36,8 @@ import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.Test;
 
 import java.net.HttpURLConnection;
-import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -53,20 +53,17 @@ public class FlinkUtilsTest {
     KubernetesMockServer mockServer;
 
     @Test
-    public void testMergePods() throws Exception {
-
+    public void testMergePods() {
         Container container1 = new Container();
         container1.setName("container1");
         Container container2 = new Container();
         container2.setName("container2");
 
-        Pod pod1 =
-                TestUtils.getTestPod(
-                        "pod1 hostname", "pod1 api version", Arrays.asList(container2));
+        Pod pod1 = TestUtils.getTestPod("pod1 hostname", "pod1 api version", List.of(container2));
 
         Pod pod2 =
                 TestUtils.getTestPod(
-                        "pod2 hostname", "pod2 api version", Arrays.asList(container1, container2));
+                        "pod2 hostname", "pod2 api version", List.of(container1, container2));
 
         Pod mergedPod = FlinkUtils.mergePodTemplates(pod1, pod2);
 
