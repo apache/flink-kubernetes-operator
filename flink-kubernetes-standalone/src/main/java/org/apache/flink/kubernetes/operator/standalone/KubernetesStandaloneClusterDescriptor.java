@@ -94,8 +94,7 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
                 StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.SESSION);
 
-        final ClusterClientProvider clusterClientProvider =
-                deployClusterInternal(clusterSpecification);
+        var clusterClientProvider = deployClusterInternal(clusterSpecification);
 
         try (ClusterClient<String> clusterClient = clusterClientProvider.getClusterClient()) {
             LOG.info(
@@ -115,8 +114,7 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
                 StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
         applicationConfiguration.applyToConfiguration(flinkConfig);
-        final ClusterClientProvider clusterClientProvider =
-                deployClusterInternal(clusterSpecification);
+        var clusterClientProvider = deployClusterInternal(clusterSpecification);
 
         try (ClusterClient<String> clusterClient = clusterClientProvider.getClusterClient()) {
             LOG.info(

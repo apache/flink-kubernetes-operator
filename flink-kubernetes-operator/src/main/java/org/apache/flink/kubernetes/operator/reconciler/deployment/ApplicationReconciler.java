@@ -66,18 +66,18 @@ public class ApplicationReconciler
     }
 
     @Override
-    protected FlinkService getFlinkService(FlinkDeployment resource, Context context) {
+    protected FlinkService getFlinkService(FlinkDeployment resource, Context<?> context) {
         return flinkService;
     }
 
     @Override
-    protected Configuration getObserveConfig(FlinkDeployment deployment, Context context) {
+    protected Configuration getObserveConfig(FlinkDeployment deployment, Context<?> context) {
         return configManager.getObserveConfig(deployment);
     }
 
     @Override
     protected Configuration getDeployConfig(
-            ObjectMeta deployMeta, FlinkDeploymentSpec currentDeploySpec, Context context) {
+            ObjectMeta deployMeta, FlinkDeploymentSpec currentDeploySpec, Context<?> context) {
         return configManager.getDeployConfig(deployMeta, currentDeploySpec);
     }
 
@@ -125,7 +125,7 @@ public class ApplicationReconciler
             FlinkDeployment relatedResource,
             FlinkDeploymentSpec spec,
             FlinkDeploymentStatus status,
-            Context ctx,
+            Context<?> ctx,
             Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
@@ -165,7 +165,7 @@ public class ApplicationReconciler
     @Override
     protected void cancelJob(
             FlinkDeployment deployment,
-            Context ctx,
+            Context<?> ctx,
             UpgradeMode upgradeMode,
             Configuration observeConfig)
             throws Exception {
@@ -192,7 +192,8 @@ public class ApplicationReconciler
 
     @Override
     public boolean reconcileOtherChanges(
-            FlinkDeployment deployment, Context ctx, Configuration observeConfig) throws Exception {
+            FlinkDeployment deployment, Context<?> ctx, Configuration observeConfig)
+            throws Exception {
         if (super.reconcileOtherChanges(deployment, ctx, observeConfig)) {
             return true;
         }
@@ -205,7 +206,8 @@ public class ApplicationReconciler
     }
 
     private void recoverJmDeployment(
-            FlinkDeployment deployment, Context ctx, Configuration observeConfig) throws Exception {
+            FlinkDeployment deployment, Context<?> ctx, Configuration observeConfig)
+            throws Exception {
         LOG.info("Missing Flink Cluster deployment, trying to recover...");
         FlinkDeploymentSpec specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
         restoreJob(deployment, specToRecover, deployment.getStatus(), ctx, observeConfig, true);
@@ -213,7 +215,7 @@ public class ApplicationReconciler
 
     @Override
     @SneakyThrows
-    protected DeleteControl cleanupInternal(FlinkDeployment deployment, Context context) {
+    protected DeleteControl cleanupInternal(FlinkDeployment deployment, Context<?> context) {
         var status = deployment.getStatus();
         if (status.getReconciliationStatus().isFirstDeployment()) {
             flinkService.deleteClusterDeployment(deployment.getMetadata(), status, true);

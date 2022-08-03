@@ -99,7 +99,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
-import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Collection;
@@ -202,10 +201,9 @@ public abstract class AbstractFlinkService implements FlinkService {
             socket.connect(socketAddress, 1000);
             socket.close();
             return true;
-        } catch (SocketTimeoutException ste) {
         } catch (IOException e) {
+            return false;
         }
-        return false;
     }
 
     @Override

@@ -61,12 +61,11 @@ public class DefaultRequestMutator<T extends KubernetesResource> implements Requ
         Operation operation = Operation.valueOf(admissionRequest.getOperation());
         KubernetesResource originalResource =
                 AdmissionUtils.getTargetResource(admissionRequest, operation);
-        KubernetesResource clonedResource =
-                (KubernetesResource) this.cloner.clone((T) originalResource);
+        T clonedResource = this.cloner.clone((T) originalResource);
 
         AdmissionResponse admissionResponse;
         try {
-            T mutatedResource = this.mutator.mutate((T) clonedResource, operation);
+            T mutatedResource = this.mutator.mutate(clonedResource, operation);
             admissionResponse = admissionResponseFromMutation(originalResource, mutatedResource);
         } catch (NotAllowedException e) {
             admissionResponse = AdmissionUtils.notAllowedExceptionToAdmissionResponse(e);

@@ -28,5 +28,5 @@ public interface Observer<CR> {
      * @param cr the target custom resource
      * @param context the context with which the operation is executed
      */
-    void observe(CR cr, Context context);
+    void observe(CR cr, Context<?> context);
 }

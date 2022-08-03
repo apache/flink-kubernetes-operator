@@ -24,16 +24,12 @@ import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.function.BiConsumer;
 
 /** Helper class for creating Kubernetes events for Flink resources. */
 public class EventRecorder {
-
-    private static final Logger LOG = LoggerFactory.getLogger(EventRecorder.class);
 
     private final KubernetesClient client;
     private final BiConsumer<AbstractFlinkResource<?, ?>, Event> eventListener;

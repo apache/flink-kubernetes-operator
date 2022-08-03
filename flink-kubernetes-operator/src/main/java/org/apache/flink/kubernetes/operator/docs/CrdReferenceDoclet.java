@@ -93,7 +93,7 @@ public class CrdReferenceDoclet implements Doclet {
             printStream.write(FileUtils.readFileToByteArray(new File(templateFile)));
 
             MdPrinter se = new MdPrinter(printStream);
-            printStream.println("");
+            printStream.println();
             printStream.println("## Spec");
             var spec =
                     sortedByName(
@@ -103,7 +103,7 @@ public class CrdReferenceDoclet implements Doclet {
             handleAbstractClass(spec, environment.getTypeUtils());
             se.show(spec);
 
-            printStream.println("");
+            printStream.println();
             printStream.println("## Status");
             var status =
                     sortedByName(
@@ -173,12 +173,12 @@ public class CrdReferenceDoclet implements Doclet {
             ElementKind kind = e.getKind();
             switch (kind) {
                 case CLASS:
-                    out.println("");
+                    out.println();
                     out.println("### " + e.getSimpleName());
                     out.println("**Class**: " + e);
-                    out.println("");
+                    out.println();
                     out.println("**Description**: " + dcTree);
-                    out.println("");
+                    out.println();
                     out.println("| Parameter | Type | Docs |");
                     out.println("| ----------| ---- | ---- |");
                     // if this is a child class, print it's parent's enclosed elements.
@@ -198,12 +198,12 @@ public class CrdReferenceDoclet implements Doclet {
                                     + " |");
                     return null;
                 case ENUM:
-                    out.println("");
+                    out.println();
                     out.println("### " + e.getSimpleName());
                     out.println("**Class**: " + e);
-                    out.println("");
+                    out.println();
                     out.println("**Description**: " + dcTree);
-                    out.println("");
+                    out.println();
                     out.println("| Value | Docs |");
                     out.println("| ----- | ---- |");
                     break;

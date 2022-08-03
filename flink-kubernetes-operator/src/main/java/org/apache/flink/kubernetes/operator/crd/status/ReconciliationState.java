@@ -26,5 +26,5 @@ public enum ReconciliationState {
     /** In the process of rolling back to the lastStableSpec. */
     ROLLING_BACK,
     /** Rolled back to the lastStableSpec. */
-    ROLLED_BACK;
+    ROLLED_BACK
 }

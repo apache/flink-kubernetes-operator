@@ -19,8 +19,6 @@ package org.apache.flink.kubernetes.operator.standalone;
 
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
-import org.apache.flink.client.program.ClusterClient;
-import org.apache.flink.client.program.ClusterClientProvider;
 import org.apache.flink.configuration.BlobServerOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
@@ -76,8 +74,7 @@ public class KubernetesStandaloneClusterDescriptorTest {
         flinkConfig.setString(TaskManagerOptions.RPC_PORT, String.valueOf(0));
         flinkConfig.setString(RestOptions.BIND_PORT, String.valueOf(0));
 
-        ClusterClientProvider clusterClientProvider =
-                clusterDescriptor.deploySessionCluster(clusterSpecification);
+        var clusterClientProvider = clusterDescriptor.deploySessionCluster(clusterSpecification);
 
         List<Deployment> deployments =
                 kubernetesClient
@@ -112,7 +109,7 @@ public class KubernetesStandaloneClusterDescriptorTest {
                 jmDeployment.getSpec().getTemplate().getSpec().getContainers().stream()
                         .anyMatch(c -> c.getArgs().contains("jobmanager")));
 
-        ClusterClient clusterClient = clusterClientProvider.getClusterClient();
+        var clusterClient = clusterClientProvider.getClusterClient();
 
         String expectedWebUrl =
                 String.format(
@@ -131,7 +128,7 @@ public class KubernetesStandaloneClusterDescriptorTest {
         flinkConfig.setString(TaskManagerOptions.RPC_PORT, String.valueOf(0));
         flinkConfig.setString(RestOptions.BIND_PORT, String.valueOf(0));
 
-        ClusterClientProvider clusterClientProvider =
+        var clusterClientProvider =
                 clusterDescriptor.deployApplicationCluster(
                         clusterSpecification,
                         ApplicationConfiguration.fromConfiguration(flinkConfig));
@@ -169,7 +166,7 @@ public class KubernetesStandaloneClusterDescriptorTest {
                 jmDeployment.getSpec().getTemplate().getSpec().getContainers().stream()
                         .anyMatch(c -> c.getArgs().contains("standalone-job")));
 
-        ClusterClient clusterClient = clusterClientProvider.getClusterClient();
+        var clusterClient = clusterClientProvider.getClusterClient();
 
         String expectedWebUrl =
                 String.format(

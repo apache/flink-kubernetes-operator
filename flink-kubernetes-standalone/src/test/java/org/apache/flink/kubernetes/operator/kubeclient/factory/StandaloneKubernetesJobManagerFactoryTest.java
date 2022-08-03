@@ -175,7 +175,7 @@ public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBas
     }
 
     @Test
-    public void testAdditionalResourcesSize() throws IOException {
+    public void testAdditionalResourcesSize() {
         final List<HasMetadata> resultAdditionalResources = this.jmSpec.getAccompanyingResources();
         assertEquals(3, resultAdditionalResources.size());
 

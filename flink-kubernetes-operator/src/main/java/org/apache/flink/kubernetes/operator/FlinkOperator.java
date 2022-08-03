@@ -69,7 +69,7 @@ public class FlinkOperator {
     private final FlinkServiceFactory flinkServiceFactory;
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
-    @VisibleForTesting final Set<RegisteredController> registeredControllers = new HashSet<>();
+    @VisibleForTesting final Set<RegisteredController<?>> registeredControllers = new HashSet<>();
     private final KubernetesOperatorMetricGroup metricGroup;
     private final Collection<FlinkResourceListener> listeners;
 
@@ -149,9 +149,7 @@ public class FlinkOperator {
         var reconciler =
                 new SessionJobReconciler(
                         client, flinkServiceFactory, configManager, eventRecorder, statusRecorder);
-        var observer =
-                new SessionJobObserver(
-                        flinkServiceFactory, configManager, statusRecorder, eventRecorder);
+        var observer = new SessionJobObserver(flinkServiceFactory, configManager, eventRecorder);
         var controller =
                 new FlinkSessionJobController(
                         configManager, validators, reconciler, observer, statusRecorder);

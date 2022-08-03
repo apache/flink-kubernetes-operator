@@ -26,11 +26,11 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 public class ApplicationObserverContext {
 
     public final FlinkDeployment flinkApp;
-    public final Context context;
+    public final Context<?> context;
     public final Configuration deployedConfig;
 
     public ApplicationObserverContext(
-            FlinkDeployment flinkApp, Context context, Configuration deployedConfig) {
+            FlinkDeployment flinkApp, Context<?> context, Configuration deployedConfig) {
         this.flinkApp = flinkApp;
         this.context = context;
         this.deployedConfig = deployedConfig;

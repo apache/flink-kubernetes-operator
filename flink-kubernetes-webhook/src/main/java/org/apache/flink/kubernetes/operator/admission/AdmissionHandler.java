@@ -72,7 +72,7 @@ public class AdmissionHandler extends SimpleChannelInboundHandler<HttpRequest> {
 
     public AdmissionHandler(Validator<HasMetadata> validator, Mutator<HasMetadata> mutator) {
         this.validatingController = new AdmissionController<>(validator);
-        this.mutatorController = new AdmissionController<>(new DefaultRequestMutator(mutator));
+        this.mutatorController = new AdmissionController<>(new DefaultRequestMutator<>(mutator));
     }
 
     @Override

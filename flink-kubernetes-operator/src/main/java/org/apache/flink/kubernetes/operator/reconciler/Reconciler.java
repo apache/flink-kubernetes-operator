@@ -35,7 +35,7 @@ public interface Reconciler<CR> {
      * @param context the context with which the operation is executed
      * @throws Exception Error during reconciliation.
      */
-    void reconcile(CR cr, Context context) throws Exception;
+    void reconcile(CR cr, Context<?> context) throws Exception;
 
     /**
      * This is called when receiving the delete event of custom resource. This method is meant to
@@ -45,5 +45,5 @@ public interface Reconciler<CR> {
      * @param context the context with which the operation is executed
      * @return DeleteControl to manage the deletion behavior
      */
-    DeleteControl cleanup(CR cr, Context context);
+    DeleteControl cleanup(CR cr, Context<?> context);
 }

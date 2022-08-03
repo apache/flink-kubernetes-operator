@@ -100,6 +100,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateServiceAccount(spec.getServiceAccount()));
     }
 
+    @SafeVarargs
     private static Optional<String> firstPresent(Optional<String>... errOpts) {
         for (Optional<String> opt : errOpts) {
             if (opt.isPresent()) {

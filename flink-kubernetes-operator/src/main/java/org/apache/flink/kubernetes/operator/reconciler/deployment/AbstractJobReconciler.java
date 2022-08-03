@@ -60,7 +60,7 @@ public abstract class AbstractJobReconciler<
     }
 
     @Override
-    public boolean readyToReconcile(CR resource, Context context, Configuration deployConfig) {
+    public boolean readyToReconcile(CR resource, Context<?> context, Configuration deployConfig) {
         if (shouldWaitForPendingSavepoint(
                 resource.getStatus().getJobStatus(),
                 getDeployConfig(resource.getMetadata(), resource.getSpec(), context))) {
@@ -78,7 +78,7 @@ public abstract class AbstractJobReconciler<
 
     @Override
     protected void reconcileSpecChange(
-            CR resource, Context ctx, Configuration observeConfig, Configuration deployConfig)
+            CR resource, Context<?> ctx, Configuration observeConfig, Configuration deployConfig)
             throws Exception {
         STATUS status = resource.getStatus();
         var reconciliationStatus = status.getReconciliationStatus();
@@ -173,7 +173,7 @@ public abstract class AbstractJobReconciler<
             CR resource,
             SPEC spec,
             STATUS status,
-            Context ctx,
+            Context<?> ctx,
             Configuration deployConfig,
             boolean requireHaMetadata)
             throws Exception {
@@ -189,7 +189,7 @@ public abstract class AbstractJobReconciler<
     }
 
     @Override
-    protected void rollback(CR resource, Context ctx, Configuration observeConfig)
+    protected void rollback(CR resource, Context<?> ctx, Configuration observeConfig)
             throws Exception {
         var reconciliationStatus = resource.getStatus().getReconciliationStatus();
         var rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
@@ -216,8 +216,8 @@ public abstract class AbstractJobReconciler<
     }
 
     @Override
-    public boolean reconcileOtherChanges(CR resource, Context context, Configuration observeConfig)
-            throws Exception {
+    public boolean reconcileOtherChanges(
+            CR resource, Context<?> context, Configuration observeConfig) throws Exception {
         return SavepointUtils.triggerSavepointIfNeeded(
                 getFlinkService(resource, context), resource, observeConfig);
     }
@@ -231,6 +231,6 @@ public abstract class AbstractJobReconciler<
      * @throws Exception Error during cancellation.
      */
     protected abstract void cancelJob(
-            CR resource, Context ctx, UpgradeMode upgradeMode, Configuration observeConfig)
+            CR resource, Context<?> ctx, UpgradeMode upgradeMode, Configuration observeConfig)
             throws Exception;
 }

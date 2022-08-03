@@ -99,9 +99,7 @@ public class StandaloneKubernetesTaskManagerParametersTest extends ParametersTes
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> {
-                    kubernetesTaskManagerParameters.getReplicas();
-                });
+                () -> kubernetesTaskManagerParameters.getReplicas());
     }
 
     @Test
@@ -134,10 +132,7 @@ public class StandaloneKubernetesTaskManagerParametersTest extends ParametersTes
     public void testInvalidRPCPort() {
         flinkConfig.set(TaskManagerOptions.RPC_PORT, String.valueOf(0));
         assertThrows(
-                IllegalArgumentException.class,
-                () -> {
-                    kubernetesTaskManagerParameters.getRPCPort();
-                });
+                IllegalArgumentException.class, () -> kubernetesTaskManagerParameters.getRPCPort());
     }
 
     @Test
