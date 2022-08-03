@@ -21,6 +21,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
@@ -29,7 +30,9 @@ import org.apache.flink.metrics.Metric;
 import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
 
 import io.javaoperatorsdk.operator.api.monitoring.Metrics;
+import io.javaoperatorsdk.operator.api.reconciler.Constants;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
+import io.javaoperatorsdk.operator.processing.GroupVersionKind;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.controller.ResourceAction;
 import io.javaoperatorsdk.operator.processing.event.source.controller.ResourceEvent;
@@ -45,13 +48,13 @@ import static org.junit.jupiter.api.Assertions.fail;
 /** {@link OperatorJosdkMetrics} tests. */
 public class OperatorJosdkMetricsTest {
 
-    private final ResourceID resourceId = new ResourceID("testname", "testns");
-    private final String controllerName = FlinkDeploymentController.class.getSimpleName();
-    private final String resourcePrefix =
+    private static final ResourceID resourceId = new ResourceID("testname", "testns");
+    private static final String controllerName = FlinkDeploymentController.class.getSimpleName();
+    private static final String resourcePrefix =
             "testhost.k8soperator.flink-operator-test.testopname.resource.testns.testname.JOSDK.";
-    private final String systemPrefix =
+    private static final String systemPrefix =
             "testhost.k8soperator.flink-operator-test.testopname.system.";
-    private final String executionPrefix = systemPrefix + "JOSDK.FlinkDeployment.";
+    private static final String executionPrefix = systemPrefix + "JOSDK.FlinkDeployment.";
 
     private Map<String, Metric> metrics = new HashMap<>();
     private OperatorJosdkMetrics operatorMetrics;
@@ -73,29 +76,7 @@ public class OperatorJosdkMetricsTest {
 
     @Test
     public void testTimeControllerExecution() throws Exception {
-        Metrics.ControllerExecution<Object> successExecution =
-                new Metrics.ControllerExecution<>() {
-                    @Override
-                    public String name() {
-                        return "reconcile";
-                    }
-
-                    @Override
-                    public String controllerName() {
-                        return controllerName;
-                    }
-
-                    @Override
-                    public String successTypeName(Object o) {
-                        return "resource";
-                    }
-
-                    @Override
-                    public Object execute() throws Exception {
-                        Thread.sleep(1000);
-                        return null;
-                    }
-                };
+        var successExecution = new TestingExecutionBase<>();
         operatorMetrics.timeControllerExecution(successExecution);
         assertEquals(1, metrics.size());
         assertEquals(1, getHistogram("reconcile", "resource").getCount());
@@ -106,21 +87,11 @@ public class OperatorJosdkMetricsTest {
         assertEquals(3, getHistogram("reconcile", "resource").getCount());
         assertEquals(1, getHistogram("reconcile", "resource").getStatistics().getMin());
 
-        Metrics.ControllerExecution<Object> failureExecution =
-                new Metrics.ControllerExecution<>() {
+        var failureExecution =
+                new TestingExecutionBase<>() {
                     @Override
                     public String name() {
                         return "cleanup";
-                    }
-
-                    @Override
-                    public String controllerName() {
-                        return controllerName;
-                    }
-
-                    @Override
-                    public String successTypeName(Object o) {
-                        return null;
                     }
 
                     @Override
@@ -217,5 +188,39 @@ public class OperatorJosdkMetricsTest {
 
     private long getCount(String name) {
         return ((Counter) metrics.get(resourcePrefix + name + ".Count")).getCount();
+    }
+
+    private static class TestingExecutionBase<T> implements Metrics.ControllerExecution<T> {
+        @Override
+        public String controllerName() {
+            return controllerName;
+        }
+
+        @Override
+        public String successTypeName(Object o) {
+            return "resource";
+        }
+
+        @Override
+        public ResourceID resourceID() {
+            return resourceId;
+        }
+
+        @Override
+        public Map<String, Object> metadata() {
+            return Map.of(
+                    Constants.RESOURCE_GVK_KEY, GroupVersionKind.gvkFor(FlinkDeployment.class));
+        }
+
+        @Override
+        public String name() {
+            return "reconcile";
+        }
+
+        @Override
+        public T execute() throws Exception {
+            Thread.sleep(1000);
+            return null;
+        }
     }
 }
