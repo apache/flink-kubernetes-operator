@@ -107,7 +107,7 @@ public class FlinkOperatorWebhook {
             AdmissionHandler admissionHandler) throws Exception {
         SslContext sslContext = createSslContext();
 
-        return new ChannelInitializer<SocketChannel>() {
+        return new ChannelInitializer<>() {
 
             @Override
             protected void initChannel(SocketChannel ch) {

@@ -63,9 +63,7 @@ public class SessionJobObserverTest {
         var statusRecorder = new TestingStatusRecorder<FlinkSessionJob, FlinkSessionJobStatus>();
         flinkService = new TestingFlinkService();
         FlinkServiceFactory flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
-        observer =
-                new SessionJobObserver(
-                        flinkServiceFactory, configManager, statusRecorder, eventRecorder);
+        observer = new SessionJobObserver(flinkServiceFactory, configManager, eventRecorder);
         reconciler =
                 new SessionJobReconciler(
                         kubernetesClient,

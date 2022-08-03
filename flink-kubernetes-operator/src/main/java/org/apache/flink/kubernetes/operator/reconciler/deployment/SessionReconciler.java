@@ -66,31 +66,31 @@ public class SessionReconciler
     }
 
     @Override
-    protected FlinkService getFlinkService(FlinkDeployment resource, Context context) {
+    protected FlinkService getFlinkService(FlinkDeployment resource, Context<?> context) {
         return flinkService;
     }
 
     @Override
     protected Configuration getDeployConfig(
-            ObjectMeta meta, FlinkDeploymentSpec spec, Context ctx) {
+            ObjectMeta meta, FlinkDeploymentSpec spec, Context<?> ctx) {
         return configManager.getDeployConfig(meta, spec);
     }
 
     @Override
-    protected Configuration getObserveConfig(FlinkDeployment resource, Context context) {
+    protected Configuration getObserveConfig(FlinkDeployment resource, Context<?> context) {
         return configManager.getObserveConfig(resource);
     }
 
     @Override
     protected boolean readyToReconcile(
-            FlinkDeployment deployment, Context ctx, Configuration deployConfig) {
+            FlinkDeployment deployment, Context<?> ctx, Configuration deployConfig) {
         return true;
     }
 
     @Override
     protected void reconcileSpecChange(
             FlinkDeployment deployment,
-            Context ctx,
+            Context<?> ctx,
             Configuration observeConfig,
             Configuration deployConfig)
             throws Exception {
@@ -122,7 +122,7 @@ public class SessionReconciler
             FlinkDeployment cr,
             FlinkDeploymentSpec spec,
             FlinkDeploymentStatus status,
-            Context ctx,
+            Context<?> ctx,
             Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
@@ -133,7 +133,7 @@ public class SessionReconciler
     }
 
     @Override
-    protected void rollback(FlinkDeployment deployment, Context ctx, Configuration observeConfig)
+    protected void rollback(FlinkDeployment deployment, Context<?> ctx, Configuration observeConfig)
             throws Exception {
         FlinkDeploymentStatus status = deployment.getStatus();
         ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
@@ -157,7 +157,8 @@ public class SessionReconciler
 
     @Override
     public boolean reconcileOtherChanges(
-            FlinkDeployment flinkApp, Context ctx, Configuration observeConfig) throws Exception {
+            FlinkDeployment flinkApp, Context<?> ctx, Configuration observeConfig)
+            throws Exception {
         if (shouldRecoverDeployment(observeConfig, flinkApp)) {
             recoverSession(flinkApp, observeConfig);
             return true;
@@ -172,7 +173,7 @@ public class SessionReconciler
     }
 
     @Override
-    public DeleteControl cleanupInternal(FlinkDeployment deployment, Context context) {
+    public DeleteControl cleanupInternal(FlinkDeployment deployment, Context<?> context) {
         Set<FlinkSessionJob> sessionJobs = context.getSecondaryResources(FlinkSessionJob.class);
         if (!sessionJobs.isEmpty()) {
             var error =

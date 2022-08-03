@@ -53,7 +53,7 @@ public class TestUtils {
     public static final double TASK_MANAGER_CPU = 4;
     public static final double JOB_MANAGER_CPU = 2;
 
-    public static final Map<String, String> generateTestStringStringMap(
+    public static Map<String, String> generateTestStringStringMap(
             String keyPrefix, String valuePrefix, int entries) {
         Map<String, String> map = new HashMap<>();
         for (int i = 1; i <= entries; i++) {

@@ -402,12 +402,11 @@ public class ReconciliationUtils {
                     StatusRecorder<R, STATUS> statusRecorder) {
 
         retryInfo.ifPresent(
-                r -> {
-                    LOG.warn(
-                            "Attempt count: {}, last attempt: {}",
-                            r.getAttemptCount(),
-                            r.isLastAttempt());
-                });
+                r ->
+                        LOG.warn(
+                                "Attempt count: {}, last attempt: {}",
+                                r.getAttemptCount(),
+                                r.isLastAttempt()));
 
         statusRecorder.updateStatusFromCache(resource);
         ReconciliationUtils.updateForReconciliationError(

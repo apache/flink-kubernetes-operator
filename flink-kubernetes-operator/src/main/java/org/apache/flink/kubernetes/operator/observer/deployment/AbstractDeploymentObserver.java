@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -72,7 +71,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
     }
 
     @Override
-    public void observe(FlinkDeployment flinkApp, Context context) {
+    public void observe(FlinkDeployment flinkApp, Context<?> context) {
         var status = flinkApp.getStatus();
         var reconciliationStatus = status.getReconciliationStatus();
 
@@ -119,7 +118,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
     }
 
     protected void observeJmDeployment(
-            FlinkDeployment flinkApp, Context context, Configuration effectiveConfig) {
+            FlinkDeployment flinkApp, Context<?> context, Configuration effectiveConfig) {
         FlinkDeploymentStatus deploymentStatus = flinkApp.getStatus();
         JobManagerDeploymentStatus previousJmStatus =
                 deploymentStatus.getJobManagerDeploymentStatus();
@@ -215,7 +214,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
 
     protected void clearErrorsIfDeploymentIsHealthy(FlinkDeployment dep) {
         FlinkDeploymentStatus status = dep.getStatus();
-        ReconciliationStatus reconciliationStatus = status.getReconciliationStatus();
+        var reconciliationStatus = status.getReconciliationStatus();
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.ERROR
                 && !JobStatus.FAILED.name().equals(dep.getStatus().getJobStatus().getState())
                 && reconciliationStatus.isLastReconciledSpecStable()) {
@@ -261,7 +260,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
      * @param flinkDep Flink resource to check.
      * @param context Context for reconciliation.
      */
-    private void checkIfAlreadyUpgraded(FlinkDeployment flinkDep, Context context) {
+    private void checkIfAlreadyUpgraded(FlinkDeployment flinkDep, Context<?> context) {
         var status = flinkDep.getStatus();
         if (status.getReconciliationStatus().isFirstDeployment()) {
             return;
@@ -309,5 +308,5 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
      * @param deployedConfig config that is deployed on the Flink cluster
      */
     protected abstract void observeFlinkCluster(
-            FlinkDeployment flinkApp, Context context, Configuration deployedConfig);
+            FlinkDeployment flinkApp, Context<?> context, Configuration deployedConfig);
 }

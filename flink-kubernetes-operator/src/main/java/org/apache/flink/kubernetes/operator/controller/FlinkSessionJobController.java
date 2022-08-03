@@ -122,7 +122,7 @@ public class FlinkSessionJobController
                 EventSourceUtils.getFlinkDeploymentInformerEventSource(context));
     }
 
-    private boolean validateSessionJob(FlinkSessionJob sessionJob, Context context) {
+    private boolean validateSessionJob(FlinkSessionJob sessionJob, Context<?> context) {
         for (FlinkResourceValidator validator : validators) {
             Optional<String> validationError =
                     validator.validateSessionJob(

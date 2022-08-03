@@ -98,10 +98,6 @@ public class OperatorMetricUtils {
                 ReporterSetup.fromConfiguration(configuration, pluginManager));
     }
 
-    public static Histogram synchronizedHistogram(Histogram histogram) {
-        return new SynchronizedHistogram(histogram);
-    }
-
     public static Counter synchronizedCounter(Counter counter) {
         return new SynchronizedCounter(counter);
     }

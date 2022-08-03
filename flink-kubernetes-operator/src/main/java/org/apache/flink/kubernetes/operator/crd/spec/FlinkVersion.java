@@ -20,11 +20,6 @@ package org.apache.flink.kubernetes.operator.crd.spec;
 
 import org.apache.flink.annotation.Experimental;
 
-import java.util.LinkedHashSet;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 /** Enumeration for supported Flink versions. */
 @Experimental
 public enum FlinkVersion {
@@ -35,19 +30,6 @@ public enum FlinkVersion {
 
     public boolean isNewerVersionThan(FlinkVersion otherVersion) {
         return this.ordinal() > otherVersion.ordinal();
-    }
-
-    /**
-     * Returns all versions within the defined range, inclusive both start and end.
-     *
-     * @param start Starting version.
-     * @param end Last version.
-     * @return Versions within the range.
-     */
-    public static Set<FlinkVersion> rangeOf(FlinkVersion start, FlinkVersion end) {
-        return Stream.of(FlinkVersion.values())
-                .filter(v -> v.ordinal() >= start.ordinal() && v.ordinal() <= end.ordinal())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     /**

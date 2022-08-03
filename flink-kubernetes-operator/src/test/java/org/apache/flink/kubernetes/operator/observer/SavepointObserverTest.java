@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.observer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -56,9 +55,7 @@ public class SavepointObserverTest {
     @BeforeEach
     public void before() {
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        observer =
-                new SavepointObserver<>(
-                        flinkService, configManager, new TestingStatusRecorder<>(), eventRecorder);
+        observer = new SavepointObserver<>(flinkService, configManager, eventRecorder);
     }
 
     @Test

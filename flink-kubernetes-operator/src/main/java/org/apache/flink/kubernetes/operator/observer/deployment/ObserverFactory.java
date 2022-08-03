@@ -69,7 +69,6 @@ public class ObserverFactory {
                             return new ApplicationObserver(
                                     flinkServiceFactory.getOrCreate(flinkApp),
                                     configManager,
-                                    statusRecorder,
                                     eventRecorder);
                         default:
                             throw new UnsupportedOperationException(

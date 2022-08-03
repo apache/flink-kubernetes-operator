@@ -177,48 +177,46 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
     private Map<String, List<Histogram>> getTransitionHistograms(CR cr) {
         var histos = new HashMap<String, List<Histogram>>();
         transitionMetrics.forEach(
-                (metricName, t) -> {
-                    histos.put(
-                            metricName,
-                            namespaceHistosEnabled
-                                    ? List.of(
-                                            t.f0,
-                                            t.f1.computeIfAbsent(
-                                                    cr.getMetadata().getNamespace(),
-                                                    ns ->
-                                                            createTransitionHistogram(
-                                                                    metricName,
-                                                                    operatorMetricGroup
-                                                                            .createResourceNamespaceGroup(
-                                                                                    configManager
-                                                                                            .getDefaultConfig(),
-                                                                                    ns))))
-                                    : List.of(t.f0));
-                });
+                (metricName, t) ->
+                        histos.put(
+                                metricName,
+                                namespaceHistosEnabled
+                                        ? List.of(
+                                                t.f0,
+                                                t.f1.computeIfAbsent(
+                                                        cr.getMetadata().getNamespace(),
+                                                        ns ->
+                                                                createTransitionHistogram(
+                                                                        metricName,
+                                                                        operatorMetricGroup
+                                                                                .createResourceNamespaceGroup(
+                                                                                        configManager
+                                                                                                .getDefaultConfig(),
+                                                                                        ns))))
+                                        : List.of(t.f0)));
         return histos;
     }
 
     private Map<ResourceLifecycleState, List<Histogram>> getStateTimeHistograms(CR cr) {
         var histos = new HashMap<ResourceLifecycleState, List<Histogram>>();
         stateTimeMetrics.forEach(
-                (state, t) -> {
-                    histos.put(
-                            state,
-                            namespaceHistosEnabled
-                                    ? List.of(
-                                            t.f0,
-                                            t.f1.computeIfAbsent(
-                                                    cr.getMetadata().getNamespace(),
-                                                    ns ->
-                                                            createStateTimeHistogram(
-                                                                    state,
-                                                                    operatorMetricGroup
-                                                                            .createResourceNamespaceGroup(
-                                                                                    configManager
-                                                                                            .getDefaultConfig(),
-                                                                                    ns))))
-                                    : List.of(t.f0));
-                });
+                (state, t) ->
+                        histos.put(
+                                state,
+                                namespaceHistosEnabled
+                                        ? List.of(
+                                                t.f0,
+                                                t.f1.computeIfAbsent(
+                                                        cr.getMetadata().getNamespace(),
+                                                        ns ->
+                                                                createStateTimeHistogram(
+                                                                        state,
+                                                                        operatorMetricGroup
+                                                                                .createResourceNamespaceGroup(
+                                                                                        configManager
+                                                                                                .getDefaultConfig(),
+                                                                                        ns))))
+                                        : List.of(t.f0)));
         return histos;
     }
 

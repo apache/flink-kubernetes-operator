@@ -54,8 +54,7 @@ public class StandaloneKubernetesJobManagerParameters extends KubernetesJobManag
 
     @Override
     public Map<String, String> getSelectors() {
-        return Collections.unmodifiableMap(
-                StandaloneKubernetesUtils.getJobManagerSelectors(getClusterId()));
+        return StandaloneKubernetesUtils.getJobManagerSelectors(getClusterId());
     }
 
     @Override

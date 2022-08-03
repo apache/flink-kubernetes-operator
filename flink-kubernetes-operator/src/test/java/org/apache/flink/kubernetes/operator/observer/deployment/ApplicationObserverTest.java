@@ -22,7 +22,6 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
@@ -68,9 +67,7 @@ public class ApplicationObserverTest {
     @BeforeEach
     public void before() {
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        observer =
-                new ApplicationObserver(
-                        flinkService, configManager, new TestingStatusRecorder<>(), eventRecorder);
+        observer = new ApplicationObserver(flinkService, configManager, eventRecorder);
     }
 
     @Test

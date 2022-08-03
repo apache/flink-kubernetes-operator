@@ -59,7 +59,7 @@ public class SessionJobReconciler
     }
 
     @Override
-    protected FlinkService getFlinkService(FlinkSessionJob resource, Context context) {
+    protected FlinkService getFlinkService(FlinkSessionJob resource, Context<?> context) {
         Optional<FlinkDeployment> deploymentOpt =
                 context.getSecondaryResource(FlinkDeployment.class);
 
@@ -70,13 +70,13 @@ public class SessionJobReconciler
     }
 
     @Override
-    protected Configuration getObserveConfig(FlinkSessionJob sessionJob, Context context) {
+    protected Configuration getObserveConfig(FlinkSessionJob sessionJob, Context<?> context) {
         return getDeployConfig(sessionJob.getMetadata(), sessionJob.getSpec(), context);
     }
 
     @Override
     protected Configuration getDeployConfig(
-            ObjectMeta deployMeta, FlinkSessionJobSpec currentDeploySpec, Context context) {
+            ObjectMeta deployMeta, FlinkSessionJobSpec currentDeploySpec, Context<?> context) {
         Optional<FlinkDeployment> deploymentOpt =
                 context.getSecondaryResource(FlinkDeployment.class);
 
@@ -88,7 +88,7 @@ public class SessionJobReconciler
 
     @Override
     public boolean readyToReconcile(
-            FlinkSessionJob flinkSessionJob, Context context, Configuration deployConfig) {
+            FlinkSessionJob flinkSessionJob, Context<?> context, Configuration deployConfig) {
         return sessionClusterReady(context.getSecondaryResource(FlinkDeployment.class))
                 && super.readyToReconcile(flinkSessionJob, context, deployConfig);
     }
@@ -98,7 +98,7 @@ public class SessionJobReconciler
             FlinkSessionJob cr,
             FlinkSessionJobSpec sessionJobSpec,
             FlinkSessionJobStatus status,
-            Context ctx,
+            Context<?> ctx,
             Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
@@ -118,7 +118,7 @@ public class SessionJobReconciler
     @Override
     protected void cancelJob(
             FlinkSessionJob resource,
-            Context ctx,
+            Context<?> ctx,
             UpgradeMode upgradeMode,
             Configuration observeConfig)
             throws Exception {
@@ -127,7 +127,7 @@ public class SessionJobReconciler
     }
 
     @Override
-    public DeleteControl cleanupInternal(FlinkSessionJob sessionJob, Context context) {
+    public DeleteControl cleanupInternal(FlinkSessionJob sessionJob, Context<?> context) {
         Optional<FlinkDeployment> flinkDepOptional =
                 context.getSecondaryResource(FlinkDeployment.class);
 

@@ -108,13 +108,11 @@ public class InformerManager {
         if (flinkDepInformers != null) {
             synchronized (this) {
                 if (flinkDepInformers != null) {
-                    flinkDepInformers
-                            .entrySet()
-                            .forEach(
-                                    entry -> {
-                                        LOG.info("Stopping informer in {})", entry.getKey());
-                                        entry.getValue().stop();
-                                    });
+                    flinkDepInformers.forEach(
+                            (key, value) -> {
+                                LOG.info("Stopping informer in {})", key);
+                                value.stop();
+                            });
                 }
                 flinkDepInformers = null;
             }

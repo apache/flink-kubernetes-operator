@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.ApplicationObserverContext;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -44,11 +43,10 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     public ApplicationObserver(
             FlinkService flinkService,
             FlinkConfigManager configManager,
-            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
             EventRecorder eventRecorder) {
         super(flinkService, configManager, eventRecorder);
         this.savepointObserver =
-                new SavepointObserver(flinkService, configManager, statusRecorder, eventRecorder);
+                new SavepointObserver<>(flinkService, configManager, eventRecorder);
         this.jobStatusObserver =
                 new JobStatusObserver<>(flinkService, eventRecorder) {
                     @Override
@@ -69,7 +67,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
 
     @Override
     protected void observeFlinkCluster(
-            FlinkDeployment flinkApp, Context context, Configuration deployedConfig) {
+            FlinkDeployment flinkApp, Context<?> context, Configuration deployedConfig) {
 
         boolean jobFound =
                 jobStatusObserver.observe(

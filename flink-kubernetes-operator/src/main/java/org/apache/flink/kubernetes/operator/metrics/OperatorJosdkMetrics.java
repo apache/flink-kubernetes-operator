@@ -84,7 +84,6 @@ public class OperatorJosdkMetrics implements Metrics {
             histogram(execution, execution.successTypeName(result)).update(toSeconds(startTime));
             return result;
         } catch (Exception e) {
-            var h = histogram(execution, "failed");
             histogram(execution, "failed").update(toSeconds(startTime));
             throw e;
         }

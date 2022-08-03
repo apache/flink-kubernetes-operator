@@ -40,7 +40,7 @@ public class SessionObserver extends AbstractDeploymentObserver {
 
     @Override
     public void observeFlinkCluster(
-            FlinkDeployment deployment, Context context, Configuration deployedConfig) {
+            FlinkDeployment deployment, Context<?> context, Configuration deployedConfig) {
         // Check if session cluster can serve rest calls following our practice in JobObserver
         try {
             flinkService.listJobs(deployedConfig);

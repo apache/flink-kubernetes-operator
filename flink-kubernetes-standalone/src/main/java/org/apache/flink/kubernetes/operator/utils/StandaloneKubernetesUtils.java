@@ -38,7 +38,7 @@ public class StandaloneKubernetesUtils {
     }
 
     public static Map<String, String> getCommonLabels(String clusterId) {
-        Map<String, String> commonLabels = new HashMap();
+        Map<String, String> commonLabels = new HashMap<>();
         commonLabels.put(Constants.LABEL_TYPE_KEY, LABEL_TYPE_STANDALONE_TYPE);
         commonLabels.put(Constants.LABEL_APP_KEY, clusterId);
         return commonLabels;
@@ -53,12 +53,6 @@ public class StandaloneKubernetesUtils {
     public static Map<String, String> getJobManagerSelectors(String clusterId) {
         final Map<String, String> labels = getCommonLabels(clusterId);
         labels.put(Constants.LABEL_COMPONENT_KEY, Constants.LABEL_COMPONENT_JOB_MANAGER);
-        return Collections.unmodifiableMap(labels);
-    }
-
-    public static Map<String, String> getConfigMapLabels(String clusterId, String type) {
-        Map<String, String> labels = new HashMap(getCommonLabels(clusterId));
-        labels.put("configmap-type", type);
         return Collections.unmodifiableMap(labels);
     }
 }
