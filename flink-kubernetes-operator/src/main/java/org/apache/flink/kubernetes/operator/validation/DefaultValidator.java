@@ -420,7 +420,7 @@ public class DefaultValidator implements FlinkResourceValidator {
     private Optional<String> validateSpecChange(FlinkSessionJob sessionJob) {
         FlinkSessionJobSpec newSpec = sessionJob.getSpec();
 
-        if (sessionJob.getStatus().getReconciliationStatus().getLastReconciledSpec() == null) {
+        if (sessionJob.getStatus().getReconciliationStatus().isFirstDeployment()) {
             // New job
             if (newSpec.getJob() != null && !newSpec.getJob().getState().equals(JobState.RUNNING)) {
                 return Optional.of("Job must start in running state");
