@@ -22,6 +22,7 @@ import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
 import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -104,10 +105,16 @@ public class FlinkConfigManagerTest {
                 configManager
                         .getDefaultConfig()
                         .contains(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));
+        assertEquals(
+                SavepointFormatType.DEFAULT,
+                configManager.getOperatorConfiguration().getSavepointFormatType());
 
         config.set(
                 KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL,
                 Duration.ofSeconds(15));
+        config.set(
+                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE,
+                SavepointFormatType.NATIVE.name());
 
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getSpec().setLogConfiguration(Map.of(Constants.CONFIG_FILE_LOG4J_NAME, "test"));
@@ -117,6 +124,9 @@ public class FlinkConfigManagerTest {
         Configuration deployConfig = configManager.getObserveConfig(deployment);
         assertFalse(
                 deployConfig.contains(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));
+        assertEquals(
+                SavepointFormatType.DEFAULT,
+                configManager.getOperatorConfiguration().getSavepointFormatType());
         assertTrue(new File(deployConfig.get(DeploymentOptionsInternal.CONF_DIR)).exists());
         assertTrue(
                 new File(deployConfig.get(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE))
@@ -164,10 +174,8 @@ public class FlinkConfigManagerTest {
                 configManager.getOperatorConfiguration().getReconcileInterval());
 
         assertEquals(
-                Duration.ofSeconds(15),
-                configManager
-                        .getObserveConfig(deployment)
-                        .get(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));
+                SavepointFormatType.NATIVE,
+                configManager.getOperatorConfiguration().getSavepointFormatType());
     }
 
     @Test

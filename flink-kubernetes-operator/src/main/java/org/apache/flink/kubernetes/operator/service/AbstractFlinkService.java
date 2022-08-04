@@ -25,7 +25,6 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
-import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
@@ -293,7 +292,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                                     conf.get(FLINK_VERSION)
                                                                     .isNewerVersionThan(
                                                                             FlinkVersion.v1_14)
-                                                            ? SavepointFormatType.DEFAULT
+                                                            ? configManager
+                                                                    .getOperatorConfiguration()
+                                                                    .getSavepointFormatType()
                                                             : null)
                                             .get(timeout, TimeUnit.SECONDS);
                             savepointOpt = Optional.of(savepoint);
@@ -386,7 +387,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                                 conf.get(FLINK_VERSION)
                                                                 .isNewerVersionThan(
                                                                         FlinkVersion.v1_14)
-                                                        ? SavepointFormatType.DEFAULT
+                                                        ? configManager
+                                                                .getOperatorConfiguration()
+                                                                .getSavepointFormatType()
                                                         : null)
                                         .get(timeout, TimeUnit.SECONDS);
                         savepointOpt = Optional.of(savepoint);
@@ -444,7 +447,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                             false,
                                             conf.get(FLINK_VERSION)
                                                             .isNewerVersionThan(FlinkVersion.v1_14)
-                                                    ? SavepointFormatType.DEFAULT
+                                                    ? configManager
+                                                            .getOperatorConfiguration()
+                                                            .getSavepointFormatType()
                                                     : null,
                                             null))
                             .get(timeout, TimeUnit.SECONDS);
