@@ -51,12 +51,15 @@ public class OperatorJosdkMetricsTest {
     private static final ResourceID resourceId = new ResourceID("testname", "testns");
     private static final String controllerName = FlinkDeploymentController.class.getSimpleName();
     private static final String resourcePrefix =
-            "testhost.k8soperator.flink-operator-test.testopname.resource.testns.testname.JOSDK.";
+            "testhost.k8soperator.flink-operator-test.testopname.resource.testns.testname.FlinkDeployment.JOSDK.";
     private static final String systemPrefix =
             "testhost.k8soperator.flink-operator-test.testopname.system.";
-    private static final String executionPrefix = systemPrefix + "JOSDK.FlinkDeployment.";
+    private static final String nsPrefix =
+            "testhost.k8soperator.flink-operator-test.testopname.namespace.testns.FlinkDeployment.JOSDK.";
+    private static final Map<String, Object> metadata =
+            Map.of(Constants.RESOURCE_GVK_KEY, GroupVersionKind.gvkFor(FlinkDeployment.class));
 
-    private Map<String, Metric> metrics = new HashMap<>();
+    private final Map<String, Metric> metrics = new HashMap<>();
     private OperatorJosdkMetrics operatorMetrics;
 
     @BeforeEach
@@ -125,15 +128,15 @@ public class OperatorJosdkMetricsTest {
 
     @Test
     public void testMetrics() {
-        operatorMetrics.failedReconciliation(resourceId, null);
+        operatorMetrics.failedReconciliation(resourceId, null, metadata);
         assertEquals(1, metrics.size());
         assertEquals(1, getCount("Reconciliation.failed"));
-        operatorMetrics.failedReconciliation(resourceId, null);
-        operatorMetrics.failedReconciliation(resourceId, null);
+        operatorMetrics.failedReconciliation(resourceId, null, metadata);
+        operatorMetrics.failedReconciliation(resourceId, null, metadata);
         assertEquals(1, metrics.size());
         assertEquals(3, getCount("Reconciliation.failed"));
 
-        operatorMetrics.reconcileCustomResource(resourceId, null);
+        operatorMetrics.reconcileCustomResource(resourceId, null, metadata);
         assertEquals(2, metrics.size());
         assertEquals(1, getCount("Reconciliation"));
 
@@ -149,21 +152,23 @@ public class OperatorJosdkMetricsTest {
                     public boolean isLastAttempt() {
                         return false;
                     }
-                });
+                },
+                metadata);
         assertEquals(3, metrics.size());
         assertEquals(2, getCount("Reconciliation"));
         assertEquals(1, getCount("Reconciliation.retries"));
 
-        operatorMetrics.receivedEvent(new ResourceEvent(ResourceAction.ADDED, resourceId, null));
+        operatorMetrics.receivedEvent(
+                new ResourceEvent(ResourceAction.ADDED, resourceId, null), metadata);
         assertEquals(5, metrics.size());
         assertEquals(1, getCount("Resource.Event"));
         assertEquals(1, getCount("Resource.Event.ADDED"));
 
-        operatorMetrics.cleanupDoneFor(resourceId);
+        operatorMetrics.cleanupDoneFor(resourceId, metadata);
         assertEquals(6, metrics.size());
         assertEquals(1, getCount("Reconciliation.cleanup"));
 
-        operatorMetrics.finishedReconciliation(resourceId);
+        operatorMetrics.finishedReconciliation(resourceId, metadata);
         assertEquals(7, metrics.size());
         assertEquals(1, getCount("Reconciliation.finished"));
 
@@ -171,19 +176,18 @@ public class OperatorJosdkMetricsTest {
         assertEquals(8, metrics.size());
         assertEquals(2, ((Gauge<Integer>) metrics.get(systemPrefix + "mymap.size")).getValue());
 
-        operatorMetrics.reconcileCustomResource(new ResourceID("other", "otherns"), null);
+        operatorMetrics.reconcileCustomResource(new ResourceID("other", "otherns"), null, metadata);
         assertEquals(9, metrics.size());
         assertEquals(
                 1,
                 ((Counter)
                                 metrics.get(
-                                        "testhost.k8soperator.flink-operator-test.testopname.resource.otherns.other.JOSDK.Reconciliation.Count"))
+                                        "testhost.k8soperator.flink-operator-test.testopname.resource.otherns.other.FlinkDeployment.JOSDK.Reconciliation.Count"))
                         .getCount());
     }
 
     private Histogram getHistogram(String... names) {
-        return ((Histogram)
-                metrics.get(executionPrefix + String.join(".", names) + ".TimeSeconds"));
+        return ((Histogram) metrics.get(nsPrefix + String.join(".", names) + ".TimeSeconds"));
     }
 
     private long getCount(String name) {
@@ -208,8 +212,7 @@ public class OperatorJosdkMetricsTest {
 
         @Override
         public Map<String, Object> metadata() {
-            return Map.of(
-                    Constants.RESOURCE_GVK_KEY, GroupVersionKind.gvkFor(FlinkDeployment.class));
+            return metadata;
         }
 
         @Override

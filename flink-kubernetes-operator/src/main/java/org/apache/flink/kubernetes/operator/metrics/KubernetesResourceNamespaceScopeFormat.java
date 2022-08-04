@@ -28,14 +28,20 @@ import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorSco
 public class KubernetesResourceNamespaceScopeFormat extends ScopeFormat {
 
     public static final String RESOURCE_NS = asVariable("resourcens");
+    public static final String RESOURCE_TYPE = asVariable("resourcetype");
 
     public KubernetesResourceNamespaceScopeFormat(String format) {
-        super(format, null, new String[] {NAMESPACE, NAME, SCOPE_HOST, RESOURCE_NS});
+        super(format, null, new String[] {NAMESPACE, NAME, SCOPE_HOST, RESOURCE_NS, RESOURCE_TYPE});
     }
 
-    public String[] formatScope(String namespace, String name, String hostname, String resourceNs) {
+    public String[] formatScope(
+            String namespace,
+            String name,
+            String hostname,
+            String resourceNs,
+            String resourceType) {
         final String[] template = copyTemplate();
-        final String[] values = {namespace, name, hostname, resourceNs};
+        final String[] values = {namespace, name, hostname, resourceNs, resourceType};
         return bindVariables(template, values);
     }
 

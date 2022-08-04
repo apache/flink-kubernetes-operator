@@ -24,6 +24,7 @@ import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMet
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorScopeFormat.NAME;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorScopeFormat.NAMESPACE;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesResourceNamespaceScopeFormat.RESOURCE_NS;
+import static org.apache.flink.kubernetes.operator.metrics.KubernetesResourceNamespaceScopeFormat.RESOURCE_TYPE;
 
 /** Format for metrics. * */
 public class KubernetesResourceScopeFormat extends ScopeFormat {
@@ -31,7 +32,10 @@ public class KubernetesResourceScopeFormat extends ScopeFormat {
     public static final String RESOURCE = asVariable("resourcename");
 
     public KubernetesResourceScopeFormat(String format) {
-        super(format, null, new String[] {NAMESPACE, NAME, SCOPE_HOST, RESOURCE_NS, RESOURCE});
+        super(
+                format,
+                null,
+                new String[] {NAMESPACE, NAME, SCOPE_HOST, RESOURCE_NS, RESOURCE, RESOURCE_TYPE});
     }
 
     public String[] formatScope(
@@ -39,9 +43,10 @@ public class KubernetesResourceScopeFormat extends ScopeFormat {
             String name,
             String hostname,
             String resourceNs,
-            String resourceName) {
+            String resourceName,
+            String resourceType) {
         final String[] template = copyTemplate();
-        final String[] values = {namespace, name, hostname, resourceNs, resourceName};
+        final String[] values = {namespace, name, hostname, resourceNs, resourceName, resourceType};
         return bindVariables(template, values);
     }
 

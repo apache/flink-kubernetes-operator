@@ -82,7 +82,8 @@ public class KubernetesOperatorMetricOptions {
     public static final ConfigOption<String> SCOPE_NAMING_KUBERNETES_OPERATOR_RESOURCENS =
             ConfigOptions.key("metrics.scope.k8soperator.resourcens")
                     .stringType()
-                    .defaultValue("<host>.k8soperator.<namespace>.<name>.namespace.<resourcens>")
+                    .defaultValue(
+                            "<host>.k8soperator.<namespace>.<name>.namespace.<resourcens>.<resourcetype>")
                     .withDescription(
                             "Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource namespace.");
 
@@ -90,7 +91,7 @@ public class KubernetesOperatorMetricOptions {
             ConfigOptions.key("metrics.scope.k8soperator.resource")
                     .stringType()
                     .defaultValue(
-                            "<host>.k8soperator.<namespace>.<name>.resource.<resourcens>.<resourcename>")
+                            "<host>.k8soperator.<namespace>.<name>.resource.<resourcens>.<resourcename>.<resourcetype>")
                     .withDescription(
                             "Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource.");
 }

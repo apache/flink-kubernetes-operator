@@ -30,14 +30,17 @@ public class KubernetesResourceNamespaceMetricGroup
         extends AbstractMetricGroup<KubernetesOperatorMetricGroup> {
 
     private final String resourceNs;
+    private final String resourceType;
 
     protected KubernetesResourceNamespaceMetricGroup(
             MetricRegistry registry,
             KubernetesOperatorMetricGroup parent,
             String[] scope,
-            String resourceNs) {
+            String resourceNs,
+            String resourceType) {
         super(registry, scope, parent);
         this.resourceNs = resourceNs;
+        this.resourceType = resourceType;
     }
 
     public KubernetesResourceMetricGroup createResourceNamespaceGroup(
@@ -51,13 +54,15 @@ public class KubernetesResourceNamespaceMetricGroup
                                 parent.name,
                                 parent.hostname,
                                 resourceNs,
-                                resourceName),
+                                resourceName,
+                                resourceType),
                 resourceName);
     }
 
     @Override
     protected final void putVariables(Map<String, String> variables) {
         variables.put(KubernetesResourceNamespaceScopeFormat.RESOURCE_NS, resourceNs);
+        variables.put(KubernetesResourceNamespaceScopeFormat.RESOURCE_TYPE, resourceType);
     }
 
     @Override

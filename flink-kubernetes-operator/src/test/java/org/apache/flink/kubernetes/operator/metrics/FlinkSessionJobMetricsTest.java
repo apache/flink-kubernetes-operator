@@ -26,7 +26,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.apache.flink.kubernetes.operator.metrics.FlinkSessionJobMetrics.COUNTER_NAME;
-import static org.apache.flink.kubernetes.operator.metrics.FlinkSessionJobMetrics.METRIC_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,7 +50,8 @@ public class FlinkSessionJobMetricsTest {
         var namespace = "test-ns";
         var job1 = TestUtils.buildSessionJob("job1", namespace);
         var job2 = TestUtils.buildSessionJob("job2", namespace);
-        var metricId = listener.getNamespaceMetricId(namespace, METRIC_GROUP_NAME, COUNTER_NAME);
+        var metricId =
+                listener.getNamespaceMetricId(FlinkSessionJob.class, namespace, COUNTER_NAME);
         assertTrue(listener.getGauge(namespace).isEmpty());
 
         metricManager.onUpdate(job1);
@@ -78,8 +78,10 @@ public class FlinkSessionJobMetricsTest {
         var job1 = TestUtils.buildSessionJob("job", namespace1);
         var job2 = TestUtils.buildSessionJob("job", namespace2);
 
-        var metricId1 = listener.getNamespaceMetricId(namespace1, METRIC_GROUP_NAME, COUNTER_NAME);
-        var metricId2 = listener.getNamespaceMetricId(namespace2, METRIC_GROUP_NAME, COUNTER_NAME);
+        var metricId1 =
+                listener.getNamespaceMetricId(FlinkSessionJob.class, namespace1, COUNTER_NAME);
+        var metricId2 =
+                listener.getNamespaceMetricId(FlinkSessionJob.class, namespace2, COUNTER_NAME);
 
         assertTrue(listener.getGauge(metricId1).isEmpty());
         assertTrue(listener.getGauge(metricId2).isEmpty());
@@ -118,8 +120,8 @@ public class FlinkSessionJobMetricsTest {
 
         var metricId =
                 listener.getNamespaceMetricId(
+                        FlinkSessionJob.class,
                         flinkSessionJob.getMetadata().getNamespace(),
-                        METRIC_GROUP_NAME,
                         COUNTER_NAME);
 
         assertTrue(listener.getGauge(metricId).isEmpty());
