@@ -32,7 +32,6 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
     private final Configuration configuration;
     private final Map<String, Map<JobManagerDeploymentStatus, Set<String>>> deployments =
             new ConcurrentHashMap<>();
-    public static final String DEPLOYMENT_GROUP_NAME = FlinkDeployment.class.getSimpleName();
     public static final String STATUS_GROUP_NAME = "JmDeploymentStatus";
     public static final String COUNTER_NAME = "Count";
 
@@ -68,8 +67,7 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
 
     private void initNamespaceDeploymentCounts(String ns) {
         parentMetricGroup
-                .createResourceNamespaceGroup(configuration, ns)
-                .addGroup(DEPLOYMENT_GROUP_NAME)
+                .createResourceNamespaceGroup(configuration, FlinkDeployment.class, ns)
                 .gauge(
                         COUNTER_NAME,
                         () -> deployments.get(ns).values().stream().mapToInt(Set::size).sum());
@@ -78,7 +76,7 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
     private void initNamespaceStatusCounts(String ns) {
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
             parentMetricGroup
-                    .createResourceNamespaceGroup(configuration, ns)
+                    .createResourceNamespaceGroup(configuration, FlinkDeployment.class, ns)
                     .addGroup(STATUS_GROUP_NAME)
                     .addGroup(status.toString())
                     .gauge(COUNTER_NAME, () -> deployments.get(ns).get(status).size());

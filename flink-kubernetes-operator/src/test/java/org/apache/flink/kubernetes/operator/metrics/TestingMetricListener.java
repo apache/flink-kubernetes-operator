@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.Histogram;
@@ -83,9 +84,27 @@ public class TestingMetricListener {
         return metricGroup.getMetricIdentifier(String.join(DELIMITER, identifiers));
     }
 
-    public String getNamespaceMetricId(String resourceNs, String... identifiers) {
+    public String getNamespaceMetricId(
+            Class<? extends AbstractFlinkResource<?, ?>> resourceClass,
+            String resourceNs,
+            String... identifiers) {
         return metricGroup
-                .createResourceNamespaceGroup(configuration, resourceNs)
+                .createResourceNamespaceGroup(configuration, resourceClass, resourceNs)
                 .getMetricIdentifier(String.join(DELIMITER, identifiers));
+    }
+
+    public String getResourceMetricId(
+            Class<? extends AbstractFlinkResource<?, ?>> resourceClass,
+            String resourceNs,
+            String resourceName,
+            String... identifiers) {
+        return metricGroup
+                .createResourceNamespaceGroup(configuration, resourceClass, resourceNs)
+                .createResourceNamespaceGroup(configuration, resourceName)
+                .getMetricIdentifier(String.join(DELIMITER, identifiers));
+    }
+
+    public int size() {
+        return metrics.size();
     }
 }

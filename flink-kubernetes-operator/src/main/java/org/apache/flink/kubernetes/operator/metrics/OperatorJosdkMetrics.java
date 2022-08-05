@@ -18,8 +18,9 @@
 package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
-import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.MetricGroup;
@@ -28,15 +29,19 @@ import org.apache.flink.util.clock.Clock;
 import org.apache.flink.util.clock.SystemClock;
 
 import io.javaoperatorsdk.operator.api.monitoring.Metrics;
+import io.javaoperatorsdk.operator.api.reconciler.Constants;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
+import io.javaoperatorsdk.operator.processing.GroupVersionKind;
 import io.javaoperatorsdk.operator.processing.event.Event;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.controller.ResourceEvent;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -62,13 +67,6 @@ public class OperatorJosdkMetrics implements Metrics {
     private final Map<List<String>, Histogram> histograms = new ConcurrentHashMap<>();
     private final Map<List<String>, Counter> counters = new ConcurrentHashMap<>();
 
-    private static final Map<String, String> CONTROLLERS =
-            Map.of(
-                    FlinkDeploymentController.class.getSimpleName().toLowerCase(),
-                    "FlinkDeployment",
-                    FlinkSessionJobController.class.getSimpleName().toLowerCase(),
-                    "FlinkSessionJob");
-
     public OperatorJosdkMetrics(
             KubernetesOperatorMetricGroup operatorMetricGroup, FlinkConfigManager configManager) {
         this.operatorMetricGroup = operatorMetricGroup;
@@ -90,12 +88,13 @@ public class OperatorJosdkMetrics implements Metrics {
     }
 
     @Override
-    public void receivedEvent(Event event) {
+    public void receivedEvent(Event event, Map<String, Object> metadata) {
         if (event instanceof ResourceEvent) {
             var action = ((ResourceEvent) event).getAction();
-            counter(getResourceMg(event.getRelatedCustomResourceID()), RESOURCE, EVENT).inc();
+            counter(getResourceMg(event.getRelatedCustomResourceID(), metadata), RESOURCE, EVENT)
+                    .inc();
             counter(
-                            getResourceMg(event.getRelatedCustomResourceID()),
+                            getResourceMg(event.getRelatedCustomResourceID(), metadata),
                             RESOURCE,
                             EVENT,
                             action.name())
@@ -104,32 +103,34 @@ public class OperatorJosdkMetrics implements Metrics {
     }
 
     @Override
-    public void cleanupDoneFor(ResourceID resourceID) {
-        counter(getResourceMg(resourceID), RECONCILIATION, "cleanup").inc();
+    public void cleanupDoneFor(ResourceID resourceID, Map<String, Object> metadata) {
+        counter(getResourceMg(resourceID, metadata), RECONCILIATION, "cleanup").inc();
     }
 
     @Override
-    public void reconcileCustomResource(ResourceID resourceID, RetryInfo retryInfoNullable) {
-        counter(getResourceMg(resourceID), RECONCILIATION).inc();
+    public void reconcileCustomResource(
+            ResourceID resourceID, RetryInfo retryInfoNullable, Map<String, Object> metadata) {
+        counter(getResourceMg(resourceID, metadata), RECONCILIATION).inc();
 
         if (retryInfoNullable != null) {
-            counter(getResourceMg(resourceID), RECONCILIATION, "retries").inc();
+            counter(getResourceMg(resourceID, metadata), RECONCILIATION, "retries").inc();
         }
     }
 
     @Override
-    public void finishedReconciliation(ResourceID resourceID) {
-        counter(getResourceMg(resourceID), RECONCILIATION, "finished").inc();
+    public void finishedReconciliation(ResourceID resourceID, Map<String, Object> metadata) {
+        counter(getResourceMg(resourceID, metadata), RECONCILIATION, "finished").inc();
     }
 
     @Override
-    public void failedReconciliation(ResourceID resourceID, Exception exception) {
-        counter(getResourceMg(resourceID), RECONCILIATION, "failed").inc();
+    public void failedReconciliation(
+            ResourceID resourceID, Exception exception, Map<String, Object> metadata) {
+        counter(getResourceMg(resourceID, metadata), RECONCILIATION, "failed").inc();
     }
 
     @Override
     public <T extends Map<?, ?>> T monitorSizeOf(T map, String name) {
-        operatorMetricGroup.addGroup(name).gauge("size", map::size);
+        operatorMetricGroup.addGroup(OPERATOR_SDK_GROUP).addGroup(name).gauge("size", map::size);
         return map;
     }
 
@@ -138,7 +139,9 @@ public class OperatorJosdkMetrics implements Metrics {
         return histograms.computeIfAbsent(
                 groups,
                 k -> {
-                    var group = operatorMetricGroup.addGroup(OPERATOR_SDK_GROUP);
+                    var group =
+                            getResourceNsMg(execution.resourceID(), execution.metadata())
+                                    .addGroup(OPERATOR_SDK_GROUP);
                     for (String mg : groups) {
                         group = group.addGroup(mg);
                     }
@@ -151,8 +154,7 @@ public class OperatorJosdkMetrics implements Metrics {
     }
 
     private List<String> getHistoGroups(ControllerExecution<?> execution, String name) {
-        return List.of(
-                CONTROLLERS.get(execution.controllerName().toLowerCase()), execution.name(), name);
+        return List.of(execution.name(), name);
     }
 
     private long toSeconds(long startTime) {
@@ -176,20 +178,52 @@ public class OperatorJosdkMetrics implements Metrics {
                 });
     }
 
-    private KubernetesResourceNamespaceMetricGroup getResourceNsMg(ResourceID resourceID) {
+    private KubernetesResourceNamespaceMetricGroup getResourceNsMg(
+            ResourceID resourceID, Map<String, Object> metadata) {
+        Class<? extends AbstractFlinkResource<?, ?>> resourceClass =
+                getResourceClass(metadata)
+                        .orElseThrow(
+                                () ->
+                                        new RuntimeException(
+                                                "Unknown resource kind for " + resourceID));
+
         return resourceNsMetricGroups.computeIfAbsent(
                 resourceID,
                 rid ->
                         operatorMetricGroup.createResourceNamespaceGroup(
                                 configManager.getDefaultConfig(),
+                                resourceClass,
                                 rid.getNamespace().orElse("default")));
     }
 
-    private KubernetesResourceMetricGroup getResourceMg(ResourceID resourceID) {
+    @NotNull
+    private Optional<Class<? extends AbstractFlinkResource<?, ?>>> getResourceClass(
+            Map<String, Object> metadata) {
+        var resourceGvk = (GroupVersionKind) metadata.get(Constants.RESOURCE_GVK_KEY);
+
+        if (resourceGvk == null) {
+            return Optional.empty();
+        }
+
+        Class<? extends AbstractFlinkResource<?, ?>> resourceClass;
+
+        if (resourceGvk.kind.equals(FlinkDeployment.class.getSimpleName())) {
+            resourceClass = FlinkDeployment.class;
+        } else if (resourceGvk.kind.equals(FlinkSessionJob.class.getSimpleName())) {
+            resourceClass = FlinkSessionJob.class;
+        } else {
+            return Optional.empty();
+        }
+
+        return Optional.of(resourceClass);
+    }
+
+    private KubernetesResourceMetricGroup getResourceMg(
+            ResourceID resourceID, Map<String, Object> metadata) {
         return resourceMetricGroups.computeIfAbsent(
                 resourceID,
                 rid ->
-                        getResourceNsMg(rid)
+                        getResourceNsMg(rid, metadata)
                                 .createResourceNamespaceGroup(
                                         configManager.getDefaultConfig(), rid.getName()));
     }

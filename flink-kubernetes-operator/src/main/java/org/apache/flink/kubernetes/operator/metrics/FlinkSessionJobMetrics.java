@@ -30,7 +30,6 @@ public class FlinkSessionJobMetrics implements CustomResourceMetrics<FlinkSessio
     private final KubernetesOperatorMetricGroup parentMetricGroup;
     private final Configuration configuration;
     private final Map<String, Set<String>> sessionJobs = new ConcurrentHashMap<>();
-    public static final String METRIC_GROUP_NAME = FlinkSessionJob.class.getSimpleName();
     public static final String COUNTER_NAME = "Count";
 
     public FlinkSessionJobMetrics(
@@ -62,8 +61,7 @@ public class FlinkSessionJobMetrics implements CustomResourceMetrics<FlinkSessio
 
     private void initNamespaceSessionJobCounts(String ns) {
         parentMetricGroup
-                .createResourceNamespaceGroup(configuration, ns)
-                .addGroup(METRIC_GROUP_NAME)
+                .createResourceNamespaceGroup(configuration, FlinkSessionJob.class, ns)
                 .gauge(COUNTER_NAME, () -> sessionJobs.get(ns).size());
     }
 }

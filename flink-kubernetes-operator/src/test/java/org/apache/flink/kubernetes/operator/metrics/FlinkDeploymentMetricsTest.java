@@ -27,7 +27,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.COUNTER_NAME;
-import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.DEPLOYMENT_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.STATUS_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -55,12 +54,16 @@ public class FlinkDeploymentMetricsTest {
         var deployment2 = TestUtils.buildApplicationCluster("deployment2", namespace);
 
         var counterId =
-                listener.getNamespaceMetricId(namespace, DEPLOYMENT_GROUP_NAME, COUNTER_NAME);
+                listener.getNamespaceMetricId(FlinkDeployment.class, namespace, COUNTER_NAME);
         assertTrue(listener.getGauge(counterId).isEmpty());
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
             var statusId =
                     listener.getNamespaceMetricId(
-                            namespace, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+                            FlinkDeployment.class,
+                            namespace,
+                            STATUS_GROUP_NAME,
+                            status.name(),
+                            COUNTER_NAME);
             assertTrue(listener.getGauge(statusId).isEmpty());
         }
 
@@ -75,7 +78,11 @@ public class FlinkDeploymentMetricsTest {
 
             var statusId =
                     listener.getNamespaceMetricId(
-                            namespace, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+                            FlinkDeployment.class,
+                            namespace,
+                            STATUS_GROUP_NAME,
+                            status.name(),
+                            COUNTER_NAME);
             assertEquals(2, listener.getGauge(statusId).get().getValue());
         }
 
@@ -85,7 +92,11 @@ public class FlinkDeploymentMetricsTest {
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
             var statusId =
                     listener.getNamespaceMetricId(
-                            namespace, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+                            FlinkDeployment.class,
+                            namespace,
+                            STATUS_GROUP_NAME,
+                            status.name(),
+                            COUNTER_NAME);
             assertEquals(0, listener.getGauge(statusId).get().getValue());
         }
     }
@@ -98,18 +109,26 @@ public class FlinkDeploymentMetricsTest {
         var deployment2 = TestUtils.buildApplicationCluster("deployment", namespace2);
 
         var counterId1 =
-                listener.getNamespaceMetricId(namespace1, DEPLOYMENT_GROUP_NAME, COUNTER_NAME);
+                listener.getNamespaceMetricId(FlinkDeployment.class, namespace1, COUNTER_NAME);
         var counterId2 =
-                listener.getNamespaceMetricId(namespace2, DEPLOYMENT_GROUP_NAME, COUNTER_NAME);
+                listener.getNamespaceMetricId(FlinkDeployment.class, namespace2, COUNTER_NAME);
         assertTrue(listener.getGauge(counterId1).isEmpty());
         assertTrue(listener.getGauge(counterId2).isEmpty());
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
             var statusId1 =
                     listener.getNamespaceMetricId(
-                            namespace1, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+                            FlinkDeployment.class,
+                            namespace1,
+                            STATUS_GROUP_NAME,
+                            status.name(),
+                            COUNTER_NAME);
             var statusId2 =
                     listener.getNamespaceMetricId(
-                            namespace2, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+                            FlinkDeployment.class,
+                            namespace2,
+                            STATUS_GROUP_NAME,
+                            status.name(),
+                            COUNTER_NAME);
             assertTrue(listener.getGauge(statusId1).isEmpty());
             assertTrue(listener.getGauge(statusId2).isEmpty());
         }
@@ -125,10 +144,18 @@ public class FlinkDeploymentMetricsTest {
             metricManager.onUpdate(deployment2);
             var statusId1 =
                     listener.getNamespaceMetricId(
-                            namespace1, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+                            FlinkDeployment.class,
+                            namespace1,
+                            STATUS_GROUP_NAME,
+                            status.name(),
+                            COUNTER_NAME);
             var statusId2 =
                     listener.getNamespaceMetricId(
-                            namespace2, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+                            FlinkDeployment.class,
+                            namespace2,
+                            STATUS_GROUP_NAME,
+                            status.name(),
+                            COUNTER_NAME);
             assertEquals(1, listener.getGauge(statusId1).get().getValue());
             assertEquals(1, listener.getGauge(statusId2).get().getValue());
         }
@@ -143,10 +170,18 @@ public class FlinkDeploymentMetricsTest {
             deployment2.getStatus().setJobManagerDeploymentStatus(status);
             var statusId1 =
                     listener.getNamespaceMetricId(
-                            namespace1, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+                            FlinkDeployment.class,
+                            namespace1,
+                            STATUS_GROUP_NAME,
+                            status.name(),
+                            COUNTER_NAME);
             var statusId2 =
                     listener.getNamespaceMetricId(
-                            namespace2, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+                            FlinkDeployment.class,
+                            namespace2,
+                            STATUS_GROUP_NAME,
+                            status.name(),
+                            COUNTER_NAME);
             assertEquals(0, listener.getGauge(statusId1).get().getValue());
             assertEquals(0, listener.getGauge(statusId2).get().getValue());
         }
@@ -166,13 +201,17 @@ public class FlinkDeploymentMetricsTest {
         var deployment = TestUtils.buildApplicationCluster("deployment", namespace);
 
         var counterId =
-                listener.getNamespaceMetricId(namespace, DEPLOYMENT_GROUP_NAME, COUNTER_NAME);
+                listener.getNamespaceMetricId(FlinkDeployment.class, namespace, COUNTER_NAME);
         metricManager.onUpdate(deployment);
         assertTrue(listener.getGauge(counterId).isEmpty());
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
             var statusId =
                     listener.getNamespaceMetricId(
-                            namespace, STATUS_GROUP_NAME, status.name(), COUNTER_NAME);
+                            FlinkDeployment.class,
+                            namespace,
+                            STATUS_GROUP_NAME,
+                            status.name(),
+                            COUNTER_NAME);
             assertTrue(listener.getGauge(statusId).isEmpty());
         }
     }

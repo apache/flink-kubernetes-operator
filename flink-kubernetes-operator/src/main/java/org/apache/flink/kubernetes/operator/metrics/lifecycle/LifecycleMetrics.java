@@ -78,7 +78,7 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
     private Map<String, Tuple2<Histogram, Map<String, Histogram>>> transitionMetrics;
     private Map<ResourceLifecycleState, Tuple2<Histogram, Map<String, Histogram>>> stateTimeMetrics;
 
-    private Function<MetricGroup, MetricGroup> metricGroupFunction;
+    private Function<MetricGroup, MetricGroup> metricGroupFunction = mg -> mg.addGroup("Lifecycle");
 
     public LifecycleMetrics(
             FlinkConfigManager configManager, KubernetesOperatorMetricGroup operatorMetricGroup) {
@@ -106,7 +106,7 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
 
     private ResourceLifecycleMetricTracker getLifecycleMetricTracker(CR cr) {
         init(cr);
-        createNamespaceStateCountIfMissing(cr.getMetadata().getNamespace());
+        createNamespaceStateCountIfMissing(cr);
         return lifecycleTrackers.computeIfAbsent(
                 Tuple2.of(cr.getMetadata().getNamespace(), cr.getMetadata().getName()),
                 k -> {
@@ -123,7 +123,8 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
                 });
     }
 
-    private void createNamespaceStateCountIfMissing(String namespace) {
+    private void createNamespaceStateCountIfMissing(CR cr) {
+        var namespace = cr.getMetadata().getNamespace();
         if (!namespaces.add(namespace)) {
             return;
         }
@@ -131,7 +132,7 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
         MetricGroup lifecycleGroup =
                 metricGroupFunction.apply(
                         operatorMetricGroup.createResourceNamespaceGroup(
-                                configManager.getDefaultConfig(), namespace));
+                                configManager.getDefaultConfig(), cr.getClass(), namespace));
         for (ResourceLifecycleState state : ResourceLifecycleState.values()) {
             lifecycleGroup
                     .addGroup("State")
@@ -150,8 +151,6 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
         if (transitionMetrics != null) {
             return;
         }
-        this.metricGroupFunction =
-                mg -> mg.addGroup(cr.getClass().getSimpleName()).addGroup("Lifecycle");
 
         this.transitionMetrics = new ConcurrentHashMap<>();
         TRACKED_TRANSITIONS.forEach(
@@ -192,6 +191,8 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
                                                                                 .createResourceNamespaceGroup(
                                                                                         configManager
                                                                                                 .getDefaultConfig(),
+                                                                                        cr
+                                                                                                .getClass(),
                                                                                         ns))))
                                         : List.of(t.f0)));
         return histos;
@@ -215,6 +216,8 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
                                                                                 .createResourceNamespaceGroup(
                                                                                         configManager
                                                                                                 .getDefaultConfig(),
+                                                                                        cr
+                                                                                                .getClass(),
                                                                                         ns))))
                                         : List.of(t.f0)));
         return histos;
