@@ -130,7 +130,7 @@ public class OperatorJosdkMetrics implements Metrics {
 
     @Override
     public <T extends Map<?, ?>> T monitorSizeOf(T map, String name) {
-        operatorMetricGroup.addGroup(name).gauge("size", map::size);
+        operatorMetricGroup.addGroup(OPERATOR_SDK_GROUP).addGroup(name).gauge("size", map::size);
         return map;
     }
 

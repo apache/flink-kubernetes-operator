@@ -92,4 +92,19 @@ public class TestingMetricListener {
                 .createResourceNamespaceGroup(configuration, resourceClass, resourceNs)
                 .getMetricIdentifier(String.join(DELIMITER, identifiers));
     }
+
+    public String getResourceMetricId(
+            Class<? extends AbstractFlinkResource<?, ?>> resourceClass,
+            String resourceNs,
+            String resourceName,
+            String... identifiers) {
+        return metricGroup
+                .createResourceNamespaceGroup(configuration, resourceClass, resourceNs)
+                .createResourceNamespaceGroup(configuration, resourceName)
+                .getMetricIdentifier(String.join(DELIMITER, identifiers));
+    }
+
+    public int size() {
+        return metrics.size();
+    }
 }
