@@ -307,6 +307,10 @@ public class ReconciliationUtils {
         ObjectNode metadata = internalMeta.putObject("metadata");
         metadata.put("generation", relatedResource.getMetadata().getGeneration());
 
+        if (relatedResource.getStatus().getReconciliationStatus().isFirstDeployment()) {
+            metadata.put("firstDeployment", true);
+        }
+
         return writeSpecWithMeta(spec, internalMeta);
     }
 
@@ -435,6 +439,26 @@ public class ReconciliationUtils {
         }
 
         return lastSpecWithMeta.f1.get("metadata").get("generation").asLong(-1L);
+    }
+
+    /**
+     * Clear last reconciled spec if that corresponds to the first deployment. This is important in
+     * cases where the first deployment fails.
+     *
+     * @param resource Flink resource.
+     */
+    public static void clearLastReconciledSpecIfFirstDeploy(AbstractFlinkResource<?, ?> resource) {
+        var reconStatus = resource.getStatus().getReconciliationStatus();
+        var lastSpecWithMeta = reconStatus.deserializeLastReconciledSpecWithMeta();
+
+        if (lastSpecWithMeta.f1 == null) {
+            return;
+        }
+
+        var firstDeploymentNode = lastSpecWithMeta.f1.get("metadata").get("firstDeployment");
+        if (firstDeploymentNode != null && firstDeploymentNode.asBoolean(false)) {
+            reconStatus.setLastReconciledSpec(null);
+        }
     }
 
     /**

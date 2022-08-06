@@ -76,13 +76,15 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         var reconciliationStatus = status.getReconciliationStatus();
 
         // Nothing has been launched so skip observing
-        if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
+        if (reconciliationStatus.isFirstDeployment()
+                || reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
             return;
         }
 
         if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
             checkIfAlreadyUpgraded(flinkApp, context);
             if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+                ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(flinkApp);
                 return;
             }
         }
@@ -262,9 +264,6 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
      */
     private void checkIfAlreadyUpgraded(FlinkDeployment flinkDep, Context<?> context) {
         var status = flinkDep.getStatus();
-        if (status.getReconciliationStatus().isFirstDeployment()) {
-            return;
-        }
         Optional<Deployment> depOpt = context.getSecondaryResource(Deployment.class);
         depOpt.ifPresent(
                 deployment -> {

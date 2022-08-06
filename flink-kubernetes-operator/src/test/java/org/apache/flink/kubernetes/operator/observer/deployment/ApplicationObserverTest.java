@@ -492,4 +492,19 @@ public class ApplicationObserverTest {
         assertEquals(JobState.RUNNING, specWithMeta.f0.getJob().getState());
         assertEquals(5, specWithMeta.f0.getJob().getParallelism());
     }
+
+    @Test
+    public void validateLastReconciledClearedOnInitialFailure() {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getMetadata().setGeneration(123L);
+
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
+                deployment,
+                new FlinkConfigManager(new Configuration())
+                        .getDeployConfig(deployment.getMetadata(), deployment.getSpec()));
+
+        assertFalse(deployment.getStatus().getReconciliationStatus().isFirstDeployment());
+        observer.observe(deployment, TestUtils.createEmptyContext());
+        assertTrue(deployment.getStatus().getReconciliationStatus().isFirstDeployment());
+    }
 }
