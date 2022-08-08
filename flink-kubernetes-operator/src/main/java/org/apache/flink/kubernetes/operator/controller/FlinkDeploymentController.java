@@ -116,6 +116,12 @@ public class FlinkDeploymentController
         } catch (DeploymentFailedException dfe) {
             handleDeploymentFailed(flinkApp, dfe);
         } catch (Exception e) {
+            eventRecorder.triggerEvent(
+                    flinkApp,
+                    EventRecorder.Type.Warning,
+                    "ClusterDeploymentException",
+                    e.getMessage(),
+                    EventRecorder.Component.JobManagerDeployment);
             throw new ReconciliationException(e);
         }
 
