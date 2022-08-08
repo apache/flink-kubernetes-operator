@@ -157,6 +157,12 @@ public class FlinkDeploymentController
         for (FlinkResourceValidator validator : validators) {
             Optional<String> validationError = validator.validateDeployment(deployment);
             if (validationError.isPresent()) {
+                eventRecorder.triggerEvent(
+                        deployment,
+                        EventRecorder.Type.Warning,
+                        EventRecorder.Reason.ValidationError,
+                        EventRecorder.Component.Operator,
+                        validationError.get());
                 return ReconciliationUtils.applyValidationErrorAndResetSpec(
                         deployment, validationError.get());
             }

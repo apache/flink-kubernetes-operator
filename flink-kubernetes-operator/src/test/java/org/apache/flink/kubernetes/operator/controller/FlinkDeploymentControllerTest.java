@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -61,9 +62,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED;
+import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -576,16 +579,21 @@ public class FlinkDeploymentControllerTest {
                         .getState());
         appCluster.getSpec().setLogConfiguration(Map.of("invalid", "conf"));
         testController.reconcile(appCluster, TestUtils.createEmptyContext());
-        assertEquals(1, testController.events().size());
+        assertEquals(2, testController.events().size());
+        testController.events().remove();
         assertEquals(
                 EventRecorder.Reason.Submit,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(testController.events().remove().getReason()));
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
-        assertEquals(1, testController.events().size());
+        var statusEvents =
+                testController.events().stream()
+                        .filter(e -> !e.getReason().equals(ValidationError.name()))
+                        .collect(Collectors.toList());
+        assertEquals(1, statusEvents.size());
         assertEquals(
                 EventRecorder.Reason.StatusChanged,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(statusEvents.get(0).getReason()));
 
         assertEquals(
                 JobManagerDeploymentStatus.READY,
@@ -863,6 +871,23 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec(),
                 appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
+    }
+
+    @Test
+    public void testValidationError() throws Exception {
+        assertTrue(testController.events().isEmpty());
+        var flinkDeployment = TestUtils.buildApplicationCluster();
+        flinkDeployment.getSpec().getJob().setParallelism(-1);
+        testController.reconcile(flinkDeployment, context);
+
+        assertEquals(1, testController.events().size());
+        assertEquals(
+                ResourceLifecycleState.FAILED, flinkDeployment.getStatus().getLifecycleState());
+
+        var event = testController.events().remove();
+        assertEquals("Warning", event.getType());
+        assertEquals("ValidationError", event.getReason());
+        assertTrue(event.getMessage().startsWith("Job parallelism "));
     }
 
     @Test

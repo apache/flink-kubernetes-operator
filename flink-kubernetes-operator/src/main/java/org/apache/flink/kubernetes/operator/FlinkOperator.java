@@ -152,7 +152,12 @@ public class FlinkOperator {
         var observer = new SessionJobObserver(flinkServiceFactory, configManager, eventRecorder);
         var controller =
                 new FlinkSessionJobController(
-                        configManager, validators, reconciler, observer, statusRecorder);
+                        configManager,
+                        validators,
+                        reconciler,
+                        observer,
+                        statusRecorder,
+                        eventRecorder);
         registeredControllers.add(operator.register(controller, this::overrideControllerConfigs));
     }
 
