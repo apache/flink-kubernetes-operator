@@ -122,6 +122,7 @@ public class EventRecorder {
         StatusChanged,
         SavepointError,
         Cleanup,
-        Missing
+        Missing,
+        ValidationError
     }
 }

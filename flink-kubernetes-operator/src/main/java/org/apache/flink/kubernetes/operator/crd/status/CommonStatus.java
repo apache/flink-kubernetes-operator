@@ -27,6 +27,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import org.apache.commons.lang3.StringUtils;
 
 /** Last observed common status of the Flink deployment/Flink SessionJob. */
 @Experimental
@@ -54,7 +55,9 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
         var reconciliationStatus = getReconciliationStatus();
 
         if (reconciliationStatus.isFirstDeployment()) {
-            return ResourceLifecycleState.CREATED;
+            return StringUtils.isEmpty(error)
+                    ? ResourceLifecycleState.CREATED
+                    : ResourceLifecycleState.FAILED;
         }
 
         switch (reconciliationStatus.getState()) {
