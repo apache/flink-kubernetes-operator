@@ -488,7 +488,7 @@ public class ApplicationObserverTest {
                 status.getJobManagerDeploymentStatus());
 
         var specWithMeta = status.getReconciliationStatus().deserializeLastReconciledSpecWithMeta();
-        assertEquals(321L, specWithMeta.f1.get("metadata").get("generation").asLong());
+        assertEquals(321L, specWithMeta.f1.getMetadata().getGeneration());
         assertEquals(JobState.RUNNING, specWithMeta.f0.getJob().getState());
         assertEquals(5, specWithMeta.f0.getJob().getParallelism());
     }
