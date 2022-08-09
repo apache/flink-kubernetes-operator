@@ -268,8 +268,9 @@ public class ReconciliationUtils {
      * @return Tuple2 of spec and meta.
      * @param <T> Spec type.
      */
-    public static <T extends AbstractFlinkSpec> Tuple2<T, ObjectNode> deserializeSpecWithMeta(
-            @Nullable String specWithMetaString, Class<T> specClass) {
+    public static <T extends AbstractFlinkSpec>
+            Tuple2<T, ReconciliationMetadata> deserializeSpecWithMeta(
+                    @Nullable String specWithMetaString, Class<T> specClass) {
         if (specWithMetaString == null) {
             return null;
         }
@@ -284,7 +285,8 @@ public class ReconciliationUtils {
                 return Tuple2.of(objectMapper.treeToValue(wrapper, specClass), null);
             } else {
                 return Tuple2.of(
-                        objectMapper.treeToValue(wrapper.get("spec"), specClass), internalMeta);
+                        objectMapper.treeToValue(wrapper.get("spec"), specClass),
+                        objectMapper.convertValue(internalMeta, ReconciliationMetadata.class));
             }
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Could not deserialize spec, this indicates a bug...", e);
@@ -300,29 +302,25 @@ public class ReconciliationUtils {
      */
     public static String writeSpecWithMeta(
             AbstractFlinkSpec spec, AbstractFlinkResource<?, ?> relatedResource) {
-
-        ObjectNode internalMeta = objectMapper.createObjectNode();
-
-        internalMeta.put("apiVersion", relatedResource.getApiVersion());
-        ObjectNode metadata = internalMeta.putObject("metadata");
-        metadata.put("generation", relatedResource.getMetadata().getGeneration());
-
-        return writeSpecWithMeta(spec, internalMeta);
+        return writeSpecWithMeta(spec, ReconciliationMetadata.from(relatedResource));
     }
 
     /**
      * Serializes the spec and custom meta information into a JSON string.
      *
      * @param spec Flink resource spec.
-     * @param meta Custom meta object.
+     * @param metadata Reconciliation meta object.
      * @return Serialized json.
      */
-    public static String writeSpecWithMeta(AbstractFlinkSpec spec, ObjectNode meta) {
+    public static String writeSpecWithMeta(
+            AbstractFlinkSpec spec, ReconciliationMetadata metadata) {
 
         ObjectNode wrapper = objectMapper.createObjectNode();
 
         wrapper.set("spec", objectMapper.valueToTree(Preconditions.checkNotNull(spec)));
-        wrapper.set(INTERNAL_METADATA_JSON_KEY, meta);
+        wrapper.set(
+                INTERNAL_METADATA_JSON_KEY,
+                objectMapper.valueToTree(Preconditions.checkNotNull(metadata)));
 
         try {
             return objectMapper.writeValueAsString(wrapper);
@@ -435,7 +433,26 @@ public class ReconciliationUtils {
             return -1L;
         }
 
-        return lastSpecWithMeta.f1.get("metadata").get("generation").asLong(-1L);
+        return lastSpecWithMeta.f1.getMetadata().getGeneration();
+    }
+
+    /**
+     * Clear last reconciled spec if that corresponds to the first deployment. This is important in
+     * cases where the first deployment fails.
+     *
+     * @param resource Flink resource.
+     */
+    public static void clearLastReconciledSpecIfFirstDeploy(AbstractFlinkResource<?, ?> resource) {
+        var reconStatus = resource.getStatus().getReconciliationStatus();
+        var lastSpecWithMeta = reconStatus.deserializeLastReconciledSpecWithMeta();
+
+        if (lastSpecWithMeta.f1 == null) {
+            return;
+        }
+
+        if (lastSpecWithMeta.f1.isFirstDeployment()) {
+            reconStatus.setLastReconciledSpec(null);
+        }
     }
 
     /**

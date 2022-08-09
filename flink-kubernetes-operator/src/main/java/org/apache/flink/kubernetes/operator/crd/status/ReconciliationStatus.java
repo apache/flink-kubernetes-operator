@@ -21,10 +21,10 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationMetadata;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -68,12 +68,12 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
     }
 
     @JsonIgnore
-    public Tuple2<SPEC, ObjectNode> deserializeLastReconciledSpecWithMeta() {
+    public Tuple2<SPEC, ReconciliationMetadata> deserializeLastReconciledSpecWithMeta() {
         return ReconciliationUtils.deserializeSpecWithMeta(lastReconciledSpec, getSpecClass());
     }
 
     @JsonIgnore
-    public Tuple2<SPEC, ObjectNode> deserializeLastStableSpecWithMeta() {
+    public Tuple2<SPEC, ReconciliationMetadata> deserializeLastStableSpecWithMeta() {
         return ReconciliationUtils.deserializeSpecWithMeta(lastStableSpec, getSpecClass());
     }
 
