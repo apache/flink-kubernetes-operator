@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -45,6 +46,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link SessionJobObserver}. */
 @EnableKubernetesMockClient(crud = true)
@@ -340,5 +344,17 @@ public class SessionJobObserverTest {
                         RuntimeException.class, () -> observer.observe(sessionJob, readyContext));
         Assertions.assertTrue(
                 exception.getMessage().contains("doesn't match upgrade target generation"));
+    }
+
+    @Test
+    public void validateLastReconciledClearedOnInitialFailure() {
+        var sessionJob = TestUtils.buildSessionJob();
+        sessionJob.getMetadata().setGeneration(123L);
+
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(sessionJob, new Configuration());
+
+        assertFalse(sessionJob.getStatus().getReconciliationStatus().isFirstDeployment());
+        observer.observe(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertTrue(sessionJob.getStatus().getReconciliationStatus().isFirstDeployment());
     }
 }
