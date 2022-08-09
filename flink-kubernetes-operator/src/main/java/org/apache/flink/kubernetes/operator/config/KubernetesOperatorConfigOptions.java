@@ -234,7 +234,7 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Comma separated list of namespaces the operator monitors for custom resources.");
 
-    @Documentation.Section(SECTION_SYSTEM)
+    @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<String> OPERATOR_LABEL_SELECTOR =
             ConfigOptions.key("kubernetes.operator.label.selector")
                     .stringType()
@@ -289,4 +289,18 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(SavepointFormatType.DEFAULT)
                     .withDescription(
                             "Type of the binary format in which a savepoint should be taken.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Boolean> OPERATOR_HEALTH_PROBE_ENABLED =
+            ConfigOptions.key("kubernetes.operator.health.probe.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription("Enables health probe for the kubernetes operator.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Integer> OPERATOR_HEALTH_PROBE_PORT =
+            ConfigOptions.key("kubernetes.operator.health.probe.port")
+                    .intType()
+                    .defaultValue(8085)
+                    .withDescription("The port the health probe will use to expose the status.");
 }

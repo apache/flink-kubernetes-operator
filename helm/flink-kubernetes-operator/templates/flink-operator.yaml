@@ -59,10 +59,15 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["/docker-entrypoint.sh", "operator"]
-          {{- if .Values.metrics.port }}
           ports:
+          {{- if .Values.metrics.port }}
             - containerPort: {{ .Values.metrics.port }}
               name: metrics
+              protocol: TCP
+          {{- end }}
+          {{- if index .Values "operatorHealth" }}
+            - containerPort: {{ .Values.operatorHealth.port }}
+              name: health-port
               protocol: TCP
           {{- end }}
           env:
@@ -90,6 +95,20 @@ spec:
             {{- if .Values.operatorVolumeMounts.create }}
                 {{- toYaml .Values.operatorVolumeMounts.data | nindent 12 }}
             {{- end }}
+          {{- if and (index .Values "operatorHealth") (index .Values.operatorHealth "livenessProbe") }}
+          livenessProbe:
+            {{- toYaml .Values.operatorHealth.livenessProbe | nindent 12 }}
+            httpGet:
+              path: /
+              port: health-port
+          {{- end }}
+          {{- if and (index .Values "operatorHealth") (index .Values.operatorHealth "startupProbe") }}
+          startupProbe:
+            {{- toYaml .Values.operatorHealth.startupProbe | nindent 12 }}
+            httpGet:
+              path: /
+              port: health-port
+          {{- end }}
         {{- if eq (include "webhook-enabled" .) "true" }}
         - name: flink-webhook
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -173,6 +192,10 @@ data:
 {{- end }}
 {{- if .Values.watchNamespaces }}
     kubernetes.operator.watched.namespaces: {{ join "," .Values.watchNamespaces  }}
+{{- end }}
+{{- if index .Values "operatorHealth" }}
+    kubernetes.operator.health.probe.enabled: true
+    kubernetes.operator.health.probe.port: {{ .Values.operatorHealth.port }}
 {{- end }}
   log4j-operator.properties: |+
 {{- if .Values.defaultConfiguration.append }}

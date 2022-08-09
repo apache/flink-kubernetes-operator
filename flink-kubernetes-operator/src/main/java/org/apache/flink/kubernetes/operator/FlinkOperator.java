@@ -25,6 +25,7 @@ import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
+import org.apache.flink.kubernetes.operator.health.OperatorHealthService;
 import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.listener.ListenerUtils;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
@@ -72,14 +73,16 @@ public class FlinkOperator {
     @VisibleForTesting final Set<RegisteredController<?>> registeredControllers = new HashSet<>();
     private final KubernetesOperatorMetricGroup metricGroup;
     private final Collection<FlinkResourceListener> listeners;
+    private final OperatorHealthService operatorHealthService;
 
     public FlinkOperator(@Nullable Configuration conf) {
         this.configManager =
                 conf != null
                         ? new FlinkConfigManager(conf) // For testing only
                         : new FlinkConfigManager(this::handleNamespaceChanges);
-        this.metricGroup =
-                OperatorMetricUtils.initOperatorMetrics(configManager.getDefaultConfig());
+
+        var defaultConfig = configManager.getDefaultConfig();
+        this.metricGroup = OperatorMetricUtils.initOperatorMetrics(defaultConfig);
         this.client =
                 KubernetesClientUtils.getKubernetesClient(
                         configManager.getOperatorConfiguration(), this.metricGroup);
@@ -87,9 +90,9 @@ public class FlinkOperator {
         this.flinkServiceFactory = new FlinkServiceFactory(client, configManager);
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.listeners = ListenerUtils.discoverListeners(configManager);
-        PluginManager pluginManager =
-                PluginUtils.createPluginManagerFromRootFolder(configManager.getDefaultConfig());
-        FileSystem.initialize(configManager.getDefaultConfig(), pluginManager);
+        PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(defaultConfig);
+        FileSystem.initialize(defaultConfig, pluginManager);
+        this.operatorHealthService = OperatorHealthService.fromConfig(configManager);
     }
 
     private void handleNamespaceChanges(Set<String> namespaces) {
@@ -183,6 +186,10 @@ public class FlinkOperator {
         registerSessionJobController();
         operator.installShutdownHook();
         operator.start();
+        if (operatorHealthService != null) {
+            Runtime.getRuntime().addShutdownHook(new Thread(operatorHealthService::stop));
+            operatorHealthService.start();
+        }
     }
 
     public static void main(String... args) {
