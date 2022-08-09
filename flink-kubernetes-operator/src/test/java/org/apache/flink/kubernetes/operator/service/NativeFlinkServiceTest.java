@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.service;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
@@ -344,27 +345,27 @@ public class NativeFlinkServiceTest {
         final TestingClusterClient<String> testingClusterClient =
                 new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final String savepointPath = "file:///path/of/svp";
-        final CompletableFuture<Tuple3<JobID, String, Boolean>> savepointFeature =
-                new CompletableFuture<>();
+        final CompletableFuture<Tuple4<JobID, String, Boolean, SavepointFormatType>>
+                triggerSavepointFuture = new CompletableFuture<>();
         configuration.set(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointPath);
         testingClusterClient.setRequestProcessor(
                 (headers, parameters, requestBody) -> {
-                    savepointFeature.complete(
-                            new Tuple3<>(
+                    triggerSavepointFuture.complete(
+                            new Tuple4<>(
                                     ((SavepointTriggerMessageParameters) parameters)
                                             .jobID.getValue(),
                                     ((SavepointTriggerRequestBody) requestBody)
                                             .getTargetDirectory()
                                             .get(),
-                                    ((SavepointTriggerRequestBody) requestBody).isCancelJob()));
+                                    ((SavepointTriggerRequestBody) requestBody).isCancelJob(),
+                                    ((SavepointTriggerRequestBody) requestBody).getFormatType()));
                     return CompletableFuture.completedFuture(new TriggerResponse(new TriggerId()));
                 });
-        final CompletableFuture<Tuple3<JobID, Boolean, String>> stopWithSavepointFuture =
-                new CompletableFuture<>();
-        testingClusterClient.setStopWithSavepointFunction(
-                (id, advanceToEndOfEventTime, savepointDir) -> {
-                    stopWithSavepointFuture.complete(
-                            new Tuple3<>(id, advanceToEndOfEventTime, savepointDir));
+        final CompletableFuture<Tuple3<JobID, SavepointFormatType, String>>
+                stopWithSavepointFuture = new CompletableFuture<>();
+        testingClusterClient.setStopWithSavepointFormat(
+                (id, formatType, savepointDir) -> {
+                    stopWithSavepointFuture.complete(new Tuple3<>(id, formatType, savepointDir));
                     return CompletableFuture.completedFuture(savepointPath);
                 });
 
@@ -392,10 +393,11 @@ public class NativeFlinkServiceTest {
                         .set(
                                 KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE,
                                 SavepointFormatType.NATIVE));
-        assertTrue(savepointFeature.isDone());
-        assertEquals(jobID, savepointFeature.get().f0);
-        assertEquals(savepointPath, savepointFeature.get().f1);
-        assertFalse(savepointFeature.get().f2);
+        assertTrue(triggerSavepointFuture.isDone());
+        assertEquals(jobID, triggerSavepointFuture.get().f0);
+        assertEquals(savepointPath, triggerSavepointFuture.get().f1);
+        assertFalse(triggerSavepointFuture.get().f2);
+        assertEquals(SavepointFormatType.NATIVE, triggerSavepointFuture.get().f3);
 
         flinkService.cancelJob(
                 deployment,
@@ -406,7 +408,7 @@ public class NativeFlinkServiceTest {
                                 SavepointFormatType.NATIVE));
         assertTrue(stopWithSavepointFuture.isDone());
         assertEquals(jobID, stopWithSavepointFuture.get().f0);
-        assertFalse(stopWithSavepointFuture.get().f1);
+        assertEquals(SavepointFormatType.NATIVE, stopWithSavepointFuture.get().f1);
         assertEquals(savepointPath, stopWithSavepointFuture.get().f2);
     }
 
