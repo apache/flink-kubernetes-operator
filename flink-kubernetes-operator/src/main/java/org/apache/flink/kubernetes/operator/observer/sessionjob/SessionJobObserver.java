@@ -118,6 +118,7 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
         if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
             checkIfAlreadyUpgraded(flinkSessionJob, deployedConfig);
             if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+                ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(flinkSessionJob);
                 return;
             }
         }

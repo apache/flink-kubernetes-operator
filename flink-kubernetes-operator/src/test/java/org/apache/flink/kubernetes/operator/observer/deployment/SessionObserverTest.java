@@ -148,7 +148,7 @@ public class SessionObserverTest {
                 status.getJobManagerDeploymentStatus());
 
         var specWithMeta = status.getReconciliationStatus().deserializeLastReconciledSpecWithMeta();
-        assertEquals(321L, specWithMeta.f1.get("metadata").get("generation").asLong());
+        assertEquals(321L, specWithMeta.f1.getMetadata().getGeneration());
         assertEquals("1", specWithMeta.f0.getFlinkConfiguration().get("k"));
     }
 }

@@ -70,6 +70,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /** {@link FlinkDeploymentController} tests. */
@@ -941,5 +942,20 @@ public class FlinkDeploymentControllerTest {
             }
         }
         return args.stream();
+    }
+
+    @Test
+    public void testInitialSavepointOnError() throws Exception {
+        FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        flinkDeployment.getSpec().getJob().setInitialSavepointPath("msp");
+        flinkService.setDeployFailure(true);
+        try {
+            testController.reconcile(flinkDeployment, context);
+            fail();
+        } catch (Exception expected) {
+        }
+        flinkService.setDeployFailure(false);
+        testController.reconcile(flinkDeployment, context);
+        assertEquals("msp", flinkService.listJobs().get(0).f0);
     }
 }
