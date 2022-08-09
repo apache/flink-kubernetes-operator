@@ -55,14 +55,10 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -81,7 +77,9 @@ public class NativeFlinkServiceTest {
 
     @BeforeEach
     public void setup() {
-        setConfiguration(configuration);
+        configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
+        configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
+        configuration.set(FLINK_VERSION, FlinkVersion.v1_15);
     }
 
     @Test
@@ -112,10 +110,8 @@ public class NativeFlinkServiceTest {
         assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
     }
 
-    @ParameterizedTest
-    @MethodSource("provideSavepointFormatType")
-    public void testCancelJobWithSavepointUpgradeMode(
-            Configuration configuration, FlinkConfigManager configManager) throws Exception {
+    @Test
+    public void testCancelJobWithSavepointUpgradeMode() throws Exception {
         final TestingClusterClient<String> testingClusterClient =
                 new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final CompletableFuture<Tuple3<JobID, Boolean, String>> stopWithSavepointFuture =
@@ -129,7 +125,7 @@ public class NativeFlinkServiceTest {
                     return CompletableFuture.completedFuture(savepointPath);
                 });
 
-        final FlinkService flinkService = createFlinkService(testingClusterClient, configuration);
+        final FlinkService flinkService = createFlinkService(testingClusterClient);
 
         JobID jobID = JobID.generate();
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
@@ -186,10 +182,8 @@ public class NativeFlinkServiceTest {
                         .get());
     }
 
-    @ParameterizedTest
-    @MethodSource("provideSavepointFormatType")
-    public void testTriggerSavepoint(Configuration configuration, FlinkConfigManager configManager)
-            throws Exception {
+    @Test
+    public void testTriggerSavepoint() throws Exception {
         final TestingClusterClient<String> testingClusterClient =
                 new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final CompletableFuture<Tuple3<JobID, String, Boolean>> triggerSavepointFuture =
@@ -345,6 +339,77 @@ public class NativeFlinkServiceTest {
                 AbstractFlinkService.getEffectiveStatus(allFinished));
     }
 
+    @Test
+    public void testNativeSavepointFormat() throws Exception {
+        final TestingClusterClient<String> testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        final String savepointPath = "file:///path/of/svp";
+        final CompletableFuture<Tuple3<JobID, String, Boolean>> savepointFeature =
+                new CompletableFuture<>();
+        configuration.set(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointPath);
+        testingClusterClient.setRequestProcessor(
+                (headers, parameters, requestBody) -> {
+                    savepointFeature.complete(
+                            new Tuple3<>(
+                                    ((SavepointTriggerMessageParameters) parameters)
+                                            .jobID.getValue(),
+                                    ((SavepointTriggerRequestBody) requestBody)
+                                            .getTargetDirectory()
+                                            .get(),
+                                    ((SavepointTriggerRequestBody) requestBody).isCancelJob()));
+                    return CompletableFuture.completedFuture(new TriggerResponse(new TriggerId()));
+                });
+        final CompletableFuture<Tuple3<JobID, Boolean, String>> stopWithSavepointFuture =
+                new CompletableFuture<>();
+        testingClusterClient.setStopWithSavepointFunction(
+                (id, advanceToEndOfEventTime, savepointDir) -> {
+                    stopWithSavepointFuture.complete(
+                            new Tuple3<>(id, advanceToEndOfEventTime, savepointDir));
+                    return CompletableFuture.completedFuture(savepointPath);
+                });
+
+        final FlinkService flinkService = createFlinkService(testingClusterClient);
+
+        final JobID jobID = JobID.generate();
+        final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), savepointPath);
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        JobStatus jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        jobStatus.setJobId(jobID.toString());
+        deployment.getStatus().setJobStatus(jobStatus);
+        flinkService.triggerSavepoint(
+                deployment.getStatus().getJobStatus().getJobId(),
+                SavepointTriggerType.MANUAL,
+                deployment.getStatus().getJobStatus().getSavepointInfo(),
+                new Configuration(configuration)
+                        .set(
+                                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE,
+                                SavepointFormatType.NATIVE));
+        assertTrue(savepointFeature.isDone());
+        assertEquals(jobID, savepointFeature.get().f0);
+        assertEquals(savepointPath, savepointFeature.get().f1);
+        assertFalse(savepointFeature.get().f2);
+
+        flinkService.cancelJob(
+                deployment,
+                UpgradeMode.SAVEPOINT,
+                new Configuration(configManager.getObserveConfig(deployment))
+                        .set(
+                                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE,
+                                SavepointFormatType.NATIVE));
+        assertTrue(stopWithSavepointFuture.isDone());
+        assertEquals(jobID, stopWithSavepointFuture.get().f0);
+        assertFalse(stopWithSavepointFuture.get().f1);
+        assertEquals(savepointPath, stopWithSavepointFuture.get().f2);
+    }
+
     private JobDetails getJobDetails(
             org.apache.flink.api.common.JobStatus status,
             Tuple2<ExecutionState, Integer>... tasksPerState) {
@@ -366,11 +431,6 @@ public class NativeFlinkServiceTest {
     }
 
     private FlinkService createFlinkService(ClusterClient<String> clusterClient) {
-        return createFlinkService(clusterClient, configuration);
-    }
-
-    private FlinkService createFlinkService(
-            ClusterClient<String> clusterClient, Configuration configuration) {
         return new NativeFlinkService(client, new FlinkConfigManager(configuration)) {
             @Override
             protected ClusterClient<String> getClusterClient(Configuration config) {
@@ -388,27 +448,5 @@ public class NativeFlinkServiceTest {
                 .withNewSpec()
                 .endSpec()
                 .build();
-    }
-
-    private static Configuration setConfiguration(Configuration configuration) {
-        configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
-        configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
-        configuration.set(FLINK_VERSION, FlinkVersion.v1_15);
-        return configuration;
-    }
-
-    private static Stream<Arguments> provideSavepointFormatType() {
-        Configuration canonicalConfiguration = setConfiguration(new Configuration());
-        Configuration nativeConfiguration =
-                setConfiguration(
-                        new Configuration()
-                                .set(
-                                        KubernetesOperatorConfigOptions
-                                                .OPERATOR_SAVEPOINT_FORMAT_TYPE,
-                                        SavepointFormatType.NATIVE.name()));
-        return Stream.of(
-                Arguments.of(
-                        canonicalConfiguration, new FlinkConfigManager(canonicalConfiguration)),
-                Arguments.of(nativeConfiguration, new FlinkConfigManager(nativeConfiguration)));
     }
 }

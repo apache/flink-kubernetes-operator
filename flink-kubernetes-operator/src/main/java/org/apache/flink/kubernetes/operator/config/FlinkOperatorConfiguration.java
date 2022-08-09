@@ -19,7 +19,6 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
@@ -55,7 +54,6 @@ public class FlinkOperatorConfiguration {
     Duration savepointHistoryAgeThreshold;
     RetryConfiguration retryConfiguration;
     String labelSelector;
-    SavepointFormatType savepointFormatType;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -131,14 +129,6 @@ public class FlinkOperatorConfiguration {
         String labelSelector =
                 operatorConfig.getString(KubernetesOperatorConfigOptions.OPERATOR_LABEL_SELECTOR);
 
-        SavepointFormatType savepointFormatType =
-                SavepointFormatType.valueOf(
-                        operatorConfig
-                                .getString(
-                                        KubernetesOperatorConfigOptions
-                                                .OPERATOR_SAVEPOINT_FORMAT_TYPE)
-                                .toUpperCase());
-
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -157,8 +147,7 @@ public class FlinkOperatorConfiguration {
                 savepointHistoryCountThreshold,
                 savepointHistoryAgeThreshold,
                 retryConfiguration,
-                labelSelector,
-                savepointFormatType);
+                labelSelector);
     }
 
     /** Enables configurable retry mechanism for reconciliation errors. */

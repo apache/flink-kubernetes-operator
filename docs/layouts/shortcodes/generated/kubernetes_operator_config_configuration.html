@@ -142,9 +142,9 @@
         </tr>
         <tr>
             <td><h5>kubernetes.operator.savepoint.format.type</h5></td>
-            <td style="word-wrap: break-word;">"CANONICAL"</td>
-            <td>String</td>
-            <td>Type of the binary format in which a savepoint should be taken.</td>
+            <td style="word-wrap: break-word;">CANONICAL</td>
+            <td><p>Enum</p></td>
+            <td>Type of the binary format in which a savepoint should be taken.<br /><br />Possible values:<ul><li>"CANONICAL": A canonical, common for all state backends format. It lets you switch state backends.</li><li>"NATIVE": A format specific for the chosen state backend, in its native binary format. Might be faster to take and restore from than the canonical one.</li></ul></td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.savepoint.history.max.age</h5></td>

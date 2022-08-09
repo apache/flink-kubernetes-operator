@@ -283,10 +283,10 @@ public class KubernetesOperatorConfigOptions {
                             "Enables last-state fallback for savepoint upgrade mode. When the job is not running thus savepoint cannot be triggered but HA metadata is available for last state restore the operator can initiate the upgrade process when the flag is enabled.");
 
     @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<String> OPERATOR_SAVEPOINT_FORMAT_TYPE =
+    public static final ConfigOption<SavepointFormatType> OPERATOR_SAVEPOINT_FORMAT_TYPE =
             ConfigOptions.key("kubernetes.operator.savepoint.format.type")
-                    .stringType()
-                    .defaultValue(SavepointFormatType.DEFAULT.name())
+                    .enumType(SavepointFormatType.class)
+                    .defaultValue(SavepointFormatType.DEFAULT)
                     .withDescription(
                             "Type of the binary format in which a savepoint should be taken.");
 }
