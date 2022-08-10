@@ -42,7 +42,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
-import io.fabric8.kubernetes.api.model.EventBuilder;
+import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRule;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -888,6 +888,26 @@ public class FlinkDeploymentControllerTest {
         assertEquals("Warning", event.getType());
         assertEquals("ValidationError", event.getReason());
         assertTrue(event.getMessage().startsWith("Job parallelism "));
+    }
+
+    @Test
+    public void testNonDeploymentFailedException() throws Exception {
+        assertTrue(testController.events().isEmpty());
+        var flinkDeployment = TestUtils.buildApplicationCluster();
+
+        flinkService.setDeployFailure(true);
+        try {
+            testController.reconcile(flinkDeployment, context);
+            fail();
+        } catch (Exception expected) {
+        }
+        assertEquals(2, testController.events().size());
+
+        var event = testController.events().remove();
+        assertEquals("Submit", event.getReason());
+        event = testController.events().remove();
+        assertEquals("ClusterDeploymentException", event.getReason());
+        assertEquals("Deployment failure", event.getMessage());
     }
 
     @Test
