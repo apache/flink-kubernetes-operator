@@ -891,6 +891,26 @@ public class FlinkDeploymentControllerTest {
     }
 
     @Test
+    public void testEventOfNonDeploymentFailedException() throws Exception {
+        assertTrue(testController.events().isEmpty());
+        var flinkDeployment = TestUtils.buildApplicationCluster();
+
+        flinkService.setDeployFailure(true);
+        try {
+            testController.reconcile(flinkDeployment, context);
+            fail();
+        } catch (Exception expected) {
+        }
+        assertEquals(2, testController.events().size());
+
+        var event = testController.events().remove();
+        assertEquals("Submit", event.getReason());
+        event = testController.events().remove();
+        assertEquals("ClusterDeploymentException", event.getReason());
+        assertEquals("Deployment failure", event.getMessage());
+    }
+
+    @Test
     public void cleanUpNewDeployment() {
         FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
         var deleteControl = testController.cleanup(flinkDeployment, context);
