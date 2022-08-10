@@ -42,7 +42,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
-import io.fabric8.kubernetes.api.model.*;
+import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRule;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -891,7 +891,7 @@ public class FlinkDeploymentControllerTest {
     }
 
     @Test
-    public void testNonDeploymentFailedException() throws Exception {
+    public void testEventOfNonDeploymentFailedException() throws Exception {
         assertTrue(testController.events().isEmpty());
         var flinkDeployment = TestUtils.buildApplicationCluster();
 
