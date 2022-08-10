@@ -136,6 +136,9 @@ public class FlinkConfigBuilder {
         setDefaultConf(CANCEL_ENABLE, false);
 
         if (spec.getJob() != null) {
+            // Set 'pipeline.name' to resource name by default for application deployments.
+            setDefaultConf(PipelineOptions.NAME, clusterId);
+
             // With last-state upgrade mode, set the default value of
             // 'execution.checkpointing.interval'
             // to 5 minutes when HA is enabled.
