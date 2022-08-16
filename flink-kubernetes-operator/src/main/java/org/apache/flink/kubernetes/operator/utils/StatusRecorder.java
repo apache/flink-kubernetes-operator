@@ -35,6 +35,7 @@ import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
@@ -163,6 +164,7 @@ public class StatusRecorder<
                     Collection<FlinkResourceListener> listeners) {
         BiConsumer<CR, S> consumer =
                 (resource, previousStatus) -> {
+                    var now = Instant.now();
                     var ctx =
                             new FlinkResourceListener.StatusUpdateContext() {
                                 @Override
@@ -178,6 +180,11 @@ public class StatusRecorder<
                                 @Override
                                 public KubernetesClient getKubernetesClient() {
                                     return kubernetesClient;
+                                }
+
+                                @Override
+                                public Instant getTimestamp() {
+                                    return now;
                                 }
                             };
 

@@ -30,6 +30,7 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -73,6 +74,8 @@ public class FlinkResourceListenerTest {
 
         assertEquals(1, listener2.updates.size());
         assertEquals(deployment, listener2.updates.get(0).getFlinkResource());
+        assertEquals(
+                listener1.updates.get(0).getTimestamp(), listener2.updates.get(0).getTimestamp());
 
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         statusRecorder.patchAndCacheStatus(deployment);
@@ -109,6 +112,11 @@ public class FlinkResourceListenerTest {
 
         for (int i = 0; i < listener1.events.size(); i++) {
             assertEquals(listener1.events.get(i).getEvent(), listener2.events.get(i).getEvent());
+            assertEquals(
+                    listener1.events.get(i).getTimestamp(),
+                    Instant.parse(listener1.events.get(i).getEvent().getLastTimestamp()));
+            assertEquals(
+                    listener1.events.get(i).getTimestamp(), listener2.events.get(i).getTimestamp());
         }
     }
 }

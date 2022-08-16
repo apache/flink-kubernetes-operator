@@ -28,6 +28,8 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
 
+import java.time.Instant;
+
 /** Listener interface for Flink resource related events and status changes. */
 public interface FlinkResourceListener extends Plugin {
 
@@ -44,12 +46,19 @@ public interface FlinkResourceListener extends Plugin {
         R getFlinkResource();
 
         KubernetesClient getKubernetesClient();
+
+        Instant getTimestamp();
     }
 
     /** Context for Resource Event listener methods. */
     interface ResourceEventContext<R extends AbstractFlinkResource<?, ?>>
             extends ResourceContext<R> {
         Event getEvent();
+
+        @Override
+        default Instant getTimestamp() {
+            return Instant.parse(getEvent().getLastTimestamp());
+        }
     }
 
     /** Context for Status listener methods. */
