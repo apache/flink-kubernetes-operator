@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.health;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.util.NetUtils;
 
 import org.junit.jupiter.api.Test;
 
@@ -35,19 +36,20 @@ public class OperatorHealthServiceTest {
 
     @Test
     public void testHealthService() throws Exception {
-        var conf = new Configuration();
-        conf.set(KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT, 1234);
-        var healthService = new OperatorHealthService(new FlinkConfigManager(conf));
-        healthService.start();
+        try (var port = NetUtils.getAvailablePort()) {
+            var conf = new Configuration();
+            conf.set(KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT, port.getPort());
+            var healthService = new OperatorHealthService(new FlinkConfigManager(conf));
+            healthService.start();
 
-        assertTrue(callHealthEndpoint(conf));
-        HealthProbe.INSTANCE.markUnhealthy();
-        assertFalse(callHealthEndpoint(conf));
-
-        healthService.stop();
+            assertTrue(callHealthEndpoint(conf));
+            HealthProbe.INSTANCE.markUnhealthy();
+            assertFalse(callHealthEndpoint(conf));
+            healthService.stop();
+        }
     }
 
-    public static boolean callHealthEndpoint(Configuration conf) throws Exception {
+    private boolean callHealthEndpoint(Configuration conf) throws Exception {
         URL u =
                 new URL(
                         "http://localhost:"
