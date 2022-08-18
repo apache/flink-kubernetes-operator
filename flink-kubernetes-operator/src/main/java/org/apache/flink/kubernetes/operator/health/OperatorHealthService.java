@@ -27,12 +27,11 @@ import org.slf4j.LoggerFactory;
 public class OperatorHealthService {
     private static final Logger LOG = LoggerFactory.getLogger(OperatorHealthService.class);
 
-    private final HealthProbe probe;
+    private final HealthProbe probe = HealthProbe.INSTANCE;
     private final FlinkConfigManager configManager;
     private HttpBootstrap httpBootstrap = null;
 
-    public OperatorHealthService(FlinkConfigManager configManager, HealthProbe probe) {
-        this.probe = probe;
+    public OperatorHealthService(FlinkConfigManager configManager) {
         this.configManager = configManager;
     }
 
@@ -60,7 +59,7 @@ public class OperatorHealthService {
         var defaultConfig = configManager.getDefaultConfig();
         if (defaultConfig.getBoolean(
                 KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_ENABLED)) {
-            return new OperatorHealthService(configManager, new DummyHealthProbe());
+            return new OperatorHealthService(configManager);
         } else {
             LOG.info("Health probe disabled");
             return null;

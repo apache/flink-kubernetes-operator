@@ -31,8 +31,6 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseSt
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion;
 
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 
@@ -42,13 +40,8 @@ import java.nio.charset.StandardCharsets;
  */
 @ChannelHandler.Sharable
 public class OperatorHealthHandler extends SimpleChannelInboundHandler<HttpObject> {
-    private static final Logger LOG = LoggerFactory.getLogger(OperatorHealthHandler.class);
 
-    private final HealthProbe probe;
-
-    OperatorHealthHandler(HealthProbe probe) {
-        this.probe = probe;
-    }
+    private final HealthProbe probe = HealthProbe.INSTANCE;
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, HttpObject msg) {

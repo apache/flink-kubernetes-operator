@@ -17,7 +17,19 @@
 
 package org.apache.flink.kubernetes.operator.health;
 
-/** Base interface for health probes. */
-public interface HealthProbe {
-    boolean isHealthy();
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/** Flink operator health probe. */
+public enum HealthProbe {
+    INSTANCE;
+
+    private final AtomicBoolean isHealthy = new AtomicBoolean(true);
+
+    public void markUnhealthy() {
+        isHealthy.set(false);
+    }
+
+    public boolean isHealthy() {
+        return isHealthy.get();
+    }
 }

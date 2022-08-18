@@ -47,7 +47,7 @@ public class HttpBootstrap {
                         ChannelPipeline pipeline = ch.pipeline();
                         pipeline.addLast(new HttpServerCodec());
                         pipeline.addLast(new HttpObjectAggregator(MAX_REQUEST_LENGTH));
-                        pipeline.addLast(new OperatorHealthHandler(probe));
+                        pipeline.addLast(new OperatorHealthHandler());
                     }
                 };
 
