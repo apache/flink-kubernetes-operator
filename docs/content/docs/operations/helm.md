@@ -96,6 +96,9 @@ The configurable parameters of the Helm chart and which default values as detail
 | fullnameOverride | Overrides the fullname with the specified full name. | |
 | jvmArgs.webhook | The JVM start up options for webhook. | |
 | jvmArgs.operator |  The JVM start up options for operator. | |
+| operatorHealth.port |  Operator health endpoint port to be used by the probes. | 8085 |
+| operatorHealth.livenessProbe |  Liveness probe configuration for the operator using the health endpoint. Only time settings should be configured, endpoint is set automatically based on port. | |
+| operatorHealth.startupProbe |  Startup probe configuration for the operator using the health endpoint. Only time settings should be configured, endpoint is set automatically based on port. | |
 
 For more information check the [Helm documentation](https://helm.sh/docs/helm/helm_install/).
 
