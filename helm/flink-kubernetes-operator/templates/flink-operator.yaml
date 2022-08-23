@@ -84,8 +84,8 @@ spec:
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.operator }}
             {{- range $k, $v := .Values.operatorPod.env }}
-            - name: {{ $v.name }}
-              value: {{ $v.value }}
+            - name: {{ $v.name | quote }}
+              value: {{ $v.value | quote }}
             {{- end }}
           securityContext:
             {{- toYaml .Values.operatorSecurityContext | nindent 12 }}
