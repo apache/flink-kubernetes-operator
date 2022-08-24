@@ -113,7 +113,7 @@ defaultConfiguration:
     kubernetes.operator.metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
     kubernetes.operator.metrics.reporter.prom.port: 9999
 ```
-Some metric reporters, including the Prometheus, needs a port to be exposed on the container. This can be achieved be defining a value for the otherwise empty `metrics.port` variable.
+Some metric reporters, including the Prometheus, need a port to be exposed on the container. This can be achieved be defining a value for the otherwise empty `metrics.port` variable.
 Either in the `values.yaml` file:
 ```yaml
 metrics:
@@ -193,4 +193,16 @@ spec:
       rootLogger.level = DEBUG
       rootLogger.appenderRef.file.ref = LogFile
       ...
+```
+
+### FlinkDeployment Prometheus Configuration
+
+The following example shows how to enable the Prometheus metric reporter for the FlinkDeployment:
+
+```yaml
+spec:
+  ...
+  flinkConfiguration:
+    metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
+    metrics.reporter.prom.port: 9249-9250
 ```
