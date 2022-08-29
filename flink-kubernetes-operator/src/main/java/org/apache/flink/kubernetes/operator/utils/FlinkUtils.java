@@ -187,6 +187,18 @@ public class FlinkUtils {
         conf.set(KubernetesConfigOptions.JOB_MANAGER_ANNOTATIONS, labels);
     }
 
+    public static void setTaskmanagerGenerationAnnotation(Configuration conf, Long generation) {
+        if (generation == null) {
+            return;
+        }
+        var labels =
+                new HashMap<>(
+                        conf.getOptional(KubernetesConfigOptions.TASK_MANAGER_ANNOTATIONS)
+                                .orElse(Collections.emptyMap()));
+        labels.put(CR_GENERATION_LABEL, generation.toString());
+        conf.set(KubernetesConfigOptions.TASK_MANAGER_ANNOTATIONS, labels);
+    }
+
     /**
      * The jobID's lower part is the resource uid, the higher part is the resource generation.
      *

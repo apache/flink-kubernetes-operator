@@ -35,12 +35,13 @@ import org.apache.flink.kubernetes.KubernetesClusterDescriptor;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.Endpoint;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
-import org.apache.flink.kubernetes.kubeclient.KubernetesJobManagerSpecification;
 import org.apache.flink.kubernetes.operator.kubeclient.FlinkStandaloneKubeClient;
+import org.apache.flink.kubernetes.operator.kubeclient.StandaloneKubernetesJobManagerSpecification;
 import org.apache.flink.kubernetes.operator.kubeclient.factory.StandaloneKubernetesJobManagerFactory;
 import org.apache.flink.kubernetes.operator.kubeclient.factory.StandaloneKubernetesTaskManagerFactory;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesTaskManagerParameters;
+import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.highavailability.HighAvailabilityServicesUtils;
@@ -48,11 +49,13 @@ import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClie
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.rpc.AddressResolution;
 
-import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
+import io.fabric8.kubernetes.api.model.apps.StatefulSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Optional;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -146,12 +149,11 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
 
         // Deploy JM + resources
         try {
-            KubernetesJobManagerSpecification jmSpec = getJobManagerSpec(clusterSpecification);
-            Deployment tmDeployment = getTaskManagerDeployment(clusterSpecification);
-
+            StandaloneKubernetesJobManagerSpecification jmSpec =
+                    getJobManagerSpec(clusterSpecification);
+            StatefulSet taskManagerStatefulSet = getTaskManagerStatefulSet(clusterSpecification);
             client.createJobManagerComponent(jmSpec);
-            client.createTaskManagerDeployment(tmDeployment);
-
+            client.createTaskManagerStatefulSet(taskManagerStatefulSet);
             return createClusterClientProvider(clusterId);
         } catch (Exception e) {
             try {
@@ -170,7 +172,7 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
         }
     }
 
-    private KubernetesJobManagerSpecification getJobManagerSpec(
+    private StandaloneKubernetesJobManagerSpecification getJobManagerSpec(
             ClusterSpecification clusterSpecification) throws IOException {
         final StandaloneKubernetesJobManagerParameters kubernetesJobManagerParameters =
                 new StandaloneKubernetesJobManagerParameters(flinkConfig, clusterSpecification);
@@ -184,11 +186,15 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
                                                 client, file, Constants.MAIN_CONTAINER_NAME))
                         .orElse(new FlinkPod.Builder().build());
 
+        final List<PersistentVolumeClaim> persistentVolumeClaims =
+                StandaloneKubernetesUtils.loadPvcFromTemplateFile(
+                        client, kubernetesJobManagerParameters.getVolumeClaimTemplates());
+
         return StandaloneKubernetesJobManagerFactory.buildKubernetesJobManagerSpecification(
-                podTemplate, kubernetesJobManagerParameters);
+                podTemplate, persistentVolumeClaims, kubernetesJobManagerParameters);
     }
 
-    private Deployment getTaskManagerDeployment(ClusterSpecification clusterSpecification) {
+    private StatefulSet getTaskManagerStatefulSet(ClusterSpecification clusterSpecification) {
         final StandaloneKubernetesTaskManagerParameters kubernetesTaskManagerParameters =
                 new StandaloneKubernetesTaskManagerParameters(flinkConfig, clusterSpecification);
 
@@ -200,9 +206,11 @@ public class KubernetesStandaloneClusterDescriptor extends KubernetesClusterDesc
                                         KubernetesUtils.loadPodFromTemplateFile(
                                                 client, file, Constants.MAIN_CONTAINER_NAME))
                         .orElse(new FlinkPod.Builder().build());
-
-        return StandaloneKubernetesTaskManagerFactory.buildKubernetesTaskManagerDeployment(
-                podTemplate, kubernetesTaskManagerParameters);
+        final List<PersistentVolumeClaim> persistentVolumeClaims =
+                StandaloneKubernetesUtils.loadPvcFromTemplateFile(
+                        client, kubernetesTaskManagerParameters.getVolumeClaimTemplates());
+        return StandaloneKubernetesTaskManagerFactory.buildKubernetesTaskManagerStatefulSet(
+                podTemplate, persistentVolumeClaims, kubernetesTaskManagerParameters);
     }
 
     private ClusterClientProvider<String> createClusterClientProvider(String clusterId) {

@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.kubeclient.Fabric8FlinkStandaloneKubeClient;
 import org.apache.flink.kubernetes.operator.kubeclient.FlinkStandaloneKubeClient;
 import org.apache.flink.kubernetes.operator.standalone.KubernetesStandaloneClusterDescriptor;
@@ -39,6 +40,7 @@ import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -86,7 +88,7 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     @Override
     public void deleteClusterDeployment(
             ObjectMeta meta, FlinkDeploymentStatus status, boolean deleteHaData) {
-        deleteClusterInternal(meta, deleteHaData);
+        deleteClusterInternal(meta, status, deleteHaData);
     }
 
     @Override
@@ -142,26 +144,27 @@ public class StandaloneFlinkService extends AbstractFlinkService {
         return new KubernetesClusterClientFactory().getClusterSpecification(conf);
     }
 
-    private void deleteClusterInternal(ObjectMeta meta, boolean deleteHaConfigmaps) {
+    private void deleteClusterInternal(
+            ObjectMeta meta, FlinkDeploymentStatus status, boolean deleteHaConfigmaps) {
         final String clusterId = meta.getName();
         final String namespace = meta.getNamespace();
 
         LOG.info("Deleting Flink Standalone cluster TM resources");
         kubernetesClient
                 .apps()
-                .deployments()
+                .statefulSets()
                 .inNamespace(namespace)
-                .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
-                .cascading(true)
+                .withName(StandaloneKubernetesUtils.getTaskManagerStatefulSetName(clusterId))
+                .withPropagationPolicy(DeletionPropagation.BACKGROUND)
                 .delete();
 
         LOG.info("Deleting Flink Standalone cluster JM resources");
         kubernetesClient
                 .apps()
-                .deployments()
+                .statefulSets()
                 .inNamespace(namespace)
-                .withName(StandaloneKubernetesUtils.getJobManagerDeploymentName(clusterId))
-                .cascading(true)
+                .withName(StandaloneKubernetesUtils.getJobManagerStatefulSetName(clusterId))
+                .withPropagationPolicy(DeletionPropagation.BACKGROUND)
                 .delete();
 
         if (deleteHaConfigmaps) {
@@ -181,6 +184,7 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                                     clusterId, LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
                     .delete();
         }
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
     }
 
     @Override
@@ -192,24 +196,24 @@ public class StandaloneFlinkService extends AbstractFlinkService {
 
         var clusterId = meta.getName();
         var namespace = meta.getNamespace();
-        var name = StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId);
-        var deployment =
-                kubernetesClient.apps().deployments().inNamespace(namespace).withName(name);
+        var name = StandaloneKubernetesUtils.getTaskManagerStatefulSetName(clusterId);
+        var statefulSet =
+                kubernetesClient.apps().statefulSets().inNamespace(namespace).withName(name);
 
-        if (deployment == null || deployment.get() == null) {
+        if (statefulSet == null || statefulSet.get() == null) {
             LOG.warn("TM Deployment ({}) not found", name);
             return false;
         }
 
-        var actualReplicas = deployment.get().getSpec().getReplicas();
+        var actualReplicas = statefulSet.get().getSpec().getReplicas();
         var desiredReplicas =
                 conf.get(StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS);
-        if (actualReplicas != desiredReplicas) {
+        if (!actualReplicas.equals(desiredReplicas)) {
             LOG.info(
                     "Scaling TM replicas: actual({}) -> desired({})",
                     actualReplicas,
                     desiredReplicas);
-            deployment.scale(desiredReplicas);
+            statefulSet.scale(desiredReplicas);
         } else {
             LOG.info(
                     "Not scaling TM replicas: actual({}) == desired({})",

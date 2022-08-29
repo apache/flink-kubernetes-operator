@@ -63,3 +63,4 @@ spec:
       logger.zookeeper.level = INFO
       logger.netty.name = org.apache.flink.shaded.akka.org.jboss.netty.channel.DefaultChannelPipeline
       logger.netty.level = OFF
+  mode: native

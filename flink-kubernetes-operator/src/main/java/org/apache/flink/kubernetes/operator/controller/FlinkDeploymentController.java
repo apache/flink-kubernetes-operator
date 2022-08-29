@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.exception.FlinkDeploymentException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -114,7 +115,7 @@ public class FlinkDeploymentController
             }
             statusRecorder.patchAndCacheStatus(flinkApp);
             reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context);
-        } catch (DeploymentFailedException dfe) {
+        } catch (FlinkDeploymentException dfe) {
             handleDeploymentFailed(flinkApp, dfe);
         } catch (Exception e) {
             eventRecorder.triggerEvent(
@@ -132,7 +133,7 @@ public class FlinkDeploymentController
                 configManager.getOperatorConfiguration(), flinkApp, previousDeployment, true);
     }
 
-    private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
+    private void handleDeploymentFailed(FlinkDeployment flinkApp, FlinkDeploymentException dfe) {
         LOG.error("Flink Deployment failed", dfe);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
         flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
@@ -150,7 +151,8 @@ public class FlinkDeploymentController
             EventSourceContext<FlinkDeployment> context) {
         return EventSourceInitializer.nameEventSources(
                 EventSourceUtils.getSessionJobInformerEventSource(context),
-                EventSourceUtils.getDeploymentInformerEventSource(context));
+                EventSourceUtils.getDeploymentInformerEventSource(context),
+                EventSourceUtils.getStatefulSetInformerEventSource(context));
     }
 
     @Override

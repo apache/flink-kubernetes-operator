@@ -19,11 +19,11 @@ package org.apache.flink.kubernetes.operator.kubeclient.factory;
 
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
-import org.apache.flink.kubernetes.kubeclient.KubernetesJobManagerSpecification;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.FlinkConfMountDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.InternalServiceDecorator;
 import org.apache.flink.kubernetes.kubeclient.services.HeadlessClusterIPService;
+import org.apache.flink.kubernetes.operator.kubeclient.StandaloneKubernetesJobManagerSpecification;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.ParametersTestBase;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils;
@@ -40,7 +40,7 @@ import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.api.model.Service;
-import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
+import io.fabric8.kubernetes.api.model.apps.StatefulSetSpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -61,7 +61,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /** @link StandaloneKubernetesJobManagerFactory unit tests */
 public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBase {
 
-    KubernetesJobManagerSpecification jmSpec;
+    StandaloneKubernetesJobManagerSpecification jmSpec;
 
     @BeforeEach
     public void setup() throws Exception {
@@ -71,39 +71,41 @@ public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBas
         StandaloneKubernetesJobManagerParameters tmParameters =
                 new StandaloneKubernetesJobManagerParameters(
                         flinkConfig, TestUtils.createClusterSpecification());
+        System.out.println(tmParameters.getVolumeClaimTemplates());
         jmSpec =
                 StandaloneKubernetesJobManagerFactory.buildKubernetesJobManagerSpecification(
-                        podTemplate, tmParameters);
+                        podTemplate, null, tmParameters);
     }
 
     @Test
     public void testDeploymentMetadata() {
-        ObjectMeta deploymentMetadata = jmSpec.getDeployment().getMetadata();
+        ObjectMeta statefulSetMetadata = jmSpec.getStatefulSet().getMetadata();
         assertEquals(
-                StandaloneKubernetesUtils.getJobManagerDeploymentName(CLUSTER_ID),
-                deploymentMetadata.getName());
+                StandaloneKubernetesUtils.getJobManagerStatefulSetName(CLUSTER_ID),
+                statefulSetMetadata.getName());
 
         final Map<String, String> expectedLabels =
                 new HashMap<>(StandaloneKubernetesUtils.getJobManagerSelectors(CLUSTER_ID));
         expectedLabels.putAll(userLabels);
-        assertEquals(expectedLabels, deploymentMetadata.getLabels());
+        assertEquals(expectedLabels, statefulSetMetadata.getLabels());
 
-        assertEquals(userAnnotations, deploymentMetadata.getAnnotations());
+        assertEquals(userAnnotations, statefulSetMetadata.getAnnotations());
     }
 
     @Test
     public void testDeploymentSpec() {
-        DeploymentSpec deploymentSpec = jmSpec.getDeployment().getSpec();
+        StatefulSetSpec statefulSetSpec = jmSpec.getStatefulSet().getSpec();
 
-        assertEquals(1, deploymentSpec.getReplicas());
+        assertEquals(1, statefulSetSpec.getReplicas());
         assertEquals(
                 StandaloneKubernetesUtils.getJobManagerSelectors(CLUSTER_ID),
-                deploymentSpec.getSelector().getMatchLabels());
+                statefulSetSpec.getSelector().getMatchLabels());
     }
 
     @Test
     public void testTemplateMetadata() {
-        final ObjectMeta podMetadata = jmSpec.getDeployment().getSpec().getTemplate().getMetadata();
+        final ObjectMeta podMetadata =
+                jmSpec.getStatefulSet().getSpec().getTemplate().getMetadata();
 
         final Map<String, String> expectedLabels =
                 new HashMap<>(StandaloneKubernetesUtils.getJobManagerSelectors(CLUSTER_ID));
@@ -118,7 +120,7 @@ public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBas
 
     @Test
     public void testTemplateSpec() {
-        final PodSpec podSpec = jmSpec.getDeployment().getSpec().getTemplate().getSpec();
+        final PodSpec podSpec = jmSpec.getStatefulSet().getSpec().getTemplate().getSpec();
 
         assertEquals(1, podSpec.getContainers().size());
         assertEquals(TestUtils.SERVICE_ACCOUNT, podSpec.getServiceAccountName());

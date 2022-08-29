@@ -30,7 +30,7 @@ import org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.util.concurrent.Executors;
 
-import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.StatefulSet;
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
@@ -76,19 +76,19 @@ public class KubernetesStandaloneClusterDescriptorTest {
 
         var clusterClientProvider = clusterDescriptor.deploySessionCluster(clusterSpecification);
 
-        List<Deployment> deployments =
+        List<StatefulSet> statefulSets =
                 kubernetesClient
                         .apps()
-                        .deployments()
+                        .statefulSets()
                         .inNamespace(TestUtils.TEST_NAMESPACE)
                         .list()
                         .getItems();
         String expectedJMDeploymentName = TestUtils.CLUSTER_ID;
         String expectedTMDeploymentName = TestUtils.CLUSTER_ID + "-taskmanager";
 
-        assertEquals(2, deployments.size());
+        assertEquals(2, statefulSets.size());
         assertThat(
-                deployments.stream()
+                statefulSets.stream()
                         .map(d -> d.getMetadata().getName())
                         .collect(Collectors.toList()),
                 containsInAnyOrder(expectedJMDeploymentName, expectedTMDeploymentName));
@@ -100,13 +100,13 @@ public class KubernetesStandaloneClusterDescriptorTest {
                 String.valueOf(Constants.TASK_MANAGER_RPC_PORT));
         assertEquals(flinkConfig.get(RestOptions.BIND_PORT), String.valueOf(Constants.REST_PORT));
 
-        Deployment jmDeployment =
-                deployments.stream()
+        StatefulSet jmStatefulSet =
+                statefulSets.stream()
                         .filter(d -> d.getMetadata().getName().equals(expectedJMDeploymentName))
                         .findFirst()
                         .orElse(null);
         assertTrue(
-                jmDeployment.getSpec().getTemplate().getSpec().getContainers().stream()
+                jmStatefulSet.getSpec().getTemplate().getSpec().getContainers().stream()
                         .anyMatch(c -> c.getArgs().contains("jobmanager")));
 
         var clusterClient = clusterClientProvider.getClusterClient();
@@ -133,19 +133,19 @@ public class KubernetesStandaloneClusterDescriptorTest {
                         clusterSpecification,
                         ApplicationConfiguration.fromConfiguration(flinkConfig));
 
-        List<Deployment> deployments =
+        List<StatefulSet> statefulSets =
                 kubernetesClient
                         .apps()
-                        .deployments()
+                        .statefulSets()
                         .inNamespace(TestUtils.TEST_NAMESPACE)
                         .list()
                         .getItems();
         String expectedJMDeploymentName = TestUtils.CLUSTER_ID;
         String expectedTMDeploymentName = TestUtils.CLUSTER_ID + "-taskmanager";
 
-        assertEquals(2, deployments.size());
+        assertEquals(2, statefulSets.size());
         assertThat(
-                deployments.stream()
+                statefulSets.stream()
                         .map(d -> d.getMetadata().getName())
                         .collect(Collectors.toList()),
                 containsInAnyOrder(expectedJMDeploymentName, expectedTMDeploymentName));
@@ -157,13 +157,13 @@ public class KubernetesStandaloneClusterDescriptorTest {
                 String.valueOf(Constants.TASK_MANAGER_RPC_PORT));
         assertEquals(flinkConfig.get(RestOptions.BIND_PORT), String.valueOf(Constants.REST_PORT));
 
-        Deployment jmDeployment =
-                deployments.stream()
+        StatefulSet jmStatefulSet =
+                statefulSets.stream()
                         .filter(d -> d.getMetadata().getName().equals(expectedJMDeploymentName))
                         .findFirst()
                         .orElse(null);
         assertTrue(
-                jmDeployment.getSpec().getTemplate().getSpec().getContainers().stream()
+                jmStatefulSet.getSpec().getTemplate().getSpec().getContainers().stream()
                         .anyMatch(c -> c.getArgs().contains("standalone-job")));
 
         var clusterClient = clusterClientProvider.getClusterClient();

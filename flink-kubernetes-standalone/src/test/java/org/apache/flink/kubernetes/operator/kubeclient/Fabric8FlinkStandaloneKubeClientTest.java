@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.kubeclient;
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
-import org.apache.flink.kubernetes.kubeclient.KubernetesJobManagerSpecification;
 import org.apache.flink.kubernetes.operator.kubeclient.factory.StandaloneKubernetesJobManagerFactory;
 import org.apache.flink.kubernetes.operator.kubeclient.factory.StandaloneKubernetesTaskManagerFactory;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesJobManagerParameters;
@@ -28,13 +27,14 @@ import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKube
 import org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils;
 import org.apache.flink.util.concurrent.Executors;
 
-import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.StatefulSet;
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,13 +47,17 @@ public class Fabric8FlinkStandaloneKubeClientTest {
     KubernetesMockServer mockServer;
     protected NamespacedKubernetesClient kubernetesClient;
     private FlinkStandaloneKubeClient flinkKubeClient;
+
+    private StandaloneKubernetesJobManagerParameters jobManagerParameters;
     private StandaloneKubernetesTaskManagerParameters taskManagerParameters;
-    private Deployment tmDeployment;
+    private StandaloneKubernetesJobManagerSpecification jobManagerSpecification;
+
+    private StatefulSet tmStatefulSet;
     private ClusterSpecification clusterSpecification;
     private Configuration flinkConfig = new Configuration();
 
     @BeforeEach
-    public final void setup() {
+    public final void setup() throws IOException {
         flinkConfig = TestUtils.createTestFlinkConfig();
         kubernetesClient = mockServer.createClient();
 
@@ -61,22 +65,33 @@ public class Fabric8FlinkStandaloneKubeClientTest {
                 new Fabric8FlinkStandaloneKubeClient(
                         flinkConfig, kubernetesClient, Executors.newDirectExecutorService());
         clusterSpecification = TestUtils.createClusterSpecification();
-
+        jobManagerParameters =
+                new StandaloneKubernetesJobManagerParameters(flinkConfig, clusterSpecification);
         taskManagerParameters =
                 new StandaloneKubernetesTaskManagerParameters(flinkConfig, clusterSpecification);
-
-        tmDeployment =
-                StandaloneKubernetesTaskManagerFactory.buildKubernetesTaskManagerDeployment(
-                        new FlinkPod.Builder().build(), taskManagerParameters);
+        jobManagerSpecification =
+                StandaloneKubernetesJobManagerFactory.buildKubernetesJobManagerSpecification(
+                        new FlinkPod.Builder().build(), null, jobManagerParameters);
+        tmStatefulSet =
+                StandaloneKubernetesTaskManagerFactory.buildKubernetesTaskManagerStatefulSet(
+                        new FlinkPod.Builder().build(), null, taskManagerParameters);
     }
 
     @Test
-    public void testCreateTaskManagerDeployment() {
-        flinkKubeClient.createTaskManagerDeployment(tmDeployment);
+    public void testCreateJobManagerStatefulSet() {
+        flinkKubeClient.createJobManagerComponent(jobManagerSpecification);
+        final List<StatefulSet> resultedStatefulSets =
+                kubernetesClient.apps().statefulSets().inNamespace(NAMESPACE).list().getItems();
+        assertEquals(1, resultedStatefulSets.size());
+    }
 
-        final List<Deployment> resultedDeployments =
-                kubernetesClient.apps().deployments().inNamespace(NAMESPACE).list().getItems();
-        assertEquals(1, resultedDeployments.size());
+    @Test
+    public void testCreateTaskManagerStatefulSet() {
+        flinkKubeClient.createTaskManagerStatefulSet(tmStatefulSet);
+
+        final List<StatefulSet> resultedStatefulSets =
+                kubernetesClient.apps().statefulSets().inNamespace(NAMESPACE).list().getItems();
+        assertEquals(1, resultedStatefulSets.size());
     }
 
     @Test
@@ -84,21 +99,21 @@ public class Fabric8FlinkStandaloneKubeClientTest {
         ClusterSpecification clusterSpecification = TestUtils.createClusterSpecification();
         StandaloneKubernetesJobManagerParameters jmParameters =
                 new StandaloneKubernetesJobManagerParameters(flinkConfig, clusterSpecification);
-        KubernetesJobManagerSpecification jmSpec =
+        StandaloneKubernetesJobManagerSpecification jmSpec =
                 StandaloneKubernetesJobManagerFactory.buildKubernetesJobManagerSpecification(
-                        new FlinkPod.Builder().build(), jmParameters);
+                        new FlinkPod.Builder().build(), null, jmParameters);
 
         flinkKubeClient.createJobManagerComponent(jmSpec);
-        flinkKubeClient.createTaskManagerDeployment(tmDeployment);
+        flinkKubeClient.createTaskManagerStatefulSet(tmStatefulSet);
 
-        List<Deployment> resultedDeployments =
-                kubernetesClient.apps().deployments().inNamespace(NAMESPACE).list().getItems();
-        assertEquals(2, resultedDeployments.size());
+        List<StatefulSet> resultedStatefulSets =
+                kubernetesClient.apps().statefulSets().inNamespace(NAMESPACE).list().getItems();
+        assertEquals(2, resultedStatefulSets.size());
 
         flinkKubeClient.stopAndCleanupCluster(taskManagerParameters.getClusterId());
 
-        resultedDeployments =
-                kubernetesClient.apps().deployments().inNamespace(NAMESPACE).list().getItems();
-        assertEquals(0, resultedDeployments.size());
+        resultedStatefulSets =
+                kubernetesClient.apps().statefulSets().inNamespace(NAMESPACE).list().getItems();
+        assertEquals(0, resultedStatefulSets.size());
     }
 }

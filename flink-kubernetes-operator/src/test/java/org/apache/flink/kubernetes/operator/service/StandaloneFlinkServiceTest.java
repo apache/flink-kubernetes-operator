@@ -30,8 +30,8 @@ import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
+import io.fabric8.kubernetes.api.model.apps.StatefulSet;
+import io.fabric8.kubernetes.api.model.apps.StatefulSetSpecBuilder;
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
@@ -65,44 +65,44 @@ public class StandaloneFlinkServiceTest {
 
     @Test
     public void testDeleteClusterDeployment() throws Exception {
-        FlinkDeployment flinkDeployment = TestUtils.buildSessionCluster();
+        FlinkDeployment flinkDeployment = TestUtils.buildStandaloneSessionCluster();
         configuration = buildConfig(flinkDeployment, configuration);
 
-        createDeployments(flinkDeployment);
+        createStatefulSets(flinkDeployment);
 
-        List<Deployment> deployments = kubernetesClient.apps().deployments().list().getItems();
+        List<StatefulSet> statefulSets = kubernetesClient.apps().statefulSets().list().getItems();
 
-        assertEquals(2, deployments.size());
+        assertEquals(2, statefulSets.size());
 
         flinkStandaloneService.deleteClusterDeployment(
                 flinkDeployment.getMetadata(), flinkDeployment.getStatus(), false);
 
-        deployments = kubernetesClient.apps().deployments().list().getItems();
+        statefulSets = kubernetesClient.apps().statefulSets().list().getItems();
 
-        assertEquals(0, deployments.size());
+        assertEquals(0, statefulSets.size());
     }
 
     @Test
     public void testDeleteClusterDeploymentWithHADelete() throws Exception {
-        FlinkDeployment flinkDeployment = TestUtils.buildSessionCluster();
+        FlinkDeployment flinkDeployment = TestUtils.buildStandaloneSessionCluster();
         configuration = buildConfig(flinkDeployment, configuration);
 
-        createDeployments(flinkDeployment);
+        createStatefulSets(flinkDeployment);
 
-        List<Deployment> deployments = kubernetesClient.apps().deployments().list().getItems();
-        assertEquals(2, deployments.size());
+        List<StatefulSet> statefulSets = kubernetesClient.apps().statefulSets().list().getItems();
+        assertEquals(2, statefulSets.size());
 
         flinkStandaloneService.deleteClusterDeployment(
                 flinkDeployment.getMetadata(), flinkDeployment.getStatus(), true);
 
-        deployments = kubernetesClient.apps().deployments().list().getItems();
+        statefulSets = kubernetesClient.apps().statefulSets().list().getItems();
 
-        assertEquals(0, deployments.size());
+        assertEquals(0, statefulSets.size());
     }
 
     @Test
     public void testReactiveScale() throws Exception {
-        var flinkDeployment = TestUtils.buildApplicationCluster();
+        var flinkDeployment = TestUtils.buildStandaloneApplicationCluster();
         var clusterId = flinkDeployment.getMetadata().getName();
         var namespace = flinkDeployment.getMetadata().getNamespace();
         flinkDeployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
@@ -112,7 +112,7 @@ public class StandaloneFlinkServiceTest {
                 .put(
                         JobManagerOptions.SCHEDULER_MODE.key(),
                         SchedulerExecutionMode.REACTIVE.name());
-        createDeployments(flinkDeployment);
+        createStatefulSets(flinkDeployment);
         assertTrue(
                 flinkStandaloneService.scale(
                         flinkDeployment.getMetadata(),
@@ -123,9 +123,10 @@ public class StandaloneFlinkServiceTest {
                 1,
                 kubernetesClient
                         .apps()
-                        .deployments()
+                        .statefulSets()
                         .inNamespace(namespace)
-                        .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
+                        .withName(
+                                StandaloneKubernetesUtils.getTaskManagerStatefulSetName(clusterId))
                         .get()
                         .getSpec()
                         .getReplicas());
@@ -140,18 +141,19 @@ public class StandaloneFlinkServiceTest {
                 2,
                 kubernetesClient
                         .apps()
-                        .deployments()
+                        .statefulSets()
                         .inNamespace(namespace)
-                        .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
+                        .withName(
+                                StandaloneKubernetesUtils.getTaskManagerStatefulSetName(clusterId))
                         .get()
                         .getSpec()
                         .getReplicas());
 
         kubernetesClient
                 .apps()
-                .deployments()
+                .statefulSets()
                 .inNamespace(namespace)
-                .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
+                .withName(StandaloneKubernetesUtils.getTaskManagerStatefulSetName(clusterId))
                 .delete();
         assertFalse(
                 flinkStandaloneService.scale(
@@ -159,7 +161,7 @@ public class StandaloneFlinkServiceTest {
                         flinkDeployment.getSpec().getJob(),
                         buildConfig(flinkDeployment, configuration)));
 
-        createDeployments(flinkDeployment);
+        createStatefulSets(flinkDeployment);
         assertTrue(
                 flinkStandaloneService.scale(
                         flinkDeployment.getMetadata(),
@@ -186,28 +188,29 @@ public class StandaloneFlinkServiceTest {
                 configuration);
     }
 
-    private void createDeployments(AbstractFlinkResource cr) {
-        Deployment jmDeployment = new Deployment();
+    private void createStatefulSets(AbstractFlinkResource cr) {
+        StatefulSet jmStatefulSet = new StatefulSet();
         ObjectMeta jmMetadata = new ObjectMeta();
         jmMetadata.setName(
-                StandaloneKubernetesUtils.getJobManagerDeploymentName(cr.getMetadata().getName()));
-        jmDeployment.setMetadata(jmMetadata);
+                StandaloneKubernetesUtils.getJobManagerStatefulSetName(cr.getMetadata().getName()));
+        jmStatefulSet.setMetadata(jmMetadata);
         kubernetesClient
                 .apps()
-                .deployments()
+                .statefulSets()
                 .inNamespace(cr.getMetadata().getNamespace())
-                .createOrReplace(jmDeployment);
+                .createOrReplace(jmStatefulSet);
 
-        Deployment tmDeployment = new Deployment();
+        StatefulSet tmStatefulSet = new StatefulSet();
         ObjectMeta tmMetadata = new ObjectMeta();
         tmMetadata.setName(
-                StandaloneKubernetesUtils.getTaskManagerDeploymentName(cr.getMetadata().getName()));
-        tmDeployment.setMetadata(tmMetadata);
-        tmDeployment.setSpec(new DeploymentSpec());
+                StandaloneKubernetesUtils.getTaskManagerStatefulSetName(
+                        cr.getMetadata().getName()));
+        tmStatefulSet.setMetadata(tmMetadata);
+        tmStatefulSet.setSpec(new StatefulSetSpecBuilder().withReplicas(1).build());
         kubernetesClient
                 .apps()
-                .deployments()
+                .statefulSets()
                 .inNamespace(cr.getMetadata().getNamespace())
-                .createOrReplace(tmDeployment);
+                .createOrReplace(tmStatefulSet);
     }
 }

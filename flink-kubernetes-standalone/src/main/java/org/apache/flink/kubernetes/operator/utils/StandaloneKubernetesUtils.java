@@ -17,10 +17,16 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.kubernetes.operator.kubeclient.FlinkStandaloneKubeClient;
 import org.apache.flink.kubernetes.utils.Constants;
 
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
+
+import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Standalone Kubernetes Utils. */
@@ -29,16 +35,16 @@ public class StandaloneKubernetesUtils {
     public static final String LABEL_TYPE_STANDALONE_TYPE = "flink-standalone-kubernetes";
     private static final String TM_DEPLOYMENT_POSTFIX = "-taskmanager";
 
-    public static String getTaskManagerDeploymentName(String clusterId) {
+    public static String getTaskManagerStatefulSetName(String clusterId) {
         return clusterId + TM_DEPLOYMENT_POSTFIX;
     }
 
-    public static String getJobManagerDeploymentName(String clusterId) {
+    public static String getJobManagerStatefulSetName(String clusterId) {
         return clusterId;
     }
 
     public static Map<String, String> getCommonLabels(String clusterId) {
-        Map<String, String> commonLabels = new HashMap<>();
+        Map<String, String> commonLabels = new HashMap<>(2);
         commonLabels.put(Constants.LABEL_TYPE_KEY, LABEL_TYPE_STANDALONE_TYPE);
         commonLabels.put(Constants.LABEL_APP_KEY, clusterId);
         return commonLabels;
@@ -54,5 +60,18 @@ public class StandaloneKubernetesUtils {
         final Map<String, String> labels = getCommonLabels(clusterId);
         labels.put(Constants.LABEL_COMPONENT_KEY, Constants.LABEL_COMPONENT_JOB_MANAGER);
         return Collections.unmodifiableMap(labels);
+    }
+
+    public static List<PersistentVolumeClaim> loadPvcFromTemplateFile(
+            FlinkStandaloneKubeClient kubeClient, List<File> pvcFiles) {
+        if (null == pvcFiles) {
+            return null;
+        }
+        List<PersistentVolumeClaim> volumeClaims = new ArrayList<>();
+        pvcFiles.forEach(
+                file -> {
+                    volumeClaims.add(kubeClient.loadVolumeClaimTemplates(file));
+                });
+        return volumeClaims;
     }
 }

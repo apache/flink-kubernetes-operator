@@ -31,16 +31,22 @@ import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.util.Preconditions;
 
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
-import io.fabric8.kubernetes.api.model.apps.Deployment;
-import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
+import io.fabric8.kubernetes.api.model.PodTemplateSpecBuilder;
+import io.fabric8.kubernetes.api.model.apps.StatefulSet;
+import io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder;
 
-/** Utility class for constructing the TaskManager Deployment when deploying in standalone mode. */
+import java.util.List;
+
+/** Utility class for constructing the TaskManager StatefulSet when deploying in standalone mode. */
 public class StandaloneKubernetesTaskManagerFactory {
 
-    public static Deployment buildKubernetesTaskManagerDeployment(
+    public static StatefulSet buildKubernetesTaskManagerStatefulSet(
             FlinkPod podTemplate,
+            List<PersistentVolumeClaim> volumeClaims,
             StandaloneKubernetesTaskManagerParameters kubernetesTaskManagerParameters) {
         FlinkPod flinkPod = Preconditions.checkNotNull(podTemplate).copy();
 
@@ -66,25 +72,39 @@ public class StandaloneKubernetesTaskManagerFactory {
                         .endSpec()
                         .build();
 
-        return new DeploymentBuilder()
-                .withApiVersion(Constants.APPS_API_VERSION)
-                .editOrNewMetadata()
-                .withName(
-                        StandaloneKubernetesUtils.getTaskManagerDeploymentName(
-                                kubernetesTaskManagerParameters.getClusterId()))
-                .withAnnotations(kubernetesTaskManagerParameters.getAnnotations())
-                .withLabels(kubernetesTaskManagerParameters.getLabels())
-                .endMetadata()
-                .editOrNewSpec()
-                .withReplicas(kubernetesTaskManagerParameters.getReplicas())
-                .editOrNewTemplate()
-                .withMetadata(resolvedPod.getMetadata())
-                .withSpec(resolvedPod.getSpec())
-                .endTemplate()
-                .editOrNewSelector()
-                .addToMatchLabels(kubernetesTaskManagerParameters.getSelectors())
-                .endSelector()
-                .endSpec()
-                .build();
+        final PodTemplateSpec podTemplateSpec =
+                new PodTemplateSpecBuilder()
+                        .withMetadata(resolvedPod.getMetadata())
+                        .withSpec(resolvedPod.getSpec())
+                        .build();
+        StatefulSetBuilder statefulSetBuilder =
+                new StatefulSetBuilder()
+                        .withApiVersion(Constants.APPS_API_VERSION)
+                        .editOrNewMetadata()
+                        .withName(
+                                StandaloneKubernetesUtils.getTaskManagerStatefulSetName(
+                                        kubernetesTaskManagerParameters.getClusterId()))
+                        .withAnnotations(kubernetesTaskManagerParameters.getAnnotations())
+                        .withLabels(kubernetesTaskManagerParameters.getLabels())
+                        .endMetadata()
+                        .editOrNewSpec()
+                        .withServiceName(
+                                StandaloneKubernetesUtils.getTaskManagerStatefulSetName(
+                                        kubernetesTaskManagerParameters.getClusterId()))
+                        .withReplicas(kubernetesTaskManagerParameters.getReplicas())
+                        .withTemplate(podTemplateSpec)
+                        .editOrNewSelector()
+                        .addToMatchLabels(kubernetesTaskManagerParameters.getSelectors())
+                        .endSelector()
+                        .endSpec();
+        if (null != volumeClaims) {
+            return statefulSetBuilder
+                    .editSpec()
+                    .withVolumeClaimTemplates(volumeClaims)
+                    .endSpec()
+                    .build();
+        } else {
+            return statefulSetBuilder.build();
+        }
     }
 }

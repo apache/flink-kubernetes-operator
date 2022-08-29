@@ -19,12 +19,16 @@ package org.apache.flink.kubernetes.operator.crd.spec;
 
 import org.apache.flink.annotation.Experimental;
 
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.model.annotation.SpecReplicas;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /** TaskManager spec. */
 @Experimental
@@ -38,6 +42,9 @@ public class TaskManagerSpec {
 
     /** Number of TaskManager replicas. If defined, takes precedence over parallelism */
     @SpecReplicas private Integer replicas;
+
+    /** Volume Claim Templates for TaskManager stateful set. Just for standalone mode. */
+    private List<PersistentVolumeClaim> volumeClaimTemplates = new ArrayList<>();
 
     /** TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
     private Pod podTemplate;

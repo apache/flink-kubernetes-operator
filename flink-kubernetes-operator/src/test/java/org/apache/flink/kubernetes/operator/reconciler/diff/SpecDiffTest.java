@@ -132,7 +132,6 @@ public class SpecDiffTest {
         var diff = left.diff(right);
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(0, diff.getNumDiffs());
-
         left = TestUtils.buildSessionJob().getSpec();
         right = ReconciliationUtils.clone(left);
         diff = left.diff(right);

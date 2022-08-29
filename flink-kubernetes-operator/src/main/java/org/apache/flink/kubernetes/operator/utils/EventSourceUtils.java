@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.utils.Constants;
 
 import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.StatefulSet;
 import io.javaoperatorsdk.operator.api.config.informer.InformerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.EventSourceContext;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
@@ -58,6 +59,23 @@ public class EventSourceUtils {
                         .followNamespaceChanges(true)
                         .build();
 
+        return new InformerEventSource<>(configuration, context);
+    }
+
+    public static InformerEventSource<StatefulSet, FlinkDeployment>
+            getStatefulSetInformerEventSource(EventSourceContext<FlinkDeployment> context) {
+        final String labelSelector =
+                Map.of(Constants.LABEL_COMPONENT_KEY, Constants.LABEL_COMPONENT_JOB_MANAGER)
+                        .entrySet().stream()
+                        .map(Object::toString)
+                        .collect(Collectors.joining(","));
+        var configuration =
+                InformerConfiguration.from(StatefulSet.class, context)
+                        .withLabelSelector(labelSelector)
+                        .withSecondaryToPrimaryMapper(Mappers.fromLabel(Constants.LABEL_APP_KEY))
+                        .withNamespacesInheritedFromController(context)
+                        .followNamespaceChanges(true)
+                        .build();
         return new InformerEventSource<>(configuration, context);
     }
 

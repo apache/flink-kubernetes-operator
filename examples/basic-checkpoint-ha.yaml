@@ -58,3 +58,4 @@ spec:
     upgradeMode: savepoint
     state: running
     savepointTriggerNonce: 0
+  mode: native

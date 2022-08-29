@@ -26,8 +26,13 @@ import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfi
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
+import org.apache.commons.lang3.StringUtils;
+
+import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -86,5 +91,20 @@ public class StandaloneKubernetesJobManagerParameters extends KubernetesJobManag
             return flinkConfig.get(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE);
         }
         return null;
+    }
+
+    public List<File> getVolumeClaimTemplates() {
+        String templates =
+                flinkConfig.get(StandaloneKubernetesConfigOptionsInternal.JOB_MANAGER_PVC_TEMPLATE);
+        if (StringUtils.isEmpty(templates)) {
+            return null;
+        } else {
+            String[] pvcFiles = templates.split(",");
+            List<File> files = new ArrayList<>();
+            for (String pvcFile : pvcFiles) {
+                files.add(new File(pvcFile));
+            }
+            return files;
+        }
     }
 }

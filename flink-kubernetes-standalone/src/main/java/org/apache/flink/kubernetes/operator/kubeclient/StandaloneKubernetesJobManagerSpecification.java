@@ -17,19 +17,28 @@
 
 package org.apache.flink.kubernetes.operator.kubeclient;
 
-import org.apache.flink.kubernetes.kubeclient.FlinkKubeClient;
-
-import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.apps.StatefulSet;
 
-import java.io.File;
+import java.util.List;
 
-/** Extension of the FlinkKubeClient that is used for Flink standalone deployments. */
-public interface FlinkStandaloneKubeClient extends FlinkKubeClient {
+/** Composition of the created Kubernetes components that represents a Flink application. */
+public class StandaloneKubernetesJobManagerSpecification {
+    private final StatefulSet statefulSet;
 
-    void createJobManagerComponent(StandaloneKubernetesJobManagerSpecification kubernetesJMSpec);
+    private final List<HasMetadata> accompanyingResources;
 
-    void createTaskManagerStatefulSet(StatefulSet tmStatefulSet);
+    public StandaloneKubernetesJobManagerSpecification(
+            StatefulSet statefulSet, List<HasMetadata> accompanyingResources) {
+        this.statefulSet = statefulSet;
+        this.accompanyingResources = accompanyingResources;
+    }
 
-    PersistentVolumeClaim loadVolumeClaimTemplates(File file);
+    public StatefulSet getStatefulSet() {
+        return statefulSet;
+    }
+
+    public List<HasMetadata> getAccompanyingResources() {
+        return accompanyingResources;
+    }
 }

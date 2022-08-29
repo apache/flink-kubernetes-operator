@@ -41,6 +41,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 public class SessionObserverTest {
     private final Context<FlinkDeployment> readyContext =
             TestUtils.createContextWithReadyJobManagerDeployment();
+
+    private final Context<FlinkDeployment> standaloneReadyContext =
+            TestUtils.createContextWithReadyJobManagerStatefulSet();
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private final TestingFlinkService flinkService = new TestingFlinkService();
     private SessionObserver observer;
@@ -54,16 +57,27 @@ public class SessionObserverTest {
     @Test
     public void observeSessionCluster() {
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+        observeSessionCluster(deployment, readyContext);
+    }
 
-        observer.observe(deployment, readyContext);
+    @Test
+    public void observeStandaloneSessionCluster() {
+        FlinkDeployment deployment = TestUtils.buildStandaloneSessionCluster();
+        observeSessionCluster(deployment, standaloneReadyContext);
+    }
+
+    private void observeSessionCluster(
+            FlinkDeployment deployment, Context<FlinkDeployment> context) {
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+        System.out.println("First observe");
+        observer.observe(deployment, context);
         assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
-
-        observer.observe(deployment, readyContext);
+        System.out.println("Second observe");
+        observer.observe(deployment, context);
 
         assertEquals(
                 JobManagerDeploymentStatus.READY,
@@ -73,7 +87,7 @@ public class SessionObserverTest {
                 deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
         // Observe again, the JM should be READY
-        observer.observe(deployment, readyContext);
+        observer.observe(deployment, context);
 
         assertEquals(
                 JobManagerDeploymentStatus.READY,
@@ -81,18 +95,18 @@ public class SessionObserverTest {
 
         // Test job manager is unavailable suddenly
         flinkService.setPortReady(false);
-        observer.observe(deployment, readyContext);
+        observer.observe(deployment, context);
 
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
                 deployment.getStatus().getJobManagerDeploymentStatus());
         // Job manager recovers
         flinkService.setPortReady(true);
-        observer.observe(deployment, readyContext);
+        observer.observe(deployment, context);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
-        observer.observe(deployment, readyContext);
+        observer.observe(deployment, context);
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());

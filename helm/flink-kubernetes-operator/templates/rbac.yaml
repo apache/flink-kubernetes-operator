@@ -44,6 +44,8 @@ rules:
     resources:
       - deployments
       - deployments/finalizers
+      - statefulsets
+      - statefulsets/finalizers
       - replicasets
     verbs:
       - "*"
@@ -51,6 +53,7 @@ rules:
       - extensions
     resources:
       - deployments
+      - statefulsets
       - ingresses
     verbs:
       - "*"
@@ -88,6 +91,8 @@ rules:
     resources:
       - deployments
       - deployments/finalizers
+      - statefulsets
+      - statefulsets/finalizers
     verbs:
       - '*'
 {{- end }}

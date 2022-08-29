@@ -148,6 +148,7 @@ public class FlinkConfigManager {
     public Configuration getDeployConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
         var conf = getConfig(objectMeta, spec);
         FlinkUtils.setGenerationAnnotation(conf, objectMeta.getGeneration());
+        FlinkUtils.setTaskmanagerGenerationAnnotation(conf, objectMeta.getGeneration());
         return conf;
     }
 

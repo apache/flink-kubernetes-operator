@@ -26,6 +26,19 @@ import static org.apache.flink.configuration.ConfigOptions.key;
  * clusters in standalone mode.
  */
 public class StandaloneKubernetesConfigOptionsInternal {
+    public static final ConfigOption<String> JOB_MANAGER_PVC_TEMPLATE =
+            key("kubernetes.pvc-template-file.jobmanager")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Specify a local file that contains the jobmanager pvc template definition. It will be used to mount pvc to jobmanager pod.");
+    public static final ConfigOption<String> TASK_MANAGER_PVC_TEMPLATE =
+            key("kubernetes.pvc-template-file.taskmanager")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Specify a local file that contains the taskmanager pvc template definition. It will be used to mount pvc to taskmanager pod.");
+
     public static final ConfigOption<Integer> KUBERNETES_TASKMANAGER_REPLICAS =
             key("kubernetes.internal.taskmanager.replicas")
                     .intType()

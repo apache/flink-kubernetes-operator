@@ -39,3 +39,4 @@ spec:
   job:
     jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
     parallelism: 2
+  mode: native

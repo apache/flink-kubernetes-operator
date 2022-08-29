@@ -18,22 +18,22 @@
 package org.apache.flink.kubernetes.operator.exception;
 
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
-import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
+import io.fabric8.kubernetes.api.model.apps.StatefulSetCondition;
 
-/** Exception to signal terminal deployment failure. */
-public class DeploymentFailedException extends FlinkDeploymentException {
+/** Exception to signal terminal statefulSet failure. */
+public class StatefulSetFailedException extends FlinkDeploymentException {
 
-    private static final long serialVersionUID = -1070179896083579221L;
+    private static final long serialVersionUID = 4756119502434252719L;
 
-    public DeploymentFailedException(DeploymentCondition deployCondition) {
+    public StatefulSetFailedException(StatefulSetCondition deployCondition) {
         super(deployCondition.getMessage(), deployCondition.getReason());
     }
 
-    public DeploymentFailedException(ContainerStateWaiting stateWaiting) {
+    public StatefulSetFailedException(ContainerStateWaiting stateWaiting) {
         super(stateWaiting.getMessage(), stateWaiting.getReason());
     }
 
-    public DeploymentFailedException(String message, String reason) {
+    public StatefulSetFailedException(String message, String reason) {
         super(message, reason);
     }
 }

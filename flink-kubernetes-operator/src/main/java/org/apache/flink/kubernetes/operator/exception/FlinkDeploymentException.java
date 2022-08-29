@@ -17,23 +17,19 @@
 
 package org.apache.flink.kubernetes.operator.exception;
 
-import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
-import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
+/** Exception to signal terminal flink deployment failure. */
+public class FlinkDeploymentException extends RuntimeException {
+    public static final String REASON_CRASH_LOOP_BACKOFF = "CrashLoopBackOff";
 
-/** Exception to signal terminal deployment failure. */
-public class DeploymentFailedException extends FlinkDeploymentException {
+    private static final long serialVersionUID = 3641912388482837809L;
+    private final String reason;
 
-    private static final long serialVersionUID = -1070179896083579221L;
-
-    public DeploymentFailedException(DeploymentCondition deployCondition) {
-        super(deployCondition.getMessage(), deployCondition.getReason());
+    public FlinkDeploymentException(String message, String reason) {
+        super(message);
+        this.reason = reason;
     }
 
-    public DeploymentFailedException(ContainerStateWaiting stateWaiting) {
-        super(stateWaiting.getMessage(), stateWaiting.getReason());
-    }
-
-    public DeploymentFailedException(String message, String reason) {
-        super(message, reason);
+    public String getReason() {
+        return reason;
     }
 }

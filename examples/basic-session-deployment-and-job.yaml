@@ -32,6 +32,7 @@ spec:
       memory: "2048m"
       cpu: 1
   serviceAccount: flink
+  mode: native
 ---
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkSessionJob

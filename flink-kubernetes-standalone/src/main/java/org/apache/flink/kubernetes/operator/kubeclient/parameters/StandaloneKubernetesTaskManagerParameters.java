@@ -27,7 +27,10 @@ import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.util.Preconditions;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -134,5 +137,21 @@ public class StandaloneKubernetesTaskManagerParameters extends AbstractKubernete
 
     public double getCpuLimitFactor() {
         return flinkConfig.get(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR);
+    }
+
+    public List<File> getVolumeClaimTemplates() {
+        String templates =
+                flinkConfig.get(
+                        StandaloneKubernetesConfigOptionsInternal.TASK_MANAGER_PVC_TEMPLATE);
+        if (StringUtils.isEmpty(templates)) {
+            return null;
+        } else {
+            String[] pvcFiles = templates.split(",");
+            List<File> files = new ArrayList<>();
+            for (String pvcFile : pvcFiles) {
+                files.add(new File(pvcFile));
+            }
+            return files;
+        }
     }
 }

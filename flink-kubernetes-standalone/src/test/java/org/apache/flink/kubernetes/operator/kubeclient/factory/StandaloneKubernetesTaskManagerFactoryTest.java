@@ -31,7 +31,7 @@ import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
-import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.StatefulSet;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -47,7 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /** @link StandaloneKubernetesJobManagerFactory unit tests */
 public class StandaloneKubernetesTaskManagerFactoryTest extends ParametersTestBase {
 
-    private Deployment deployment;
+    private StatefulSet statefulSet;
 
     @BeforeEach
     public void setup() {
@@ -56,37 +56,37 @@ public class StandaloneKubernetesTaskManagerFactoryTest extends ParametersTestBa
         StandaloneKubernetesTaskManagerParameters tmParameters =
                 new StandaloneKubernetesTaskManagerParameters(
                         flinkConfig, TestUtils.createClusterSpecification());
-        deployment =
-                StandaloneKubernetesTaskManagerFactory.buildKubernetesTaskManagerDeployment(
-                        podTemplate, tmParameters);
+        statefulSet =
+                StandaloneKubernetesTaskManagerFactory.buildKubernetesTaskManagerStatefulSet(
+                        podTemplate, null, tmParameters);
     }
 
     @Test
     public void testDeploymentMetadata() {
         assertEquals(
-                StandaloneKubernetesUtils.getTaskManagerDeploymentName(TestUtils.CLUSTER_ID),
-                deployment.getMetadata().getName());
+                StandaloneKubernetesUtils.getTaskManagerStatefulSetName(TestUtils.CLUSTER_ID),
+                statefulSet.getMetadata().getName());
 
         final Map<String, String> expectedLabels =
                 new HashMap<>(
                         StandaloneKubernetesUtils.getTaskManagerSelectors(TestUtils.CLUSTER_ID));
         expectedLabels.putAll(userLabels);
-        assertEquals(expectedLabels, deployment.getMetadata().getLabels());
+        assertEquals(expectedLabels, statefulSet.getMetadata().getLabels());
 
-        assertEquals(userAnnotations, deployment.getMetadata().getAnnotations());
+        assertEquals(userAnnotations, statefulSet.getMetadata().getAnnotations());
     }
 
     @Test
     public void testDeploymentSpec() {
-        assertEquals(1, deployment.getSpec().getReplicas());
+        assertEquals(1, statefulSet.getSpec().getReplicas());
         assertEquals(
                 StandaloneKubernetesUtils.getTaskManagerSelectors(TestUtils.CLUSTER_ID),
-                deployment.getSpec().getSelector().getMatchLabels());
+                statefulSet.getSpec().getSelector().getMatchLabels());
     }
 
     @Test
     public void testTemplateMetadata() {
-        final ObjectMeta podMetadata = deployment.getSpec().getTemplate().getMetadata();
+        final ObjectMeta podMetadata = statefulSet.getSpec().getTemplate().getMetadata();
 
         final Map<String, String> expectedLabels =
                 new HashMap<>(
@@ -102,7 +102,7 @@ public class StandaloneKubernetesTaskManagerFactoryTest extends ParametersTestBa
 
     @Test
     public void testTemplateSpec() {
-        final PodSpec podSpec = deployment.getSpec().getTemplate().getSpec();
+        final PodSpec podSpec = statefulSet.getSpec().getTemplate().getSpec();
 
         assertEquals(1, podSpec.getContainers().size());
         assertEquals(TestUtils.SERVICE_ACCOUNT, podSpec.getServiceAccountName());

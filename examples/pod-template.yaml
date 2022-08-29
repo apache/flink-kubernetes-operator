@@ -82,3 +82,4 @@ spec:
     jarURI: local:///opt/flink/downloads/flink-examples-streaming.jar
     entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample
     parallelism: 2
+  mode: native

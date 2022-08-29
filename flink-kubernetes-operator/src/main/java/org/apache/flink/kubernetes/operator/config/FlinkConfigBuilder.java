@@ -46,6 +46,7 @@ import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
 
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.client.internal.SerializationUtils;
 import org.slf4j.Logger;
@@ -57,7 +58,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
 import static org.apache.flink.configuration.DeploymentOptions.SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR;
@@ -214,6 +217,7 @@ public class FlinkConfigBuilder {
                         KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS,
                         spec.getJobManager().getReplicas());
             }
+            setPvcTemplate(spec.getJobManager().getVolumeClaimTemplates(), effectiveConfig, true);
         }
         return this;
     }
@@ -226,13 +230,13 @@ public class FlinkConfigBuilder {
                     spec.getTaskManager().getPodTemplate(),
                     effectiveConfig,
                     false);
-
             if (spec.getTaskManager().getReplicas() != null
                     && spec.getTaskManager().getReplicas() > 0) {
                 effectiveConfig.set(
                         StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS,
                         spec.getTaskManager().getReplicas());
             }
+            setPvcTemplate(spec.getJobManager().getVolumeClaimTemplates(), effectiveConfig, false);
         }
 
         if (spec.getJob() != null
@@ -415,6 +419,33 @@ public class FlinkConfigBuilder {
         Files.write(tmp.toPath(), SerializationUtils.dumpAsYaml(podTemplate).getBytes());
         tmp.deleteOnExit();
         return tmp.getAbsolutePath();
+    }
+
+    private static void setPvcTemplate(
+            List<PersistentVolumeClaim> persistentVolumeClaims,
+            Configuration effectiveConfig,
+            boolean isJm)
+            throws IOException {
+        if (persistentVolumeClaims != null) {
+            final ConfigOption<String> pvcConfigOptions =
+                    isJm
+                            ? StandaloneKubernetesConfigOptionsInternal.JOB_MANAGER_PVC_TEMPLATE
+                            : StandaloneKubernetesConfigOptionsInternal.TASK_MANAGER_PVC_TEMPLATE;
+            effectiveConfig.setString(
+                    pvcConfigOptions, String.join(",", createPvcTempFile(persistentVolumeClaims)));
+        }
+    }
+
+    private static List<String> createPvcTempFile(List<PersistentVolumeClaim> pvcTemplates)
+            throws IOException {
+        List<String> pvcFilePaths = new ArrayList<>();
+        for (PersistentVolumeClaim pvc : pvcTemplates) {
+            final File tmp = File.createTempFile(GENERATED_FILE_PREFIX + "podTemplate_", ".yaml");
+            Files.write(tmp.toPath(), SerializationUtils.dumpAsYaml(pvc).getBytes());
+            tmp.deleteOnExit();
+            pvcFilePaths.add(tmp.getAbsolutePath());
+        }
+        return pvcFilePaths;
     }
 
     protected static void cleanupTmpFiles(Configuration configuration) {

@@ -22,7 +22,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -31,6 +30,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.spec.Resource;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
@@ -57,6 +57,9 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
+import io.fabric8.kubernetes.api.model.apps.StatefulSet;
+import io.fabric8.kubernetes.api.model.apps.StatefulSetSpec;
+import io.fabric8.kubernetes.api.model.apps.StatefulSetStatus;
 import io.fabric8.mockwebserver.utils.ResponseProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -108,11 +111,21 @@ public class TestUtils {
     }
 
     public static FlinkDeployment buildSessionCluster(FlinkVersion version) {
-        return buildSessionCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version);
+        return buildSessionCluster(
+                TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version, KubernetesDeploymentMode.NATIVE);
+    }
+
+    public static FlinkDeployment buildStandaloneSessionCluster() {
+        return buildStandaloneSessionCluster(FlinkVersion.v1_15);
+    }
+
+    public static FlinkDeployment buildStandaloneSessionCluster(FlinkVersion version) {
+        return buildSessionCluster(
+                TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version, KubernetesDeploymentMode.STANDALONE);
     }
 
     public static FlinkDeployment buildSessionCluster(
-            String name, String namespace, FlinkVersion version) {
+            String name, String namespace, FlinkVersion version, KubernetesDeploymentMode mode) {
         FlinkDeployment deployment = new FlinkDeployment();
         deployment.setStatus(new FlinkDeploymentStatus());
         deployment.setMetadata(
@@ -121,7 +134,11 @@ public class TestUtils {
                         .withNamespace(namespace)
                         .withCreationTimestamp(Instant.now().toString())
                         .build());
-        deployment.setSpec(getTestFlinkDeploymentSpec(version));
+        if (KubernetesDeploymentMode.STANDALONE.equals(mode)) {
+            deployment.setSpec(getTestStandaloneFlinkDeploymentSpec(version));
+        } else {
+            deployment.setSpec(getTestFlinkDeploymentSpec(version));
+        }
         return deployment;
     }
 
@@ -130,16 +147,32 @@ public class TestUtils {
     }
 
     public static FlinkDeployment buildApplicationCluster(String name, String namespace) {
-        return buildApplicationCluster(name, namespace, FlinkVersion.v1_15);
+        return buildApplicationCluster(
+                name, namespace, FlinkVersion.v1_15, KubernetesDeploymentMode.NATIVE);
     }
 
     public static FlinkDeployment buildApplicationCluster(FlinkVersion version) {
-        return buildApplicationCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version);
+        return buildApplicationCluster(
+                TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version, KubernetesDeploymentMode.NATIVE);
+    }
+
+    public static FlinkDeployment buildStandaloneApplicationCluster() {
+        return buildStandaloneApplicationCluster(FlinkVersion.v1_15);
+    }
+
+    public static FlinkDeployment buildStandaloneApplicationCluster(String name, String namespace) {
+        return buildApplicationCluster(
+                name, name, FlinkVersion.v1_15, KubernetesDeploymentMode.STANDALONE);
+    }
+
+    public static FlinkDeployment buildStandaloneApplicationCluster(FlinkVersion version) {
+        return buildApplicationCluster(
+                TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version, KubernetesDeploymentMode.STANDALONE);
     }
 
     public static FlinkDeployment buildApplicationCluster(
-            String name, String namespace, FlinkVersion version) {
-        FlinkDeployment deployment = buildSessionCluster(name, namespace, version);
+            String name, String namespace, FlinkVersion version, KubernetesDeploymentMode mode) {
+        FlinkDeployment deployment = buildSessionCluster(name, namespace, version, mode);
         deployment
                 .getSpec()
                 .setJob(
@@ -164,9 +197,6 @@ public class TestUtils {
                         .withUid(UUID.randomUUID().toString())
                         .withGeneration(1L)
                         .build());
-
-        Map<String, String> conf = new HashMap<>();
-        conf.put(KubernetesOperatorConfigOptions.JAR_ARTIFACT_HTTP_HEADER.key(), "header");
         sessionJob.setSpec(
                 FlinkSessionJobSpec.builder()
                         .deploymentName(TEST_DEPLOYMENT_NAME)
@@ -177,7 +207,7 @@ public class TestUtils {
                                         .upgradeMode(UpgradeMode.STATELESS)
                                         .state(JobState.RUNNING)
                                         .build())
-                        .flinkConfiguration(conf)
+                        .flinkConfiguration(new HashMap<>())
                         .build());
         return sessionJob;
     }
@@ -202,8 +232,31 @@ public class TestUtils {
                 .serviceAccount(SERVICE_ACCOUNT)
                 .flinkVersion(version)
                 .flinkConfiguration(conf)
-                .jobManager(new JobManagerSpec(new Resource(1.0, "2048m"), 1, null))
-                .taskManager(new TaskManagerSpec(new Resource(1.0, "2048m"), null, null))
+                .mode(KubernetesDeploymentMode.NATIVE)
+                .jobManager(new JobManagerSpec(new Resource(1.0, "2048m"), 1, null, null))
+                .taskManager(new TaskManagerSpec(new Resource(1.0, "2048m"), null, null, null))
+                .build();
+    }
+
+    public static FlinkDeploymentSpec getTestStandaloneFlinkDeploymentSpec(FlinkVersion version) {
+        Map<String, String> conf = new HashMap<>();
+        conf.put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+        conf.put(
+                HighAvailabilityOptions.HA_MODE.key(),
+                KubernetesHaServicesFactory.class.getCanonicalName());
+        conf.put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), "test");
+        conf.put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), "test-savepoint-dir");
+        conf.put(CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(), "test-checkpoint-dir");
+
+        return FlinkDeploymentSpec.builder()
+                .image(IMAGE)
+                .imagePullPolicy(IMAGE_POLICY)
+                .serviceAccount(SERVICE_ACCOUNT)
+                .flinkVersion(version)
+                .flinkConfiguration(conf)
+                .mode(KubernetesDeploymentMode.STANDALONE)
+                .jobManager(new JobManagerSpec(new Resource(1.0, "2048m"), 1, null, null))
+                .taskManager(new TaskManagerSpec(new Resource(1.0, "2048m"), null, null, null))
                 .build();
     }
 
@@ -249,12 +302,35 @@ public class TestUtils {
         return deployment;
     }
 
+    public static StatefulSet createStatefulSet(boolean ready) {
+        StatefulSetStatus status = new StatefulSetStatus();
+        status.setAvailableReplicas(ready ? 1 : 0);
+        status.setReplicas(1);
+        StatefulSetSpec spec = new StatefulSetSpec();
+        spec.setReplicas(1);
+        StatefulSet statefulSet = new StatefulSet();
+        statefulSet.setMetadata(new ObjectMeta());
+        statefulSet.setSpec(spec);
+        statefulSet.setStatus(status);
+        return statefulSet;
+    }
+
     public static <T extends HasMetadata> Context<T> createContextWithDeployment(
             @Nullable Deployment deployment) {
         return new TestingContext<>() {
             @Override
             public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
                 return (Optional<T>) Optional.ofNullable(deployment);
+            }
+        };
+    }
+
+    public static <T extends HasMetadata> Context<T> createContextWithStatefulSet(
+            @Nullable StatefulSet statefulSet) {
+        return new TestingContext<>() {
+            @Override
+            public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
+                return (Optional<T>) Optional.ofNullable(statefulSet);
             }
         };
     }
@@ -269,6 +345,10 @@ public class TestUtils {
 
     public static <T extends HasMetadata> Context<T> createContextWithInProgressDeployment() {
         return createContextWithDeployment(createDeployment(false));
+    }
+
+    public static <T extends HasMetadata> Context<T> createContextWithReadyJobManagerStatefulSet() {
+        return createContextWithStatefulSet(createStatefulSet(true));
     }
 
     public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment() {

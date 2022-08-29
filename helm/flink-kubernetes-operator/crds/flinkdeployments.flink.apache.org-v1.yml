@@ -3046,6 +3046,198 @@ spec:
                     type: object
                   replicas:
                     type: integer
+                  volumeClaimTemplates:
+                    items:
+                      properties:
+                        apiVersion:
+                          type: string
+                        kind:
+                          type: string
+                        metadata:
+                          properties:
+                            annotations:
+                              additionalProperties:
+                                type: string
+                              type: object
+                            clusterName:
+                              type: string
+                            creationTimestamp:
+                              type: string
+                            deletionGracePeriodSeconds:
+                              type: integer
+                            deletionTimestamp:
+                              type: string
+                            finalizers:
+                              items:
+                                type: string
+                              type: array
+                            generateName:
+                              type: string
+                            generation:
+                              type: integer
+                            labels:
+                              additionalProperties:
+                                type: string
+                              type: object
+                            managedFields:
+                              items:
+                                properties:
+                                  apiVersion:
+                                    type: string
+                                  fieldsType:
+                                    type: string
+                                  fieldsV1:
+                                    type: object
+                                  manager:
+                                    type: string
+                                  operation:
+                                    type: string
+                                  subresource:
+                                    type: string
+                                  time:
+                                    type: string
+                                type: object
+                              type: array
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            ownerReferences:
+                              items:
+                                properties:
+                                  apiVersion:
+                                    type: string
+                                  blockOwnerDeletion:
+                                    type: boolean
+                                  controller:
+                                    type: boolean
+                                  kind:
+                                    type: string
+                                  name:
+                                    type: string
+                                  uid:
+                                    type: string
+                                type: object
+                              type: array
+                            resourceVersion:
+                              type: string
+                            selfLink:
+                              type: string
+                            uid:
+                              type: string
+                          type: object
+                        spec:
+                          properties:
+                            accessModes:
+                              items:
+                                type: string
+                              type: array
+                            dataSource:
+                              properties:
+                                apiGroup:
+                                  type: string
+                                kind:
+                                  type: string
+                                name:
+                                  type: string
+                              type: object
+                            dataSourceRef:
+                              properties:
+                                apiGroup:
+                                  type: string
+                                kind:
+                                  type: string
+                                name:
+                                  type: string
+                              type: object
+                            resources:
+                              properties:
+                                limits:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    x-kubernetes-int-or-string: true
+                                  type: object
+                                requests:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    x-kubernetes-int-or-string: true
+                                  type: object
+                              type: object
+                            selector:
+                              properties:
+                                matchExpressions:
+                                  items:
+                                    properties:
+                                      key:
+                                        type: string
+                                      operator:
+                                        type: string
+                                      values:
+                                        items:
+                                          type: string
+                                        type: array
+                                    type: object
+                                  type: array
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  type: object
+                              type: object
+                            storageClassName:
+                              type: string
+                            volumeMode:
+                              type: string
+                            volumeName:
+                              type: string
+                          type: object
+                        status:
+                          properties:
+                            accessModes:
+                              items:
+                                type: string
+                              type: array
+                            allocatedResources:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                x-kubernetes-int-or-string: true
+                              type: object
+                            capacity:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                x-kubernetes-int-or-string: true
+                              type: object
+                            conditions:
+                              items:
+                                properties:
+                                  lastProbeTime:
+                                    type: string
+                                  lastTransitionTime:
+                                    type: string
+                                  message:
+                                    type: string
+                                  reason:
+                                    type: string
+                                  status:
+                                    type: string
+                                  type:
+                                    type: string
+                                type: object
+                              type: array
+                            phase:
+                              type: string
+                            resizeStatus:
+                              type: string
+                          type: object
+                      type: object
+                    type: array
                   podTemplate:
                     properties:
                       apiVersion:
@@ -6050,6 +6242,198 @@ spec:
                     type: object
                   replicas:
                     type: integer
+                  volumeClaimTemplates:
+                    items:
+                      properties:
+                        apiVersion:
+                          type: string
+                        kind:
+                          type: string
+                        metadata:
+                          properties:
+                            annotations:
+                              additionalProperties:
+                                type: string
+                              type: object
+                            clusterName:
+                              type: string
+                            creationTimestamp:
+                              type: string
+                            deletionGracePeriodSeconds:
+                              type: integer
+                            deletionTimestamp:
+                              type: string
+                            finalizers:
+                              items:
+                                type: string
+                              type: array
+                            generateName:
+                              type: string
+                            generation:
+                              type: integer
+                            labels:
+                              additionalProperties:
+                                type: string
+                              type: object
+                            managedFields:
+                              items:
+                                properties:
+                                  apiVersion:
+                                    type: string
+                                  fieldsType:
+                                    type: string
+                                  fieldsV1:
+                                    type: object
+                                  manager:
+                                    type: string
+                                  operation:
+                                    type: string
+                                  subresource:
+                                    type: string
+                                  time:
+                                    type: string
+                                type: object
+                              type: array
+                            name:
+                              type: string
+                            namespace:
+                              type: string
+                            ownerReferences:
+                              items:
+                                properties:
+                                  apiVersion:
+                                    type: string
+                                  blockOwnerDeletion:
+                                    type: boolean
+                                  controller:
+                                    type: boolean
+                                  kind:
+                                    type: string
+                                  name:
+                                    type: string
+                                  uid:
+                                    type: string
+                                type: object
+                              type: array
+                            resourceVersion:
+                              type: string
+                            selfLink:
+                              type: string
+                            uid:
+                              type: string
+                          type: object
+                        spec:
+                          properties:
+                            accessModes:
+                              items:
+                                type: string
+                              type: array
+                            dataSource:
+                              properties:
+                                apiGroup:
+                                  type: string
+                                kind:
+                                  type: string
+                                name:
+                                  type: string
+                              type: object
+                            dataSourceRef:
+                              properties:
+                                apiGroup:
+                                  type: string
+                                kind:
+                                  type: string
+                                name:
+                                  type: string
+                              type: object
+                            resources:
+                              properties:
+                                limits:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    x-kubernetes-int-or-string: true
+                                  type: object
+                                requests:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    x-kubernetes-int-or-string: true
+                                  type: object
+                              type: object
+                            selector:
+                              properties:
+                                matchExpressions:
+                                  items:
+                                    properties:
+                                      key:
+                                        type: string
+                                      operator:
+                                        type: string
+                                      values:
+                                        items:
+                                          type: string
+                                        type: array
+                                    type: object
+                                  type: array
+                                matchLabels:
+                                  additionalProperties:
+                                    type: string
+                                  type: object
+                              type: object
+                            storageClassName:
+                              type: string
+                            volumeMode:
+                              type: string
+                            volumeName:
+                              type: string
+                          type: object
+                        status:
+                          properties:
+                            accessModes:
+                              items:
+                                type: string
+                              type: array
+                            allocatedResources:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                x-kubernetes-int-or-string: true
+                              type: object
+                            capacity:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                x-kubernetes-int-or-string: true
+                              type: object
+                            conditions:
+                              items:
+                                properties:
+                                  lastProbeTime:
+                                    type: string
+                                  lastTransitionTime:
+                                    type: string
+                                  message:
+                                    type: string
+                                  reason:
+                                    type: string
+                                  status:
+                                    type: string
+                                  type:
+                                    type: string
+                                type: object
+                              type: array
+                            phase:
+                              type: string
+                            resizeStatus:
+                              type: string
+                          type: object
+                      type: object
+                    type: array
                   podTemplate:
                     properties:
                       apiVersion:

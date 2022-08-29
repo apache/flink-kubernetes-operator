@@ -24,10 +24,12 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
+import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.exception.StatefulSetFailedException;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -37,12 +39,17 @@ import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
+import io.fabric8.kubernetes.api.model.apps.StatefulSet;
+import io.fabric8.kubernetes.api.model.apps.StatefulSetCondition;
+import io.fabric8.kubernetes.api.model.apps.StatefulSetSpec;
+import io.fabric8.kubernetes.api.model.apps.StatefulSetStatus;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -141,41 +148,19 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
             return;
         }
 
-        Optional<Deployment> deployment = context.getSecondaryResource(Deployment.class);
-        if (deployment.isPresent()) {
-            DeploymentStatus status = deployment.get().getStatus();
-            DeploymentSpec spec = deployment.get().getSpec();
-            if (status != null
-                    && status.getAvailableReplicas() != null
-                    && spec.getReplicas().intValue() == status.getReplicas()
-                    && spec.getReplicas().intValue() == status.getAvailableReplicas()
-                    && flinkService.isJobManagerPortReady(effectiveConfig)) {
-
-                // typically it takes a few seconds for the REST server to be ready
-                logger.info(
-                        "JobManager deployment port is ready, waiting for the Flink REST API...");
-                deploymentStatus.setJobManagerDeploymentStatus(
-                        JobManagerDeploymentStatus.DEPLOYED_NOT_READY);
+        if (KubernetesDeploymentMode.NATIVE.equals(flinkApp.getSpec().getMode())) {
+            Optional<Deployment> deployment = context.getSecondaryResource(Deployment.class);
+            if (deployment.isPresent()) {
+                jmDeploymentObserver(deployment.get(), effectiveConfig, deploymentStatus, flinkApp);
                 return;
             }
-
-            try {
-                checkFailedCreate(status);
-                // checking the pod is expensive; only do it when the deployment isn't ready
-                checkCrashLoopBackoff(flinkApp, effectiveConfig);
-            } catch (DeploymentFailedException dfe) {
-                // throw only when not already in error status to allow for spec update
-                deploymentStatus.getJobStatus().setState(JobStatus.RECONCILING.name());
-                if (!JobManagerDeploymentStatus.ERROR.equals(
-                        deploymentStatus.getJobManagerDeploymentStatus())) {
-                    throw dfe;
-                }
+        } else if (KubernetesDeploymentMode.STANDALONE.equals(flinkApp.getSpec().getMode())) {
+            Optional<StatefulSet> statefulSet = context.getSecondaryResource(StatefulSet.class);
+            if (statefulSet.isPresent()) {
+                jmStatefulSetObserver(
+                        statefulSet.get(), effectiveConfig, deploymentStatus, flinkApp);
                 return;
             }
-
-            logger.info("JobManager is being deployed");
-            deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-            return;
         }
 
         deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
@@ -187,11 +172,95 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         }
     }
 
+    private void jmStatefulSetObserver(
+            StatefulSet statefulSet,
+            Configuration effectiveConfig,
+            FlinkDeploymentStatus deploymentStatus,
+            FlinkDeployment flinkApp) {
+        StatefulSetStatus status = statefulSet.getStatus();
+        StatefulSetSpec spec = statefulSet.getSpec();
+        if (status != null
+                && status.getAvailableReplicas() != null
+                && spec.getReplicas().intValue() == status.getReplicas()
+                && spec.getReplicas().intValue() == status.getAvailableReplicas()
+                && flinkService.isJobManagerPortReady(effectiveConfig)) {
+
+            // typically it takes a few seconds for the REST server to be ready
+            logger.info("JobManager statefulSet port is ready, waiting for the Flink REST API...");
+            deploymentStatus.setJobManagerDeploymentStatus(
+                    JobManagerDeploymentStatus.DEPLOYED_NOT_READY);
+            return;
+        }
+
+        try {
+            checkStatefulFailedCreate(status);
+            // checking the pod is expensive; only do it when the deployment isn't ready
+            checkCrashLoopBackoff(flinkApp, effectiveConfig);
+        } catch (DeploymentFailedException dfe) {
+            // throw only when not already in error status to allow for spec update
+            deploymentStatus.getJobStatus().setState(JobStatus.RECONCILING.name());
+            if (!JobManagerDeploymentStatus.ERROR.equals(
+                    deploymentStatus.getJobManagerDeploymentStatus())) {
+                throw dfe;
+            }
+            return;
+        }
+        logger.info("JobManager is being deployed");
+        deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+    }
+
+    private void jmDeploymentObserver(
+            Deployment deployment,
+            Configuration effectiveConfig,
+            FlinkDeploymentStatus deploymentStatus,
+            FlinkDeployment flinkApp) {
+        DeploymentStatus status = deployment.getStatus();
+        DeploymentSpec spec = deployment.getSpec();
+        if (status != null
+                && status.getAvailableReplicas() != null
+                && spec.getReplicas().intValue() == status.getReplicas()
+                && spec.getReplicas().intValue() == status.getAvailableReplicas()
+                && flinkService.isJobManagerPortReady(effectiveConfig)) {
+
+            // typically it takes a few seconds for the REST server to be ready
+            logger.info("JobManager deployment port is ready, waiting for the Flink REST API...");
+            deploymentStatus.setJobManagerDeploymentStatus(
+                    JobManagerDeploymentStatus.DEPLOYED_NOT_READY);
+            return;
+        }
+
+        try {
+            checkFailedCreate(status);
+            // checking the pod is expensive; only do it when the deployment isn't ready
+            checkCrashLoopBackoff(flinkApp, effectiveConfig);
+        } catch (DeploymentFailedException dfe) {
+            // throw only when not already in error status to allow for spec update
+            deploymentStatus.getJobStatus().setState(JobStatus.RECONCILING.name());
+            if (!JobManagerDeploymentStatus.ERROR.equals(
+                    deploymentStatus.getJobManagerDeploymentStatus())) {
+                throw dfe;
+            }
+            return;
+        }
+
+        logger.info("JobManager is being deployed");
+        deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+    }
+
     private void checkFailedCreate(DeploymentStatus status) {
         List<DeploymentCondition> conditions = status.getConditions();
         for (DeploymentCondition dc : conditions) {
             if ("FailedCreate".equals(dc.getReason()) && "ReplicaFailure".equals(dc.getType())) {
                 throw new DeploymentFailedException(dc);
+            }
+        }
+    }
+
+    private void checkStatefulFailedCreate(StatefulSetStatus status) {
+        List<StatefulSetCondition> conditions = status.getConditions();
+        for (StatefulSetCondition dc : conditions) {
+            if ("FailedCreate".equals(dc.getReason()) && "ReplicaFailure".equals(dc.getType())) {
+                throw new StatefulSetFailedException(dc);
             }
         }
     }
@@ -264,38 +333,44 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
      */
     private void checkIfAlreadyUpgraded(FlinkDeployment flinkDep, Context<?> context) {
         var status = flinkDep.getStatus();
-        Optional<Deployment> depOpt = context.getSecondaryResource(Deployment.class);
-        depOpt.ifPresent(
-                deployment -> {
-                    Map<String, String> annotations = deployment.getMetadata().getAnnotations();
-                    if (annotations == null) {
-                        return;
-                    }
-                    Long deployedGeneration =
-                            Optional.ofNullable(annotations.get(FlinkUtils.CR_GENERATION_LABEL))
-                                    .map(Long::valueOf)
-                                    .orElse(-1L);
+        if (KubernetesDeploymentMode.NATIVE.equals(flinkDep.getSpec().getMode())) {
+            Optional<Deployment> depOpt = context.getSecondaryResource(Deployment.class);
+            depOpt.ifPresent(deployment -> upgradeStatus(flinkDep, deployment, status));
+        } else if (KubernetesDeploymentMode.STANDALONE.equals(flinkDep.getSpec().getMode())) {
+            Optional<StatefulSet> statefulSetOptional =
+                    context.getSecondaryResource(StatefulSet.class);
+            statefulSetOptional.ifPresent(
+                    statefulSet -> upgradeStatus(flinkDep, statefulSet, status));
+        }
+    }
 
-                    Long upgradeTargetGeneration =
-                            ReconciliationUtils.getUpgradeTargetGeneration(flinkDep);
+    private void upgradeStatus(
+            FlinkDeployment flinkDep, HasMetadata k8sResource, FlinkDeploymentStatus status) {
+        Map<String, String> annotations = k8sResource.getMetadata().getAnnotations();
+        if (annotations == null) {
+            return;
+        }
+        Long deployedGeneration =
+                Optional.ofNullable(annotations.get(FlinkUtils.CR_GENERATION_LABEL))
+                        .map(Long::valueOf)
+                        .orElse(-1L);
 
-                    if (deployedGeneration.equals(upgradeTargetGeneration)) {
-                        logger.info("Pending upgrade is already deployed, updating status.");
-                        ReconciliationUtils.updateStatusForAlreadyUpgraded(flinkDep);
-                        if (flinkDep.getSpec().getJob() != null) {
-                            status.getJobStatus()
-                                    .setState(
-                                            org.apache.flink.api.common.JobStatus.RECONCILING
-                                                    .name());
-                        }
-                        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-                    } else {
-                        logger.warn(
-                                "Running deployment generation {} doesn't match upgrade target generation {}.",
-                                deployedGeneration,
-                                upgradeTargetGeneration);
-                    }
-                });
+        Long upgradeTargetGeneration = ReconciliationUtils.getUpgradeTargetGeneration(flinkDep);
+
+        if (deployedGeneration.equals(upgradeTargetGeneration)) {
+            logger.info("Pending upgrade is already deployed, updating status.");
+            ReconciliationUtils.updateStatusForAlreadyUpgraded(flinkDep);
+            if (flinkDep.getSpec().getJob() != null) {
+                status.getJobStatus()
+                        .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+            }
+            status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+        } else {
+            logger.warn(
+                    "Running deployment generation {} doesn't match upgrade target generation {}.",
+                    deployedGeneration,
+                    upgradeTargetGeneration);
+        }
     }
 
     /**

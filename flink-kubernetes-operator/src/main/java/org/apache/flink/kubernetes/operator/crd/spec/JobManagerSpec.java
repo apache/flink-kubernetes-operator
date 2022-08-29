@@ -19,11 +19,15 @@ package org.apache.flink.kubernetes.operator.crd.spec;
 
 import org.apache.flink.annotation.Experimental;
 
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaim;
 import io.fabric8.kubernetes.api.model.Pod;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /** JobManager spec. */
 @Experimental
@@ -37,6 +41,9 @@ public class JobManagerSpec {
 
     /** Number of JobManager replicas. Must be 1 for non-HA deployments. */
     private int replicas = 1;
+
+    /** Volume Claim Templates for JobManager stateful set. Just for standalone mode. */
+    private List<PersistentVolumeClaim> volumeClaimTemplates = new ArrayList<>();
 
     /** JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
     private Pod podTemplate;

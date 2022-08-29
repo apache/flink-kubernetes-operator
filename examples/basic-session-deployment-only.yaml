@@ -34,3 +34,4 @@ spec:
     resource:
       memory: "2048m"
       cpu: 1
+  mode: native
