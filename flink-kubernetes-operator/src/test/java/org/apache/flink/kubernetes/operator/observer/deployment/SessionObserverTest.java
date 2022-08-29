@@ -69,14 +69,14 @@ public class SessionObserverTest {
     private void observeSessionCluster(
             FlinkDeployment deployment, Context<FlinkDeployment> context) {
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-        System.out.println("First observe");
+
         observer.observe(deployment, context);
         assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
                 deployment.getStatus().getJobManagerDeploymentStatus());
-        System.out.println("Second observe");
+
         observer.observe(deployment, context);
 
         assertEquals(

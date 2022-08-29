@@ -71,7 +71,7 @@ public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBas
         StandaloneKubernetesJobManagerParameters tmParameters =
                 new StandaloneKubernetesJobManagerParameters(
                         flinkConfig, TestUtils.createClusterSpecification());
-        System.out.println(tmParameters.getVolumeClaimTemplates());
+
         jmSpec =
                 StandaloneKubernetesJobManagerFactory.buildKubernetesJobManagerSpecification(
                         podTemplate, null, tmParameters);
