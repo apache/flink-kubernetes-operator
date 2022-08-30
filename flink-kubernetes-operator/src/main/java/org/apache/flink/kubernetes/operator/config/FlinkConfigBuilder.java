@@ -461,6 +461,12 @@ public class FlinkConfigBuilder {
         configuration
                 .getOptional(DeploymentOptionsInternal.CONF_DIR)
                 .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
+        configuration
+                .getOptional(StandaloneKubernetesConfigOptionsInternal.JOB_MANAGER_PVC_TEMPLATE)
+                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
+        configuration
+                .getOptional(StandaloneKubernetesConfigOptionsInternal.TASK_MANAGER_PVC_TEMPLATE)
+                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
     }
 
     private static void deleteSilentlyIfGenerated(String file) {
