@@ -180,9 +180,9 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         StatefulSetStatus status = statefulSet.getStatus();
         StatefulSetSpec spec = statefulSet.getSpec();
         if (status != null
-                && status.getAvailableReplicas() != null
+                && status.getReadyReplicas() != null
                 && spec.getReplicas().intValue() == status.getReplicas()
-                && spec.getReplicas().intValue() == status.getAvailableReplicas()
+                && spec.getReplicas().intValue() == status.getReadyReplicas()
                 && flinkService.isJobManagerPortReady(effectiveConfig)) {
 
             // typically it takes a few seconds for the REST server to be ready

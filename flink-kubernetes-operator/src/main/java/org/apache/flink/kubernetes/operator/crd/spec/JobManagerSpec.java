@@ -42,7 +42,10 @@ public class JobManagerSpec {
     /** Number of JobManager replicas. Must be 1 for non-HA deployments. */
     private int replicas = 1;
 
-    /** Volume Claim Templates for JobManager stateful set. Just for standalone mode. */
+    /**
+     * Volume Claim Templates for JobManager StatefulSet, it will be used to mount custom PVCs just
+     * for standalone mode.
+     */
     private List<PersistentVolumeClaim> volumeClaimTemplates = new ArrayList<>();
 
     /** JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */

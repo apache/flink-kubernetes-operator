@@ -99,12 +99,12 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 **Description**: JobManager spec.
 
-| Parameter | Type | Docs                                                                                          |
-| ----------| ---- |-----------------------------------------------------------------------------------------------|
-| resource | org.apache.flink.kubernetes.operator.crd.spec.Resource | Resource specification for the JobManager pods.                                               |
-| replicas | int | Number of JobManager replicas. Must be 1 for non-HA deployments.                              |
-| podTemplate | io.fabric8.kubernetes.api.model.Pod | JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate.              |
-| volumeClaimTemplates | java.util.List<io.fabric8.kubernetes.api.model.PersistentVolumeClaim>| JobManager Volume Claim templates. It will be used to mount custom PVCs by defined templates. | 
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| resource | org.apache.flink.kubernetes.operator.crd.spec.Resource | Resource specification for the JobManager pods. |
+| replicas | int | Number of JobManager replicas. Must be 1 for non-HA deployments. |
+| volumeClaimTemplates | java.util.List<io.fabric8.kubernetes.api.model.PersistentVolumeClaim> | Volume Claim Templates for JobManager StatefulSet, it will be used to mount custom PVCs just  for standalone mode. |
+| podTemplate | io.fabric8.kubernetes.api.model.Pod | JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. |
 
 ### JobSpec
 **Class**: org.apache.flink.kubernetes.operator.crd.spec.JobSpec
@@ -158,12 +158,13 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 **Description**: TaskManager spec.
 
-| Parameter | Type                                                   | Docs                                                                                           |
-| ----------|--------------------------------------------------------|------------------------------------------------------------------------------------------------|
-| resource | org.apache.flink.kubernetes.operator.crd.spec.Resource | Resource specification for the TaskManager pods.                                               |
-| replicas | java.lang.Integer                                      | Number of TaskManager replicas. If defined, takes precedence over parallelism                  |
-| podTemplate | io.fabric8.kubernetes.api.model.Pod                    | TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate.              | 
-| volumeClaimTemplates | java.util.List<io.fabric8.kubernetes.api.model.PersistentVolumeClaim>                                       | TaskManager Volume Claim templates. It will be used to mount custom PVCs by defined templates. | 
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| resource | org.apache.flink.kubernetes.operator.crd.spec.Resource | Resource specification for the TaskManager pods. |
+| replicas | java.lang.Integer | Number of TaskManager replicas. If defined, takes precedence over parallelism |
+| volumeClaimTemplates | java.util.List<io.fabric8.kubernetes.api.model.PersistentVolumeClaim> | Volume Claim Templates for TaskManager StatefulSet, it will be used to mount custom PVCs just  for standalone mode. |
+| podTemplate | io.fabric8.kubernetes.api.model.Pod | TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. |
+
 ### UpgradeMode
 **Class**: org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode
 

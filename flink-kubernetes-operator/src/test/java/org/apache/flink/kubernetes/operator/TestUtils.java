@@ -304,7 +304,7 @@ public class TestUtils {
 
     public static StatefulSet createStatefulSet(boolean ready) {
         StatefulSetStatus status = new StatefulSetStatus();
-        status.setAvailableReplicas(ready ? 1 : 0);
+        status.setReadyReplicas(ready ? 1 : 0);
         status.setReplicas(1);
         StatefulSetSpec spec = new StatefulSetSpec();
         spec.setReplicas(1);

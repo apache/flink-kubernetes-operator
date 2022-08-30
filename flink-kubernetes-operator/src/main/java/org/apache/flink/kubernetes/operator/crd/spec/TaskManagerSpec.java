@@ -43,7 +43,10 @@ public class TaskManagerSpec {
     /** Number of TaskManager replicas. If defined, takes precedence over parallelism */
     @SpecReplicas private Integer replicas;
 
-    /** Volume Claim Templates for TaskManager stateful set. Just for standalone mode. */
+    /**
+     * Volume Claim Templates for TaskManager StatefulSet, it will be used to mount custom PVCs just
+     * for standalone mode.
+     */
     private List<PersistentVolumeClaim> volumeClaimTemplates = new ArrayList<>();
 
     /** TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
