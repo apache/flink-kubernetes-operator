@@ -72,9 +72,17 @@ function assert_available_slots() {
 function wait_for_jobmanager_running() {
     CLUSTER_ID=$1
     TIMEOUT=$2
-    retry_times 30 3 "kubectl get deploy/${CLUSTER_ID}" || exit 1
+    MODE=$3
+    if [ "$MODE" = "native" ]; then
+      retry_times 30 3 "kubectl get deploy/${CLUSTER_ID}" || exit 1
 
-    kubectl wait --for=condition=Available --timeout=${TIMEOUT}s deploy/${CLUSTER_ID} || exit 1
+      kubectl wait --for=condition=Available --timeout=${TIMEOUT}s deploy/${CLUSTER_ID} || exit 1
+    elif [ "$MODE" = "standalone" ]; then
+      retry_times 30 3 "kubectl get statefulset/${CLUSTER_ID}" || exit 1
+
+      kubectl wait -l statefulset.kubernetes.io/pod-name=${CLUSTER_ID}-0 --for=condition=ready pod --timeout=${TIMEOUT}s || exit 1
+    fi
+
     jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
 
     echo "Waiting for jobmanager pod ${jm_pod_name} ready."

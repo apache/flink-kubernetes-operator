@@ -33,8 +33,8 @@ OPERATOR_POD_LABEL="app.kubernetes.io/name=flink-kubernetes-operator"
 on_exit cleanup_and_exit $APPLICATION_YAML $TIMEOUT $CLUSTER_ID
 
 retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
-
-wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT
+mode=$(cat $APPLICATION_YAML |grep "mode"|awk '{print $2}')
+wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT $mode
 jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
 
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
@@ -74,7 +74,7 @@ kubectl delete pod -l $OPERATOR_POD_LABEL
 echo "Submitting the session job again"
 retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
 
-wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT
+wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT $mode
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
 wait_for_status $SESSION_CLUSTER_IDENTIFIER '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
 wait_for_status $SESSION_JOB_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1

@@ -28,11 +28,11 @@ on_exit cleanup_and_exit $APPLICATION_YAML $TIMEOUT $CLUSTER_ID
 
 create_namespace flink
 retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
-
+mode=$(cat $APPLICATION_YAML |grep "mode"|head -1|awk '{print $2}')
 # Current namespace: default
 kubectl config set-context --current --namespace=default
 echo "Current namespace is $(kubectl config view --minify | grep namespace | awk '{print $2}')"
-wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT
+wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT $mode
 jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
 wait_for_status $SESSION_CLUSTER_IDENTIFIER '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
@@ -42,7 +42,7 @@ echo "Flink Session Job is running properly"
 # Current namespace: flink
 kubectl config set-context --current --namespace=flink
 echo "Current namespace is $(kubectl config view --minify | grep namespace | awk '{print $2}')"
-wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT
+wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT $mode
 jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
 wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || exit 1
 wait_for_status $SESSION_CLUSTER_IDENTIFIER '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
