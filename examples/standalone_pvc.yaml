@@ -37,7 +37,7 @@ spec:
         spec:
           accessModes: [ "ReadWriteOnce" ]
           ### Please override with custom supported storageClassName
-          storageClassName: "alicloud-local-lvm"
+          storageClassName: "local-lvm"
           resources:
             requests:
               storage: 10Gi
@@ -63,7 +63,7 @@ spec:
         spec:
           accessModes: [ "ReadWriteOnce" ]
           ### Please override with custom supported storageClassName
-          storageClassName: "alicloud-local-lvm"
+          storageClassName: "local-lvm"
           resources:
             requests:
               storage: 10Gi
