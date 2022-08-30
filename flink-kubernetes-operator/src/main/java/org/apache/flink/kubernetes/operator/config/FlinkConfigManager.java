@@ -21,6 +21,7 @@ package org.apache.flink.kubernetes.operator.config;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
@@ -147,8 +148,10 @@ public class FlinkConfigManager {
 
     public Configuration getDeployConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
         var conf = getConfig(objectMeta, spec);
-        FlinkUtils.setGenerationAnnotation(conf, objectMeta.getGeneration());
-        FlinkUtils.setTaskmanagerGenerationAnnotation(conf, objectMeta.getGeneration());
+        FlinkUtils.setGenerationAnnotation(
+                conf, objectMeta.getGeneration(), KubernetesConfigOptions.JOB_MANAGER_ANNOTATIONS);
+        FlinkUtils.setGenerationAnnotation(
+                conf, objectMeta.getGeneration(), KubernetesConfigOptions.TASK_MANAGER_ANNOTATIONS);
         return conf;
     }
 

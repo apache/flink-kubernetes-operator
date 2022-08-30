@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
@@ -175,28 +176,17 @@ public class FlinkUtils {
         return (parallelism + taskSlots - 1) / taskSlots;
     }
 
-    public static void setGenerationAnnotation(Configuration conf, Long generation) {
+    public static void setGenerationAnnotation(
+            Configuration conf,
+            Long generation,
+            ConfigOption<Map<String, String>> annotationsOption) {
         if (generation == null) {
             return;
         }
         var labels =
-                new HashMap<>(
-                        conf.getOptional(KubernetesConfigOptions.JOB_MANAGER_ANNOTATIONS)
-                                .orElse(Collections.emptyMap()));
+                new HashMap<>(conf.getOptional(annotationsOption).orElse(Collections.emptyMap()));
         labels.put(CR_GENERATION_LABEL, generation.toString());
-        conf.set(KubernetesConfigOptions.JOB_MANAGER_ANNOTATIONS, labels);
-    }
-
-    public static void setTaskmanagerGenerationAnnotation(Configuration conf, Long generation) {
-        if (generation == null) {
-            return;
-        }
-        var labels =
-                new HashMap<>(
-                        conf.getOptional(KubernetesConfigOptions.TASK_MANAGER_ANNOTATIONS)
-                                .orElse(Collections.emptyMap()));
-        labels.put(CR_GENERATION_LABEL, generation.toString());
-        conf.set(KubernetesConfigOptions.TASK_MANAGER_ANNOTATIONS, labels);
+        conf.set(annotationsOption, labels);
     }
 
     /**
