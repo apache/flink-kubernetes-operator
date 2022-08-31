@@ -147,6 +147,11 @@ public class ApplicationReconcilerTest {
 
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().setRestartNonce(100L);
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .setLastStableSpec(
+                        deployment.getStatus().getReconciliationStatus().getLastReconciledSpec());
         flinkService.setHaDataAvailable(false);
         deployment.getStatus().getJobStatus().setState("RECONCILING");
 
@@ -182,6 +187,39 @@ public class ApplicationReconcilerTest {
 
         assertEquals(1, flinkService.getRunningCount());
         assertEquals("finished_sp", runningJobs.get(0).f0);
+    }
+
+    @ParameterizedTest
+    @EnumSource(UpgradeMode.class)
+    public void testUpgradeBeforeReachingStableSpec(UpgradeMode upgradeMode) throws Exception {
+        flinkService.setHaDataAvailable(false);
+
+        final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+
+        reconciler.reconcile(deployment, context);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        // Ready for spec changes, the reconciliation should be performed
+        final String newImage = "new-image-1";
+        deployment.getSpec().getJob().setUpgradeMode(upgradeMode);
+        deployment.getSpec().setImage(newImage);
+        reconciler.reconcile(deployment, context);
+        if (!UpgradeMode.STATELESS.equals(upgradeMode)) {
+            assertNull(deployment.getStatus().getReconciliationStatus().getLastReconciledSpec());
+            assertEquals(
+                    ReconciliationState.UPGRADING,
+                    deployment.getStatus().getReconciliationStatus().getState());
+            reconciler.reconcile(deployment, context);
+        }
+        assertEquals(
+                newImage,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getImage());
     }
 
     @Test
