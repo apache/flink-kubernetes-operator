@@ -20,6 +20,8 @@ package org.apache.flink.kubernetes.operator.admission;
 import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.admission.mutator.FlinkMutator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.fs.FileSystemWatchService;
+import org.apache.flink.kubernetes.operator.ssl.ReloadableSslContext;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
@@ -32,24 +34,16 @@ import org.apache.flink.shaded.netty4.io.netty.channel.socket.SocketChannel;
 import org.apache.flink.shaded.netty4.io.netty.channel.socket.nio.NioServerSocketChannel;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpObjectAggregator;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpServerCodec;
-import org.apache.flink.shaded.netty4.io.netty.handler.codec.http2.Http2SecurityUtil;
 import org.apache.flink.shaded.netty4.io.netty.handler.ssl.SslContext;
-import org.apache.flink.shaded.netty4.io.netty.handler.ssl.SslContextBuilder;
-import org.apache.flink.shaded.netty4.io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import org.apache.flink.shaded.netty4.io.netty.handler.stream.ChunkedWriteHandler;
 
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.KeyManagerFactory;
-
-import java.io.File;
-import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.nio.file.Files;
-import java.security.KeyStore;
+import java.nio.file.Path;
 import java.util.Set;
 
 /** Main Class for Flink native k8s operator. */
@@ -57,6 +51,8 @@ public class FlinkOperatorWebhook {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkOperatorWebhook.class);
 
     private static final int MAX_CONTEXT_LENGTH = 104_857_600;
+
+    private static FileSystemWatchService fileSystemWatchService;
 
     public static void main(String[] args) throws Exception {
         EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
@@ -138,19 +134,35 @@ public class FlinkOperatorWebhook {
             return null;
         }
 
-        String keystorePassword = EnvUtils.getRequired(EnvUtils.ENV_WEBHOOK_KEYSTORE_PASSWORD);
         String keystoreType = EnvUtils.getRequired(EnvUtils.ENV_WEBHOOK_KEYSTORE_TYPE);
-        KeyStore keyStore = KeyStore.getInstance(keystoreType);
-        try (InputStream keyStoreFile =
-                Files.newInputStream(new File(keystorePathOpt.get()).toPath())) {
-            keyStore.load(keyStoreFile, keystorePassword.toCharArray());
-        }
-        final KeyManagerFactory kmf =
-                KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        kmf.init(keyStore, keystorePassword.toCharArray());
+        String keystorePassword = EnvUtils.getRequired(EnvUtils.ENV_WEBHOOK_KEYSTORE_PASSWORD);
+        ReloadableSslContext reloadableSslContext =
+                new ReloadableSslContext(keystorePathOpt.get(), keystoreType, keystorePassword);
+        stopFileSystemWatchService();
+        final String realKeystoreFileName =
+                Path.of(keystorePathOpt.get()).toRealPath().getFileName().toString();
+        LOG.info("Keystore path is resolved to real filename: " + realKeystoreFileName);
+        fileSystemWatchService =
+                new FileSystemWatchService(Path.of(keystorePathOpt.get()).getParent().toString()) {
+                    @Override
+                    protected void onFileOrDirectoryModified(Path relativePath) {
+                        try {
+                            LOG.info("Reloading SSL context because of certificate change");
+                            reloadableSslContext.reload();
+                            LOG.info("SSL context reloaded successfully");
+                        } catch (Exception e) {
+                            LOG.error("SSL context reload received exception: " + e);
+                        }
+                    }
+                };
+        fileSystemWatchService.start();
+        return reloadableSslContext;
+    }
 
-        return SslContextBuilder.forServer(kmf)
-                .ciphers(Http2SecurityUtil.CIPHERS, SupportedCipherSuiteFilter.INSTANCE)
-                .build();
+    private static void stopFileSystemWatchService() throws InterruptedException {
+        if (fileSystemWatchService != null) {
+            fileSystemWatchService.interrupt();
+            fileSystemWatchService.join();
+        }
     }
 }
