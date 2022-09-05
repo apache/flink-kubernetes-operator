@@ -113,6 +113,9 @@ public class FlinkOperator {
         } else {
             LOG.info("Configuring operator with {} reconciliation threads.", parallelism);
             overrider.withConcurrentReconciliationThreads(parallelism);
+            // feat: separate executor service for workflow
+            // https://github.com/java-operator-sdk/java-operator-sdk/pull/1371
+            overrider.withExecutorService(Executors.newFixedThreadPool(parallelism));
         }
         if (configManager.getOperatorConfiguration().isJosdkMetricsEnabled()) {
             overrider.withMetrics(new OperatorJosdkMetrics(metricGroup, configManager));
