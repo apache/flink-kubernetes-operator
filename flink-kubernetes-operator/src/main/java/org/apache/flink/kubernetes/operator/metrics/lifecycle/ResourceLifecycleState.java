@@ -17,25 +17,31 @@
 
 package org.apache.flink.kubernetes.operator.metrics.lifecycle;
 
+import lombok.Getter;
+
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Set;
 
 /** Enum encapsulating the lifecycle state of a Flink resource. */
 public enum ResourceLifecycleState {
-    CREATED(false),
-    SUSPENDED(true),
-    UPGRADING(false),
-    DEPLOYED(false),
-    STABLE(true),
-    ROLLING_BACK(false),
-    ROLLED_BACK(true),
-    FAILED(true);
+    CREATED(false, "The resource was created in Kubernetes but not yet handled by the operator"),
+    SUSPENDED(true, "The resource (job) has been suspended"),
+    UPGRADING(false, "The resource is being upgraded"),
+    DEPLOYED(
+            false,
+            "The resource is deployed/submitted to Kubernetes, but it’s not yet considered to be stable and might be rolled back in the future"),
+    STABLE(true, "The resource deployment is considered to be stable and won’t be rolled back"),
+    ROLLING_BACK(false, "The resource is being rolled back to the last stable spec"),
+    ROLLED_BACK(true, "The resource is deployed with the last stable spec"),
+    FAILED(true, "The job terminally failed");
 
     private final boolean terminal;
+    @Getter private final String description;
 
-    ResourceLifecycleState(boolean terminal) {
+    ResourceLifecycleState(boolean terminal, String description) {
         this.terminal = terminal;
+        this.description = description;
     }
 
     public Set<ResourceLifecycleState> getClearedStatesAfterTransition(

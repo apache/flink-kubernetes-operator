@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
 
 import io.fabric8.kubernetes.api.model.Event;
@@ -69,34 +70,35 @@ public class EventRecorder {
             KubernetesClient client, Collection<FlinkResourceListener> listeners) {
 
         BiConsumer<AbstractFlinkResource<?, ?>, Event> biConsumer =
-                (resource, event) ->
-                        listeners.forEach(
-                                listener -> {
-                                    var ctx =
-                                            new FlinkResourceListener.ResourceEventContext() {
-                                                @Override
-                                                public Event getEvent() {
-                                                    return event;
-                                                }
+                (resource, event) -> {
+                    var ctx =
+                            new FlinkResourceListener.ResourceEventContext() {
+                                @Override
+                                public Event getEvent() {
+                                    return event;
+                                }
 
-                                                @Override
-                                                public AbstractFlinkResource<?, ?>
-                                                        getFlinkResource() {
-                                                    return resource;
-                                                }
+                                @Override
+                                public AbstractFlinkResource<?, ?> getFlinkResource() {
+                                    return resource;
+                                }
 
-                                                @Override
-                                                public KubernetesClient getKubernetesClient() {
-                                                    return client;
-                                                }
-                                            };
+                                @Override
+                                public KubernetesClient getKubernetesClient() {
+                                    return client;
+                                }
+                            };
+                    listeners.forEach(
+                            listener -> {
+                                if (resource instanceof FlinkDeployment) {
+                                    listener.onDeploymentEvent(ctx);
+                                } else {
+                                    listener.onSessionJobEvent(ctx);
+                                }
+                            });
+                    AuditUtils.logContext(ctx);
+                };
 
-                                    if (resource instanceof FlinkDeployment) {
-                                        listener.onDeploymentEvent(ctx);
-                                    } else {
-                                        listener.onSessionJobEvent(ctx);
-                                    }
-                                });
         return new EventRecorder(client, biConsumer);
     }
 

@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 
@@ -196,6 +197,7 @@ public class StatusRecorder<
                                     listener.onSessionJobStatusUpdate(ctx);
                                 }
                             });
+                    AuditUtils.logContext(ctx);
                 };
 
         return new StatusRecorder<>(kubernetesClient, metricManager, consumer);
