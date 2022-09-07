@@ -26,7 +26,6 @@ import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DelegatingConfiguration;
 import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +44,7 @@ import java.util.regex.Pattern;
 /** Flink resource listener utilities. */
 public class ListenerUtils {
 
-    private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ListenerUtils.class);
 
     private static final String PREFIX = "kubernetes.operator.plugins.listeners.";
     private static final String SUFFIX = ".class";
