@@ -147,7 +147,7 @@ public abstract class JobStatusObserver<CTX> {
             eventRecorder.triggerEvent(
                     resource,
                     EventRecorder.Type.Normal,
-                    EventRecorder.Reason.StatusChanged,
+                    EventRecorder.Reason.JobStatusChanged,
                     EventRecorder.Component.Job,
                     message);
         }

@@ -58,36 +58,40 @@ public class FlinkResourceListenerTest {
         var eventRecorder = EventRecorder.create(kubernetesClient, listeners);
 
         var deployment = TestUtils.buildApplicationCluster();
-        statusRecorder.updateStatusFromCache(deployment);
 
-        statusRecorder.patchAndCacheStatus(deployment);
         assertTrue(listener1.updates.isEmpty());
         assertTrue(listener2.updates.isEmpty());
         assertTrue(listener1.events.isEmpty());
         assertTrue(listener2.events.isEmpty());
 
-        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-
-        statusRecorder.patchAndCacheStatus(deployment);
+        statusRecorder.updateStatusFromCache(deployment);
+        assertEquals(1, listener1.updates.size());
+        statusRecorder.updateStatusFromCache(deployment);
         assertEquals(1, listener1.updates.size());
         assertEquals(deployment, listener1.updates.get(0).getFlinkResource());
 
-        assertEquals(1, listener2.updates.size());
-        assertEquals(deployment, listener2.updates.get(0).getFlinkResource());
-        assertEquals(
-                listener1.updates.get(0).getTimestamp(), listener2.updates.get(0).getTimestamp());
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
+        statusRecorder.patchAndCacheStatus(deployment);
+        assertEquals(2, listener1.updates.size());
+        assertEquals(deployment, listener1.updates.get(1).getFlinkResource());
 
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         statusRecorder.patchAndCacheStatus(deployment);
+        assertEquals(3, listener1.updates.size());
+        assertEquals(deployment, listener1.updates.get(2).getFlinkResource());
 
-        assertEquals(2, listener1.updates.size());
-        assertEquals(deployment, listener1.updates.get(0).getFlinkResource());
-        assertEquals(2, listener2.updates.size());
-        assertEquals(deployment, listener2.updates.get(0).getFlinkResource());
+        for (int i = 0; i < listener1.updates.size(); i++) {
+            assertEquals(
+                    listener1.updates.get(i).getTimestamp(),
+                    listener2.updates.get(i).getTimestamp());
+            assertEquals(
+                    listener1.updates.get(i).getFlinkResource(),
+                    listener2.updates.get(i).getFlinkResource());
+        }
 
         var updateContext =
                 (FlinkResourceListener.StatusUpdateContext<FlinkDeployment, FlinkDeploymentStatus>)
-                        listener1.updates.get(1);
+                        listener1.updates.get(2);
         assertEquals(
                 JobManagerDeploymentStatus.ERROR,
                 updateContext.getPreviousStatus().getJobManagerDeploymentStatus());

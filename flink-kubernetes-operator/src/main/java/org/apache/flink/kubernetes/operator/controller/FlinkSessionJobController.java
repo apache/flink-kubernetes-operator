@@ -107,7 +107,14 @@ public class FlinkSessionJobController
 
     @Override
     public DeleteControl cleanup(FlinkSessionJob sessionJob, Context context) {
-        LOG.info("Deleting FlinkSessionJob");
+        String msg = "Cleaning up " + FlinkSessionJob.class.getSimpleName();
+        LOG.info(msg);
+        eventRecorder.triggerEvent(
+                sessionJob,
+                EventRecorder.Type.Normal,
+                EventRecorder.Reason.Cleanup,
+                EventRecorder.Component.Operator,
+                msg);
         statusRecorder.removeCachedStatus(sessionJob);
         return reconciler.cleanup(sessionJob, context);
     }

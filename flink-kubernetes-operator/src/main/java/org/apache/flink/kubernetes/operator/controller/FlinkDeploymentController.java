@@ -84,7 +84,14 @@ public class FlinkDeploymentController
 
     @Override
     public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
-        LOG.info("Deleting FlinkDeployment");
+        String msg = "Cleaning up " + FlinkDeployment.class.getSimpleName();
+        LOG.info(msg);
+        eventRecorder.triggerEvent(
+                flinkApp,
+                EventRecorder.Type.Normal,
+                EventRecorder.Reason.Cleanup,
+                EventRecorder.Component.Operator,
+                msg);
         statusRecorder.updateStatusFromCache(flinkApp);
         try {
             observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);

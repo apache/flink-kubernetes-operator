@@ -187,7 +187,7 @@ public class SessionReconciler
             if (eventRecorder.triggerEvent(
                     deployment,
                     EventRecorder.Type.Warning,
-                    EventRecorder.Reason.Cleanup,
+                    EventRecorder.Reason.CleanupFailed,
                     EventRecorder.Component.Operator,
                     error)) {
                 LOG.warn(error);
