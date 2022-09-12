@@ -98,8 +98,8 @@ The `upgradeMode` setting controls both the stop and restore mechanisms as detai
 The three  upgrade modes are intended to support different scenarios:
 
  1. **stateless**: Stateless application upgrades from empty state
- 2. **last-state**: Quick upgrades in any application state (even for failing jobs), does not require a healthy job as it always uses last checkpoint information. Manual recovery may be necessary if HA metadata is lost.
- 3. **savepoint**: Use savepoint (when possible) for upgrade, providing maximal safety and possibility to serve as backup/fork point.
+ 2. **last-state**: Quick upgrades in any application state (even for failing jobs), does not require a healthy job as it always uses the latest checkpoint information. Manual recovery may be necessary if HA metadata is lost.
+ 3. **savepoint**: Use savepoint for upgrade, providing maximal safety and possibility to serve as backup/fork point. The savepoint will be created during the upgrade process. Note that the Flink job needs to be running to allow the savepoint to get created. If the job is in an unhealthy state, the last checkpoint will be used. If the last checkpoint is not available, the job upgrade will fail.
 
 During stateful upgrades there are always cases which might require user intervention to preserve the consistency of the application. Please see the [manual Recovery section](#manual-recovery) for details.
 
