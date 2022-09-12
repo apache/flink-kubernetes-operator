@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
+import org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -140,6 +141,9 @@ public class StatusRecorder<
         } else {
             // Initialize cache with current status copy
             statusCache.put(key, objectMapper.convertValue(resource.getStatus(), ObjectNode.class));
+            if (ResourceLifecycleState.CREATED.equals(resource.getStatus().getLifecycleState())) {
+                statusUpdateListener.accept(resource, resource.getStatus());
+            }
         }
         metricManager.onUpdate(resource);
     }

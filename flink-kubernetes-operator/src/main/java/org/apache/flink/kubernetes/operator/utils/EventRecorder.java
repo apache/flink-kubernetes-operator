@@ -121,9 +121,10 @@ public class EventRecorder {
         SpecChanged,
         Rollback,
         Submit,
-        StatusChanged,
+        JobStatusChanged,
         SavepointError,
         Cleanup,
+        CleanupFailed,
         Missing,
         ValidationError
     }
