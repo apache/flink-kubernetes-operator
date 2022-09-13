@@ -31,10 +31,9 @@ import io.fabric8.kubernetes.client.http.BasicBuilder;
 import io.fabric8.kubernetes.client.http.HttpRequest;
 import io.fabric8.kubernetes.client.http.HttpResponse;
 import io.fabric8.kubernetes.client.http.Interceptor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +47,7 @@ public class KubernetesClientMetrics implements Interceptor {
     public static final String KUBE_CLIENT_GROUP = "KubeClient";
     public static final String HTTP_REQUEST_GROUP = "HttpRequest";
     public static final String HTTP_REQUEST_FAILED_GROUP = "Failed";
+    public static final String HTTP_REQUEST_SLOW_GROUP = "Slow";
     public static final String HTTP_RESPONSE_GROUP = "HttpResponse";
     public static final String HTTP_RESPONSE_1XX = "1xx";
     public static final String HTTP_RESPONSE_2XX = "2xx";
@@ -62,10 +62,12 @@ public class KubernetesClientMetrics implements Interceptor {
 
     private final MetricGroup requestMetricGroup;
     private final MetricGroup failedRequestMetricGroup;
+    private final MetricGroup slowRequestMetricGroup;
     private final MetricGroup responseMetricGroup;
 
     private final Counter requestCounter;
     private final Counter failedRequestCounter;
+    private final Counter slowRequestCounter;
     private final Counter responseCounter;
 
     private final SynchronizedMeterView requestRateMeter;
@@ -79,7 +81,7 @@ public class KubernetesClientMetrics implements Interceptor {
     private final Map<String, Counter> requestMethodCounter = new ConcurrentHashMap<>();
     private final LongSupplier nanoTimeSource;
 
-    private final Logger logger = LoggerFactory.getLogger(KubernetesClientMetrics.class);
+    private final Duration slowRequestThreshold;
 
     public KubernetesClientMetrics(
             MetricGroup parentGroup, FlinkOperatorConfiguration flinkOperatorConfiguration) {
@@ -95,12 +97,16 @@ public class KubernetesClientMetrics implements Interceptor {
 
         this.requestMetricGroup = metricGroup.addGroup(HTTP_REQUEST_GROUP);
         this.failedRequestMetricGroup = requestMetricGroup.addGroup(HTTP_REQUEST_FAILED_GROUP);
+        this.slowRequestMetricGroup = requestMetricGroup.addGroup(HTTP_REQUEST_SLOW_GROUP);
         this.responseMetricGroup = metricGroup.addGroup(HTTP_RESPONSE_GROUP);
 
         this.requestCounter =
                 OperatorMetricUtils.synchronizedCounter(requestMetricGroup.counter(COUNTER));
         this.failedRequestCounter =
                 OperatorMetricUtils.synchronizedCounter(failedRequestMetricGroup.counter(COUNTER));
+        this.slowRequestThreshold = flinkOperatorConfiguration.getSlowRequestThreshold();
+        this.slowRequestCounter =
+                OperatorMetricUtils.synchronizedCounter(slowRequestMetricGroup.counter(COUNTER));
         this.responseCounter =
                 OperatorMetricUtils.synchronizedCounter(responseMetricGroup.counter(COUNTER));
 
@@ -208,6 +214,16 @@ public class KubernetesClientMetrics implements Interceptor {
     }
 
     @VisibleForTesting
+    public Counter getSlowRequestCounter() {
+        return slowRequestCounter;
+    }
+
+    @VisibleForTesting
+    public Duration getSlowRequestThreshold() {
+        return slowRequestThreshold;
+    }
+
+    @VisibleForTesting
     SynchronizedMeterView getRequestFailedRateMeter() {
         return requestFailedRateMeter;
     }
@@ -236,6 +252,9 @@ public class KubernetesClientMetrics implements Interceptor {
             final long requestStartNanos = Long.parseLong(header);
             final long latency = currentNanos - requestStartNanos;
             this.responseLatency.update(latency);
+            if (latency >= slowRequestThreshold.toNanos()) {
+                slowRequestCounter.inc();
+            }
         }
     }
 
