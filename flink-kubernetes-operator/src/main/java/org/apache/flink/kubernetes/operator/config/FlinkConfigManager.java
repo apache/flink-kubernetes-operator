@@ -19,6 +19,7 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
@@ -53,6 +54,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
+import static org.apache.flink.configuration.CheckpointingOptions.SAVEPOINT_DIRECTORY;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_ENABLED;
@@ -160,7 +162,7 @@ public class FlinkConfigManager {
                     "Cannot create observe config before first deployment, this indicates a bug.");
         }
         var conf = getConfig(deployment.getMetadata(), deployedSpec);
-        addOperatorConfigsFromSpec(deployment.getSpec(), conf);
+        applyConfigsFromCurrentSpec(deployment.getSpec(), conf, SAVEPOINT_DIRECTORY);
         return conf;
     }
 
@@ -174,6 +176,18 @@ public class FlinkConfigManager {
                                     conf.setString(k, v);
                                 }
                             });
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyConfigsFromCurrentSpec(
+            AbstractFlinkSpec spec, Configuration conf, ConfigOption... configOptions) {
+        addOperatorConfigsFromSpec(spec, conf);
+        if (spec.getFlinkConfiguration() != null) {
+            var deployConfig = Configuration.fromMap(spec.getFlinkConfiguration());
+            for (ConfigOption configOption : configOptions) {
+                deployConfig.getOptional(configOption).ifPresent(v -> conf.set(configOption, v));
+            }
         }
     }
 
