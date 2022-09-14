@@ -32,6 +32,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.junit.jupiter.api.Test;
 
+import static org.apache.flink.kubernetes.operator.crd.CrdConstants.API_GROUP;
+import static org.apache.flink.kubernetes.operator.crd.CrdConstants.API_VERSION;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -77,7 +79,7 @@ public class ReconciliationUtilsTest {
 
         ObjectNode internalMeta =
                 (ObjectNode) node.get(ReconciliationUtils.INTERNAL_METADATA_JSON_KEY);
-        assertEquals("flink.apache.org/v1beta1", internalMeta.get("apiVersion").asText());
+        assertEquals(API_GROUP + "/" + API_VERSION, internalMeta.get("apiVersion").asText());
         assertEquals(12L, internalMeta.get("metadata").get("generation").asLong());
         assertEquals(
                 app.getSpec(),
