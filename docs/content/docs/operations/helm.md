@@ -68,6 +68,8 @@ The configurable parameters of the Helm chart and which default values as detail
 | operatorPod.annotations | Custom annotations to be added to the operator pod (but not the deployment). | |
 | operatorPod.labels | Custom labels to be added to the operator pod (but not the deployment). | |
 | operatorPod.env | Custom env to be added to the operator pod. | |
+| operatorPod.dnsPolicy | DNS policy to be used by the operator pod. | |
+| operatorPod.dnsConfig | DNS configuration to be used by the operator pod. | |
 | operatorServiceAccount.create | Whether to enable operator service account to create for flink-kubernetes-operator. | true |
 | operatorServiceAccount.annotations | The annotations of operator service account. | |
 | operatorServiceAccount.name | The name of operator service account. | flink-operator |
