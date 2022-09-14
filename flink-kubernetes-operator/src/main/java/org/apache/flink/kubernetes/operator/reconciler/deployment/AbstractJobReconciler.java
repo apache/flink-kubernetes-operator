@@ -154,9 +154,6 @@ public abstract class AbstractJobReconciler<
             CR resource, Configuration deployConfig, Configuration observeConfig) {
         var status = resource.getStatus();
         var upgradeMode = resource.getSpec().getJob().getUpgradeMode();
-        var changedToLastStateWithoutHa =
-                ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-                        resource, observeConfig);
 
         if (upgradeMode == UpgradeMode.STATELESS) {
             LOG.info("Stateless job, ready for upgrade");
@@ -171,6 +168,9 @@ public abstract class AbstractJobReconciler<
 
         if (ReconciliationUtils.isJobRunning(status)) {
             LOG.info("Job is in running state, ready for upgrade with {}", upgradeMode);
+            var changedToLastStateWithoutHa =
+                    ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
+                            resource, observeConfig);
             if (changedToLastStateWithoutHa) {
                 LOG.info(
                         "Using savepoint upgrade mode when switching to last-state without HA previously enabled");
