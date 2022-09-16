@@ -63,3 +63,18 @@ The Operator manages the lifecycle of Flink resources. The following chart illus
   - ROLLING_BACK : The resource is being rolled back to the last stable spec
   - ROLLED_BACK : The resource is deployed with the last stable spec
   - FAILED : The job terminally failed
+
+## Admission Control
+
+In addition to compiled-in admission plugins, a custom admission plugin named Flink Kubernetes Operator Webhook (Webhook)
+can be started as extension and run as webhook.
+
+The Webhook follow the Kubernetes principles, notably the [dynamic admission control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/).
+
+It's deployed by default when the Operator is installed on a Kubernetes cluster using [Helm](https://helm.sh).
+Please see further details how to deploy the Operator/Webhook [here](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/try-flink-kubernetes-operator/quick-start/#deploying-the-operator).
+
+The Webhook is using TLS protocol for communication by default. It automatically loads/re-loads keytore file when the file
+has changed and provides the following endpoints:
+
+{{< img src="/img/concepts/webhook.svg" alt="Webhook" >}}
