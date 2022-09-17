@@ -55,6 +55,9 @@ operatorPod:
   env:
   # - name: ""
   #   value: ""
+  # dnsPolicy: ""
+  # dnsConfig: {}
+
 
 operatorServiceAccount:
   create: true

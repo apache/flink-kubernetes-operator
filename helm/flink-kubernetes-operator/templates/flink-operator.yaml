@@ -165,6 +165,15 @@ spec:
             mountPath: /opt/flink/conf/log4j-console.properties
             subPath: log4j-console.properties
         {{- end }}
+      {{- if index (.Values.operatorPod) "dnsPolicy" }}
+      dnsPolicy: {{ .Values.operatorPod.dnsPolicy | quote }}
+      {{- end }}
+      {{- if index (.Values.operatorPod) "dnsConfig" }}
+      dnsConfig:
+        {{- with .Values.operatorPod.dnsConfig }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
       volumes:
         - name: flink-operator-config-volume
           configMap:
