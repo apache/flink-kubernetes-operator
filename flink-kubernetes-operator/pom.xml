@@ -364,8 +364,10 @@ under the License.
                                 <java classname="org.apache.flink.kubernetes.operator.validation.CrdCompatibilityChecker"
                                       fork="true" failonerror="true">
                                     <classpath refid="maven.compile.classpath"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.1/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.1.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>
@@ -381,8 +383,10 @@ under the License.
                                 <java classname="org.apache.flink.kubernetes.operator.validation.CrdCompatibilityChecker"
                                       fork="true" failonerror="true">
                                     <classpath refid="maven.compile.classpath"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.1/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
+                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.1.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
                                 </java>
                             </target>
                         </configuration>
