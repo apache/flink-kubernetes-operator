@@ -165,7 +165,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
-        deployApplicationCluster(jobSpec, conf);
+
+        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
     }
 
     @Override
@@ -182,7 +183,12 @@ public abstract class AbstractFlinkService implements FlinkService {
             throws Exception {
         // we generate jobID in advance to help deduplicate job submission.
         var jobID = FlinkUtils.generateSessionJobFixedJobID(meta);
-        runJar(spec.getJob(), jobID, uploadJar(meta, spec, conf), conf, savepoint);
+        runJar(
+                spec.getJob(),
+                jobID,
+                uploadJar(meta, spec, removeOperatorConfigs(conf)),
+                conf,
+                savepoint);
         LOG.info("Submitted job: {} to session cluster.", jobID);
         return jobID;
     }
@@ -782,6 +788,20 @@ public abstract class AbstractFlinkService implements FlinkService {
                                         getEffectiveStatus(details),
                                         details.getStartTime()))
                 .collect(Collectors.toList());
+    }
+
+    @VisibleForTesting
+    protected static Configuration removeOperatorConfigs(Configuration config) {
+        Configuration newConfig = new Configuration();
+        config.toMap()
+                .forEach(
+                        (k, v) -> {
+                            if (!k.startsWith("kubernetes.operator.")) {
+                                newConfig.setString(k, v);
+                            }
+                        });
+
+        return newConfig;
     }
 
     @VisibleForTesting

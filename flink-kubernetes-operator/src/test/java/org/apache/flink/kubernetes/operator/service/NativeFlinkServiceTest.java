@@ -29,7 +29,6 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingClusterClient;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
@@ -59,9 +58,12 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -303,6 +305,14 @@ public class NativeFlinkServiceTest {
     }
 
     @Test
+    public void testRemoveOperatorConfig() {
+        Map<String, String> configMap = Map.of(OPERATOR_HEALTH_PROBE_PORT.key(), "80");
+        Configuration conf = Configuration.fromMap(configMap);
+        Configuration newConf = AbstractFlinkService.removeOperatorConfigs(conf);
+        assertFalse(newConf.containsKey(OPERATOR_HEALTH_PROBE_PORT.key()));
+    }
+
+    @Test
     public void testEffectiveStatus() {
 
         JobDetails allRunning =
@@ -390,9 +400,7 @@ public class NativeFlinkServiceTest {
                 SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
                 new Configuration(configuration)
-                        .set(
-                                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE,
-                                SavepointFormatType.NATIVE));
+                        .set(OPERATOR_SAVEPOINT_FORMAT_TYPE, SavepointFormatType.NATIVE));
         assertTrue(triggerSavepointFuture.isDone());
         assertEquals(jobID, triggerSavepointFuture.get().f0);
         assertEquals(savepointPath, triggerSavepointFuture.get().f1);
@@ -403,9 +411,7 @@ public class NativeFlinkServiceTest {
                 deployment,
                 UpgradeMode.SAVEPOINT,
                 new Configuration(configManager.getObserveConfig(deployment))
-                        .set(
-                                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE,
-                                SavepointFormatType.NATIVE));
+                        .set(OPERATOR_SAVEPOINT_FORMAT_TYPE, SavepointFormatType.NATIVE));
         assertTrue(stopWithSavepointFuture.isDone());
         assertEquals(jobID, stopWithSavepointFuture.get().f0);
         assertEquals(SavepointFormatType.NATIVE, stopWithSavepointFuture.get().f1);
