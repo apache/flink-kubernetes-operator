@@ -156,11 +156,13 @@ public class RollbackTest {
     public void testRollbackFailureWithLastState(FlinkVersion flinkVersion) throws Exception {
         var dep = TestUtils.buildApplicationCluster(flinkVersion);
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        dep.getSpec().getFlinkConfiguration().put("t", "1");
 
         testRollback(
                 dep,
                 () -> {
                     dep.getSpec().getJob().setParallelism(9999);
+                    dep.getSpec().getFlinkConfiguration().remove("t");
                     testController.reconcile(dep, context);
                     assertEquals(
                             JobState.SUSPENDED,
@@ -178,6 +180,17 @@ public class RollbackTest {
                 () -> {
                     assertEquals("RUNNING", dep.getStatus().getJobStatus().getState());
                     assertEquals(1, flinkService.listJobs().size());
+
+                    // Trigger deployment recovery
+                    flinkService.clear();
+                    flinkService.setPortReady(false);
+
+                    testController.reconcile(dep, context);
+                    flinkService.setPortReady(true);
+                    testController.reconcile(dep, context);
+                    var jobs = flinkService.listJobs();
+                    // Make sure deployment was recovered with correct spec/config
+                    assertTrue(jobs.get(jobs.size() - 1).f2.containsKey("t"));
 
                     // Remove job to simulate rollback failure
                     flinkService.clear();
@@ -199,6 +212,12 @@ public class RollbackTest {
         testRollback(
                 dep,
                 () -> {
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .put(
+                                    KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED
+                                            .key(),
+                                    "false");
                     dep.getSpec().getJob().setParallelism(9999);
                     testController.reconcile(dep, context);
                     assertEquals(
@@ -209,6 +228,13 @@ public class RollbackTest {
                                     .getJob()
                                     .getState());
                     testController.reconcile(dep, context);
+                    // Validate that rollback config is picked up from latest deploy conf
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .put(
+                                    KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED
+                                            .key(),
+                                    "true");
 
                     // Trigger rollback by delaying the recovery
                     Thread.sleep(200);

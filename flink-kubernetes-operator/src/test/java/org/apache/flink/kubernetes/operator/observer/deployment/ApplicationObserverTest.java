@@ -18,11 +18,11 @@
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
@@ -379,7 +379,7 @@ public class ApplicationObserverTest {
         flinkService.setPortReady(true);
         observer.observe(deployment, readyContext);
         // Simulate Failed job
-        Tuple2<String, JobStatusMessage> jobTuple = flinkService.listJobs().get(0);
+        var jobTuple = flinkService.listJobs().get(0);
         jobTuple.f0 = "last-SP";
         jobTuple.f1 =
                 new JobStatusMessage(
@@ -403,6 +403,32 @@ public class ApplicationObserverTest {
                         .getLastSavepoint()
                         .getLocation());
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
+
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                3,
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getSavepointHistory()
+                        .size());
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT.key(),
+                        "1");
+        observer.observe(deployment, readyContext);
+        assertEquals(
+                1,
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getSavepointHistory()
+                        .size());
     }
 
     private void bringToReadyStatus(FlinkDeployment deployment) {

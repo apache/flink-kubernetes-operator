@@ -31,6 +31,8 @@ import lombok.experimental.SuperBuilder;
 
 import java.util.Map;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
+
 /** The common spec. */
 @Experimental
 @Data
@@ -51,8 +53,7 @@ public abstract class AbstractFlinkSpec implements Diffable<AbstractFlinkSpec> {
     /** Flink configuration overrides for the Flink deployment or Flink session job. */
     @SpecDiff.Config({
         @SpecDiff.Entry(prefix = "parallelism.default", type = DiffType.IGNORE),
-        @SpecDiff.Entry(prefix = "kubernetes.operator", type = DiffType.IGNORE),
-        @SpecDiff.Entry(prefix = "metrics.scope.k8soperator", type = DiffType.IGNORE)
+        @SpecDiff.Entry(prefix = K8S_OP_CONF_PREFIX, type = DiffType.IGNORE),
     })
     private Map<String, String> flinkConfiguration;
 

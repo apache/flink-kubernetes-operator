@@ -74,6 +74,8 @@ public class SavepointObserver<
         if (ReconciliationUtils.isJobInTerminalState(resource.getStatus())) {
             observeLatestSavepoint(savepointInfo, jobId, deployedConfig);
         }
+
+        cleanupSavepointHistory(savepointInfo, deployedConfig);
     }
 
     /**
@@ -129,25 +131,29 @@ public class SavepointObserver<
 
         ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(savepointInfo, resource);
         savepointInfo.updateLastSavepoint(savepoint);
-        cleanupSavepointHistory(savepointInfo, savepoint, deployedConfig);
     }
 
     /** Clean up and dispose savepoints according to the configured max size/age. */
     @VisibleForTesting
-    void cleanupSavepointHistory(
-            SavepointInfo currentSavepointInfo,
-            Savepoint newSavepoint,
-            Configuration deployedConfig) {
+    void cleanupSavepointHistory(SavepointInfo currentSavepointInfo, Configuration deployedConfig) {
 
         // maintain history
         List<Savepoint> savepointHistory = currentSavepointInfo.getSavepointHistory();
+        if (savepointHistory.size() < 2) {
+            return;
+        }
+        var lastSavepoint = savepointHistory.get(savepointHistory.size() - 1);
+
         int maxCount =
-                ConfigOptionUtils.getValueWithThreshold(
-                        deployedConfig,
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
-                        configManager
-                                .getOperatorConfiguration()
-                                .getSavepointHistoryCountThreshold());
+                Math.max(
+                        1,
+                        ConfigOptionUtils.getValueWithThreshold(
+                                deployedConfig,
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
+                                configManager
+                                        .getOperatorConfiguration()
+                                        .getSavepointHistoryCountThreshold()));
         while (savepointHistory.size() > maxCount) {
             // remove oldest entries
             disposeSavepointQuietly(savepointHistory.remove(0), deployedConfig);
@@ -162,7 +168,7 @@ public class SavepointObserver<
         Iterator<Savepoint> it = savepointHistory.iterator();
         while (it.hasNext()) {
             Savepoint sp = it.next();
-            if (sp.getTimeStamp() < maxTms && sp != newSavepoint) {
+            if (sp.getTimeStamp() < maxTms && sp != lastSavepoint) {
                 it.remove();
                 disposeSavepointQuietly(sp, deployedConfig);
             }

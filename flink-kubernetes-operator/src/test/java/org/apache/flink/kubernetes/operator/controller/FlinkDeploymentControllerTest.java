@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
@@ -381,7 +380,7 @@ public class FlinkDeploymentControllerTest {
                         CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
                         "file:///flink-data/savepoints");
         testController.reconcile(appCluster, context);
-        List<Tuple2<String, JobStatusMessage>> jobs = flinkService.listJobs();
+        var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
         assertEquals(
@@ -389,7 +388,7 @@ public class FlinkDeploymentControllerTest {
                         "component=taskmanager,app=" + appCluster.getMetadata().getName(), 1),
                 appCluster.getStatus().getTaskManager());
 
-        List<Tuple2<String, JobStatusMessage>> previousJobs = new ArrayList<>(jobs);
+        var previousJobs = new ArrayList<>(jobs);
         appCluster.getSpec().getJob().setInitialSavepointPath("s1");
 
         // Send in a no-op change
@@ -470,7 +469,7 @@ public class FlinkDeploymentControllerTest {
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
 
         testController.reconcile(appCluster, context);
-        List<Tuple2<String, JobStatusMessage>> jobs = flinkService.listJobs();
+        var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
         assertEquals(1, testController.events().size());

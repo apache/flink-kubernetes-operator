@@ -54,6 +54,8 @@ public class FlinkConfigManagerTest {
     @Test
     public void testConfigGeneration() {
         ConfigOption<String> testConf = ConfigOptions.key("test").stringType().noDefaultValue();
+        ConfigOption<String> opTestConf =
+                ConfigOptions.key("kubernetes.operator.test").stringType().noDefaultValue();
 
         FlinkConfigManager configManager =
                 new FlinkConfigManager(
@@ -67,16 +69,25 @@ public class FlinkConfigManagerTest {
         var reconciliationStatus = deployment.getStatus().getReconciliationStatus();
 
         deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "reconciled");
+        deployment.getSpec().getFlinkConfiguration().put(opTestConf.key(), "reconciled");
         reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         reconciliationStatus.markReconciledSpecAsStable();
 
         deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "latest");
+        deployment.getSpec().getFlinkConfiguration().put(opTestConf.key(), "latest");
+
         assertEquals(
                 "latest",
                 configManager
                         .getDeployConfig(deployment.getMetadata(), deployment.getSpec())
                         .get(testConf));
+        assertEquals(
+                "latest",
+                configManager
+                        .getDeployConfig(deployment.getMetadata(), deployment.getSpec())
+                        .get(opTestConf));
         assertEquals("reconciled", configManager.getObserveConfig(deployment).get(testConf));
+        assertEquals("latest", configManager.getObserveConfig(deployment).get(opTestConf));
 
         deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "stable");
         reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
