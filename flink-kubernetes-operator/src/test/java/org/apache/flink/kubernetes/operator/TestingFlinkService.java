@@ -19,7 +19,7 @@ package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
@@ -89,7 +89,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     private int savepointCounter = 0;
     private int triggerCounter = 0;
 
-    private final List<Tuple2<String, JobStatusMessage>> jobs = new ArrayList<>();
+    private final List<Tuple3<String, JobStatusMessage, Configuration>> jobs = new ArrayList<>();
     private final Map<JobID, String> jobErrors = new HashMap<>();
     private final Set<String> sessions = new HashSet<>();
     private boolean isPortReady = true;
@@ -98,8 +98,8 @@ public class TestingFlinkService extends AbstractFlinkService {
     private Runnable sessionJobSubmittedCallback;
     private PodList podList = new PodList();
     private Consumer<Configuration> listJobConsumer = conf -> {};
-    private List<String> disposedSavepoints = new ArrayList<>();
-    private Map<String, Boolean> savepointTriggers = new HashMap<>();
+    private final List<String> disposedSavepoints = new ArrayList<>();
+    private final Map<String, Boolean> savepointTriggers = new HashMap<>();
     private int desiredReplicas = 0;
 
     public TestingFlinkService() {
@@ -157,7 +157,8 @@ public class TestingFlinkService extends AbstractFlinkService {
                         JobStatus.RUNNING,
                         System.currentTimeMillis());
 
-        jobs.add(Tuple2.of(conf.get(SavepointConfigOptions.SAVEPOINT_PATH), jobStatusMessage));
+        jobs.add(
+                Tuple3.of(conf.get(SavepointConfigOptions.SAVEPOINT_PATH), jobStatusMessage, conf));
     }
 
     protected void validateHaMetadataExists(Configuration conf) {
@@ -214,7 +215,7 @@ public class TestingFlinkService extends AbstractFlinkService {
                         JobStatus.RUNNING,
                         System.currentTimeMillis());
 
-        jobs.add(Tuple2.of(savepoint, jobStatusMessage));
+        jobs.add(Tuple3.of(savepoint, jobStatusMessage, conf));
         if (sessionJobSubmittedCallback != null) {
             sessionJobSubmittedCallback.run();
         }
@@ -233,7 +234,7 @@ public class TestingFlinkService extends AbstractFlinkService {
         this.listJobConsumer = listJobConsumer;
     }
 
-    public List<Tuple2<String, JobStatusMessage>> listJobs() {
+    public List<Tuple3<String, JobStatusMessage, Configuration>> listJobs() {
         return jobs;
     }
 
@@ -354,8 +355,7 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     private String cancelJob(FlinkVersion flinkVersion, JobID jobID, boolean savepoint)
             throws Exception {
-        Optional<Tuple2<String, JobStatusMessage>> jobOpt =
-                jobs.stream().filter(js -> js.f1.getJobId().equals(jobID)).findAny();
+        var jobOpt = jobs.stream().filter(js -> js.f1.getJobId().equals(jobID)).findAny();
 
         if (jobOpt.isEmpty()) {
             throw new Exception("Job not found");
@@ -402,14 +402,13 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     public Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) throws Exception {
-        Optional<Tuple2<String, JobStatusMessage>> jobOpt =
-                jobs.stream().filter(js -> js.f1.getJobId().equals(jobId)).findAny();
+        var jobOpt = jobs.stream().filter(js -> js.f1.getJobId().equals(jobId)).findAny();
 
         if (jobOpt.isEmpty()) {
             throw new Exception("Job not found");
         }
 
-        Tuple2<String, JobStatusMessage> t = jobOpt.get();
+        var t = jobOpt.get();
         if (!t.f1.getJobState().isGloballyTerminalState()) {
             throw new Exception("Checkpoint should not be queried if job is not in terminal state");
         }

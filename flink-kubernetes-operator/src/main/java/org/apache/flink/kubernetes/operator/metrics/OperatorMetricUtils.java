@@ -43,12 +43,14 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
+
 /** Utility class for flink based operator metrics. */
 public class OperatorMetricUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(OperatorMetricUtils.class);
 
-    private static final String OPERATOR_METRICS_PREFIX = "kubernetes.operator.metrics.";
+    private static final String OPERATOR_METRICS_PREFIX = K8S_OP_CONF_PREFIX + "metrics.";
     private static final String METRICS_PREFIX = "metrics.";
 
     public static KubernetesOperatorMetricGroup initOperatorMetrics(Configuration defaultConfig) {

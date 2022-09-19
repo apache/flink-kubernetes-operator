@@ -18,61 +18,62 @@
 package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.ConfigOption;
-import org.apache.flink.configuration.ConfigOptions;
+
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.operatorConfig;
 
 /** Configuration options for metrics. */
 public class KubernetesOperatorMetricOptions {
 
     public static final ConfigOption<Boolean> OPERATOR_JVM_METRICS_ENABLED =
-            ConfigOptions.key("kubernetes.operator.jvm.metrics.enabled")
+            operatorConfig("jvm.metrics.enabled")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription("Enable Kubernetes Operator JVM metrics.");
 
     public static final ConfigOption<Boolean> OPERATOR_JOSDK_METRICS_ENABLED =
-            ConfigOptions.key("kubernetes.operator.josdk.metrics.enabled")
+            operatorConfig("josdk.metrics.enabled")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription(
                             "Enable forwarding of Java Operator SDK metrics to the Flink metric registry.");
 
     public static final ConfigOption<Boolean> OPERATOR_KUBERNETES_CLIENT_METRICS_ENABLED =
-            ConfigOptions.key("kubernetes.operator.kubernetes.client.metrics.enabled")
+            operatorConfig("kubernetes.client.metrics.enabled")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription(
                             "Enable KubernetesClient metrics for measuring the HTTP traffic to the Kubernetes API Server.");
 
     public static final ConfigOption<Boolean> OPERATOR_RESOURCE_METRICS_ENABLED =
-            ConfigOptions.key("kubernetes.operator.resource.metrics.enabled")
+            operatorConfig("resource.metrics.enabled")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription(
                             "Enables metrics for FlinkDeployment and FlinkSessionJob custom resources.");
 
     public static final ConfigOption<Boolean> OPERATOR_LIFECYCLE_METRICS_ENABLED =
-            ConfigOptions.key("kubernetes.operator.resource.lifecycle.metrics.enabled")
+            operatorConfig("resource.lifecycle.metrics.enabled")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription(
                             "Enable resource lifecycle state metrics. This enables both state and transition counts/histograms.");
 
     public static final ConfigOption<Boolean> OPERATOR_LIFECYCLE_NAMESPACE_HISTOGRAMS_ENABLED =
-            ConfigOptions.key("kubernetes.operator.resource.lifecycle.namespace.histograms.enabled")
+            operatorConfig("resource.lifecycle.namespace.histograms.enabled")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription(
                             "In addition to the system level histograms, enable per namespace tracking of state and transition times.");
 
     public static final ConfigOption<Integer> OPERATOR_METRICS_HISTOGRAM_SAMPLE_SIZE =
-            ConfigOptions.key("kubernetes.operator.metrics.histogram.sample.size")
+            operatorConfig("metrics.histogram.sample.size")
                     .intType()
                     .defaultValue(1000)
                     .withDescription(
                             "Defines the number of measured samples when calculating statistics.");
 
     public static final ConfigOption<String> SCOPE_NAMING_KUBERNETES_OPERATOR =
-            ConfigOptions.key("metrics.scope.k8soperator.system")
+            operatorConfig("metrics.scope.k8soperator.system")
                     .stringType()
                     .defaultValue("<host>.k8soperator.<namespace>.<name>.system")
                     .withDeprecatedKeys("metrics.scope.k8soperator")
@@ -80,18 +81,20 @@ public class KubernetesOperatorMetricOptions {
                             "Defines the scope format string that is applied to all metrics scoped to the kubernetes operator.");
 
     public static final ConfigOption<String> SCOPE_NAMING_KUBERNETES_OPERATOR_RESOURCENS =
-            ConfigOptions.key("metrics.scope.k8soperator.resourcens")
+            operatorConfig("metrics.scope.k8soperator.resourcens")
                     .stringType()
                     .defaultValue(
                             "<host>.k8soperator.<namespace>.<name>.namespace.<resourcens>.<resourcetype>")
+                    .withDeprecatedKeys("metrics.scope.k8soperator.resourcens")
                     .withDescription(
                             "Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource namespace.");
 
     public static final ConfigOption<String> SCOPE_NAMING_KUBERNETES_OPERATOR_RESOURCE =
-            ConfigOptions.key("metrics.scope.k8soperator.resource")
+            operatorConfig("metrics.scope.k8soperator.resource")
                     .stringType()
                     .defaultValue(
                             "<host>.k8soperator.<namespace>.<name>.resource.<resourcens>.<resourcename>.<resourcetype>")
+                    .withDeprecatedKeys("metrics.scope.k8soperator.resource")
                     .withDescription(
                             "Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource.");
 }

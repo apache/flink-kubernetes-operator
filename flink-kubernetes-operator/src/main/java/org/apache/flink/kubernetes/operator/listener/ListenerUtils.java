@@ -41,12 +41,14 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
+
 /** Flink resource listener utilities. */
 public class ListenerUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(ListenerUtils.class);
 
-    private static final String PREFIX = "kubernetes.operator.plugins.listeners.";
+    private static final String PREFIX = K8S_OP_CONF_PREFIX + "plugins.listeners.";
     private static final String SUFFIX = ".class";
     private static final Pattern PTN =
             Pattern.compile(Pattern.quote(PREFIX) + "([\\S&&[^.]]*)" + Pattern.quote(SUFFIX));

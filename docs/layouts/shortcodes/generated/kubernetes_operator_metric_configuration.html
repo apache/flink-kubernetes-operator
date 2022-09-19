@@ -33,6 +33,24 @@
             <td>Defines the number of measured samples when calculating statistics.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.metrics.scope.k8soperator.resource</h5></td>
+            <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.resource.&lt;resourcens&gt;.&lt;resourcename&gt;.&lt;resourcetype&gt;"</td>
+            <td>String</td>
+            <td>Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.metrics.scope.k8soperator.resourcens</h5></td>
+            <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.namespace.&lt;resourcens&gt;.&lt;resourcetype&gt;"</td>
+            <td>String</td>
+            <td>Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource namespace.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.metrics.scope.k8soperator.system</h5></td>
+            <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.system"</td>
+            <td>String</td>
+            <td>Defines the scope format string that is applied to all metrics scoped to the kubernetes operator.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.resource.lifecycle.metrics.enabled</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
@@ -49,24 +67,6 @@
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
             <td>Enables metrics for FlinkDeployment and FlinkSessionJob custom resources.</td>
-        </tr>
-        <tr>
-            <td><h5>metrics.scope.k8soperator.resource</h5></td>
-            <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.resource.&lt;resourcens&gt;.&lt;resourcename&gt;.&lt;resourcetype&gt;"</td>
-            <td>String</td>
-            <td>Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource.</td>
-        </tr>
-        <tr>
-            <td><h5>metrics.scope.k8soperator.resourcens</h5></td>
-            <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.namespace.&lt;resourcens&gt;.&lt;resourcetype&gt;"</td>
-            <td>String</td>
-            <td>Defines the scope format string that is applied to all metrics scoped to the kubernetes operator resource namespace.</td>
-        </tr>
-        <tr>
-            <td><h5>metrics.scope.k8soperator.system</h5></td>
-            <td style="word-wrap: break-word;">"&lt;host&gt;.k8soperator.&lt;namespace&gt;.&lt;name&gt;.system"</td>
-            <td>String</td>
-            <td>Defines the scope format string that is applied to all metrics scoped to the kubernetes operator.</td>
         </tr>
     </tbody>
 </table>

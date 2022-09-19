@@ -19,7 +19,6 @@ package org.apache.flink.kubernetes.operator.observer.sessionjob;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -326,7 +325,7 @@ public class SessionJobObserverTest {
 
         // mock a job with different id of the target CR occurs
         var jobs = flinkService.listJobs();
-        for (Tuple2<String, JobStatusMessage> job : jobs) {
+        for (var job : jobs) {
             if (!job.f1.getJobState().isGloballyTerminalState()
                     && !job.f1.getJobId().toHexString().equals(jobID)) {
                 job.f1 =

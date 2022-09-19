@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
@@ -100,7 +100,7 @@ public class ApplicationReconcilerTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster(flinkVersion);
 
         reconciler.reconcile(deployment, context);
-        List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        var runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
 
         // Test stateless upgrade
@@ -228,7 +228,7 @@ public class ApplicationReconcilerTest {
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
-        List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        var runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
 
         // Suspend FlinkDeployment with savepoint upgrade mode
@@ -266,7 +266,7 @@ public class ApplicationReconcilerTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
-        List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        var runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
@@ -346,6 +346,16 @@ public class ApplicationReconcilerTest {
         spDeployment.getSpec().getJob().setSavepointTriggerNonce(null);
         reconciler.reconcile(spDeployment, context);
         assertFalse(SavepointUtils.savepointInProgress(spDeployment.getStatus().getJobStatus()));
+
+        reconciler.reconcile(spDeployment, context);
+        assertFalse(SavepointUtils.savepointInProgress(spDeployment.getStatus().getJobStatus()));
+
+        spDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL.key(), "1");
+        reconciler.reconcile(spDeployment, context);
+        assertTrue(SavepointUtils.savepointInProgress(spDeployment.getStatus().getJobStatus()));
     }
 
     @Test
@@ -389,7 +399,7 @@ public class ApplicationReconcilerTest {
                         .getImage());
         // Upgrade mode changes from stateless to last-state should trigger a savepoint
         final String expectedSavepointPath = "savepoint_0";
-        final List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        var runningJobs = flinkService.listJobs();
         assertEquals(expectedSavepointPath, runningJobs.get(0).f0);
     }
 
@@ -431,7 +441,7 @@ public class ApplicationReconcilerTest {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         reconciler.reconcile(deployment, context);
-        List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        var runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
 
         // Test restart job
@@ -468,7 +478,8 @@ public class ApplicationReconcilerTest {
     }
 
     private void verifyAndSetRunningJobsToStatus(
-            FlinkDeployment deployment, List<Tuple2<String, JobStatusMessage>> runningJobs) {
+            FlinkDeployment deployment,
+            List<Tuple3<String, JobStatusMessage, Configuration>> runningJobs) {
         assertEquals(1, runningJobs.size());
         assertNull(runningJobs.get(0).f0);
         deployment
@@ -487,7 +498,7 @@ public class ApplicationReconcilerTest {
     public void testJobUpgradeIgnorePendingSavepoint() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         reconciler.reconcile(deployment, context);
-        List<Tuple2<String, JobStatusMessage>> runningJobs = flinkService.listJobs();
+        var runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
 
         FlinkDeployment spDeployment = ReconciliationUtils.clone(deployment);

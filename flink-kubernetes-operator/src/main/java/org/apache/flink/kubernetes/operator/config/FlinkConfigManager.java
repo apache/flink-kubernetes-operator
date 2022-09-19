@@ -22,6 +22,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -52,6 +53,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_ENABLED;
 
@@ -157,7 +159,22 @@ public class FlinkConfigManager {
             throw new RuntimeException(
                     "Cannot create observe config before first deployment, this indicates a bug.");
         }
-        return getConfig(deployment.getMetadata(), deployedSpec);
+        var conf = getConfig(deployment.getMetadata(), deployedSpec);
+        addOperatorConfigsFromSpec(deployment.getSpec(), conf);
+        return conf;
+    }
+
+    private void addOperatorConfigsFromSpec(AbstractFlinkSpec spec, Configuration conf) {
+        // Observe config should include the latest operator related settings
+        if (spec.getFlinkConfiguration() != null) {
+            spec.getFlinkConfiguration()
+                    .forEach(
+                            (k, v) -> {
+                                if (k.startsWith(K8S_OP_CONF_PREFIX)) {
+                                    conf.setString(k, v);
+                                }
+                            });
+        }
     }
 
     public Configuration getSessionJobConfig(
