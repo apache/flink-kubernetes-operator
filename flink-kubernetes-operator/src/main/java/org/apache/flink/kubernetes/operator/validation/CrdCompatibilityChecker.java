@@ -51,7 +51,14 @@ public class CrdCompatibilityChecker {
     private static final ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
 
     public static void main(String[] args) throws IOException {
-        checkObjectCompatibility("", getSchema(args[0]), getSchema(args[1]));
+
+        for (int i = 1; i < args.length; i++) {
+            String actualSchema = args[0];
+            String oldSchema = args[i];
+            logger.info("New schema: {}", actualSchema);
+            logger.info("Old schema: {}", oldSchema);
+            checkObjectCompatibility("", getSchema(oldSchema), getSchema(actualSchema));
+        }
         System.out.println("Successful validation!");
     }
 
@@ -80,9 +87,9 @@ public class CrdCompatibilityChecker {
                     checkObjectCompatibility(fieldPath, oldProps.get(field), newProps.get(field));
                 }
             }
-            logger.info("Successfully validated property names for {}", path);
+            logger.debug("Successfully validated property names for {}", path);
         } else {
-            logger.info("Successfully validated type for {}", path);
+            logger.debug("Successfully validated type for {}", path);
         }
     }
 
