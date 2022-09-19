@@ -96,4 +96,24 @@ public class ReconciliationUtilsTest {
                 migrated.f0.getJob().getJarURI());
         assertNull(migrated.f1);
     }
+
+    @Test
+    public void testSpecDeserializationWithUnknownField() throws JsonProcessingException {
+        FlinkDeployment app = TestUtils.buildApplicationCluster();
+        String serialized = ReconciliationUtils.writeSpecWithMeta(app.getSpec(), app);
+        assertEquals(
+                app.getSpec(),
+                ReconciliationUtils.deserializeSpecWithMeta(serialized, FlinkDeploymentSpec.class)
+                        .f0);
+
+        ObjectNode node = (ObjectNode) new ObjectMapper().readTree(serialized);
+        ((ObjectNode) node.get("spec")).put("unknown_field", "unknown_field_value");
+        String serializedWithUnknownField = new ObjectMapper().writeValueAsString(node);
+
+        assertEquals(
+                app.getSpec(),
+                ReconciliationUtils.deserializeSpecWithMeta(
+                                serializedWithUnknownField, FlinkDeploymentSpec.class)
+                        .f0);
+    }
 }
