@@ -115,6 +115,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
 
 /**
  * An abstract {@link FlinkService} containing some common implementations for the native and
@@ -183,11 +184,12 @@ public abstract class AbstractFlinkService implements FlinkService {
             throws Exception {
         // we generate jobID in advance to help deduplicate job submission.
         var jobID = FlinkUtils.generateSessionJobFixedJobID(meta);
+        Configuration runtimeConfig = removeOperatorConfigs(conf);
         runJar(
                 spec.getJob(),
                 jobID,
-                uploadJar(meta, spec, removeOperatorConfigs(conf)),
-                conf,
+                uploadJar(meta, spec, runtimeConfig),
+                runtimeConfig,
                 savepoint);
         LOG.info("Submitted job: {} to session cluster.", jobID);
         return jobID;
@@ -630,7 +632,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                 conf, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
-    private JarRunResponseBody runJar(
+    protected JarRunResponseBody runJar(
             JobSpec job,
             JobID jobID,
             JarUploadResponseBody response,
@@ -672,7 +674,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    private JarUploadResponseBody uploadJar(
+    protected JarUploadResponseBody uploadJar(
             ObjectMeta objectMeta, FlinkSessionJobSpec spec, Configuration conf) throws Exception {
         String targetDir = artifactManager.generateJarDir(objectMeta, spec);
         File jarFile = artifactManager.fetch(spec.getJob().getJarURI(), conf, targetDir);
@@ -796,7 +798,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         config.toMap()
                 .forEach(
                         (k, v) -> {
-                            if (!k.startsWith("kubernetes.operator.")) {
+                            if (!k.startsWith(K8S_OP_CONF_PREFIX)) {
                                 newConfig.setString(k, v);
                             }
                         });

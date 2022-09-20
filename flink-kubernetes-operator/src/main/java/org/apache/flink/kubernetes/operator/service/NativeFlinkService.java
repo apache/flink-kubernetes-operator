@@ -73,17 +73,7 @@ public class NativeFlinkService extends AbstractFlinkService {
 
     @Override
     public void submitSessionCluster(Configuration conf) throws Exception {
-        LOG.info("Deploying session cluster");
-        final ClusterClientServiceLoader clusterClientServiceLoader =
-                new DefaultClusterClientServiceLoader();
-        final ClusterClientFactory<String> kubernetesClusterClientFactory =
-                clusterClientServiceLoader.getClusterClientFactory(conf);
-        try (final ClusterDescriptor<String> kubernetesClusterDescriptor =
-                kubernetesClusterClientFactory.createClusterDescriptor(conf)) {
-            kubernetesClusterDescriptor.deploySessionCluster(
-                    kubernetesClusterClientFactory.getClusterSpecification(conf));
-        }
-        LOG.info("Session cluster successfully deployed");
+        submitClusterInternal(removeOperatorConfigs(conf));
     }
 
     @Override
@@ -113,6 +103,20 @@ public class NativeFlinkService extends AbstractFlinkService {
                 .inNamespace(namespace)
                 .withLabels(KubernetesUtils.getJobManagerSelectors(clusterId))
                 .list();
+    }
+
+    protected void submitClusterInternal(Configuration conf) throws Exception {
+        LOG.info("Deploying session cluster");
+        final ClusterClientServiceLoader clusterClientServiceLoader =
+                new DefaultClusterClientServiceLoader();
+        final ClusterClientFactory<String> kubernetesClusterClientFactory =
+                clusterClientServiceLoader.getClusterClientFactory(conf);
+        try (final ClusterDescriptor<String> kubernetesClusterDescriptor =
+                kubernetesClusterClientFactory.createClusterDescriptor(conf)) {
+            kubernetesClusterDescriptor.deploySessionCluster(
+                    kubernetesClusterClientFactory.getClusterSpecification(conf));
+        }
+        LOG.info("Session cluster successfully deployed");
     }
 
     /**
