@@ -120,6 +120,7 @@ public class TestUtils {
                         .withName(name)
                         .withNamespace(namespace)
                         .withCreationTimestamp(Instant.now().toString())
+                        .withUid(UUID.randomUUID().toString())
                         .build());
         deployment.setSpec(getTestFlinkDeploymentSpec(version));
         return deployment;
