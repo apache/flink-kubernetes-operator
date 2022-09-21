@@ -47,6 +47,8 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -106,6 +108,8 @@ public abstract class AbstractFlinkResourceReconciler<
             // handle subsequent deployment and status update errors
             ReconciliationUtils.updateStatusBeforeDeploymentAttempt(cr, deployConfig);
             statusRecorder.patchAndCacheStatus(cr);
+
+            setOwnerReference(cr, deployConfig);
 
             deploy(
                     cr,
@@ -425,5 +429,18 @@ public abstract class AbstractFlinkResourceReconciler<
                     != ((FlinkDeploymentSpec) newSpec).getFlinkVersion();
         }
         return false;
+    }
+
+    private void setOwnerReference(CR owner, Configuration deployConfig) {
+        final Map<String, String> ownerReference =
+            Map.of(
+                    "apiVersion", owner.getApiVersion(),
+                    "kind", owner.getKind(),
+                    "name", owner.getMetadata().getName(),
+                    "uid", owner.getMetadata().getUid(),
+                    "blockOwnerDeletion", "false",
+                    "controller", "false");
+        deployConfig.set(
+                KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE, List.of(ownerReference));
     }
 }
