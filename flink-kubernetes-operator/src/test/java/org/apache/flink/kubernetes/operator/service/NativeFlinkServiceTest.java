@@ -30,8 +30,6 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingClusterClient;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
@@ -48,13 +46,10 @@ import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 import org.apache.flink.runtime.rest.util.RestMapperUtils;
-import org.apache.flink.runtime.webmonitor.handlers.JarRunResponseBody;
-import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -344,21 +339,6 @@ public class NativeFlinkServiceTest {
     }
 
     @Test
-    public void testSubmitJobToSessionClusterConfigRemoval() throws Exception {
-        var testingClusterClient =
-                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
-        Configuration deployConfig = createOperatorConfig();
-        final FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
-
-        var flinkService = (NativeFlinkService) createFlinkService(testingClusterClient);
-        var testingService = new TestingNativeFlinkService(flinkService);
-        testingService.submitJobToSessionCluster(
-                sessionJob.getMetadata(), sessionJob.getSpec(), deployConfig, "");
-        assertFalse(
-                testingService.getRuntimeConfig().containsKey(OPERATOR_HEALTH_PROBE_PORT.key()));
-    }
-
-    @Test
     public void testEffectiveStatus() {
 
         JobDetails allRunning =
@@ -479,24 +459,6 @@ public class NativeFlinkServiceTest {
         @Override
         protected void submitClusterInternal(Configuration conf) throws Exception {
             this.runtimeConfig = conf;
-        }
-
-        @Override
-        protected JarRunResponseBody runJar(
-                JobSpec job,
-                JobID jobID,
-                JarUploadResponseBody response,
-                Configuration conf,
-                String savepoint) {
-            this.runtimeConfig = conf;
-            return new JarRunResponseBody(jobID);
-        }
-
-        @Override
-        protected JarUploadResponseBody uploadJar(
-                ObjectMeta objectMeta, FlinkSessionJobSpec spec, Configuration conf)
-                throws Exception {
-            return new JarUploadResponseBody(objectMeta.getName());
         }
 
         public Configuration getRuntimeConfig() {

@@ -184,13 +184,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             throws Exception {
         // we generate jobID in advance to help deduplicate job submission.
         var jobID = FlinkUtils.generateSessionJobFixedJobID(meta);
-        Configuration runtimeConfig = removeOperatorConfigs(conf);
-        runJar(
-                spec.getJob(),
-                jobID,
-                uploadJar(meta, spec, runtimeConfig),
-                runtimeConfig,
-                savepoint);
+        runJar(spec.getJob(), jobID, uploadJar(meta, spec, conf), conf, savepoint);
         LOG.info("Submitted job: {} to session cluster.", jobID);
         return jobID;
     }
@@ -632,7 +626,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                 conf, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
-    protected JarRunResponseBody runJar(
+    private JarRunResponseBody runJar(
             JobSpec job,
             JobID jobID,
             JarUploadResponseBody response,
@@ -674,7 +668,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    protected JarUploadResponseBody uploadJar(
+    private JarUploadResponseBody uploadJar(
             ObjectMeta objectMeta, FlinkSessionJobSpec spec, Configuration conf) throws Exception {
         String targetDir = artifactManager.generateJarDir(objectMeta, spec);
         File jarFile = artifactManager.fetch(spec.getJob().getJarURI(), conf, targetDir);
