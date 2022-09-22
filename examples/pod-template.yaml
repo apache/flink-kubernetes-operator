@@ -73,7 +73,7 @@ spec:
             - /bin/sh
             - -c
             - "wget -O /opt/flink/downloads/flink-examples-streaming.jar \
-              https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.1/flink-examples-streaming_2.12-1.15.1.jar"
+              https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.2/flink-examples-streaming_2.12-1.15.2.jar"
   taskManager:
     resource:
       memory: "2048m"
