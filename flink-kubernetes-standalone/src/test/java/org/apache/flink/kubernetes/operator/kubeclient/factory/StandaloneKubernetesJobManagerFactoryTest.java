@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.kubeclient.KubernetesJobManagerSpecification;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.FlinkConfMountDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.InternalServiceDecorator;
+import org.apache.flink.kubernetes.kubeclient.resources.KubernetesOwnerReference;
 import org.apache.flink.kubernetes.kubeclient.services.HeadlessClusterIPService;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.ParametersTestBase;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesJobManagerParameters;
@@ -36,6 +37,7 @@ import io.fabric8.kubernetes.api.model.ContainerPort;
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
@@ -89,6 +91,12 @@ public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBas
         assertEquals(expectedLabels, deploymentMetadata.getLabels());
 
         assertEquals(userAnnotations, deploymentMetadata.getAnnotations());
+
+        final List<OwnerReference> expectedOwnerReferences =
+                List.of(
+                        KubernetesOwnerReference.fromMap(flinkDeploymentOwnerReference)
+                                .getInternalResource());
+        assertEquals(expectedOwnerReferences, deploymentMetadata.getOwnerReferences());
     }
 
     @Test

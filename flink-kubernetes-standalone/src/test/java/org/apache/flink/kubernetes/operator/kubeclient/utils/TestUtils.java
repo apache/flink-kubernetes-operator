@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.utils.Constants;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /** Testing utilities. */
 public class TestUtils {
@@ -60,6 +61,22 @@ public class TestUtils {
             map.put(keyPrefix + i, valuePrefix + i);
         }
         return map;
+    }
+
+    public static Map<String, String> generateTestOwnerReferenceMap(String kind) {
+        return Map.of(
+                "apiVersion",
+                "flink.apache.org/v1beta1",
+                "kind",
+                kind,
+                "name",
+                CLUSTER_ID,
+                "uid",
+                UUID.randomUUID().toString(),
+                "blockOwnerDeletion",
+                "false",
+                "controller",
+                "false");
     }
 
     public static ClusterSpecification createClusterSpecification() {

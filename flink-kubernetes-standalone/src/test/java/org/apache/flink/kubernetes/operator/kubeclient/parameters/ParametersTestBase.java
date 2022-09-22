@@ -74,6 +74,9 @@ public class ParametersTestBase {
 
     protected final List<String> templateImagePullSecrets = Arrays.asList("ts1", "ts2", "ts3");
 
+    protected final Map<String, String> flinkDeploymentOwnerReference =
+            TestUtils.generateTestOwnerReferenceMap("FlinkDeployment");
+
     private static final String SECRETS = "ssl-cert:/etc/ssl";
 
     protected FlinkPod createPodTemplate() {
@@ -141,5 +144,8 @@ public class ParametersTestBase {
         flinkConfig.set(KubernetesConfigOptions.JOB_MANAGER_NODE_SELECTOR, userNodeSelectors);
         flinkConfig.set(KubernetesConfigOptions.CONTAINER_IMAGE_PULL_SECRETS, userImagePullSecrets);
         flinkConfig.setString(KubernetesConfigOptions.KUBERNETES_SECRETS.key(), SECRETS);
+        flinkConfig.set(
+                KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE,
+                List.of(flinkDeploymentOwnerReference));
     }
 }

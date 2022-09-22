@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.kubeclient.factory;
 
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
+import org.apache.flink.kubernetes.kubeclient.resources.KubernetesOwnerReference;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.ParametersTestBase;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesTaskManagerParameters;
 import org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils;
@@ -28,6 +29,7 @@ import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerPort;
 import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.OwnerReference;
 import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
@@ -74,6 +76,12 @@ public class StandaloneKubernetesTaskManagerFactoryTest extends ParametersTestBa
         assertEquals(expectedLabels, deployment.getMetadata().getLabels());
 
         assertEquals(userAnnotations, deployment.getMetadata().getAnnotations());
+
+        final List<OwnerReference> expectedOwnerReferences =
+                List.of(
+                        KubernetesOwnerReference.fromMap(flinkDeploymentOwnerReference)
+                                .getInternalResource());
+        assertEquals(expectedOwnerReferences, deployment.getMetadata().getOwnerReferences());
     }
 
     @Test
