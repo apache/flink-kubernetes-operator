@@ -328,6 +328,19 @@ public class FlinkConfigBuilderTest {
     }
 
     @Test
+    public void testApplyJobOrSessionSpecWithNoJar() throws Exception {
+        FlinkDeployment deploymentClone = ReconciliationUtils.clone(flinkDeployment);
+        deploymentClone.getSpec().getJob().setJarURI(null);
+
+        var configuration =
+                new FlinkConfigBuilder(deploymentClone, new Configuration())
+                        .applyJobOrSessionSpec()
+                        .build();
+
+        Assertions.assertNull(configuration.get(PipelineOptions.JARS));
+    }
+
+    @Test
     public void testAllowNonRestoredStateInSpecOverrideInFlinkConf() throws URISyntaxException {
         flinkDeployment.getSpec().getJob().setAllowNonRestoredState(false);
         flinkDeployment

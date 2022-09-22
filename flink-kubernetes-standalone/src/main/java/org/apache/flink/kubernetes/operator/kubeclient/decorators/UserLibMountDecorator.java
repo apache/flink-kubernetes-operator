@@ -58,6 +58,10 @@ public class UserLibMountDecorator extends AbstractKubernetesStepDecorator {
             return flinkPod;
         }
 
+        if (!kubernetesJobManagerParameters.isPipelineClasspathDefined()) {
+            return flinkPod;
+        }
+
         final Volume userLibVolume =
                 new VolumeBuilder()
                         .withName(USER_LIB_VOLUME)

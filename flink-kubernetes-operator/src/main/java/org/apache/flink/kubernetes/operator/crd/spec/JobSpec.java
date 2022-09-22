@@ -40,8 +40,9 @@ import lombok.NoArgsConstructor;
 public class JobSpec implements Diffable<JobSpec> {
 
     /**
-     * URI of the job jar within the Flink docker container. For example: Example:
-     * local:///opt/flink/examples/streaming/StateMachineExample.jar
+     * Optional URI of the job jar within the Flink docker container. For example:
+     * local:///opt/flink/examples/streaming/StateMachineExample.jar. If not specified the job jar
+     * should be available in the system classpath.
      */
     private String jarURI;
 
