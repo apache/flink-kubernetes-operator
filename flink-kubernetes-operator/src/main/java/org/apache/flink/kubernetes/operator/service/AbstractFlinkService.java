@@ -96,10 +96,12 @@ import javax.annotation.Nullable;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -123,11 +125,13 @@ import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLI
 public abstract class AbstractFlinkService implements FlinkService {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractFlinkService.class);
+    private static final String NOOP_JAR_FILENAME = "noop.jar";
 
     protected final KubernetesClient kubernetesClient;
     protected final FlinkConfigManager configManager;
     private final ExecutorService executorService;
     protected final ArtifactManager artifactManager;
+    private final String noopJarPath;
 
     public AbstractFlinkService(
             KubernetesClient kubernetesClient, FlinkConfigManager configManager) {
@@ -137,6 +141,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         this.executorService =
                 Executors.newFixedThreadPool(
                         4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
+        this.noopJarPath = copyNoopJar();
     }
 
     protected abstract PodList getJmPodList(String namespace, String clusterId);
@@ -669,7 +674,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     private JarUploadResponseBody uploadJar(
             ObjectMeta objectMeta, FlinkSessionJobSpec spec, Configuration conf) throws Exception {
         String targetDir = artifactManager.generateJarDir(objectMeta, spec);
-        File jarFile = artifactManager.fetch(spec.getJob().getJarURI(), conf, targetDir);
+        File jarFile = artifactManager.fetch(findJarURI(spec.getJob()), conf, targetDir);
         Preconditions.checkArgument(
                 jarFile.exists(),
                 String.format("The jar file %s not exists", jarFile.getAbsolutePath()));
@@ -703,6 +708,14 @@ public abstract class AbstractFlinkService implements FlinkService {
         } finally {
             LOG.debug("Deleting the jar file {}", jarFile);
             FileUtils.deleteFileOrDirectory(jarFile);
+        }
+    }
+
+    private String findJarURI(JobSpec jobSpec) {
+        if (jobSpec.getJarURI() != null) {
+            return jobSpec.getJarURI();
+        } else {
+            return noopJarPath;
         }
     }
 
@@ -804,6 +817,25 @@ public abstract class AbstractFlinkService implements FlinkService {
                             + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
                             + "Manual restore required.",
                     "RestoreFailed");
+        }
+    }
+
+    private String copyNoopJar() {
+        try {
+            InputStream noopJarSource =
+                    AbstractFlinkService.class
+                            .getClassLoader()
+                            .getResourceAsStream(NOOP_JAR_FILENAME);
+
+            String noopJarDestination =
+                    Files.createTempDirectory("flink").toString() + "/" + NOOP_JAR_FILENAME;
+
+            LOG.debug("Copying noop jar to {}", noopJarDestination);
+            org.apache.commons.io.FileUtils.copyToFile(noopJarSource, new File(noopJarDestination));
+
+            return noopJarDestination;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to copy noop jar", e);
         }
     }
 }

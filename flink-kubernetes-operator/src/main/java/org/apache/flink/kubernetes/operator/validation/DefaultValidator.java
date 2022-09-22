@@ -180,10 +180,6 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.empty();
         }
 
-        if (StringUtils.isNullOrWhitespaceOnly(job.getJarURI())) {
-            return Optional.of("Jar URI must be defined");
-        }
-
         Configuration configuration = Configuration.fromMap(confMap);
         if (job.getUpgradeMode() == UpgradeMode.LAST_STATE
                 && !FlinkUtils.isKubernetesHAActivated(configuration)) {

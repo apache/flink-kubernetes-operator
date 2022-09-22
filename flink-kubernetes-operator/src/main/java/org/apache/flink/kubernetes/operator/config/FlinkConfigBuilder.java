@@ -255,8 +255,13 @@ public class FlinkConfigBuilder {
             JobSpec jobSpec = spec.getJob();
             effectiveConfig.set(
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());
-            final URI uri = new URI(jobSpec.getJarURI());
-            effectiveConfig.set(PipelineOptions.JARS, Collections.singletonList(uri.toString()));
+
+            if (jobSpec.getJarURI() != null) {
+                final URI uri = new URI(jobSpec.getJarURI());
+                effectiveConfig.set(
+                        PipelineOptions.JARS, Collections.singletonList(uri.toString()));
+            }
+
             effectiveConfig.set(CoreOptions.DEFAULT_PARALLELISM, getParallelism());
 
             if (jobSpec.getAllowNonRestoredState() != null) {
@@ -280,7 +285,7 @@ public class FlinkConfigBuilder {
                     StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
                     spec.getJob() == null ? SESSION : APPLICATION);
 
-            if (spec.getJob() != null) {
+            if (spec.getJob() != null && spec.getJob().getJarURI() != null) {
                 effectiveConfig.set(
                         PipelineOptions.CLASSPATHS,
                         Collections.singletonList(getStandaloneJarURI(spec.getJob())));

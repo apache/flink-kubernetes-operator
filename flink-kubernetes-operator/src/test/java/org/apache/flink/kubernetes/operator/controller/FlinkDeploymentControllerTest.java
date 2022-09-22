@@ -655,7 +655,7 @@ public class FlinkDeploymentControllerTest {
 
         // Make sure we do validation before getting effective config in reconcile().
         appCluster.getSpec().getJobManager().setReplicas(1);
-        appCluster.getSpec().getJob().setJarURI(null);
+        appCluster.getSpec().getJob().setParallelism(0);
         // Verify the saved rest port in lastReconciledSpec is actually used in observe() by
         // utilizing listJobConsumer
         appCluster.getSpec().getFlinkConfiguration().put(RestOptions.PORT.key(), "12345");
