@@ -300,9 +300,11 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyJobOrSessionSpec() throws Exception {
-        flinkDeployment.getSpec().getJob().setAllowNonRestoredState(true);
+        FlinkDeployment deploymentClone = ReconciliationUtils.clone(flinkDeployment);
+        deploymentClone.getSpec().getJob().setAllowNonRestoredState(true);
+        deploymentClone.getSpec().getJob().setArgs(new String[] {"--test", "123"});
         var configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                new FlinkConfigBuilder(deploymentClone, new Configuration())
                         .applyJobOrSessionSpec()
                         .build();
         Assertions.assertTrue(
@@ -313,8 +315,11 @@ public class FlinkConfigBuilderTest {
         Assertions.assertEquals(SAMPLE_JAR, configuration.get(PipelineOptions.JARS).get(0));
         Assertions.assertEquals(
                 Integer.valueOf(2), configuration.get(CoreOptions.DEFAULT_PARALLELISM));
+        Assertions.assertEquals(
+                List.of("--test", "123"),
+                configuration.get(ApplicationConfiguration.APPLICATION_ARGS));
 
-        var dep = ReconciliationUtils.clone(flinkDeployment);
+        var dep = ReconciliationUtils.clone(deploymentClone);
         dep.getSpec().setTaskManager(new TaskManagerSpec());
         dep.getSpec().getTaskManager().setReplicas(3);
         dep.getSpec().getFlinkConfiguration().put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "4");

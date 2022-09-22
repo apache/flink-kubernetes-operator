@@ -85,6 +85,11 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
             args.add(allowNonRestoredState.toString());
         }
 
+        List<String> jobSpecArgs = kubernetesJobManagerParameters.getJobSpecArgs();
+        if (jobSpecArgs != null) {
+            args.addAll(kubernetesJobManagerParameters.getJobSpecArgs());
+        }
+
         return args;
     }
 }
