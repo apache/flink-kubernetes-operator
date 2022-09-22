@@ -57,6 +57,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 
 import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
@@ -273,6 +274,12 @@ public class FlinkConfigBuilder {
             if (jobSpec.getEntryClass() != null) {
                 effectiveConfig.set(
                         ApplicationConfiguration.APPLICATION_MAIN_CLASS, jobSpec.getEntryClass());
+            }
+
+            if (jobSpec.getArgs() != null) {
+                effectiveConfig.set(
+                        ApplicationConfiguration.APPLICATION_ARGS,
+                        Arrays.asList(jobSpec.getArgs()));
             }
         } else {
             effectiveConfig.set(

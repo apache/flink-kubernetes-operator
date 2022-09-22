@@ -29,6 +29,7 @@ import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -91,5 +92,12 @@ public class StandaloneKubernetesJobManagerParameters extends KubernetesJobManag
 
     public boolean isPipelineClasspathDefined() {
         return flinkConfig.contains(PipelineOptions.CLASSPATHS);
+    }
+
+    public List<String> getJobSpecArgs() {
+        if (flinkConfig.contains(ApplicationConfiguration.APPLICATION_ARGS)) {
+            return flinkConfig.get(ApplicationConfiguration.APPLICATION_ARGS);
+        }
+        return null;
     }
 }
