@@ -100,6 +100,8 @@ public abstract class AbstractFlinkResourceReconciler<
             return;
         }
 
+        setOwnerReference(cr, deployConfig);
+
         // If this is the first deployment for the resource we simply submit the job and return.
         // No further logic is required at this point.
         if (reconciliationStatus.isFirstDeployment()) {
@@ -109,8 +111,6 @@ public abstract class AbstractFlinkResourceReconciler<
             // handle subsequent deployment and status update errors
             ReconciliationUtils.updateStatusBeforeDeploymentAttempt(cr, deployConfig);
             statusRecorder.patchAndCacheStatus(cr);
-
-            setOwnerReference(cr, deployConfig);
 
             deploy(
                     cr,
