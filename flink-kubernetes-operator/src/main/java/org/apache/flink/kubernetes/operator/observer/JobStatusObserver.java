@@ -19,11 +19,14 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +40,10 @@ import java.util.concurrent.TimeoutException;
 public abstract class JobStatusObserver<CTX> {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
+
     private static final int MAX_ERROR_STRING_LENGTH = 512;
+    public static final String MISSING_SESSION_JOB_ERR = "Missing Session Job";
+
     private final FlinkService flinkService;
     private final EventRecorder eventRecorder;
 
@@ -59,10 +65,13 @@ public abstract class JobStatusObserver<CTX> {
         var jobStatus = resource.getStatus().getJobStatus();
         LOG.info("Observing job status");
         var previousJobStatus = jobStatus.getState();
+
         List<JobStatusMessage> clusterJobStatuses;
         try {
+            // Query job list from the cluster
             clusterJobStatuses = new ArrayList<>(flinkService.listJobs(deployedConfig));
         } catch (Exception e) {
+            // Error while accessing the rest api, will try again later...
             LOG.error("Exception while listing jobs", e);
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
             if (e instanceof TimeoutException) {
@@ -72,10 +81,19 @@ public abstract class JobStatusObserver<CTX> {
         }
 
         if (!clusterJobStatuses.isEmpty()) {
+            // There are jobs on the cluster, we filter the ones for this resource
             Optional<JobStatusMessage> targetJobStatusMessage =
                     filterTargetJob(jobStatus, clusterJobStatuses);
+
             if (targetJobStatusMessage.isEmpty()) {
-                jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+                ifRunningMoveToReconciling(jobStatus, previousJobStatus);
+                // We could list the jobs but cannot find the one for this resource
+                if (resource instanceof FlinkDeployment) {
+                    // This should never happen for application clusters, there is something wrong
+                    setUnknownJobError((FlinkDeployment) resource);
+                } else {
+                    ifHaDisabledMarkSessionJobMissing((FlinkSessionJob) resource, deployedConfig);
+                }
                 return false;
             } else {
                 updateJobStatus(resource, targetJobStatusMessage.get(), deployedConfig);
@@ -83,11 +101,70 @@ public abstract class JobStatusObserver<CTX> {
             ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
             return true;
         } else {
+            // No jobs found on the cluster, it is possible that the jobmanager is still starting up
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
+
+            if (resource instanceof FlinkSessionJob) {
+                ifHaDisabledMarkSessionJobMissing((FlinkSessionJob) resource, deployedConfig);
+            }
             return false;
         }
     }
 
+    /**
+     * When HA is disabled the session job will not recover on JM restarts. If the JM goes down /
+     * restarted the session job should be marked missing.
+     *
+     * @param sessionJob Flink session job.
+     * @param conf Flink config.
+     */
+    private void ifHaDisabledMarkSessionJobMissing(FlinkSessionJob sessionJob, Configuration conf) {
+        if (HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
+            return;
+        }
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        LOG.error(MISSING_SESSION_JOB_ERR);
+        ReconciliationUtils.updateForReconciliationError(sessionJob, MISSING_SESSION_JOB_ERR);
+        eventRecorder.triggerEvent(
+                sessionJob,
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.Missing,
+                EventRecorder.Component.Job,
+                MISSING_SESSION_JOB_ERR);
+    }
+
+    /**
+     * We found a job on an application cluster that doesn't match the expected job. Trigger error.
+     *
+     * @param deployment Application deployment.
+     * @param conf Flink config.
+     */
+    private void setUnknownJobError(FlinkDeployment deployment) {
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        String err = "Unrecognized Job for Application deployment";
+        LOG.error(err);
+        ReconciliationUtils.updateForReconciliationError(deployment, err);
+        eventRecorder.triggerEvent(
+                deployment,
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.Missing,
+                EventRecorder.Component.Job,
+                err);
+    }
+
+    /**
+     * If we observed the job previously in RUNNING state we move to RECONCILING instead as we are
+     * not sure anymore.
+     *
+     * @param jobStatus JobStatus object.
+     * @param previousJobStatus Last observed job state.
+     */
     private void ifRunningMoveToReconciling(JobStatus jobStatus, String previousJobStatus) {
         if (org.apache.flink.api.common.JobStatus.RUNNING.name().equals(previousJobStatus)) {
             jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
