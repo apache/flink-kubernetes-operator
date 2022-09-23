@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
 
+import io.fabric8.kubernetes.model.annotation.PrinterColumn;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -38,6 +39,7 @@ public class JobStatus {
     private String jobId;
 
     /** Last observed state of the job. */
+    @PrinterColumn(name = "Job Status")
     private String state;
 
     /** Start time of the job. */
