@@ -86,6 +86,7 @@ public abstract class JobStatusObserver<CTX> {
                     filterTargetJob(jobStatus, clusterJobStatuses);
 
             if (targetJobStatusMessage.isEmpty()) {
+                LOG.warn("No matching jobs found on the cluster");
                 ifRunningMoveToReconciling(jobStatus, previousJobStatus);
                 // We could list the jobs but cannot find the one for this resource
                 if (resource instanceof FlinkDeployment) {
@@ -101,6 +102,7 @@ public abstract class JobStatusObserver<CTX> {
             ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
             return true;
         } else {
+            LOG.debug("No jobs found on the cluster");
             // No jobs found on the cluster, it is possible that the jobmanager is still starting up
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
 
@@ -140,7 +142,6 @@ public abstract class JobStatusObserver<CTX> {
      * We found a job on an application cluster that doesn't match the expected job. Trigger error.
      *
      * @param deployment Application deployment.
-     * @param conf Flink config.
      */
     private void setUnknownJobError(FlinkDeployment deployment) {
         deployment

@@ -69,6 +69,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     protected void observeFlinkCluster(
             FlinkDeployment flinkApp, Context<?> context, Configuration deployedConfig) {
 
+        logger.debug("Observing application cluster");
         boolean jobFound =
                 jobStatusObserver.observe(
                         flinkApp,

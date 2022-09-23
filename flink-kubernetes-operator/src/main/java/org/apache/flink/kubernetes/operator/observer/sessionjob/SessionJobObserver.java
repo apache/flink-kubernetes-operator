@@ -87,7 +87,7 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
                                 status.getJobId(), matchedList.size()));
 
                 if (matchedList.size() == 0) {
-                    LOG.info("No job found for JobID: {}", jobId);
+                    LOG.warn("No job found for JobID: {}", jobId);
                     return Optional.empty();
                 } else {
                     return Optional.of(matchedList.get(0));
@@ -98,7 +98,16 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
 
     @Override
     public void observe(FlinkSessionJob flinkSessionJob, Context<?> context) {
-        if (flinkSessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
+        var status = flinkSessionJob.getStatus();
+        var reconciliationStatus = status.getReconciliationStatus();
+
+        if (reconciliationStatus.isBeforeFirstDeployment()) {
+            LOG.debug("Skipping observe before first deployment");
+            return;
+        }
+
+        if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
+            LOG.debug("Skipping observe during rollback operation");
             return;
         }
 
@@ -112,10 +121,13 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
         var jobStatusObserver = getJobStatusObserver(flinkService);
         var deployedConfig =
                 configManager.getSessionJobConfig(flinkDepOpt.get(), flinkSessionJob.getSpec());
-        var reconciliationStatus = flinkSessionJob.getStatus().getReconciliationStatus();
+
+        // We are in the middle or possibly right after an upgrade
         if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+            // We must check if the upgrade went through without the status upgrade for some reason
             checkIfAlreadyUpgraded(flinkSessionJob, deployedConfig, flinkService);
             if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+                LOG.debug("Skipping observe before resource is deployed during upgrade");
                 ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(flinkSessionJob);
                 return;
             }
