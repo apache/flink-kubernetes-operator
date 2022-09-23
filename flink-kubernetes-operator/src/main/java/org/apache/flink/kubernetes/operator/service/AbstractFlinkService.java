@@ -117,6 +117,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
 
 /**
  * An abstract {@link FlinkService} containing some common implementations for the native and
@@ -170,7 +171,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
-        deployApplicationCluster(jobSpec, conf);
+
+        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
     }
 
     @Override
@@ -795,6 +797,20 @@ public abstract class AbstractFlinkService implements FlinkService {
                                         getEffectiveStatus(details),
                                         details.getStartTime()))
                 .collect(Collectors.toList());
+    }
+
+    @VisibleForTesting
+    protected static Configuration removeOperatorConfigs(Configuration config) {
+        Configuration newConfig = new Configuration();
+        config.toMap()
+                .forEach(
+                        (k, v) -> {
+                            if (!k.startsWith(K8S_OP_CONF_PREFIX)) {
+                                newConfig.setString(k, v);
+                            }
+                        });
+
+        return newConfig;
     }
 
     @VisibleForTesting

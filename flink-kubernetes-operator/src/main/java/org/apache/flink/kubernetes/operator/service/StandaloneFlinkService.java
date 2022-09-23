@@ -66,14 +66,14 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     @Override
     protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
         LOG.info("Deploying application cluster");
-        submitClusterInternal(conf, Mode.APPLICATION);
+        submitClusterInternal(removeOperatorConfigs(conf), Mode.APPLICATION);
         LOG.info("Application cluster successfully deployed");
     }
 
     @Override
     public void submitSessionCluster(Configuration conf) throws Exception {
         LOG.info("Deploying session cluster");
-        submitClusterInternal(conf, Mode.SESSION);
+        submitClusterInternal(removeOperatorConfigs(conf), Mode.SESSION);
         LOG.info("Session cluster successfully deployed");
     }
 
@@ -115,7 +115,7 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                 executorService);
     }
 
-    private void submitClusterInternal(Configuration conf, Mode mode)
+    protected void submitClusterInternal(Configuration conf, Mode mode)
             throws ClusterDeploymentException {
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
 

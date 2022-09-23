@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
@@ -40,6 +41,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -57,6 +59,7 @@ public class StandaloneFlinkServiceTest {
     public void setup() {
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
+        configuration.set(OPERATOR_HEALTH_PROBE_PORT, 80);
 
         kubernetesClient = mockServer.createClient().inAnyNamespace();
         flinkStandaloneService =
@@ -175,6 +178,40 @@ public class StandaloneFlinkServiceTest {
                         flinkDeployment.getMetadata(),
                         flinkDeployment.getSpec().getJob(),
                         buildConfig(flinkDeployment, configuration)));
+    }
+
+    @Test
+    public void testSubmitSessionClusterConfigRemoval() throws Exception {
+        TestingStandaloneFlinkService service =
+                new TestingStandaloneFlinkService(flinkStandaloneService);
+        service.submitSessionCluster(configuration);
+        assertFalse(service.getRuntimeConfig().containsKey(OPERATOR_HEALTH_PROBE_PORT.key()));
+    }
+
+    @Test
+    public void testDeployApplicationClusterConfigRemoval() throws Exception {
+        var flinkDeployment = TestUtils.buildApplicationCluster();
+        TestingStandaloneFlinkService service =
+                new TestingStandaloneFlinkService(flinkStandaloneService);
+        service.deployApplicationCluster(flinkDeployment.getSpec().getJob(), configuration);
+        assertFalse(service.getRuntimeConfig().containsKey(OPERATOR_HEALTH_PROBE_PORT.key()));
+    }
+
+    class TestingStandaloneFlinkService extends StandaloneFlinkService {
+        private Configuration runtimeConfig;
+
+        public TestingStandaloneFlinkService(StandaloneFlinkService service) {
+            super(service.kubernetesClient, service.configManager);
+        }
+
+        public Configuration getRuntimeConfig() {
+            return this.runtimeConfig;
+        }
+
+        @Override
+        protected void submitClusterInternal(Configuration conf, Mode mode) {
+            this.runtimeConfig = conf;
+        }
     }
 
     private Configuration buildConfig(FlinkDeployment flinkDeployment, Configuration configuration)

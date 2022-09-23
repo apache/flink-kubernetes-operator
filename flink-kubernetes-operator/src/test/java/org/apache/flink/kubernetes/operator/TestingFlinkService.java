@@ -139,7 +139,7 @@ public class TestingFlinkService extends AbstractFlinkService {
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
-        deployApplicationCluster(jobSpec, conf);
+        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
     }
 
     protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
