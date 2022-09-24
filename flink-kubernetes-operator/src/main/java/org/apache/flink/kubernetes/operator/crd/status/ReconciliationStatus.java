@@ -98,7 +98,7 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
     }
 
     @JsonIgnore
-    public boolean isFirstDeployment() {
+    public boolean isBeforeFirstDeployment() {
         return lastReconciledSpec == null;
     }
 }

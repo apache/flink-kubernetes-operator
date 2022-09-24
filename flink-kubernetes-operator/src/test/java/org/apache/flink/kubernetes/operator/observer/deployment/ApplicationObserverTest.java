@@ -477,6 +477,10 @@ public class ApplicationObserverTest {
         var reconStatus = status.getReconciliationStatus();
 
         // New deployment
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
+                deployment,
+                new FlinkConfigManager(new Configuration())
+                        .getDeployConfig(deployment.getMetadata(), deployment.getSpec()));
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         // Test regular upgrades
@@ -528,9 +532,12 @@ public class ApplicationObserverTest {
                 deployment,
                 new FlinkConfigManager(new Configuration())
                         .getDeployConfig(deployment.getMetadata(), deployment.getSpec()));
+        var reconStatus = deployment.getStatus().getReconciliationStatus();
 
-        assertFalse(deployment.getStatus().getReconciliationStatus().isFirstDeployment());
+        assertTrue(reconStatus.deserializeLastReconciledSpecWithMeta().f1.isFirstDeployment());
+        assertFalse(reconStatus.isBeforeFirstDeployment());
+
         observer.observe(deployment, TestUtils.createEmptyContext());
-        assertTrue(deployment.getStatus().getReconciliationStatus().isFirstDeployment());
+        assertTrue(reconStatus.isBeforeFirstDeployment());
     }
 }

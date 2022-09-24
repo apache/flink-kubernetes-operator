@@ -102,16 +102,37 @@ public class ApplicationReconcilerTest {
         reconciler.reconcile(deployment, context);
         var runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
+        assertTrue(
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpecWithMeta()
+                        .f1
+                        .isFirstDeployment());
 
         // Test stateless upgrade
         FlinkDeployment statelessUpgrade = ReconciliationUtils.clone(deployment);
         statelessUpgrade.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         statelessUpgrade.getSpec().getFlinkConfiguration().put("new", "conf");
         reconciler.reconcile(statelessUpgrade, context);
+        assertFalse(
+                statelessUpgrade
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpecWithMeta()
+                        .f1
+                        .isFirstDeployment());
 
         assertEquals(0, flinkService.getRunningCount());
 
         reconciler.reconcile(statelessUpgrade, context);
+        assertFalse(
+                statelessUpgrade
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpecWithMeta()
+                        .f1
+                        .isFirstDeployment());
 
         runningJobs = flinkService.listJobs();
         assertEquals(1, flinkService.getRunningCount());

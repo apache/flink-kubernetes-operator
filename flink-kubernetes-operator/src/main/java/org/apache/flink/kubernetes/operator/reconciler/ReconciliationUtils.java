@@ -107,6 +107,9 @@ public class ReconciliationUtils {
 
         // Clear errors
         status.setError("");
+        reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
+        reconciliationStatus.setState(
+                upgrading ? ReconciliationState.UPGRADING : ReconciliationState.DEPLOYED);
 
         if (spec.getJob() != null) {
             // For jobs we have to adjust the reconciled spec
@@ -135,10 +138,6 @@ public class ReconciliationUtils {
         } else {
             reconciliationStatus.serializeAndSetLastReconciledSpec(spec, target);
         }
-
-        reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
-        reconciliationStatus.setState(
-                upgrading ? ReconciliationState.UPGRADING : ReconciliationState.DEPLOYED);
     }
 
     public static <SPEC extends AbstractFlinkSpec> void updateLastReconciledSavepointTriggerNonce(
@@ -451,6 +450,7 @@ public class ReconciliationUtils {
 
         if (lastSpecWithMeta.f1.isFirstDeployment()) {
             reconStatus.setLastReconciledSpec(null);
+            reconStatus.setState(ReconciliationState.UPGRADING);
         }
     }
 

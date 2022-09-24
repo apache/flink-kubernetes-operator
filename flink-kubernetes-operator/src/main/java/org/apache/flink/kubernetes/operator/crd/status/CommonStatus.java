@@ -54,7 +54,7 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     public ResourceLifecycleState getLifecycleState() {
         var reconciliationStatus = getReconciliationStatus();
 
-        if (reconciliationStatus.isFirstDeployment()) {
+        if (reconciliationStatus.isBeforeFirstDeployment()) {
             return StringUtils.isEmpty(error)
                     ? ResourceLifecycleState.CREATED
                     : ResourceLifecycleState.FAILED;
