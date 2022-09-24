@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -135,16 +134,8 @@ public class ApplicationReconciler
                 deployment.getMetadata(), deployment.getStatus(), false);
         flinkService.waitForClusterShutdown(deployConfig);
         if (!flinkService.isHaMetadataAvailable(deployConfig)) {
-            LOG.info(
-                    "Job never entered stable state. Clearing previous spec to reset for initial deploy");
-            // TODO: lastSpecWithMeta.f1.isFirstDeployment() is false
-            // ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(deployment);
-            deployment.getStatus().getReconciliationStatus().setLastReconciledSpec(null);
-            // UPGRADING triggers immediate reconciliation
-            deployment
-                    .getStatus()
-                    .getReconciliationStatus()
-                    .setState(ReconciliationState.UPGRADING);
+            LOG.info("Job never entered stable state. Resetting status for initial deploy");
+            ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(deployment);
             return Optional.empty();
         } else {
             // proceed with upgrade if deployment succeeded between check and delete
@@ -250,7 +241,7 @@ public class ApplicationReconciler
     @SneakyThrows
     protected DeleteControl cleanupInternal(FlinkDeployment deployment, Context<?> context) {
         var status = deployment.getStatus();
-        if (status.getReconciliationStatus().isFirstDeployment()) {
+        if (status.getReconciliationStatus().isBeforeFirstDeployment()) {
             flinkService.deleteClusterDeployment(deployment.getMetadata(), status, true);
         } else {
             flinkService.cancelJob(

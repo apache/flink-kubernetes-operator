@@ -98,7 +98,7 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
 
     @Override
     public void observe(FlinkSessionJob flinkSessionJob, Context<?> context) {
-        if (flinkSessionJob.getStatus().getReconciliationStatus().isFirstDeployment()) {
+        if (flinkSessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
             return;
         }
 

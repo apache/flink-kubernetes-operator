@@ -352,8 +352,8 @@ public class SessionJobObserverTest {
 
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(sessionJob, new Configuration());
 
-        assertFalse(sessionJob.getStatus().getReconciliationStatus().isFirstDeployment());
+        assertFalse(sessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment());
         observer.observe(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
-        assertTrue(sessionJob.getStatus().getReconciliationStatus().isFirstDeployment());
+        assertTrue(sessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment());
     }
 }

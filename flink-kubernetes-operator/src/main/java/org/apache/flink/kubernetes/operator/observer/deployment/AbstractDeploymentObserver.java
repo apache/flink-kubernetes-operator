@@ -76,7 +76,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         var reconciliationStatus = status.getReconciliationStatus();
 
         // Nothing has been launched so skip observing
-        if (reconciliationStatus.isFirstDeployment()
+        if (reconciliationStatus.isBeforeFirstDeployment()
                 || reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
             return;
         }
