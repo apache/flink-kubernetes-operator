@@ -17,11 +17,13 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.configuration.SchedulerExecutionMode;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
@@ -110,6 +112,9 @@ public class ApplicationReconcilerTest {
                         .f1
                         .isFirstDeployment());
 
+        JobID jobId = runningJobs.get(0).f1.getJobId();
+        verifyJobId(deployment, runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
+
         // Test stateless upgrade
         FlinkDeployment statelessUpgrade = ReconciliationUtils.clone(deployment);
         statelessUpgrade.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
@@ -138,10 +143,11 @@ public class ApplicationReconcilerTest {
         assertEquals(1, flinkService.getRunningCount());
         assertNull(runningJobs.get(0).f0);
 
-        deployment
-                .getStatus()
-                .getJobStatus()
-                .setJobId(runningJobs.get(0).f1.getJobId().toHexString());
+        assertNotEquals(
+                runningJobs.get(0).f2.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID), jobId);
+        jobId = runningJobs.get(0).f1.getJobId();
+
+        deployment.getStatus().getJobStatus().setJobId(jobId.toHexString());
 
         // Test stateful upgrade
         FlinkDeployment statefulUpgrade = ReconciliationUtils.clone(deployment);
@@ -165,6 +171,8 @@ public class ApplicationReconcilerTest {
                         .getSavepointInfo()
                         .getLastSavepoint()
                         .getTriggerType());
+
+        verifyJobId(deployment, runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
 
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().setRestartNonce(100L);
@@ -208,6 +216,19 @@ public class ApplicationReconcilerTest {
 
         assertEquals(1, flinkService.getRunningCount());
         assertEquals("finished_sp", runningJobs.get(0).f0);
+        verifyJobId(deployment, runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
+    }
+
+    private void verifyJobId(
+            FlinkDeployment deployment, JobStatusMessage status, Configuration conf, JobID jobId) {
+        if (deployment.getSpec().getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_15)) {
+            assertNull(conf.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID));
+        } else {
+            // jobId set by operator
+            assertEquals(jobId, status.getJobId());
+            assertEquals(
+                    conf.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID), jobId.toHexString());
+        }
     }
 
     @Test
