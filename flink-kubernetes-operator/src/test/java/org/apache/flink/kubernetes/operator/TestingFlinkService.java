@@ -24,6 +24,7 @@ import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
@@ -150,6 +151,9 @@ public class TestingFlinkService extends AbstractFlinkService {
             throw new Exception("Cannot submit 2 application clusters at the same time");
         }
         JobID jobID = new JobID();
+        if (conf.contains(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID)) {
+            jobID = JobID.fromHexString(conf.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID));
+        }
         JobStatusMessage jobStatusMessage =
                 new JobStatusMessage(
                         jobID,

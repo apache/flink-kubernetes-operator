@@ -17,13 +17,16 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
@@ -181,6 +184,9 @@ public class ApplicationReconciler
             flinkService.deleteClusterDeployment(relatedResource.getMetadata(), status, true);
             flinkService.waitForClusterShutdown(deployConfig);
         }
+
+        setJobIdIfNecessary(spec, status, deployConfig);
+
         eventRecorder.triggerEvent(
                 relatedResource,
                 EventRecorder.Type.Normal,
@@ -193,6 +199,33 @@ public class ApplicationReconciler
 
         IngressUtils.updateIngressRules(
                 relatedResource.getMetadata(), spec, deployConfig, kubernetesClient);
+    }
+
+    private void setJobIdIfNecessary(
+            FlinkDeploymentSpec spec, FlinkDeploymentStatus status, Configuration deployConfig) {
+        // https://issues.apache.org/jira/browse/FLINK-19358
+        // https://issues.apache.org/jira/browse/FLINK-29109
+        if (spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_15)) {
+            return;
+        }
+
+        if (deployConfig.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID) != null) {
+            // user managed, don't touch
+            return;
+        }
+
+        // generate jobId initially or rotate on every deployment when mode is stateless
+        if (status.getJobStatus().getJobId() == null
+                || spec.getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
+            String jobId = JobID.generate().toHexString();
+            // record before first deployment to ensure we use it on any retry
+            status.getJobStatus().setJobId(jobId);
+            LOG.info("Assigning JobId override to {}", jobId);
+        }
+
+        String jobId = status.getJobStatus().getJobId();
+        LOG.debug("Setting {} to {}", PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID, jobId);
+        deployConfig.set(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID, jobId);
     }
 
     @Override
