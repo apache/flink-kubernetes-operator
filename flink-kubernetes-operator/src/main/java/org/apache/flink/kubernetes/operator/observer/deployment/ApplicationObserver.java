@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.observer.ClusterHealthObserver;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.ApplicationObserverContext;
@@ -35,11 +36,15 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.List;
 import java.util.Optional;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
+
 /** The observer of {@link org.apache.flink.kubernetes.operator.config.Mode#APPLICATION} cluster. */
 public class ApplicationObserver extends AbstractDeploymentObserver {
 
     private final SavepointObserver<FlinkDeployment, FlinkDeploymentStatus> savepointObserver;
     private final JobStatusObserver<FlinkDeployment, ApplicationObserverContext> jobStatusObserver;
+
+    private final ClusterHealthObserver clusterHealthObserver;
 
     public ApplicationObserver(
             FlinkService flinkService,
@@ -94,6 +99,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
                                 err);
                     }
                 };
+        this.clusterHealthObserver = new ClusterHealthObserver(flinkService);
     }
 
     @Override
@@ -108,6 +114,9 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
                         new ApplicationObserverContext(flinkApp, context, deployedConfig));
         if (jobFound) {
             savepointObserver.observeSavepointStatus(flinkApp, deployedConfig);
+            if (deployedConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)) {
+                clusterHealthObserver.observe(flinkApp, deployedConfig);
+            }
         }
     }
 }

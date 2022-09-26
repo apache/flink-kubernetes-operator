@@ -31,6 +31,8 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
+import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -50,6 +52,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 import java.util.UUID;
+
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 
 /** Reconciler Flink Application deployments. */
 public class ApplicationReconciler
@@ -258,10 +262,17 @@ public class ApplicationReconciler
             return true;
         }
 
-        if (shouldRecoverDeployment(observeConfig, deployment)) {
+        boolean shouldRestartJobBecauseUnhealthy =
+                shouldRestartJobBecauseUnhealthy(deployment, observeConfig);
+        boolean shouldRecoverDeployment = shouldRecoverDeployment(observeConfig, deployment);
+        if (shouldRestartJobBecauseUnhealthy || shouldRecoverDeployment) {
+            if (shouldRestartJobBecauseUnhealthy) {
+                cancelJob(deployment, ctx, UpgradeMode.LAST_STATE, observeConfig);
+            }
             recoverJmDeployment(deployment, ctx, observeConfig);
             return true;
         }
+
         return false;
     }
 
@@ -271,6 +282,40 @@ public class ApplicationReconciler
         LOG.info("Missing Flink Cluster deployment, trying to recover...");
         FlinkDeploymentSpec specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
         restoreJob(deployment, specToRecover, deployment.getStatus(), ctx, observeConfig, true);
+    }
+
+    private boolean shouldRestartJobBecauseUnhealthy(
+            FlinkDeployment deployment, Configuration observeConfig) {
+        boolean restartNeeded = false;
+
+        if (observeConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)) {
+            var clusterInfo = deployment.getStatus().getClusterInfo();
+            ClusterHealthInfo clusterHealthInfo =
+                    ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
+            if (clusterHealthInfo != null) {
+                LOG.debug("Cluster info contains job health info");
+                if (!clusterHealthInfo.isHealthy()) {
+                    if (deployment.getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
+                        LOG.debug("Stateless job, recovering unhealthy jobmanager deployment");
+                        restartNeeded = true;
+                    } else if (FlinkUtils.isKubernetesHAActivated(observeConfig)) {
+                        LOG.debug("HA is enabled, recovering unhealthy jobmanager deployment");
+                        restartNeeded = true;
+                    } else {
+                        LOG.warn(
+                                "Could not recover unhealthy jobmanager deployment without HA enabled");
+                    }
+
+                    if (restartNeeded) {
+                        ClusterHealthEvaluator.removeLastValidClusterHealthInfo(clusterInfo);
+                    }
+                }
+            } else {
+                LOG.debug("Cluster info not contains job health info, skipping health check");
+            }
+        }
+
+        return restartNeeded;
     }
 
     @Override

@@ -9,6 +9,24 @@
     </thead>
     <tbody>
         <tr>
+            <td><h5>kubernetes.operator.cluster.health-check.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Whether to enable health check for clusters.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.cluster.health-check.restarts.threshold</h5></td>
+            <td style="word-wrap: break-word;">64</td>
+            <td>Integer</td>
+            <td>The threshold which is checked against job restart count within a configured window. If the restart count is reaching the threshold then full cluster restart is initiated.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.cluster.health-check.restarts.window</h5></td>
+            <td style="word-wrap: break-word;">2 min</td>
+            <td>Duration</td>
+            <td>The duration of the time window where job restart count measured.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.config.cache.size</h5></td>
             <td style="word-wrap: break-word;">1000</td>
             <td>Integer</td>

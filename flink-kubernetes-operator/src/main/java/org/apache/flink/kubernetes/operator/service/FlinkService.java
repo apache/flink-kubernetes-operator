@@ -38,6 +38,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import javax.annotation.Nullable;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -97,4 +98,7 @@ public interface FlinkService {
     default boolean scale(ObjectMeta meta, JobSpec jobSpec, Configuration conf) {
         return false;
     }
+
+    Map<String, String> getMetrics(Configuration conf, String jobId, List<String> metricNames)
+            throws Exception;
 }

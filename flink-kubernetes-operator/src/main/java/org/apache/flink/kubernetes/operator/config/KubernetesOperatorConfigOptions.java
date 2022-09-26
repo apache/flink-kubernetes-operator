@@ -315,4 +315,28 @@ public class KubernetesOperatorConfigOptions {
                     .intType()
                     .defaultValue(8085)
                     .withDescription("The port the health probe will use to expose the status.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED =
+            operatorConfig("cluster.health-check.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("Whether to enable health check for clusters.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Duration> OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW =
+            operatorConfig("cluster.health-check.restarts.window")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(2))
+                    .withDescription(
+                            "The duration of the time window where job restart count measured.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Integer> OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD =
+            operatorConfig("cluster.health-check.restarts.threshold")
+                    .intType()
+                    .defaultValue(64)
+                    .withDescription(
+                            "The threshold which is checked against job restart count within a configured window. "
+                                    + "If the restart count is reaching the threshold then full cluster restart is initiated.");
 }

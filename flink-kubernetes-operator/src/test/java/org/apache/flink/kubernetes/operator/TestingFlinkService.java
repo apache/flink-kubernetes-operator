@@ -105,6 +105,8 @@ public class TestingFlinkService extends AbstractFlinkService {
     private final Map<String, Boolean> savepointTriggers = new HashMap<>();
     private int desiredReplicas = 0;
 
+    private Map<String, String> metricsValues = new HashMap<>();
+
     public TestingFlinkService() {
         super(null, new FlinkConfigManager(new Configuration()));
     }
@@ -502,5 +504,15 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     public int getDesiredReplicas() {
         return desiredReplicas;
+    }
+
+    public void setMetricValue(String name, String value) {
+        metricsValues.put(name, value);
+    }
+
+    @Override
+    public Map<String, String> getMetrics(
+            Configuration conf, String jobId, List<String> metricNames) {
+        return metricsValues;
     }
 }

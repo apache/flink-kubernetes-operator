@@ -156,6 +156,20 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of("Kubernetes HA must be enabled for rollback support.");
         }
 
+        if (conf.get(KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)
+                && !conf.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED)) {
+            return Optional.of(
+                    "Deployment recovery ("
+                            + KubernetesOperatorConfigOptions
+                                    .OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED
+                                    .key()
+                            + ") must be enabled for job health check ("
+                            + KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED
+                                    .key()
+                            + ") support.");
+        }
+
         return Optional.empty();
     }
 
