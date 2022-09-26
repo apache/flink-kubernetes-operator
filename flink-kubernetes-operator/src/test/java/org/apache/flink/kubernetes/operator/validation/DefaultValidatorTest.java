@@ -179,6 +179,24 @@ public class DefaultValidatorTest {
                                                 KubernetesConfigOptions.NAMESPACE.key(), "myns")),
                 "Forbidden Flink config key");
 
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .setFlinkConfiguration(
+                                        Map.of(
+                                                KubernetesOperatorConfigOptions
+                                                                .OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED
+                                                                .key(),
+                                                        "true",
+                                                KubernetesOperatorConfigOptions
+                                                                .OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED
+                                                                .key(),
+                                                        "false")),
+                "Deployment recovery ("
+                        + KubernetesOperatorConfigOptions.OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED
+                                .key()
+                        + ") must be enabled");
+
         // Test log config validation
         testSuccess(
                 dep ->

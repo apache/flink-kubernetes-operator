@@ -40,7 +40,7 @@ import java.util.Map;
 @SuperBuilder
 public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
 
-    /** Config information from running clusters. */
+    /** Information from running clusters. */
     private Map<String, String> clusterInfo = new HashMap<>();
 
     /** Last observed status of the JobManager deployment. */

@@ -396,23 +396,27 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param deployment FlinkDeployment object.
      * @return True if recovery should be executed.
      */
-    protected static boolean shouldRecoverDeployment(
-            Configuration conf, FlinkDeployment deployment) {
+    protected boolean shouldRecoverDeployment(Configuration conf, FlinkDeployment deployment) {
+        boolean result = false;
 
-        if (!jmMissingForRunningDeployment(deployment)
-                || !conf.get(
-                        KubernetesOperatorConfigOptions.OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED)) {
-            return false;
+        if (conf.get(KubernetesOperatorConfigOptions.OPERATOR_JM_DEPLOYMENT_RECOVERY_ENABLED)) {
+            LOG.debug("Checking whether jobmanager deployment needs recovery");
+
+            if (jmMissingForRunningDeployment(deployment)) {
+                LOG.debug("Jobmanager deployment is missing, trying to recover");
+                if (FlinkUtils.isKubernetesHAActivated(conf)) {
+                    LOG.debug("HA is enabled, recovering lost jobmanager deployment");
+                    result = true;
+                } else {
+                    LOG.warn("Could not recover lost jobmanager deployment without HA enabled");
+                }
+            }
         }
 
-        if (!FlinkUtils.isKubernetesHAActivated(conf)) {
-            LOG.warn("Could not recover lost deployment without HA enabled");
-            return false;
-        }
-        return true;
+        return result;
     }
 
-    private static boolean jmMissingForRunningDeployment(FlinkDeployment deployment) {
+    private boolean jmMissingForRunningDeployment(FlinkDeployment deployment) {
         var deployedJob = ReconciliationUtils.getDeployedSpec(deployment).getJob();
         return (deployedJob == null || deployedJob.getState() == JobState.RUNNING)
                 && (deployment.getStatus().getJobManagerDeploymentStatus()

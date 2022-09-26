@@ -232,6 +232,15 @@ In these cases no recovery will be performed to avoid dataloss and an error will
 
 Please check the [manual Recovery section](#manual-recovery) to understand how to recover from these situations.
 
+## Restart of unhealthy job deployments
+
+When Kubernetes HA is enabled, the operator can restart the Flink cluster deployments in cases when it was considered
+unhealthy. Unhealthy deployment restart can be turned on in the configuration by setting `kubernetes.operator.cluster.health-check.enabled` to `true` (default: `false`).  
+In order this feature to work one must enable [recovery of missing job deployments](#recovery-of-missing-job-deployments).
+
+At the moment deployment is considered unhealthy when Flink's restarts count reaches `kubernetes.operator.cluster.health-check.restarts.threshold` (default: `64`)
+within time window of `kubernetes.operator.cluster.health-check.restarts.window` (default: 2 minutes).
+
 ## Application upgrade rollbacks (Experimental)
 
 The operator supports upgrade rollbacks as an experimental feature.

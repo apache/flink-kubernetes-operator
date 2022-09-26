@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.service;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
@@ -59,6 +60,7 @@ import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointInfo;
@@ -851,6 +853,27 @@ public abstract class AbstractFlinkService implements FlinkService {
             return emptyJarPath;
         } catch (Exception e) {
             throw new RuntimeException("Failed to create empty jar", e);
+        }
+    }
+
+    public Map<String, String> getMetrics(
+            Configuration conf, String jobId, List<String> metricNames) throws Exception {
+        try (RestClusterClient<String> clusterClient =
+                (RestClusterClient<String>) getClusterClient(conf)) {
+            var jobMetricsMessageParameters =
+                    JobMetricsHeaders.getInstance().getUnresolvedMessageParameters();
+            jobMetricsMessageParameters.jobPathParameter.resolve(JobID.fromHexString(jobId));
+            jobMetricsMessageParameters.metricsFilterParameter.resolve(metricNames);
+            var responseBody =
+                    clusterClient
+                            .sendRequest(
+                                    JobMetricsHeaders.getInstance(),
+                                    jobMetricsMessageParameters,
+                                    EmptyRequestBody.getInstance())
+                            .get();
+            return responseBody.getMetrics().stream()
+                    .map(metric -> Tuple2.of(metric.getId(), metric.getValue()))
+                    .collect(Collectors.toMap((t) -> t.f0, (t) -> t.f1));
         }
     }
 }
