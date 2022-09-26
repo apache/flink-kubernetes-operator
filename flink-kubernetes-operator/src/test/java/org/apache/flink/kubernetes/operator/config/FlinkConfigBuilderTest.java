@@ -34,6 +34,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.spec.TaskManagerSpec;
@@ -51,6 +52,8 @@ import io.fabric8.kubernetes.api.model.Pod;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.File;
 import java.io.IOException;
@@ -60,6 +63,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
 import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE;
 import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE_POLICY;
 import static org.apache.flink.kubernetes.operator.TestUtils.SAMPLE_JAR;
@@ -161,6 +165,22 @@ public class FlinkConfigBuilderTest {
                         .applyFlinkConfiguration()
                         .build();
         Assertions.assertEquals(false, configuration.get(WebOptions.CANCEL_ENABLE));
+    }
+
+    @ParameterizedTest
+    @EnumSource(FlinkVersion.class)
+    public void testApplyFlinkConfigurationShouldSetShutdownOnFinishBasedOnFlinkVersion(
+            FlinkVersion flinkVersion) {
+        flinkDeployment.getSpec().setFlinkVersion(flinkVersion);
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyFlinkConfiguration()
+                        .build();
+        if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_14)) {
+            Assertions.assertFalse(configuration.getBoolean(SHUTDOWN_ON_APPLICATION_FINISH));
+        } else {
+            Assertions.assertTrue(configuration.getBoolean(SHUTDOWN_ON_APPLICATION_FINISH));
+        }
     }
 
     @Test
