@@ -19,14 +19,11 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
-import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +34,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 
 /** An observer to observe the job status. */
-public abstract class JobStatusObserver<CTX> {
+public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>, CTX> {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
 
@@ -60,8 +57,7 @@ public abstract class JobStatusObserver<CTX> {
      * @param ctx Observe context.
      * @return If job found return true, otherwise return false.
      */
-    public boolean observe(
-            AbstractFlinkResource<?, ?> resource, Configuration deployedConfig, CTX ctx) {
+    public boolean observe(R resource, Configuration deployedConfig, CTX ctx) {
         var jobStatus = resource.getStatus().getJobStatus();
         LOG.info("Observing job status");
         var previousJobStatus = jobStatus.getState();
@@ -88,13 +84,7 @@ public abstract class JobStatusObserver<CTX> {
             if (targetJobStatusMessage.isEmpty()) {
                 LOG.warn("No matching jobs found on the cluster");
                 ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-                // We could list the jobs but cannot find the one for this resource
-                if (resource instanceof FlinkDeployment) {
-                    // This should never happen for application clusters, there is something wrong
-                    setUnknownJobError((FlinkDeployment) resource);
-                } else {
-                    ifHaDisabledMarkSessionJobMissing((FlinkSessionJob) resource, deployedConfig);
-                }
+                onTargetJobNotFound(resource, deployedConfig);
                 return false;
             } else {
                 updateJobStatus(resource, targetJobStatusMessage.get(), deployedConfig);
@@ -105,59 +95,26 @@ public abstract class JobStatusObserver<CTX> {
             LOG.debug("No jobs found on the cluster");
             // No jobs found on the cluster, it is possible that the jobmanager is still starting up
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-
-            if (resource instanceof FlinkSessionJob) {
-                ifHaDisabledMarkSessionJobMissing((FlinkSessionJob) resource, deployedConfig);
-            }
+            onNoJobsFound(resource, deployedConfig);
             return false;
         }
     }
 
     /**
-     * When HA is disabled the session job will not recover on JM restarts. If the JM goes down /
-     * restarted the session job should be marked missing.
+     * Callback when no matching target job was found on a cluster where jobs were found.
      *
-     * @param sessionJob Flink session job.
-     * @param conf Flink config.
+     * @param resource The Flink resource.
+     * @param config Deployed/observe configuration.
      */
-    private void ifHaDisabledMarkSessionJobMissing(FlinkSessionJob sessionJob, Configuration conf) {
-        if (HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
-            return;
-        }
-        sessionJob
-                .getStatus()
-                .getJobStatus()
-                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
-        LOG.error(MISSING_SESSION_JOB_ERR);
-        ReconciliationUtils.updateForReconciliationError(sessionJob, MISSING_SESSION_JOB_ERR);
-        eventRecorder.triggerEvent(
-                sessionJob,
-                EventRecorder.Type.Warning,
-                EventRecorder.Reason.Missing,
-                EventRecorder.Component.Job,
-                MISSING_SESSION_JOB_ERR);
-    }
+    protected abstract void onTargetJobNotFound(R resource, Configuration config);
 
     /**
-     * We found a job on an application cluster that doesn't match the expected job. Trigger error.
+     * Callback when no jobs were found on the cluster.
      *
-     * @param deployment Application deployment.
+     * @param resource The Flink resource.
+     * @param config Deployed/observe configuration.
      */
-    private void setUnknownJobError(FlinkDeployment deployment) {
-        deployment
-                .getStatus()
-                .getJobStatus()
-                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
-        String err = "Unrecognized Job for Application deployment";
-        LOG.error(err);
-        ReconciliationUtils.updateForReconciliationError(deployment, err);
-        eventRecorder.triggerEvent(
-                deployment,
-                EventRecorder.Type.Warning,
-                EventRecorder.Reason.Missing,
-                EventRecorder.Component.Job,
-                err);
-    }
+    protected void onNoJobsFound(R resource, Configuration config) {}
 
     /**
      * If we observed the job previously in RUNNING state we move to RECONCILING instead as we are
@@ -198,9 +155,7 @@ public abstract class JobStatusObserver<CTX> {
      * @param deployedConfig Deployed job config.
      */
     private void updateJobStatus(
-            AbstractFlinkResource<?, ?> resource,
-            JobStatusMessage clusterJobStatus,
-            Configuration deployedConfig) {
+            R resource, JobStatusMessage clusterJobStatus, Configuration deployedConfig) {
         var jobStatus = resource.getStatus().getJobStatus();
         var previousJobStatus = jobStatus.getState();
 
@@ -232,9 +187,7 @@ public abstract class JobStatusObserver<CTX> {
     }
 
     private void setErrorIfPresent(
-            AbstractFlinkResource<?, ?> resource,
-            JobStatusMessage clusterJobStatus,
-            Configuration deployedConfig) {
+            R resource, JobStatusMessage clusterJobStatus, Configuration deployedConfig) {
         if (clusterJobStatus.getJobState() == org.apache.flink.api.common.JobStatus.FAILED) {
             try {
                 var result =
