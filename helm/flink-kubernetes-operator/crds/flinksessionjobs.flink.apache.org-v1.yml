@@ -112,6 +112,14 @@ spec:
                             - UPGRADE
                             - UNKNOWN
                             type: string
+                          formatType:
+                            enum:
+                            - CANONICAL
+                            - NATIVE
+                            - UNKNOWN
+                            type: string
+                          triggerNonce:
+                            type: integer
                         type: object
                       triggerId:
                         type: string
@@ -122,6 +130,12 @@ spec:
                         - MANUAL
                         - PERIODIC
                         - UPGRADE
+                        - UNKNOWN
+                        type: string
+                      formatType:
+                        enum:
+                        - CANONICAL
+                        - NATIVE
                         - UNKNOWN
                         type: string
                       savepointHistory:
@@ -138,6 +152,14 @@ spec:
                               - UPGRADE
                               - UNKNOWN
                               type: string
+                            formatType:
+                              enum:
+                              - CANONICAL
+                              - NATIVE
+                              - UNKNOWN
+                              type: string
+                            triggerNonce:
+                              type: integer
                           type: object
                         type: array
                       lastPeriodicSavepointTimestamp:

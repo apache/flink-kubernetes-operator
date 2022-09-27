@@ -197,7 +197,6 @@ public class SessionJobObserverTest {
     public void testObserveSavepoint() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
         final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
-
         // submit job
         reconciler.reconcile(sessionJob, readyContext);
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
@@ -213,12 +212,16 @@ public class SessionJobObserverTest {
         Assertions.assertFalse(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
+        Long firstNonce = 123L;
+        sessionJob.getSpec().getJob().setSavepointTriggerNonce(firstNonce);
         flinkService.triggerSavepoint(
                 jobID, SavepointTriggerType.MANUAL, savepointInfo, new Configuration());
         Assertions.assertTrue(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
         Assertions.assertEquals("trigger_0", savepointInfo.getTriggerId());
 
+        Long secondNonce = 456L;
+        sessionJob.getSpec().getJob().setSavepointTriggerNonce(secondNonce);
         flinkService.triggerSavepoint(
                 jobID, SavepointTriggerType.MANUAL, savepointInfo, new Configuration());
         Assertions.assertTrue(
@@ -231,6 +234,7 @@ public class SessionJobObserverTest {
         observer.observe(sessionJob, readyContext); // pending
         observer.observe(sessionJob, readyContext); // success
         Assertions.assertEquals("savepoint_0", savepointInfo.getLastSavepoint().getLocation());
+        Assertions.assertEquals(secondNonce, savepointInfo.getLastSavepoint().getTriggerNonce());
         Assertions.assertFalse(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
     }

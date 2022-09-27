@@ -37,6 +37,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -44,6 +45,7 @@ import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -127,6 +129,8 @@ public class TestingFlinkService extends AbstractFlinkService {
     public void clear() {
         jobs.clear();
         sessions.clear();
+        triggerCounter = 0;
+        savepointCounter = 0;
     }
 
     public Set<String> getSessions() {
@@ -253,7 +257,10 @@ public class TestingFlinkService extends AbstractFlinkService {
             SavepointInfo savepointInfo,
             Configuration conf) {
         var triggerId = "trigger_" + triggerCounter++;
-        savepointInfo.setTrigger(triggerId, triggerType);
+
+        var savepointFormatType = SavepointUtils.getSavepointFormatType(conf);
+        savepointInfo.setTrigger(
+                triggerId, triggerType, SavepointFormatType.valueOf(savepointFormatType.name()));
         savepointTriggers.put(triggerId, false);
     }
 
