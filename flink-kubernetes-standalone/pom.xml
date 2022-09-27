@@ -38,6 +38,20 @@ under the License.
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-client</artifactId>
             <version>${fabric8.version}</version>
+            <!-- FLINK-29384, can be removed when fabric8 pulls snakeyaml 1.32+ -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.yaml</groupId>
+                    <artifactId>snakeyaml</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- FLINK-29384, can be removed when fabric8 pulls snakeyaml 1.32+ -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>${snakeyaml.version}</version>
         </dependency>
 
         <dependency>
