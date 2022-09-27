@@ -43,6 +43,7 @@ public class SessionObserver extends AbstractDeploymentObserver {
             FlinkDeployment deployment, Context<?> context, Configuration deployedConfig) {
         // Check if session cluster can serve rest calls following our practice in JobObserver
         try {
+            logger.debug("Observing session cluster");
             flinkService.listJobs(deployedConfig);
             var rs = deployment.getStatus().getReconciliationStatus();
             if (rs.getState() == ReconciliationState.DEPLOYED) {

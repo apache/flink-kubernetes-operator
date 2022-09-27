@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.observer.context.ApplicationObserverContext;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -38,7 +39,7 @@ import java.util.Optional;
 public class ApplicationObserver extends AbstractDeploymentObserver {
 
     private final SavepointObserver<FlinkDeployment, FlinkDeploymentStatus> savepointObserver;
-    private final JobStatusObserver<ApplicationObserverContext> jobStatusObserver;
+    private final JobStatusObserver<FlinkDeployment, ApplicationObserverContext> jobStatusObserver;
 
     public ApplicationObserver(
             FlinkService flinkService,
@@ -62,6 +63,36 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
                         }
                         return Optional.empty();
                     }
+
+                    @Override
+                    protected void onTargetJobNotFound(
+                            FlinkDeployment resource, Configuration config) {
+                        // This should never happen for application clusters, there is something
+                        // wrong
+                        setUnknownJobError(resource);
+                    }
+
+                    /**
+                     * We found a job on an application cluster that doesn't match the expected job.
+                     * Trigger error.
+                     *
+                     * @param deployment Application deployment.
+                     */
+                    private void setUnknownJobError(FlinkDeployment deployment) {
+                        deployment
+                                .getStatus()
+                                .getJobStatus()
+                                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+                        String err = "Unrecognized Job for Application deployment";
+                        logger.error(err);
+                        ReconciliationUtils.updateForReconciliationError(deployment, err);
+                        eventRecorder.triggerEvent(
+                                deployment,
+                                EventRecorder.Type.Warning,
+                                EventRecorder.Reason.Missing,
+                                EventRecorder.Component.Job,
+                                err);
+                    }
                 };
     }
 
@@ -69,6 +100,7 @@ public class ApplicationObserver extends AbstractDeploymentObserver {
     protected void observeFlinkCluster(
             FlinkDeployment flinkApp, Context<?> context, Configuration deployedConfig) {
 
+        logger.debug("Observing application cluster");
         boolean jobFound =
                 jobStatusObserver.observe(
                         flinkApp,

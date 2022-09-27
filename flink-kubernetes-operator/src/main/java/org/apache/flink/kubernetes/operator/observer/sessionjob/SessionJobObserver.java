@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.util.Preconditions;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -65,7 +66,8 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
         this.eventRecorder = eventRecorder;
     }
 
-    private JobStatusObserver<VoidObserverContext> getJobStatusObserver(FlinkService flinkService) {
+    private JobStatusObserver<FlinkSessionJob, VoidObserverContext> getJobStatusObserver(
+            FlinkService flinkService) {
         return new JobStatusObserver<>(flinkService, eventRecorder) {
             @Override
             protected void onTimeout(VoidObserverContext sessionJobObserverContext) {}
@@ -87,18 +89,64 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
                                 status.getJobId(), matchedList.size()));
 
                 if (matchedList.size() == 0) {
-                    LOG.info("No job found for JobID: {}", jobId);
+                    LOG.warn("No job found for JobID: {}", jobId);
                     return Optional.empty();
                 } else {
                     return Optional.of(matchedList.get(0));
                 }
+            }
+
+            @Override
+            protected void onTargetJobNotFound(FlinkSessionJob resource, Configuration config) {
+                ifHaDisabledMarkSessionJobMissing(resource, config);
+            }
+
+            @Override
+            protected void onNoJobsFound(FlinkSessionJob resource, Configuration config) {
+                ifHaDisabledMarkSessionJobMissing(resource, config);
+            }
+
+            /**
+             * When HA is disabled the session job will not recover on JM restarts. If the JM goes
+             * down / restarted the session job should be marked missing.
+             *
+             * @param sessionJob Flink session job.
+             * @param conf Flink config.
+             */
+            private void ifHaDisabledMarkSessionJobMissing(
+                    FlinkSessionJob sessionJob, Configuration conf) {
+                if (HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
+                    return;
+                }
+                sessionJob
+                        .getStatus()
+                        .getJobStatus()
+                        .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+                LOG.error(MISSING_SESSION_JOB_ERR);
+                ReconciliationUtils.updateForReconciliationError(
+                        sessionJob, MISSING_SESSION_JOB_ERR);
+                eventRecorder.triggerEvent(
+                        sessionJob,
+                        EventRecorder.Type.Warning,
+                        EventRecorder.Reason.Missing,
+                        EventRecorder.Component.Job,
+                        MISSING_SESSION_JOB_ERR);
             }
         };
     }
 
     @Override
     public void observe(FlinkSessionJob flinkSessionJob, Context<?> context) {
-        if (flinkSessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
+        var status = flinkSessionJob.getStatus();
+        var reconciliationStatus = status.getReconciliationStatus();
+
+        if (reconciliationStatus.isBeforeFirstDeployment()) {
+            LOG.debug("Skipping observe before first deployment");
+            return;
+        }
+
+        if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
+            LOG.debug("Skipping observe during rollback operation");
             return;
         }
 
@@ -112,10 +160,13 @@ public class SessionJobObserver implements Observer<FlinkSessionJob> {
         var jobStatusObserver = getJobStatusObserver(flinkService);
         var deployedConfig =
                 configManager.getSessionJobConfig(flinkDepOpt.get(), flinkSessionJob.getSpec());
-        var reconciliationStatus = flinkSessionJob.getStatus().getReconciliationStatus();
+
+        // We are in the middle or possibly right after an upgrade
         if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+            // We must check if the upgrade went through without the status upgrade for some reason
             checkIfAlreadyUpgraded(flinkSessionJob, deployedConfig, flinkService);
             if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+                LOG.debug("Skipping observe before resource is deployed during upgrade");
                 ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(flinkSessionJob);
                 return;
             }

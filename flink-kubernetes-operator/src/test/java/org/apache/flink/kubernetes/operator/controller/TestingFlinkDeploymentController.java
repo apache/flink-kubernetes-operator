@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingFlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
@@ -28,6 +27,7 @@ import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
+import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
@@ -46,7 +46,6 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.junit.jupiter.api.Assertions;
 
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
 import java.util.function.BiConsumer;
@@ -121,15 +120,6 @@ public class TestingFlinkDeploymentController
     public Map<String, EventSource> prepareEventSources(
             EventSourceContext<FlinkDeployment> eventSourceContext) {
         throw new UnsupportedOperationException();
-    }
-
-    private static class EventCollector implements BiConsumer<AbstractFlinkResource<?, ?>, Event> {
-        private Queue<Event> events = new LinkedList<>();
-
-        @Override
-        public void accept(AbstractFlinkResource<?, ?> abstractFlinkResource, Event event) {
-            events.add(event);
-        }
     }
 
     public Queue<Event> events() {

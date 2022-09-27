@@ -34,10 +34,13 @@ import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 
 /** An observer to observe the job status. */
-public abstract class JobStatusObserver<CTX> {
+public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>, CTX> {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
+
     private static final int MAX_ERROR_STRING_LENGTH = 512;
+    public static final String MISSING_SESSION_JOB_ERR = "Missing Session Job";
+
     private final FlinkService flinkService;
     private final EventRecorder eventRecorder;
 
@@ -54,15 +57,17 @@ public abstract class JobStatusObserver<CTX> {
      * @param ctx Observe context.
      * @return If job found return true, otherwise return false.
      */
-    public boolean observe(
-            AbstractFlinkResource<?, ?> resource, Configuration deployedConfig, CTX ctx) {
+    public boolean observe(R resource, Configuration deployedConfig, CTX ctx) {
         var jobStatus = resource.getStatus().getJobStatus();
         LOG.info("Observing job status");
         var previousJobStatus = jobStatus.getState();
+
         List<JobStatusMessage> clusterJobStatuses;
         try {
+            // Query job list from the cluster
             clusterJobStatuses = new ArrayList<>(flinkService.listJobs(deployedConfig));
         } catch (Exception e) {
+            // Error while accessing the rest api, will try again later...
             LOG.error("Exception while listing jobs", e);
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
             if (e instanceof TimeoutException) {
@@ -72,10 +77,14 @@ public abstract class JobStatusObserver<CTX> {
         }
 
         if (!clusterJobStatuses.isEmpty()) {
+            // There are jobs on the cluster, we filter the ones for this resource
             Optional<JobStatusMessage> targetJobStatusMessage =
                     filterTargetJob(jobStatus, clusterJobStatuses);
+
             if (targetJobStatusMessage.isEmpty()) {
-                jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+                LOG.warn("No matching jobs found on the cluster");
+                ifRunningMoveToReconciling(jobStatus, previousJobStatus);
+                onTargetJobNotFound(resource, deployedConfig);
                 return false;
             } else {
                 updateJobStatus(resource, targetJobStatusMessage.get(), deployedConfig);
@@ -83,11 +92,37 @@ public abstract class JobStatusObserver<CTX> {
             ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
             return true;
         } else {
+            LOG.debug("No jobs found on the cluster");
+            // No jobs found on the cluster, it is possible that the jobmanager is still starting up
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
+            onNoJobsFound(resource, deployedConfig);
             return false;
         }
     }
 
+    /**
+     * Callback when no matching target job was found on a cluster where jobs were found.
+     *
+     * @param resource The Flink resource.
+     * @param config Deployed/observe configuration.
+     */
+    protected abstract void onTargetJobNotFound(R resource, Configuration config);
+
+    /**
+     * Callback when no jobs were found on the cluster.
+     *
+     * @param resource The Flink resource.
+     * @param config Deployed/observe configuration.
+     */
+    protected void onNoJobsFound(R resource, Configuration config) {}
+
+    /**
+     * If we observed the job previously in RUNNING state we move to RECONCILING instead as we are
+     * not sure anymore.
+     *
+     * @param jobStatus JobStatus object.
+     * @param previousJobStatus Last observed job state.
+     */
     private void ifRunningMoveToReconciling(JobStatus jobStatus, String previousJobStatus) {
         if (org.apache.flink.api.common.JobStatus.RUNNING.name().equals(previousJobStatus)) {
             jobStatus.setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
@@ -120,9 +155,7 @@ public abstract class JobStatusObserver<CTX> {
      * @param deployedConfig Deployed job config.
      */
     private void updateJobStatus(
-            AbstractFlinkResource<?, ?> resource,
-            JobStatusMessage clusterJobStatus,
-            Configuration deployedConfig) {
+            R resource, JobStatusMessage clusterJobStatus, Configuration deployedConfig) {
         var jobStatus = resource.getStatus().getJobStatus();
         var previousJobStatus = jobStatus.getState();
 
@@ -154,9 +187,7 @@ public abstract class JobStatusObserver<CTX> {
     }
 
     private void setErrorIfPresent(
-            AbstractFlinkResource<?, ?> resource,
-            JobStatusMessage clusterJobStatus,
-            Configuration deployedConfig) {
+            R resource, JobStatusMessage clusterJobStatus, Configuration deployedConfig) {
         if (clusterJobStatus.getJobState() == org.apache.flink.api.common.JobStatus.FAILED) {
             try {
                 var result =
