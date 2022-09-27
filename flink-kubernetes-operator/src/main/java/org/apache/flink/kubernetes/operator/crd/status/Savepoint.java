@@ -19,14 +19,12 @@ package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.annotation.Experimental;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** Represents information about a finished savepoint. */
 @Experimental
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
 public class Savepoint {
     /** Millisecond timestamp at the start of the savepoint operation. */
@@ -38,7 +36,42 @@ public class Savepoint {
     /** Savepoint trigger mechanism. */
     private SavepointTriggerType triggerType = SavepointTriggerType.UNKNOWN;
 
-    public static Savepoint of(String location, SavepointTriggerType type) {
-        return new Savepoint(System.currentTimeMillis(), location, type);
+    private SavepointFormatType formatType = SavepointFormatType.UNKNOWN;
+
+    /**
+     * Nonce value used when the savepoint was triggered manually {@link
+     * SavepointTriggerType#MANUAL}, defaults to 0.
+     */
+    private Long triggerNonce = 0L;
+
+    public Savepoint(
+            long timeStamp,
+            String location,
+            SavepointTriggerType triggerType,
+            SavepointFormatType formatType,
+            Long triggerNonce) {
+        this.timeStamp = timeStamp;
+        this.location = location;
+        this.triggerType = triggerType;
+        this.formatType = formatType;
+        setTriggerNonce(triggerNonce);
+    }
+
+    public static Savepoint of(String location, SavepointTriggerType triggerType) {
+        return new Savepoint(
+                System.currentTimeMillis(), location, triggerType, SavepointFormatType.UNKNOWN, 0L);
+    }
+
+    public static Savepoint of(
+            String location, SavepointTriggerType triggerType, SavepointFormatType formatType) {
+        return new Savepoint(System.currentTimeMillis(), location, triggerType, formatType, 0L);
+    }
+
+    public void setTriggerNonce(Long triggerNonce) {
+        if (triggerNonce == null) {
+            this.triggerNonce = 0L;
+        } else {
+            this.triggerNonce = triggerNonce;
+        }
     }
 }

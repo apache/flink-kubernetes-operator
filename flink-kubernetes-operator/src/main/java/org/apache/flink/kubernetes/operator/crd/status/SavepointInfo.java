@@ -46,16 +46,20 @@ public class SavepointInfo {
     /** Savepoint trigger mechanism. */
     private SavepointTriggerType triggerType = SavepointTriggerType.UNKNOWN;
 
+    private SavepointFormatType formatType = SavepointFormatType.UNKNOWN;
+
     /** List of recent savepoints. */
     private List<Savepoint> savepointHistory = new ArrayList<>();
 
     /** Trigger timestamp of last periodic savepoint operation. */
     private long lastPeriodicSavepointTimestamp = 0L;
 
-    public void setTrigger(String triggerId, SavepointTriggerType triggerType) {
+    public void setTrigger(
+            String triggerId, SavepointTriggerType triggerType, SavepointFormatType formatType) {
         this.triggerId = triggerId;
         this.triggerTimestamp = System.currentTimeMillis();
         this.triggerType = triggerType;
+        this.formatType = formatType;
     }
 
     public void resetTrigger() {

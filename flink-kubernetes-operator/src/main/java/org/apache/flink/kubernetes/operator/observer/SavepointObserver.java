@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -127,7 +128,11 @@ public class SavepointObserver<
                 new Savepoint(
                         savepointInfo.getTriggerTimestamp(),
                         savepointFetchResult.getLocation(),
-                        savepointInfo.getTriggerType());
+                        savepointInfo.getTriggerType(),
+                        savepointInfo.getFormatType(),
+                        SavepointTriggerType.MANUAL == savepointInfo.getTriggerType()
+                                ? resource.getSpec().getJob().getSavepointTriggerNonce()
+                                : null);
 
         ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(savepointInfo, resource);
         savepointInfo.updateLastSavepoint(savepoint);

@@ -38,11 +38,13 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
@@ -53,7 +55,6 @@ import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.FileUpload;
 import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
-import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
@@ -65,7 +66,6 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointInfo;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHeaders;
-import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 import org.apache.flink.runtime.rest.util.RestConstants;
 import org.apache.flink.runtime.state.memory.NonPersistentMetadataCheckpointStorageLocation;
@@ -257,6 +257,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         var jobId = jobIdString != null ? JobID.fromHexString(jobIdString) : null;
 
         Optional<String> savepointOpt = Optional.empty();
+        var savepointFormatType = SavepointUtils.getSavepointFormatType(conf);
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
             var clusterId = clusterClient.getClusterId();
             switch (upgradeMode) {
@@ -298,9 +299,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                                     conf.get(FLINK_VERSION)
                                                                     .isNewerVersionThan(
                                                                             FlinkVersion.v1_14)
-                                                            ? conf.get(
-                                                                    KubernetesOperatorConfigOptions
-                                                                            .OPERATOR_SAVEPOINT_FORMAT_TYPE)
+                                                            ? savepointFormatType
                                                             : null)
                                             .get(timeout, TimeUnit.SECONDS);
                             savepointOpt = Optional.of(savepoint);
@@ -336,7 +335,11 @@ public abstract class AbstractFlinkService implements FlinkService {
         deploymentStatus.getJobStatus().setState(JobStatus.FINISHED.name());
         savepointOpt.ifPresent(
                 location -> {
-                    Savepoint sp = Savepoint.of(location, SavepointTriggerType.UPGRADE);
+                    Savepoint sp =
+                            Savepoint.of(
+                                    location,
+                                    SavepointTriggerType.UPGRADE,
+                                    SavepointFormatType.valueOf(savepointFormatType.name()));
                     deploymentStatus.getJobStatus().getSavepointInfo().updateLastSavepoint(sp);
                 });
 
@@ -434,16 +437,19 @@ public abstract class AbstractFlinkService implements FlinkService {
         LOG.info("Triggering new savepoint");
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
-            SavepointTriggerHeaders savepointTriggerHeaders = SavepointTriggerHeaders.getInstance();
-            SavepointTriggerMessageParameters savepointTriggerMessageParameters =
+            var savepointTriggerHeaders = SavepointTriggerHeaders.getInstance();
+            var savepointTriggerMessageParameters =
                     savepointTriggerHeaders.getUnresolvedMessageParameters();
             savepointTriggerMessageParameters.jobID.resolve(JobID.fromHexString(jobId));
 
-            final String savepointDirectory =
+            var savepointDirectory =
                     Preconditions.checkNotNull(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
-            final long timeout =
+            var timeout =
                     configManager.getOperatorConfiguration().getFlinkClientTimeout().getSeconds();
-            TriggerResponse response =
+
+            var savepointFormatType = SavepointUtils.getSavepointFormatType(conf);
+
+            var response =
                     clusterClient
                             .sendRequest(
                                     savepointTriggerHeaders,
@@ -453,15 +459,16 @@ public abstract class AbstractFlinkService implements FlinkService {
                                             false,
                                             conf.get(FLINK_VERSION)
                                                             .isNewerVersionThan(FlinkVersion.v1_14)
-                                                    ? conf.get(
-                                                            KubernetesOperatorConfigOptions
-                                                                    .OPERATOR_SAVEPOINT_FORMAT_TYPE)
+                                                    ? savepointFormatType
                                                     : null,
                                             null))
                             .get(timeout, TimeUnit.SECONDS);
             LOG.info("Savepoint successfully triggered: " + response.getTriggerId().toHexString());
 
-            savepointInfo.setTrigger(response.getTriggerId().toHexString(), triggerType);
+            savepointInfo.setTrigger(
+                    response.getTriggerId().toHexString(),
+                    triggerType,
+                    SavepointFormatType.valueOf(savepointFormatType.name()));
         }
     }
 

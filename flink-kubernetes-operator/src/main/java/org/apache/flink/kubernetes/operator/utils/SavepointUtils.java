@@ -19,8 +19,10 @@ package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
@@ -34,6 +36,8 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+
+import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 
 /** Savepoint utilities. */
 public class SavepointUtils {
@@ -163,5 +167,16 @@ public class SavepointUtils {
         return SavepointTriggerType.PERIODIC == savepointInfo.getTriggerType()
                 ? "Periodic savepoint failed"
                 : "Savepoint failed for savepointTriggerNonce: " + triggerNonce;
+    }
+
+    public static SavepointFormatType getSavepointFormatType(Configuration configuration) {
+        var savepointFormatType = org.apache.flink.core.execution.SavepointFormatType.CANONICAL;
+        if (configuration.get(FLINK_VERSION) != null
+                && configuration.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_14)) {
+            savepointFormatType =
+                    configuration.get(
+                            KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+        }
+        return savepointFormatType;
     }
 }

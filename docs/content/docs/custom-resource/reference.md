@@ -274,6 +274,19 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | timeStamp | long | Millisecond timestamp at the start of the savepoint operation. |
 | location | java.lang.String | External pointer of the savepoint can be used to recover jobs. |
 | triggerType | org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType | Savepoint trigger mechanism. |
+| formatType | org.apache.flink.kubernetes.operator.crd.status.SavepointFormatType |  |
+| triggerNonce | java.lang.Long | Nonce value used when the savepoint was triggered manually {@link SavepointTriggerType#MANUAL}, defaults to 0. |
+
+### SavepointFormatType
+**Class**: org.apache.flink.kubernetes.operator.crd.status.SavepointFormatType
+
+**Description**: Savepoint format type.
+
+| Value | Docs |
+| ----- | ---- |
+| CANONICAL | A canonical, common for all state backends format. |
+| NATIVE | A format specific for the chosen state backend. |
+| UNKNOWN | Savepoint format unknown, if the savepoint was not triggered by the operator. |
 
 ### SavepointInfo
 **Class**: org.apache.flink.kubernetes.operator.crd.status.SavepointInfo
@@ -286,6 +299,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | triggerId | java.lang.String | Trigger id of a pending savepoint operation. |
 | triggerTimestamp | long | Trigger timestamp of a pending savepoint operation. |
 | triggerType | org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType | Savepoint trigger mechanism. |
+| formatType | org.apache.flink.kubernetes.operator.crd.status.SavepointFormatType |  |
 | savepointHistory | java.util.List<org.apache.flink.kubernetes.operator.crd.status.Savepoint> | List of recent savepoints. |
 | lastPeriodicSavepointTimestamp | long | Trigger timestamp of last periodic savepoint operation. |
 
