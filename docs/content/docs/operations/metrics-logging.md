@@ -134,6 +134,12 @@ The Grafana dashboard can be accessed through port-forwarding:
 ```shell
 kubectl port-forward deployment/prometheus-grafana 3000
 ```
+The credentials for the dashboard can be retrieved by:
+```bash
+kubectl get secret prometheus-grafana -o jsonpath="{.data.admin-user}" | base64 --decode ; echo
+kubectl get secret prometheus-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+```
+
 To enable the operator metrics in Prometheus create a `pod-monitor.yaml` file with the following content:
 ```yaml
 apiVersion: monitoring.coreos.com/v1
