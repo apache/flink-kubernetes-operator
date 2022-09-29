@@ -116,7 +116,9 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 appCluster.getStatus().getJobStatus().getState());
-        assertEquals(3, testController.getInternalStatusUpdateCount());
+        assertEquals(
+                flinkVersion.isNewerVersionThan(FlinkVersion.v1_15) ? 3 : 4,
+                testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -139,7 +141,9 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 appCluster.getStatus().getJobStatus().getState());
-        assertEquals(4, testController.getInternalStatusUpdateCount());
+        assertEquals(
+                flinkVersion.isNewerVersionThan(FlinkVersion.v1_15) ? 4 : 5,
+                testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -153,7 +157,9 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING.name(),
                 appCluster.getStatus().getJobStatus().getState());
-        assertEquals(5, testController.getInternalStatusUpdateCount());
+        assertEquals(
+                flinkVersion.isNewerVersionThan(FlinkVersion.v1_15) ? 5 : 6,
+                testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -168,7 +174,9 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING.name(),
                 appCluster.getStatus().getJobStatus().getState());
-        assertEquals(5, testController.getInternalStatusUpdateCount());
+        assertEquals(
+                flinkVersion.isNewerVersionThan(FlinkVersion.v1_15) ? 5 : 6,
+                testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -194,7 +202,9 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING.name(),
                 appCluster.getStatus().getJobStatus().getState());
-        assertEquals(6, testController.getInternalStatusUpdateCount());
+        assertEquals(
+                flinkVersion.isNewerVersionThan(FlinkVersion.v1_15) ? 6 : 7,
+                testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
 
         reconciliationStatus = appCluster.getStatus().getReconciliationStatus();

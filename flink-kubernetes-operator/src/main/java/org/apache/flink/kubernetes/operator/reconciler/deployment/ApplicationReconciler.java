@@ -176,7 +176,7 @@ public class ApplicationReconciler
             flinkService.waitForClusterShutdown(deployConfig);
         }
 
-        setJobIdIfNecessary(spec, status, deployConfig);
+        setJobIdIfNecessary(spec, relatedResource, deployConfig);
 
         eventRecorder.triggerEvent(
                 relatedResource,
@@ -193,7 +193,7 @@ public class ApplicationReconciler
     }
 
     private void setJobIdIfNecessary(
-            FlinkDeploymentSpec spec, FlinkDeploymentStatus status, Configuration deployConfig) {
+            FlinkDeploymentSpec spec, FlinkDeployment resource, Configuration deployConfig) {
         // https://issues.apache.org/jira/browse/FLINK-19358
         // https://issues.apache.org/jira/browse/FLINK-29109
         if (spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_15)) {
@@ -205,6 +205,7 @@ public class ApplicationReconciler
             return;
         }
 
+        var status = resource.getStatus();
         // generate jobId initially or rotate on every deployment when mode is stateless
         if (status.getJobStatus().getJobId() == null
                 || spec.getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
@@ -212,6 +213,7 @@ public class ApplicationReconciler
             // record before first deployment to ensure we use it on any retry
             status.getJobStatus().setJobId(jobId);
             LOG.info("Assigning JobId override to {}", jobId);
+            statusRecorder.patchAndCacheStatus(resource);
         }
 
         String jobId = status.getJobStatus().getJobId();
