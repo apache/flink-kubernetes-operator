@@ -95,8 +95,8 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -114,6 +114,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
@@ -126,13 +128,13 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 public abstract class AbstractFlinkService implements FlinkService {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractFlinkService.class);
-    private static final String NOOP_JAR_FILENAME = "noop.jar";
+    private static final String EMPTY_JAR_FILENAME = "empty.jar";
 
     protected final KubernetesClient kubernetesClient;
     protected final FlinkConfigManager configManager;
     private final ExecutorService executorService;
     protected final ArtifactManager artifactManager;
-    private final String noopJarPath;
+    private final String emptyJar;
 
     public AbstractFlinkService(
             KubernetesClient kubernetesClient, FlinkConfigManager configManager) {
@@ -142,7 +144,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         this.executorService =
                 Executors.newFixedThreadPool(
                         4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
-        this.noopJarPath = copyNoopJar();
+        this.emptyJar = createEmptyJar();
     }
 
     protected abstract PodList getJmPodList(String namespace, String clusterId);
@@ -717,7 +719,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         if (jobSpec.getJarURI() != null) {
             return jobSpec.getJarURI();
         } else {
-            return noopJarPath;
+            return emptyJar;
         }
     }
 
@@ -836,22 +838,19 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    private String copyNoopJar() {
+    private String createEmptyJar() {
         try {
-            InputStream noopJarSource =
-                    AbstractFlinkService.class
-                            .getClassLoader()
-                            .getResourceAsStream(NOOP_JAR_FILENAME);
+            String emptyJarPath =
+                    Files.createTempDirectory("flink").toString() + "/" + EMPTY_JAR_FILENAME;
 
-            String noopJarDestination =
-                    Files.createTempDirectory("flink").toString() + "/" + NOOP_JAR_FILENAME;
+            LOG.debug("Creating empty jar to {}", emptyJarPath);
+            JarOutputStream target =
+                    new JarOutputStream(new FileOutputStream(emptyJarPath), new Manifest());
+            target.close();
 
-            LOG.debug("Copying noop jar to {}", noopJarDestination);
-            org.apache.commons.io.FileUtils.copyToFile(noopJarSource, new File(noopJarDestination));
-
-            return noopJarDestination;
+            return emptyJarPath;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to copy noop jar", e);
+            throw new RuntimeException("Failed to create empty jar", e);
         }
     }
 }

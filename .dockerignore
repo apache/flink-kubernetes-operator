@@ -21,5 +21,3 @@
 **/.idea
 **/*.iml
 **/*.DS_Store
-
-!flink-kubernetes-operator/src/main/resources/noop.jar
