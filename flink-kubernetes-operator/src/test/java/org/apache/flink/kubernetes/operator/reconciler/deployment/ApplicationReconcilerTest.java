@@ -46,6 +46,7 @@ import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 
@@ -58,6 +59,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.platform.commons.util.StringUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -79,12 +81,13 @@ public class ApplicationReconcilerTest {
     private TestingFlinkService flinkService;
     private ApplicationReconciler reconciler;
     private Context<FlinkDeployment> context;
+    private StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
 
     @BeforeEach
     public void before() {
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
         var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        var statusRecoder = new TestingStatusRecorder<FlinkDeployment, FlinkDeploymentStatus>();
+        statusRecorder = new TestingStatusRecorder<FlinkDeployment, FlinkDeploymentStatus>();
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         reconciler =
@@ -93,7 +96,7 @@ public class ApplicationReconcilerTest {
                         flinkService,
                         configManager,
                         eventRecorder,
-                        statusRecoder);
+                        statusRecorder);
     }
 
     @ParameterizedTest
@@ -548,5 +551,23 @@ public class ApplicationReconcilerTest {
                         .getJob()
                         .getState());
         assertEquals(4, flinkService.getDesiredReplicas());
+    }
+
+    @ParameterizedTest
+    @EnumSource(FlinkVersion.class)
+    public void verifyJobIdNotResetDuringLastStateRecovery(FlinkVersion flinkVersion) {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster(flinkVersion);
+
+        flinkService.setDeployFailure(true);
+
+        try {
+            reconciler.reconcile(deployment, context);
+        } catch (Exception expected) {
+        }
+        statusRecorder.updateStatusFromCache(deployment);
+
+        if (!flinkVersion.isNewerVersionThan(FlinkVersion.v1_15)) {
+            assertFalse(StringUtils.isBlank(deployment.getStatus().getJobStatus().getJobId()));
+        }
     }
 }
