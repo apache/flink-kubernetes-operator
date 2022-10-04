@@ -572,8 +572,7 @@ public class ApplicationReconcilerTest {
             assertFalse(StringUtils.isBlank(deployment.getStatus().getJobStatus().getJobId()));
         }
     }
-    
-    
+
     @Test
     public void testSetOwnerReference() throws Exception {
         FlinkDeployment flinkApp = TestUtils.buildApplicationCluster();
