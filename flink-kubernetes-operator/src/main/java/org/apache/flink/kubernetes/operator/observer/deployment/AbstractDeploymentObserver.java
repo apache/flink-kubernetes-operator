@@ -75,26 +75,35 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
         var status = flinkApp.getStatus();
         var reconciliationStatus = status.getReconciliationStatus();
 
-        // Nothing has been launched so skip observing
-        if (reconciliationStatus.isFirstDeployment()
-                || reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
+        if (reconciliationStatus.isBeforeFirstDeployment()) {
+            logger.debug("Skipping observe before first deployment");
             return;
         }
 
+        if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
+            logger.debug("Skipping observe during rollback operation");
+            return;
+        }
+
+        // We are in the middle or possibly right after an upgrade
         if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+            // We must check if the upgrade went through without the status upgrade for some reason
             checkIfAlreadyUpgraded(flinkApp, context);
             if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
                 ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(flinkApp);
+                logger.debug("Skipping observe before resource is deployed during upgrade");
                 return;
             }
         }
 
         Configuration observeConfig = configManager.getObserveConfig(flinkApp);
         if (!isJmDeploymentReady(flinkApp)) {
+            // Only observe the JM if we think it's in bad state
             observeJmDeployment(flinkApp, context, observeConfig);
         }
 
         if (isJmDeploymentReady(flinkApp)) {
+            // Only observe session/application if JM is ready
             observeFlinkCluster(flinkApp, context, observeConfig);
         }
 
@@ -126,7 +135,7 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
                 deploymentStatus.getJobManagerDeploymentStatus();
 
         if (isSuspendedJob(flinkApp)) {
-            logger.debug("Skipping observe step for suspended application deployments.");
+            logger.debug("Skipping observe step for suspended application deployments");
             return;
         }
 

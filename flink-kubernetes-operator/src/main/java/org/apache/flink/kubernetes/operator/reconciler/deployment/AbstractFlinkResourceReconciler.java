@@ -102,7 +102,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
         // If this is the first deployment for the resource we simply submit the job and return.
         // No further logic is required at this point.
-        if (reconciliationStatus.isFirstDeployment()) {
+        if (reconciliationStatus.isBeforeFirstDeployment()) {
             LOG.info("Deploying for the first time");
 
             // Before we try to submit the job we record the current spec in the status so we can

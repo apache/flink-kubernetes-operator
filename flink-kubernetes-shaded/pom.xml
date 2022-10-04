@@ -23,7 +23,7 @@ under the License.
     <parent>
       <groupId>org.apache.flink</groupId>
       <artifactId>flink-kubernetes-operator-parent</artifactId>
-      <version>1.2-SNAPSHOT</version>
+      <version>1.3-SNAPSHOT</version>
       <relativePath>..</relativePath>
     </parent>
 
@@ -47,6 +47,19 @@ under the License.
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-kubernetes-standalone</artifactId>
             <version>${project.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- FLINK-29384, Since the transitive snakeyaml that we are filtering out from
+            flink-kubernetes was relocated we have to bundle a relocated new version -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>${snakeyaml.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>*</groupId>
@@ -80,6 +93,12 @@ under the License.
                                     <pattern>io.fabric8</pattern>
                                     <shadedPattern>org.apache.flink.kubernetes.shaded.io.fabric8</shadedPattern>
                                 </relocation>
+                                <!-- FLINK-29384, Since the transitive snakeyaml that we are filtering out from
+                                    flink-kubernetes was relocated we have to bundle a relocated new version -->
+                                <relocation>
+                                    <pattern>org.yaml.snakeyaml</pattern>
+                                    <shadedPattern>org.apache.flink.kubernetes.shaded.org.yaml.snakeyaml</shadedPattern>
+                                </relocation>
                             </relocations>
                             <filters>
                                 <filter>
@@ -88,6 +107,7 @@ under the License.
                                         <exclude>META-INF/DEPENDENCIES</exclude>
                                         <exclude>META-INF/LICENSE</exclude>
                                         <exclude>META-INF/MANIFEST.MF</exclude>
+                                        <exclude>org/apache/flink/kubernetes/shaded/org/yaml/snakeyaml/**</exclude>
                                     </excludes>
                                 </filter>
                             </filters>

@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -63,7 +64,9 @@ public class SavepointObserverTest {
         SavepointInfo spInfo = new SavepointInfo();
         Assertions.assertTrue(spInfo.getSavepointHistory().isEmpty());
 
-        Savepoint sp = new Savepoint(1, "sp1", SavepointTriggerType.MANUAL);
+        Savepoint sp =
+                new Savepoint(
+                        1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp);
         observer.cleanupSavepointHistory(spInfo, configManager.getDefaultConfig());
 
@@ -81,7 +84,9 @@ public class SavepointObserverTest {
 
         SavepointInfo spInfo = new SavepointInfo();
 
-        Savepoint sp1 = new Savepoint(1, "sp1", SavepointTriggerType.MANUAL);
+        Savepoint sp1 =
+                new Savepoint(
+                        1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp1);
         observer.cleanupSavepointHistory(spInfo, conf);
         Assertions.assertIterableEquals(
@@ -89,7 +94,9 @@ public class SavepointObserverTest {
         Assertions.assertIterableEquals(
                 Collections.emptyList(), flinkService.getDisposedSavepoints());
 
-        Savepoint sp2 = new Savepoint(2, "sp2", SavepointTriggerType.MANUAL);
+        Savepoint sp2 =
+                new Savepoint(
+                        2, "sp2", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp2);
         observer.cleanupSavepointHistory(spInfo, conf);
         Assertions.assertIterableEquals(
@@ -110,7 +117,9 @@ public class SavepointObserverTest {
         configManager.updateDefaultConfig(conf);
         SavepointInfo spInfo = new SavepointInfo();
 
-        Savepoint sp1 = new Savepoint(1, "sp1", SavepointTriggerType.MANUAL);
+        Savepoint sp1 =
+                new Savepoint(
+                        1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp1);
         observer.cleanupSavepointHistory(spInfo, conf);
         Assertions.assertIterableEquals(
@@ -118,7 +127,9 @@ public class SavepointObserverTest {
         Assertions.assertIterableEquals(
                 Collections.emptyList(), flinkService.getDisposedSavepoints());
 
-        Savepoint sp2 = new Savepoint(2, "sp2", SavepointTriggerType.MANUAL);
+        Savepoint sp2 =
+                new Savepoint(
+                        2, "sp2", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp2);
         observer.cleanupSavepointHistory(spInfo, conf);
         Assertions.assertIterableEquals(
@@ -159,5 +170,6 @@ public class SavepointObserverTest {
         assertEquals(savepointInfo.getLastSavepoint(), savepointInfo.getSavepointHistory().get(0));
         assertEquals(
                 SavepointTriggerType.PERIODIC, savepointInfo.getLastSavepoint().getTriggerType());
+        assertEquals(0L, savepointInfo.getLastSavepoint().getTriggerNonce());
     }
 }

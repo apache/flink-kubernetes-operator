@@ -57,6 +57,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Collections;
 
 import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
@@ -149,7 +150,9 @@ public class FlinkConfigBuilder {
             }
 
             // We need to keep the application clusters around for proper operator behaviour
-            effectiveConfig.set(SHUTDOWN_ON_APPLICATION_FINISH, false);
+            if (spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_14)) {
+                effectiveConfig.set(SHUTDOWN_ON_APPLICATION_FINISH, false);
+            }
             if (HighAvailabilityMode.isHighAvailabilityModeActivated(effectiveConfig)) {
                 setDefaultConf(SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR, true);
             }
@@ -255,8 +258,13 @@ public class FlinkConfigBuilder {
             JobSpec jobSpec = spec.getJob();
             effectiveConfig.set(
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.APPLICATION.getName());
-            final URI uri = new URI(jobSpec.getJarURI());
-            effectiveConfig.set(PipelineOptions.JARS, Collections.singletonList(uri.toString()));
+
+            if (jobSpec.getJarURI() != null) {
+                final URI uri = new URI(jobSpec.getJarURI());
+                effectiveConfig.set(
+                        PipelineOptions.JARS, Collections.singletonList(uri.toString()));
+            }
+
             effectiveConfig.set(CoreOptions.DEFAULT_PARALLELISM, getParallelism());
 
             if (jobSpec.getAllowNonRestoredState() != null) {
@@ -269,6 +277,12 @@ public class FlinkConfigBuilder {
                 effectiveConfig.set(
                         ApplicationConfiguration.APPLICATION_MAIN_CLASS, jobSpec.getEntryClass());
             }
+
+            if (jobSpec.getArgs() != null) {
+                effectiveConfig.set(
+                        ApplicationConfiguration.APPLICATION_ARGS,
+                        Arrays.asList(jobSpec.getArgs()));
+            }
         } else {
             effectiveConfig.set(
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.SESSION.getName());
@@ -280,7 +294,7 @@ public class FlinkConfigBuilder {
                     StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
                     spec.getJob() == null ? SESSION : APPLICATION);
 
-            if (spec.getJob() != null) {
+            if (spec.getJob() != null && spec.getJob().getJarURI() != null) {
                 effectiveConfig.set(
                         PipelineOptions.CLASSPATHS,
                         Collections.singletonList(getStandaloneJarURI(spec.getJob())));

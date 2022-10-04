@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.kubeclient.decorators;
 
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
@@ -30,6 +31,9 @@ import io.fabric8.kubernetes.api.model.VolumeBuilder;
 import io.fabric8.kubernetes.api.model.VolumeMount;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** @link UserLibMountDecorator unit tests */
@@ -38,8 +42,9 @@ public class UserLibMountDecoratorTest {
     @Test
     public void testVolumeAddedApplicationMode() {
         StandaloneKubernetesJobManagerParameters jmParameters =
-                createJmParamsWithClusterMode(
-                        StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
+                createJmParams(
+                        StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION,
+                        Collections.singletonList("/path"));
 
         UserLibMountDecorator decorator = new UserLibMountDecorator(jmParameters);
 
@@ -60,8 +65,9 @@ public class UserLibMountDecoratorTest {
     @Test
     public void testVolumeNotAddedSessionMode() {
         StandaloneKubernetesJobManagerParameters jmParameters =
-                createJmParamsWithClusterMode(
-                        StandaloneKubernetesConfigOptionsInternal.ClusterMode.SESSION);
+                createJmParams(
+                        StandaloneKubernetesConfigOptionsInternal.ClusterMode.SESSION,
+                        Collections.singletonList("/path"));
         UserLibMountDecorator decorator = new UserLibMountDecorator(jmParameters);
 
         FlinkPod baseFlinkPod = new FlinkPod.Builder().build();
@@ -76,8 +82,9 @@ public class UserLibMountDecoratorTest {
     @Test
     public void testVolumeNotAddedExistingVolumeMount() {
         StandaloneKubernetesJobManagerParameters jmParameters =
-                createJmParamsWithClusterMode(
-                        StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
+                createJmParams(
+                        StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION,
+                        Collections.singletonList("/path"));
         UserLibMountDecorator decorator = new UserLibMountDecorator(jmParameters);
 
         final String volName = "flink-artifact";
@@ -115,11 +122,35 @@ public class UserLibMountDecoratorTest {
         assertEquals(1, decoratedPod.getPodWithoutMainContainer().getSpec().getVolumes().size());
     }
 
-    private StandaloneKubernetesJobManagerParameters createJmParamsWithClusterMode(
-            StandaloneKubernetesConfigOptionsInternal.ClusterMode clusterMode) {
-        return new StandaloneKubernetesJobManagerParameters(
+    @Test
+    public void testVolumeNotAddedNoPipelineClasspaths() {
+        StandaloneKubernetesJobManagerParameters jmParameters =
+                createJmParams(
+                        StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION, null);
+        UserLibMountDecorator decorator = new UserLibMountDecorator(jmParameters);
+
+        FlinkPod baseFlinkPod = new FlinkPod.Builder().build();
+        assertEquals(0, baseFlinkPod.getMainContainer().getVolumeMounts().size());
+        assertEquals(0, baseFlinkPod.getPodWithoutMainContainer().getSpec().getVolumes().size());
+
+        FlinkPod decoratedPod = decorator.decorateFlinkPod(baseFlinkPod);
+        assertEquals(0, decoratedPod.getMainContainer().getVolumeMounts().size());
+        assertEquals(0, decoratedPod.getPodWithoutMainContainer().getSpec().getVolumes().size());
+    }
+
+    private StandaloneKubernetesJobManagerParameters createJmParams(
+            StandaloneKubernetesConfigOptionsInternal.ClusterMode clusterMode,
+            List<String> pipelineClasspaths) {
+        Configuration configuration =
                 new Configuration()
-                        .set(StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE, clusterMode),
+                        .set(StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE, clusterMode);
+
+        if (pipelineClasspaths != null && !pipelineClasspaths.isEmpty()) {
+            configuration.set(PipelineOptions.CLASSPATHS, pipelineClasspaths);
+        }
+
+        return new StandaloneKubernetesJobManagerParameters(
+                configuration,
                 new ClusterSpecification.ClusterSpecificationBuilder()
                         .createClusterSpecification());
     }

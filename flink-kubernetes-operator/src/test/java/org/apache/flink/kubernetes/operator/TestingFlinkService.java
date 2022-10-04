@@ -24,6 +24,7 @@ import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
@@ -36,6 +37,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -43,6 +45,7 @@ import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -126,6 +129,8 @@ public class TestingFlinkService extends AbstractFlinkService {
     public void clear() {
         jobs.clear();
         sessions.clear();
+        triggerCounter = 0;
+        savepointCounter = 0;
     }
 
     public Set<String> getSessions() {
@@ -139,7 +144,7 @@ public class TestingFlinkService extends AbstractFlinkService {
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
-        deployApplicationCluster(jobSpec, conf);
+        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
     }
 
     protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
@@ -150,6 +155,9 @@ public class TestingFlinkService extends AbstractFlinkService {
             throw new Exception("Cannot submit 2 application clusters at the same time");
         }
         JobID jobID = new JobID();
+        if (conf.contains(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID)) {
+            jobID = JobID.fromHexString(conf.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID));
+        }
         JobStatusMessage jobStatusMessage =
                 new JobStatusMessage(
                         jobID,
@@ -249,7 +257,10 @@ public class TestingFlinkService extends AbstractFlinkService {
             SavepointInfo savepointInfo,
             Configuration conf) {
         var triggerId = "trigger_" + triggerCounter++;
-        savepointInfo.setTrigger(triggerId, triggerType);
+
+        var savepointFormatType = SavepointUtils.getSavepointFormatType(conf);
+        savepointInfo.setTrigger(
+                triggerId, triggerType, SavepointFormatType.valueOf(savepointFormatType.name()));
         savepointTriggers.put(triggerId, false);
     }
 

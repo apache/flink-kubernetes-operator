@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.kubeclient.factory;
 
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.kubeclient.KubernetesJobManagerSpecification;
@@ -48,6 +49,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +71,7 @@ public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBas
     public void setup() throws Exception {
         setupFlinkConfig();
         flinkConfig.set(KubernetesConfigOptions.FLINK_CONF_DIR, "/missing/dir");
+        flinkConfig.set(PipelineOptions.CLASSPATHS, Collections.singletonList("/path"));
         FlinkPod podTemplate = createPodTemplate();
         StandaloneKubernetesJobManagerParameters tmParameters =
                 new StandaloneKubernetesJobManagerParameters(

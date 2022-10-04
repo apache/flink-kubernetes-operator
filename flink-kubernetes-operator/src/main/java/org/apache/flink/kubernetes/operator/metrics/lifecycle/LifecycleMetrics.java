@@ -160,7 +160,9 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
                                 name ->
                                         Tuple2.of(
                                                 createTransitionHistogram(
-                                                        name, operatorMetricGroup),
+                                                        name,
+                                                        operatorMetricGroup.addGroup(
+                                                                cr.getClass().getSimpleName())),
                                                 new ConcurrentHashMap<>())));
 
         this.stateTimeMetrics = new ConcurrentHashMap<>();
@@ -168,7 +170,9 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
             stateTimeMetrics.put(
                     state,
                     Tuple2.of(
-                            createStateTimeHistogram(state, operatorMetricGroup),
+                            createStateTimeHistogram(
+                                    state,
+                                    operatorMetricGroup.addGroup(cr.getClass().getSimpleName())),
                             new ConcurrentHashMap<>()));
         }
     }

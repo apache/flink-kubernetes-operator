@@ -17,17 +17,19 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -135,16 +137,8 @@ public class ApplicationReconciler
                 deployment.getMetadata(), deployment.getStatus(), false);
         flinkService.waitForClusterShutdown(deployConfig);
         if (!flinkService.isHaMetadataAvailable(deployConfig)) {
-            LOG.info(
-                    "Job never entered stable state. Clearing previous spec to reset for initial deploy");
-            // TODO: lastSpecWithMeta.f1.isFirstDeployment() is false
-            // ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(deployment);
-            deployment.getStatus().getReconciliationStatus().setLastReconciledSpec(null);
-            // UPGRADING triggers immediate reconciliation
-            deployment
-                    .getStatus()
-                    .getReconciliationStatus()
-                    .setState(ReconciliationState.UPGRADING);
+            LOG.info("Job never entered stable state. Resetting status for initial deploy");
+            ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(deployment);
             return Optional.empty();
         } else {
             // proceed with upgrade if deployment succeeded between check and delete
@@ -182,6 +176,9 @@ public class ApplicationReconciler
             flinkService.deleteClusterDeployment(relatedResource.getMetadata(), status, true);
             flinkService.waitForClusterShutdown(deployConfig);
         }
+
+        setJobIdIfNecessary(spec, relatedResource, deployConfig);
+
         eventRecorder.triggerEvent(
                 relatedResource,
                 EventRecorder.Type.Normal,
@@ -194,6 +191,35 @@ public class ApplicationReconciler
 
         IngressUtils.updateIngressRules(
                 relatedResource.getMetadata(), spec, deployConfig, kubernetesClient);
+    }
+
+    private void setJobIdIfNecessary(
+            FlinkDeploymentSpec spec, FlinkDeployment resource, Configuration deployConfig) {
+        // https://issues.apache.org/jira/browse/FLINK-19358
+        // https://issues.apache.org/jira/browse/FLINK-29109
+        if (spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_15)) {
+            return;
+        }
+
+        if (deployConfig.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID) != null) {
+            // user managed, don't touch
+            return;
+        }
+
+        var status = resource.getStatus();
+        // generate jobId initially or rotate on every deployment when mode is stateless
+        if (status.getJobStatus().getJobId() == null
+                || spec.getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
+            String jobId = JobID.generate().toHexString();
+            // record before first deployment to ensure we use it on any retry
+            status.getJobStatus().setJobId(jobId);
+            LOG.info("Assigning JobId override to {}", jobId);
+            statusRecorder.patchAndCacheStatus(resource);
+        }
+
+        String jobId = status.getJobStatus().getJobId();
+        LOG.debug("Setting {} to {}", PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID, jobId);
+        deployConfig.set(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID, jobId);
     }
 
     @Override
@@ -251,7 +277,7 @@ public class ApplicationReconciler
     @SneakyThrows
     protected DeleteControl cleanupInternal(FlinkDeployment deployment, Context<?> context) {
         var status = deployment.getStatus();
-        if (status.getReconciliationStatus().isFirstDeployment()) {
+        if (status.getReconciliationStatus().isBeforeFirstDeployment()) {
             flinkService.deleteClusterDeployment(deployment.getMetadata(), status, true);
         } else {
             flinkService.cancelJob(

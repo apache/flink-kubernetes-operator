@@ -38,11 +38,13 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
@@ -53,7 +55,6 @@ import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.FileUpload;
 import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
-import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
@@ -65,7 +66,6 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointInfo;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHeaders;
-import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 import org.apache.flink.runtime.rest.util.RestConstants;
 import org.apache.flink.runtime.state.memory.NonPersistentMetadataCheckpointStorageLocation;
@@ -95,11 +95,13 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -112,9 +114,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
 
 /**
  * An abstract {@link FlinkService} containing some common implementations for the native and
@@ -123,11 +128,13 @@ import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLI
 public abstract class AbstractFlinkService implements FlinkService {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractFlinkService.class);
+    private static final String EMPTY_JAR_FILENAME = "empty.jar";
 
     protected final KubernetesClient kubernetesClient;
     protected final FlinkConfigManager configManager;
     private final ExecutorService executorService;
     protected final ArtifactManager artifactManager;
+    private final String emptyJar;
 
     public AbstractFlinkService(
             KubernetesClient kubernetesClient, FlinkConfigManager configManager) {
@@ -137,6 +144,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         this.executorService =
                 Executors.newFixedThreadPool(
                         4, new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
+        this.emptyJar = createEmptyJar();
     }
 
     protected abstract PodList getJmPodList(String namespace, String clusterId);
@@ -165,7 +173,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
-        deployApplicationCluster(jobSpec, conf);
+
+        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
     }
 
     @Override
@@ -250,6 +259,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         var jobId = jobIdString != null ? JobID.fromHexString(jobIdString) : null;
 
         Optional<String> savepointOpt = Optional.empty();
+        var savepointFormatType = SavepointUtils.getSavepointFormatType(conf);
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
             var clusterId = clusterClient.getClusterId();
             switch (upgradeMode) {
@@ -291,9 +301,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                                     conf.get(FLINK_VERSION)
                                                                     .isNewerVersionThan(
                                                                             FlinkVersion.v1_14)
-                                                            ? conf.get(
-                                                                    KubernetesOperatorConfigOptions
-                                                                            .OPERATOR_SAVEPOINT_FORMAT_TYPE)
+                                                            ? savepointFormatType
                                                             : null)
                                             .get(timeout, TimeUnit.SECONDS);
                             savepointOpt = Optional.of(savepoint);
@@ -329,7 +337,11 @@ public abstract class AbstractFlinkService implements FlinkService {
         deploymentStatus.getJobStatus().setState(JobStatus.FINISHED.name());
         savepointOpt.ifPresent(
                 location -> {
-                    Savepoint sp = Savepoint.of(location, SavepointTriggerType.UPGRADE);
+                    Savepoint sp =
+                            Savepoint.of(
+                                    location,
+                                    SavepointTriggerType.UPGRADE,
+                                    SavepointFormatType.valueOf(savepointFormatType.name()));
                     deploymentStatus.getJobStatus().getSavepointInfo().updateLastSavepoint(sp);
                 });
 
@@ -427,16 +439,19 @@ public abstract class AbstractFlinkService implements FlinkService {
         LOG.info("Triggering new savepoint");
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
-            SavepointTriggerHeaders savepointTriggerHeaders = SavepointTriggerHeaders.getInstance();
-            SavepointTriggerMessageParameters savepointTriggerMessageParameters =
+            var savepointTriggerHeaders = SavepointTriggerHeaders.getInstance();
+            var savepointTriggerMessageParameters =
                     savepointTriggerHeaders.getUnresolvedMessageParameters();
             savepointTriggerMessageParameters.jobID.resolve(JobID.fromHexString(jobId));
 
-            final String savepointDirectory =
+            var savepointDirectory =
                     Preconditions.checkNotNull(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
-            final long timeout =
+            var timeout =
                     configManager.getOperatorConfiguration().getFlinkClientTimeout().getSeconds();
-            TriggerResponse response =
+
+            var savepointFormatType = SavepointUtils.getSavepointFormatType(conf);
+
+            var response =
                     clusterClient
                             .sendRequest(
                                     savepointTriggerHeaders,
@@ -446,15 +461,16 @@ public abstract class AbstractFlinkService implements FlinkService {
                                             false,
                                             conf.get(FLINK_VERSION)
                                                             .isNewerVersionThan(FlinkVersion.v1_14)
-                                                    ? conf.get(
-                                                            KubernetesOperatorConfigOptions
-                                                                    .OPERATOR_SAVEPOINT_FORMAT_TYPE)
+                                                    ? savepointFormatType
                                                     : null,
                                             null))
                             .get(timeout, TimeUnit.SECONDS);
             LOG.info("Savepoint successfully triggered: " + response.getTriggerId().toHexString());
 
-            savepointInfo.setTrigger(response.getTriggerId().toHexString(), triggerType);
+            savepointInfo.setTrigger(
+                    response.getTriggerId().toHexString(),
+                    triggerType,
+                    SavepointFormatType.valueOf(savepointFormatType.name()));
         }
     }
 
@@ -669,7 +685,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     private JarUploadResponseBody uploadJar(
             ObjectMeta objectMeta, FlinkSessionJobSpec spec, Configuration conf) throws Exception {
         String targetDir = artifactManager.generateJarDir(objectMeta, spec);
-        File jarFile = artifactManager.fetch(spec.getJob().getJarURI(), conf, targetDir);
+        File jarFile = artifactManager.fetch(findJarURI(spec.getJob()), conf, targetDir);
         Preconditions.checkArgument(
                 jarFile.exists(),
                 String.format("The jar file %s not exists", jarFile.getAbsolutePath()));
@@ -703,6 +719,14 @@ public abstract class AbstractFlinkService implements FlinkService {
         } finally {
             LOG.debug("Deleting the jar file {}", jarFile);
             FileUtils.deleteFileOrDirectory(jarFile);
+        }
+    }
+
+    private String findJarURI(JobSpec jobSpec) {
+        if (jobSpec.getJarURI() != null) {
+            return jobSpec.getJarURI();
+        } else {
+            return emptyJar;
         }
     }
 
@@ -785,6 +809,20 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @VisibleForTesting
+    protected static Configuration removeOperatorConfigs(Configuration config) {
+        Configuration newConfig = new Configuration();
+        config.toMap()
+                .forEach(
+                        (k, v) -> {
+                            if (!k.startsWith(K8S_OP_CONF_PREFIX)) {
+                                newConfig.setString(k, v);
+                            }
+                        });
+
+        return newConfig;
+    }
+
+    @VisibleForTesting
     protected static JobStatus getEffectiveStatus(JobDetails details) {
         int numRunning = details.getTasksPerState()[ExecutionState.RUNNING.ordinal()];
         int numFinished = details.getTasksPerState()[ExecutionState.FINISHED.ordinal()];
@@ -804,6 +842,22 @@ public abstract class AbstractFlinkService implements FlinkService {
                             + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
                             + "Manual restore required.",
                     "RestoreFailed");
+        }
+    }
+
+    private String createEmptyJar() {
+        try {
+            String emptyJarPath =
+                    Files.createTempDirectory("flink").toString() + "/" + EMPTY_JAR_FILENAME;
+
+            LOG.debug("Creating empty jar to {}", emptyJarPath);
+            JarOutputStream target =
+                    new JarOutputStream(new FileOutputStream(emptyJarPath), new Manifest());
+            target.close();
+
+            return emptyJarPath;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to create empty jar", e);
         }
     }
 }

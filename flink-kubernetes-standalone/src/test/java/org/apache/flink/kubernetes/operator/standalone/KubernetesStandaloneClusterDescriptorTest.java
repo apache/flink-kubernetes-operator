@@ -176,4 +176,34 @@ public class KubernetesStandaloneClusterDescriptorTest {
                         Constants.REST_PORT);
         assertEquals(expectedWebUrl, clusterClient.getWebInterfaceURL());
     }
+
+    @Test
+    public void testMainContainerArgsIntegrity() throws Exception {
+        ClusterSpecification clusterSpecification = TestUtils.createClusterSpecification();
+
+        clusterDescriptor.deployApplicationCluster(
+                clusterSpecification,
+                new ApplicationConfiguration(new String[] {"--test", "123"}, "test"));
+        List<Deployment> deployments =
+                kubernetesClient
+                        .apps()
+                        .deployments()
+                        .inNamespace(TestUtils.TEST_NAMESPACE)
+                        .list()
+                        .getItems();
+        String expectedJMDeploymentName = TestUtils.CLUSTER_ID;
+
+        Deployment jmDeployment =
+                deployments.stream()
+                        .filter(d -> d.getMetadata().getName().equals(expectedJMDeploymentName))
+                        .findFirst()
+                        .orElse(null);
+        assertTrue(
+                jmDeployment.getSpec().getTemplate().getSpec().getContainers().stream()
+                        .anyMatch(c -> c.getArgs().contains("standalone-job")));
+
+        assertTrue(
+                jmDeployment.getSpec().getTemplate().getSpec().getContainers().stream()
+                        .anyMatch(c -> c.getArgs().contains("123")));
+    }
 }

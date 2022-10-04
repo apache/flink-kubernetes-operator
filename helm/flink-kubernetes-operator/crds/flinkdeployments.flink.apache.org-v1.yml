@@ -13,7 +13,16 @@ spec:
     singular: flinkdeployment
   scope: Namespaced
   versions:
-  - name: v1beta1
+  - additionalPrinterColumns:
+    - description: Last observed state of the job.
+      jsonPath: .status.jobStatus.state
+      name: Job Status
+      type: string
+    - description: Deployment state of the last reconciled spec.
+      jsonPath: .status.reconciliationStatus.state
+      name: Reconciliation Status
+      type: string
+    name: v1beta1
     schema:
       openAPIV3Schema:
         properties:
@@ -9153,6 +9162,14 @@ spec:
                             - UPGRADE
                             - UNKNOWN
                             type: string
+                          formatType:
+                            enum:
+                            - CANONICAL
+                            - NATIVE
+                            - UNKNOWN
+                            type: string
+                          triggerNonce:
+                            type: integer
                         type: object
                       triggerId:
                         type: string
@@ -9163,6 +9180,12 @@ spec:
                         - MANUAL
                         - PERIODIC
                         - UPGRADE
+                        - UNKNOWN
+                        type: string
+                      formatType:
+                        enum:
+                        - CANONICAL
+                        - NATIVE
                         - UNKNOWN
                         type: string
                       savepointHistory:
@@ -9179,6 +9202,14 @@ spec:
                               - UPGRADE
                               - UNKNOWN
                               type: string
+                            formatType:
+                              enum:
+                              - CANONICAL
+                              - NATIVE
+                              - UNKNOWN
+                              type: string
+                            triggerNonce:
+                              type: integer
                           type: object
                         type: array
                       lastPeriodicSavepointTimestamp:

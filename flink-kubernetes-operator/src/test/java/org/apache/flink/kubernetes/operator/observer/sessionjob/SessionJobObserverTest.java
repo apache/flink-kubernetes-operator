@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.observer.sessionjob;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
@@ -30,9 +31,11 @@ import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
+import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -40,6 +43,7 @@ import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,10 +63,12 @@ public class SessionJobObserverTest {
     private SessionJobObserver observer;
     private SessionJobReconciler reconciler;
 
+    private EventCollector eventCollector = new EventCollector();
+
     @BeforeEach
     public void before() {
         kubernetesClient.resource(TestUtils.buildSessionJob()).createOrReplace();
-        var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
+        var eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
         var statusRecorder = new TestingStatusRecorder<FlinkSessionJob, FlinkSessionJobStatus>();
         flinkService = new TestingFlinkService();
         FlinkServiceFactory flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
@@ -137,6 +143,32 @@ public class SessionJobObserverTest {
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(
                 JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+
+        // test error behaviour if job not present
+        flinkService.clear();
+
+        eventCollector.events.clear();
+
+        // With HA enabled no error should be triggered
+        observer.observe(sessionJob2, readyContext);
+        Assertions.assertEquals(
+                JobStatus.RECONCILING.name(), sessionJob2.getStatus().getJobStatus().getState());
+        Assertions.assertTrue(StringUtils.isEmpty(sessionJob2.getStatus().getError()));
+        Assertions.assertTrue(eventCollector.events.isEmpty());
+
+        // With HA disabled we expect an error status and event
+        sessionJob2
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(HighAvailabilityOptions.HA_MODE.key(), "NONE");
+        observer.observe(sessionJob2, readyContext);
+        Assertions.assertEquals(
+                JobStatus.RECONCILING.name(), sessionJob2.getStatus().getJobStatus().getState());
+        Assertions.assertEquals(
+                JobStatusObserver.MISSING_SESSION_JOB_ERR, sessionJob2.getStatus().getError());
+        Assertions.assertEquals(
+                JobStatusObserver.MISSING_SESSION_JOB_ERR,
+                eventCollector.events.peek().getMessage());
     }
 
     @Test
@@ -165,7 +197,6 @@ public class SessionJobObserverTest {
     public void testObserveSavepoint() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
         final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
-
         // submit job
         reconciler.reconcile(sessionJob, readyContext);
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
@@ -181,12 +212,16 @@ public class SessionJobObserverTest {
         Assertions.assertFalse(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
+        Long firstNonce = 123L;
+        sessionJob.getSpec().getJob().setSavepointTriggerNonce(firstNonce);
         flinkService.triggerSavepoint(
                 jobID, SavepointTriggerType.MANUAL, savepointInfo, new Configuration());
         Assertions.assertTrue(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
         Assertions.assertEquals("trigger_0", savepointInfo.getTriggerId());
 
+        Long secondNonce = 456L;
+        sessionJob.getSpec().getJob().setSavepointTriggerNonce(secondNonce);
         flinkService.triggerSavepoint(
                 jobID, SavepointTriggerType.MANUAL, savepointInfo, new Configuration());
         Assertions.assertTrue(
@@ -199,6 +234,7 @@ public class SessionJobObserverTest {
         observer.observe(sessionJob, readyContext); // pending
         observer.observe(sessionJob, readyContext); // success
         Assertions.assertEquals("savepoint_0", savepointInfo.getLastSavepoint().getLocation());
+        Assertions.assertEquals(secondNonce, savepointInfo.getLastSavepoint().getTriggerNonce());
         Assertions.assertFalse(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
     }
@@ -352,8 +388,8 @@ public class SessionJobObserverTest {
 
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(sessionJob, new Configuration());
 
-        assertFalse(sessionJob.getStatus().getReconciliationStatus().isFirstDeployment());
+        assertFalse(sessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment());
         observer.observe(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
-        assertTrue(sessionJob.getStatus().getReconciliationStatus().isFirstDeployment());
+        assertTrue(sessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment());
     }
 }

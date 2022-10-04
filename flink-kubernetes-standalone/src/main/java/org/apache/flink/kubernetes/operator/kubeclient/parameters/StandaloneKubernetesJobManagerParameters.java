@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.kubeclient.parameters;
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
@@ -28,6 +29,7 @@ import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -84,6 +86,17 @@ public class StandaloneKubernetesJobManagerParameters extends KubernetesJobManag
     public Boolean getAllowNonRestoredState() {
         if (flinkConfig.contains(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE)) {
             return flinkConfig.get(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE);
+        }
+        return null;
+    }
+
+    public boolean isPipelineClasspathDefined() {
+        return flinkConfig.contains(PipelineOptions.CLASSPATHS);
+    }
+
+    public List<String> getJobSpecArgs() {
+        if (flinkConfig.contains(ApplicationConfiguration.APPLICATION_ARGS)) {
+            return flinkConfig.get(ApplicationConfiguration.APPLICATION_ARGS);
         }
         return null;
     }
