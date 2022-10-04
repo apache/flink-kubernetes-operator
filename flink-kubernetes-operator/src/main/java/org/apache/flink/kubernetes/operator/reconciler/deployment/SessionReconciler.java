@@ -129,6 +129,7 @@ public class SessionReconciler
             Optional<String> savepoint,
             boolean requireHaMetadata)
             throws Exception {
+        setOwnerReference(cr, deployConfig);
         flinkService.submitSessionCluster(deployConfig);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         IngressUtils.updateIngressRules(cr.getMetadata(), spec, deployConfig, kubernetesClient);

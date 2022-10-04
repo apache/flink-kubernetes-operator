@@ -100,8 +100,6 @@ public abstract class AbstractFlinkResourceReconciler<
             return;
         }
 
-        setOwnerReference(cr, deployConfig);
-
         // If this is the first deployment for the resource we simply submit the job and return.
         // No further logic is required at this point.
         if (reconciliationStatus.isFirstDeployment()) {
@@ -432,7 +430,7 @@ public abstract class AbstractFlinkResourceReconciler<
         return false;
     }
 
-    private void setOwnerReference(CR owner, Configuration deployConfig) {
+    protected void setOwnerReference(CR owner, Configuration deployConfig) {
         final Map<String, String> ownerReference =
                 Map.of(
                         "apiVersion", owner.getApiVersion(),

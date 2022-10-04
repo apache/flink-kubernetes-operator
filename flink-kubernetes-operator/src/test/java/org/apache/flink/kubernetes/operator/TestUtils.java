@@ -23,6 +23,7 @@ import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
@@ -248,6 +249,16 @@ public class TestUtils {
         deployment.setSpec(spec);
         deployment.setStatus(status);
         return deployment;
+    }
+
+    public static Map<String, String> generateTestOwnerReferenceMap(AbstractFlinkResource owner) {
+        return Map.of(
+                "apiVersion", owner.getApiVersion(),
+                "kind", owner.getKind(),
+                "name", owner.getMetadata().getName(),
+                "uid", owner.getMetadata().getUid(),
+                "blockOwnerDeletion", "false",
+                "controller", "false");
     }
 
     public static <T extends HasMetadata> Context<T> createContextWithDeployment(
