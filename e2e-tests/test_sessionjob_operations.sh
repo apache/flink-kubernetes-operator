@@ -20,17 +20,18 @@
 # This script tests the session job operations:
 # 1. Trigger savepoint
 # 2. savepoint mode upgrade
-source "$(dirname "$0")"/utils.sh
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+source "${SCRIPT_DIR}/utils.sh"
 
 CLUSTER_ID="session-cluster-1"
-APPLICATION_YAML="e2e-tests/data/sessionjob-cr.yaml"
+APPLICATION_YAML="${SCRIPT_DIR}/data/sessionjob-cr.yaml"
 TIMEOUT=300
 SESSION_CLUSTER_IDENTIFIER="flinkdep/$CLUSTER_ID"
 SESSION_JOB_NAME="flink-example-statemachine"
 SESSION_JOB_IDENTIFIER="sessionjob/$SESSION_JOB_NAME"
 OPERATOR_POD_LABEL="app.kubernetes.io/name=flink-kubernetes-operator"
 
-on_exit cleanup_and_exit $APPLICATION_YAML $TIMEOUT $CLUSTER_ID
+on_exit cleanup_and_exit "$APPLICATION_YAML" $TIMEOUT $CLUSTER_ID
 
 retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
 
