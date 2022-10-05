@@ -17,13 +17,14 @@
 # limitations under the License.
 ################################################################################
 
-source "$(dirname "$0")"/utils.sh
+SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+source "${SCRIPT_DIR}/utils.sh"
 
 CLUSTER_ID="flink-example-statemachine"
-APPLICATION_YAML="e2e-tests/data/flinkdep-cr.yaml"
+APPLICATION_YAML="${SCRIPT_DIR}/data/flinkdep-cr.yaml"
 TIMEOUT=300
 
-on_exit cleanup_and_exit $APPLICATION_YAML $TIMEOUT $CLUSTER_ID
+on_exit cleanup_and_exit "$APPLICATION_YAML" $TIMEOUT $CLUSTER_ID
 
 retry_times 5 30 "kubectl apply -f $APPLICATION_YAML" || exit 1
 
