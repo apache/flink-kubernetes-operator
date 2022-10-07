@@ -32,7 +32,7 @@ The operator allows users to specify default configuration that will be shared b
 
 These configuration files are mounted externally via ConfigMaps. The [Configuration files](https://github.com/apache/flink-kubernetes-operator/tree/main/helm/flink-kubernetes-operator/conf) with default values are shipped in the Helm chart. It is recommended to review and adjust them if needed in the `values.yaml` file before deploying the Operator in production environments.
 
-To append to the default configuration, simply define the `flink-conf.yaml` key in the `defaultConfiguration` section of the Helm `values.yaml` file:
+To append to the default configuration, define the `flink-conf.yaml` key in the `defaultConfiguration` section of the Helm `values.yaml` file:
 
 ```
 defaultConfiguration:

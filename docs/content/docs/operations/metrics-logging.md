@@ -87,7 +87,7 @@ Some of these metrics are on system, namespace and resource level.
 
 The well known [Metric Reporters](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/metric_reporters) are shipped in the operator image and are ready to use.
 
-In order to specify metrics configuration for the operator, simply prefix them with `kubernetes.operator.`. This logic ensures that we can easily separate Flink job and operator metrics configuration.
+In order to specify metrics configuration for the operator, prefix them with `kubernetes.operator.`. This logic ensures that we can separate Flink job and operator metrics configuration.
 
 Let's look at a few examples.
 
@@ -189,7 +189,7 @@ To learn more about accessing the job logs or changing the log level dynamically
 
 ### FlinkDeployment Logging Configuration
 
-Users have the freedom to override the default `log4j-console.properties` settings on a per-deployment level by simply putting the entire log configuration into `spec.logConfiguration`:
+Users have the freedom to override the default `log4j-console.properties` settings on a per-deployment level by putting the entire log configuration into `spec.logConfiguration`:
 
 ```yaml
 spec:

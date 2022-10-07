@@ -63,7 +63,7 @@ The way state is handled for suspend and restore operations is described in deta
 
 **Cancelling/Deleting applications**
 
-As you can see there is no cancelled or deleted among the possible desired states. When users no longer wish to process data with a given FlinkDeployment they can simply delete the deployment object using the Kubernetes api:
+As you can see there is no cancelled or deleted among the possible desired states. When users no longer wish to process data with a given FlinkDeployment they can delete the deployment object using the Kubernetes api:
 
 ```
 kubectl delete flinkdeployment my-deployment
@@ -155,9 +155,9 @@ Last state upgrade mode is currently only supported for `FlinkDeployments`.
 
 ### Application restarts without spec change
 
-There are cases when users would simply like to restart the Flink deployments to deal with some transient problem.
+There are cases when users would like to restart the Flink deployments to deal with some transient problem.
 
-For this purpose you can use the `restartNonce` top level field in the spec. Simply set a different value to this field to trigger a restart.
+For this purpose you can use the `restartNonce` top level field in the spec. Set a different value to this field to trigger a restart.
 
 ```yaml
  spec:
