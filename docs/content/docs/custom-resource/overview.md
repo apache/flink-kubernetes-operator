@@ -149,6 +149,30 @@ For Session clusters the operator only provides very basic management and monito
  - Monitor overall cluster health
  - Stop / Delete Session cluster
 
+### Cluster Deployment Modes
+On-top of the deployment types the Flink Kubernetes Operator also supports two modes of deployments: **Native** and **Standalone**
+
+Native cluster deployment is the default deployment mode and uses Flink's built in integration with Kubernetes when deploying the cluster. This integration means the Flink cluster communicates directly with Kubernetes and allows it to manage Kubernetes resources, e.g. dynamically allocate and de-allocate TaskManager pods.
+
+For standard Operator use running your own Flink Jobs Native mode is recommended.
+
+Standalone cluster deployment simply uses Kubernetes as an orchestration platform that the Flink cluster is running on. Flink is unaware that it is running on Kubernetes and therefore all Kubernetes resources need to be managed externally, by the Kubernetes Operator.
+
+In Standalone mode the Flink cluster doesn't have access to the Kubernetes cluster so this can increase security. If unknown or external code is being ran on the Flink cluster then Standalone mode adds another layer of security. 
+
+The deployment mode can be set using the `mode` field in the deployment spec.
+
+```yaml
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+...
+spec:
+  ...
+  mode: standalone
+    
+
+```
+
 ## FlinkSessionJob
 
 The FlinkSessionJob have a similar structure to FlinkDeployment with the following required fields:
