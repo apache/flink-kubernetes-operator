@@ -123,7 +123,7 @@ kubectl port-forward svc/basic-example-rest 8081
 
 Now the Flink Dashboard is accessible at [localhost:8081](http://localhost:8081/).
 
-In order to stop your job and delete your FlinkDeployment you can simply:
+In order to stop your job and delete your FlinkDeployment you can:
 
 ```bash
 kubectl delete flinkdeployment/basic-example

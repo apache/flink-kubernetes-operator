@@ -83,12 +83,12 @@ These changes require a one time manual upgrade process for the running jobs.
 
 ### Upgrading without existing FlinkDeployments
 
-In an environment without any `FlinkDeployments` you simply need to uninstall the operator and delete the v1alpha1 CRD.
+In an environment without any `FlinkDeployments` you need to uninstall the operator and delete the v1alpha1 CRD.
 
 ```sh
 helm uninstall flink-kubernetes-operator
 kubectl delete crd flinkdeployments.flink.apache.org
-# Now simply reinstall the operator with the new v1beta1 version
+# Now reinstall the operator with the new v1beta1 version
 ```
 
 ### Upgrading with existing FlinkDeployments
