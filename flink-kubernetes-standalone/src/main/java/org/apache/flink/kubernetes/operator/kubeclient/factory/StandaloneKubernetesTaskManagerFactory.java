@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.kubeclient.decorators.HadoopConfMountDecorato
 import org.apache.flink.kubernetes.kubeclient.decorators.KerberosMountDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.KubernetesStepDecorator;
 import org.apache.flink.kubernetes.kubeclient.decorators.MountSecretsDecorator;
+import org.apache.flink.kubernetes.kubeclient.resources.KubernetesOwnerReference;
 import org.apache.flink.kubernetes.operator.kubeclient.decorators.CmdStandaloneTaskManagerDecorator;
 import org.apache.flink.kubernetes.operator.kubeclient.decorators.InitStandaloneTaskManagerDecorator;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesTaskManagerParameters;
@@ -35,6 +36,8 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
+
+import java.util.stream.Collectors;
 
 /** Utility class for constructing the TaskManager Deployment when deploying in standalone mode. */
 public class StandaloneKubernetesTaskManagerFactory {
@@ -74,6 +77,10 @@ public class StandaloneKubernetesTaskManagerFactory {
                                 kubernetesTaskManagerParameters.getClusterId()))
                 .withAnnotations(kubernetesTaskManagerParameters.getAnnotations())
                 .withLabels(kubernetesTaskManagerParameters.getLabels())
+                .withOwnerReferences(
+                        kubernetesTaskManagerParameters.getOwnerReference().stream()
+                                .map(e -> KubernetesOwnerReference.fromMap(e).getInternalResource())
+                                .collect(Collectors.toList()))
                 .endMetadata()
                 .editOrNewSpec()
                 .withReplicas(kubernetesTaskManagerParameters.getReplicas())

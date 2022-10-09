@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
@@ -47,6 +48,8 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -425,5 +428,18 @@ public abstract class AbstractFlinkResourceReconciler<
                     != ((FlinkDeploymentSpec) newSpec).getFlinkVersion();
         }
         return false;
+    }
+
+    protected void setOwnerReference(CR owner, Configuration deployConfig) {
+        final Map<String, String> ownerReference =
+                Map.of(
+                        "apiVersion", owner.getApiVersion(),
+                        "kind", owner.getKind(),
+                        "name", owner.getMetadata().getName(),
+                        "uid", owner.getMetadata().getUid(),
+                        "blockOwnerDeletion", "false",
+                        "controller", "false");
+        deployConfig.set(
+                KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE, List.of(ownerReference));
     }
 }

@@ -135,4 +135,11 @@ public class StandaloneKubernetesTaskManagerParameters extends AbstractKubernete
     public double getCpuLimitFactor() {
         return flinkConfig.get(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR);
     }
+
+    // Temporally share job manager owner reference config options
+    public List<Map<String, String>> getOwnerReference() {
+        return flinkConfig
+                .getOptional(KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE)
+                .orElse(Collections.emptyList());
+    }
 }

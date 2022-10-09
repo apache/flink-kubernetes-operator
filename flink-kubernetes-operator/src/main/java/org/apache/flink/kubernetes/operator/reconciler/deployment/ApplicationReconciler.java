@@ -164,6 +164,7 @@ public class ApplicationReconciler
             deployConfig.removeConfig(SavepointConfigOptions.SAVEPOINT_PATH);
         }
 
+        setOwnerReference(relatedResource, deployConfig);
         setRandomJobResultStorePath(deployConfig);
 
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.MISSING) {

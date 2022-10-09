@@ -25,6 +25,7 @@ import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.configuration.SchedulerExecutionMode;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
@@ -62,6 +63,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.platform.commons.util.StringUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -569,5 +571,24 @@ public class ApplicationReconcilerTest {
         if (!flinkVersion.isNewerVersionThan(FlinkVersion.v1_15)) {
             assertFalse(StringUtils.isBlank(deployment.getStatus().getJobStatus().getJobId()));
         }
+    }
+
+    @Test
+    public void testSetOwnerReference() throws Exception {
+        FlinkDeployment flinkApp = TestUtils.buildApplicationCluster();
+        ObjectMeta deployMeta = flinkApp.getMetadata();
+        FlinkDeploymentStatus status = flinkApp.getStatus();
+        FlinkDeploymentSpec spec = flinkApp.getSpec();
+        Configuration deployConfig = configManager.getDeployConfig(deployMeta, spec);
+
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        reconciler.deploy(flinkApp, spec, status, context, deployConfig, Optional.empty(), false);
+
+        final List<Map<String, String>> expectedOwnerReferences =
+                List.of(TestUtils.generateTestOwnerReferenceMap(flinkApp));
+        List<Map<String, String>> or =
+                deployConfig.get(KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE);
+        Assertions.assertEquals(expectedOwnerReferences, or);
     }
 }
