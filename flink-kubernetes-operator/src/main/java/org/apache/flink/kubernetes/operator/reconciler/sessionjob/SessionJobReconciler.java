@@ -141,7 +141,7 @@ public class SessionJobReconciler
                             UpgradeMode.STATELESS,
                             getObserveConfig(sessionJob, context));
                 } catch (Exception e) {
-                    LOG.error("Failed to cancel job.", e);
+                    LOG.error("Failed to cancel job {}.", jobID, e);
                 }
             }
         } else {
