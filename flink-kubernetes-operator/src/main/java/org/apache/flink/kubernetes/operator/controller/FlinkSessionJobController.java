@@ -98,6 +98,12 @@ public class FlinkSessionJobController
             statusRecorder.patchAndCacheStatus(flinkSessionJob);
             reconciler.reconcile(flinkSessionJob, context);
         } catch (Exception e) {
+            eventRecorder.triggerEvent(
+                    flinkSessionJob,
+                    EventRecorder.Type.Warning,
+                    "SessionJobException",
+                    e.getMessage(),
+                    EventRecorder.Component.Job);
             throw new ReconciliationException(e);
         }
         statusRecorder.patchAndCacheStatus(flinkSessionJob);
