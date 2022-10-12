@@ -53,14 +53,14 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Tests for {@link SessionJobObserver}. */
+/** Tests for {@link FlinkSessionJobObserver}. */
 @EnableKubernetesMockClient(crud = true)
-public class SessionJobObserverTest {
+public class FlinkSessionJobObserverTest {
 
     private KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private TestingFlinkService flinkService;
-    private SessionJobObserver observer;
+    private FlinkSessionJobObserver observer;
     private SessionJobReconciler reconciler;
 
     private EventCollector eventCollector = new EventCollector();
@@ -72,7 +72,7 @@ public class SessionJobObserverTest {
         var statusRecorder = new TestingStatusRecorder<FlinkSessionJob, FlinkSessionJobStatus>();
         flinkService = new TestingFlinkService();
         FlinkServiceFactory flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
-        observer = new SessionJobObserver(flinkServiceFactory, configManager, eventRecorder);
+        observer = new FlinkSessionJobObserver(flinkServiceFactory, configManager, eventRecorder);
         reconciler =
                 new SessionJobReconciler(
                         kubernetesClient,

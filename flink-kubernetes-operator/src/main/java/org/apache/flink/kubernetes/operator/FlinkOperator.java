@@ -32,8 +32,8 @@ import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGrou
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorJosdkMetrics;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
-import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
-import org.apache.flink.kubernetes.operator.observer.sessionjob.SessionJobObserver;
+import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
+import org.apache.flink.kubernetes.operator.observer.sessionjob.FlinkSessionJobObserver;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
@@ -129,7 +129,7 @@ public class FlinkOperator {
                 new ReconcilerFactory(
                         client, flinkServiceFactory, configManager, eventRecorder, statusRecorder);
         var observerFactory =
-                new ObserverFactory(
+                new FlinkDeploymentObserverFactory(
                         flinkServiceFactory, configManager, statusRecorder, eventRecorder);
 
         var controller =
@@ -152,7 +152,8 @@ public class FlinkOperator {
         var reconciler =
                 new SessionJobReconciler(
                         client, flinkServiceFactory, configManager, eventRecorder, statusRecorder);
-        var observer = new SessionJobObserver(flinkServiceFactory, configManager, eventRecorder);
+        var observer =
+                new FlinkSessionJobObserver(flinkServiceFactory, configManager, eventRecorder);
         var controller =
                 new FlinkSessionJobController(
                         configManager,

@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
@@ -29,7 +28,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import java.util.concurrent.TimeoutException;
 
 /** The observer of the {@link org.apache.flink.kubernetes.operator.config.Mode#SESSION} cluster. */
-public class SessionObserver extends AbstractDeploymentObserver {
+public class SessionObserver extends AbstractFlinkDeploymentObserver {
 
     public SessionObserver(
             FlinkService flinkService,
@@ -40,11 +39,13 @@ public class SessionObserver extends AbstractDeploymentObserver {
 
     @Override
     public void observeFlinkCluster(
-            FlinkDeployment deployment, Context<?> context, Configuration deployedConfig) {
+            FlinkDeployment deployment,
+            Context<?> context,
+            FlinkDeploymentObserverContext observerContext) {
         // Check if session cluster can serve rest calls following our practice in JobObserver
         try {
             logger.debug("Observing session cluster");
-            flinkService.listJobs(deployedConfig);
+            flinkService.listJobs(observerContext.getDeployedConfig());
             var rs = deployment.getStatus().getReconciliationStatus();
             if (rs.getState() == ReconciliationState.DEPLOYED) {
                 rs.markReconciledSpecAsStable();
@@ -53,7 +54,7 @@ public class SessionObserver extends AbstractDeploymentObserver {
             logger.error("REST service in session cluster is bad now", e);
             if (e instanceof TimeoutException) {
                 // check for problems with the underlying deployment
-                observeJmDeployment(deployment, context, deployedConfig);
+                observeJmDeployment(deployment, context, observerContext.getDeployedConfig());
             }
         }
     }

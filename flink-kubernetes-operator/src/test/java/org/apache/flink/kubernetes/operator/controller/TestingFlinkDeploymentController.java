@@ -23,7 +23,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
-import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
+import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
@@ -83,7 +83,7 @@ public class TestingFlinkDeploymentController
                                 configManager,
                                 eventRecorder,
                                 statusRecorder),
-                        new ObserverFactory(
+                        new FlinkDeploymentObserverFactory(
                                 flinkServiceFactory, configManager, statusRecorder, eventRecorder),
                         statusRecorder,
                         eventRecorder);

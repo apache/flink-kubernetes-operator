@@ -15,24 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.observer.context;
+package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.observer.ObserverContext;
 
-import io.javaoperatorsdk.operator.api.reconciler.Context;
+import lombok.Value;
 
-/** A context for application observer. */
-public class ApplicationObserverContext {
+/** Context for observing {@link FlinkDeployment} resources. */
+@Value
+public class FlinkDeploymentObserverContext implements ObserverContext {
 
-    public final FlinkDeployment flinkApp;
-    public final Context<?> context;
-    public final Configuration deployedConfig;
+    Configuration deployedConfig;
 
-    public ApplicationObserverContext(
-            FlinkDeployment flinkApp, Context<?> context, Configuration deployedConfig) {
-        this.flinkApp = flinkApp;
-        this.context = context;
-        this.deployedConfig = deployedConfig;
+    protected FlinkDeploymentObserverContext(
+            FlinkDeployment resource, FlinkConfigManager configManager) {
+        this.deployedConfig =
+                resource.getStatus().getReconciliationStatus().isBeforeFirstDeployment()
+                        ? null
+                        : configManager.getObserveConfig(resource);
     }
 }

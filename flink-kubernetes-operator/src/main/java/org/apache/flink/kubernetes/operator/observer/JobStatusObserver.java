@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,15 +35,16 @@ import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 
 /** An observer to observe the job status. */
-public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>, CTX> {
+public abstract class JobStatusObserver<
+        R extends AbstractFlinkResource<?, ?>, CTX extends ObserverContext> {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
 
     private static final int MAX_ERROR_STRING_LENGTH = 512;
     public static final String MISSING_SESSION_JOB_ERR = "Missing Session Job";
 
-    private final FlinkService flinkService;
-    private final EventRecorder eventRecorder;
+    protected final FlinkService flinkService;
+    protected final EventRecorder eventRecorder;
 
     public JobStatusObserver(FlinkService flinkService, EventRecorder eventRecorder) {
         this.flinkService = flinkService;
@@ -53,11 +55,10 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>, C
      * Observe the status of the flink job.
      *
      * @param resource The custom resource to be observed.
-     * @param deployedConfig Deployed job config.
      * @param ctx Observe context.
      * @return If job found return true, otherwise return false.
      */
-    public boolean observe(R resource, Configuration deployedConfig, CTX ctx) {
+    public boolean observe(R resource, Context resourceContext, CTX ctx) {
         var jobStatus = resource.getStatus().getJobStatus();
         LOG.info("Observing job status");
         var previousJobStatus = jobStatus.getState();
@@ -65,13 +66,13 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>, C
         List<JobStatusMessage> clusterJobStatuses;
         try {
             // Query job list from the cluster
-            clusterJobStatuses = new ArrayList<>(flinkService.listJobs(deployedConfig));
+            clusterJobStatuses = new ArrayList<>(flinkService.listJobs(ctx.getDeployedConfig()));
         } catch (Exception e) {
             // Error while accessing the rest api, will try again later...
             LOG.error("Exception while listing jobs", e);
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
             if (e instanceof TimeoutException) {
-                onTimeout(ctx);
+                onTimeout(resource, resourceContext, ctx);
             }
             return false;
         }
@@ -84,10 +85,10 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>, C
             if (targetJobStatusMessage.isEmpty()) {
                 LOG.warn("No matching jobs found on the cluster");
                 ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-                onTargetJobNotFound(resource, deployedConfig);
+                onTargetJobNotFound(resource, ctx.getDeployedConfig());
                 return false;
             } else {
-                updateJobStatus(resource, targetJobStatusMessage.get(), deployedConfig);
+                updateJobStatus(resource, targetJobStatusMessage.get(), ctx.getDeployedConfig());
             }
             ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
             return true;
@@ -95,7 +96,7 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>, C
             LOG.debug("No jobs found on the cluster");
             // No jobs found on the cluster, it is possible that the jobmanager is still starting up
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-            onNoJobsFound(resource, deployedConfig);
+            onNoJobsFound(resource, ctx.getDeployedConfig());
             return false;
         }
     }
@@ -132,9 +133,11 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>, C
     /**
      * Callback when list jobs timeout.
      *
-     * @param ctx Observe context.
+     * @param resource The Flink resource.
+     * @param resourceContext Resource context.
+     * @param observerContext Observe context.
      */
-    protected abstract void onTimeout(CTX ctx);
+    protected abstract void onTimeout(R resource, Context<?> resourceContext, CTX observerContext);
 
     /**
      * Filter the target job status message by the job list from the cluster.
