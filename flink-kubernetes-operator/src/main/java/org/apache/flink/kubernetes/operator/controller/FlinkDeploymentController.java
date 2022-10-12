@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.observer.deployment.ObserverFactory;
+import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -63,7 +63,7 @@ public class FlinkDeploymentController
 
     private final Set<FlinkResourceValidator> validators;
     private final ReconcilerFactory reconcilerFactory;
-    private final ObserverFactory observerFactory;
+    private final FlinkDeploymentObserverFactory observerFactory;
     private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
     private final EventRecorder eventRecorder;
 
@@ -71,7 +71,7 @@ public class FlinkDeploymentController
             FlinkConfigManager configManager,
             Set<FlinkResourceValidator> validators,
             ReconcilerFactory reconcilerFactory,
-            ObserverFactory observerFactory,
+            FlinkDeploymentObserverFactory observerFactory,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
             EventRecorder eventRecorder) {
         this.configManager = configManager;

@@ -26,14 +26,12 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
-import org.apache.flink.kubernetes.operator.observer.Observer;
+import org.apache.flink.kubernetes.operator.observer.AbstractFlinkResourceObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -51,67 +49,49 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/** The base observer. */
-public abstract class AbstractDeploymentObserver implements Observer<FlinkDeployment> {
+/** Base observer for session and application clusters. */
+public abstract class AbstractFlinkDeploymentObserver
+        extends AbstractFlinkResourceObserver<FlinkDeployment, FlinkDeploymentObserverContext> {
 
     protected final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     protected final FlinkService flinkService;
-    protected final FlinkConfigManager configManager;
-    protected final EventRecorder eventRecorder;
 
-    public AbstractDeploymentObserver(
+    public AbstractFlinkDeploymentObserver(
             FlinkService flinkService,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder) {
+        super(configManager, eventRecorder);
         this.flinkService = flinkService;
-        this.configManager = configManager;
-        this.eventRecorder = eventRecorder;
     }
 
     @Override
-    public void observe(FlinkDeployment flinkApp, Context<?> context) {
-        var status = flinkApp.getStatus();
-        var reconciliationStatus = status.getReconciliationStatus();
+    protected FlinkDeploymentObserverContext getObserverContext(
+            FlinkDeployment resource, Context<?> context) {
+        return new FlinkDeploymentObserverContext(resource, configManager);
+    }
 
-        if (reconciliationStatus.isBeforeFirstDeployment()) {
-            logger.debug("Skipping observe before first deployment");
-            return;
-        }
+    @Override
+    public void observeInternal(
+            FlinkDeployment flinkDep,
+            Context<?> context,
+            FlinkDeploymentObserverContext observerContext) {
 
-        if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
-            logger.debug("Skipping observe during rollback operation");
-            return;
-        }
-
-        // We are in the middle or possibly right after an upgrade
-        if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
-            // We must check if the upgrade went through without the status upgrade for some reason
-            checkIfAlreadyUpgraded(flinkApp, context);
-            if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
-                ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(flinkApp);
-                logger.debug("Skipping observe before resource is deployed during upgrade");
-                return;
-            }
-        }
-
-        Configuration observeConfig = configManager.getObserveConfig(flinkApp);
-        if (!isJmDeploymentReady(flinkApp)) {
+        if (!isJmDeploymentReady(flinkDep)) {
             // Only observe the JM if we think it's in bad state
-            observeJmDeployment(flinkApp, context, observeConfig);
+            observeJmDeployment(flinkDep, context, observerContext.getDeployedConfig());
         }
 
-        if (isJmDeploymentReady(flinkApp)) {
+        if (isJmDeploymentReady(flinkDep)) {
             // Only observe session/application if JM is ready
-            observeFlinkCluster(flinkApp, context, observeConfig);
+            observeFlinkCluster(flinkDep, context, observerContext);
         }
 
-        if (isJmDeploymentReady(flinkApp)) {
-            observeClusterInfo(flinkApp, observeConfig);
+        if (isJmDeploymentReady(flinkDep)) {
+            observeClusterInfo(flinkDep, observerContext.getDeployedConfig());
         }
 
-        SavepointUtils.resetTriggerIfJobNotRunning(flinkApp, eventRecorder);
-        clearErrorsIfDeploymentIsHealthy(flinkApp);
+        clearErrorsIfDeploymentIsHealthy(flinkDep);
     }
 
     private void observeClusterInfo(FlinkDeployment flinkApp, Configuration configuration) {
@@ -256,16 +236,11 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
                 err);
     }
 
-    /**
-     * Checks a deployment that is currently in the UPGRADING state whether it was already deployed
-     * but we simply miss the status information. After comparing the target resource generation
-     * with the one from the possible deployment if they match we update the status to the already
-     * DEPLOYED state.
-     *
-     * @param flinkDep Flink resource to check.
-     * @param context Context for reconciliation.
-     */
-    private void checkIfAlreadyUpgraded(FlinkDeployment flinkDep, Context<?> context) {
+    @Override
+    protected void updateStatusToDeployedIfAlreadyUpgraded(
+            FlinkDeployment flinkDep,
+            Context<?> context,
+            FlinkDeploymentObserverContext observerContext) {
         var status = flinkDep.getStatus();
         Optional<Deployment> depOpt = context.getSecondaryResource(Deployment.class);
         depOpt.ifPresent(
@@ -307,8 +282,10 @@ public abstract class AbstractDeploymentObserver implements Observer<FlinkDeploy
      *
      * @param flinkApp the target flinkDeployment resource
      * @param context the context with which the operation is executed
-     * @param deployedConfig config that is deployed on the Flink cluster
+     * @param observerContext Observer context
      */
     protected abstract void observeFlinkCluster(
-            FlinkDeployment flinkApp, Context<?> context, Configuration deployedConfig);
+            FlinkDeployment flinkApp,
+            Context<?> context,
+            FlinkDeploymentObserverContext observerContext);
 }

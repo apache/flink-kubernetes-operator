@@ -15,9 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.observer.context;
+package org.apache.flink.kubernetes.operator.observer;
 
-/** An empty observer context. */
-public class VoidObserverContext {
-    public static final VoidObserverContext INSTANCE = new VoidObserverContext();
+import org.apache.flink.configuration.Configuration;
+
+/** Context for the currently observed resource. */
+public interface ObserverContext {
+
+    Configuration getDeployedConfig();
 }

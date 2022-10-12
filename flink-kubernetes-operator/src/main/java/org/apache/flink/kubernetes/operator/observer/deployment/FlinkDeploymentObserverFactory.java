@@ -32,7 +32,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** The factory to create the observer based on the {@link FlinkDeployment} mode. */
-public class ObserverFactory {
+public class FlinkDeploymentObserverFactory {
 
     private final FlinkServiceFactory flinkServiceFactory;
     private final FlinkConfigManager configManager;
@@ -41,7 +41,7 @@ public class ObserverFactory {
     private final Map<Tuple2<Mode, KubernetesDeploymentMode>, Observer<FlinkDeployment>>
             observerMap;
 
-    public ObserverFactory(
+    public FlinkDeploymentObserverFactory(
             FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
