@@ -57,6 +57,9 @@ operatorPod:
   #   value: ""
   # dnsPolicy: ""
   # dnsConfig: {}
+  # Node labels for operator pod assignment
+  # https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+  nodeSelector: {}
 
 
 operatorServiceAccount:
