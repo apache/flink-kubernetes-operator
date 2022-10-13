@@ -49,6 +49,9 @@ spec:
     spec:
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.operatorPod.nodeSelector }}
+      nodeSelector: {{ toYaml .Values.operatorPod.nodeSelector | nindent 8 }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
