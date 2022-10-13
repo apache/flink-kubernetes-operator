@@ -85,6 +85,12 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
             args.add(allowNonRestoredState.toString());
         }
 
+        String savepointPath = kubernetesJobManagerParameters.getSavepointPath();
+        if (savepointPath != null) {
+            args.add("--fromSavepoint");
+            args.add(savepointPath);
+        }
+
         List<String> jobSpecArgs = kubernetesJobManagerParameters.getJobSpecArgs();
         if (jobSpecArgs != null) {
             args.addAll(kubernetesJobManagerParameters.getJobSpecArgs());
