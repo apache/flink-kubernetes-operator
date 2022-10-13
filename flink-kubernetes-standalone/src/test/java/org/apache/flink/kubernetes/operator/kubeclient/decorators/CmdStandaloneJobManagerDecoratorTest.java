@@ -75,7 +75,7 @@ public class CmdStandaloneJobManagerDecoratorTest {
                 StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE,
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
         configuration.set(ApplicationConfiguration.APPLICATION_MAIN_CLASS, testMainClass);
-        configuration.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, false);
+        configuration.set(SavepointConfigOptions.SAVEPOINT_IGNORE_UNCLAIMED_STATE, true);
         configuration.set(SavepointConfigOptions.SAVEPOINT_PATH, "/tmp/savepoint/path");
 
         FlinkPod decoratedPod = decorator.decorateFlinkPod(new FlinkPod.Builder().build());
@@ -86,7 +86,6 @@ public class CmdStandaloneJobManagerDecoratorTest {
                 containsInAnyOrder(
                         CmdStandaloneJobManagerDecorator.APPLICATION_MODE_ARG,
                         "--allowNonRestoredState",
-                        "false",
                         "--fromSavepoint",
                         "/tmp/savepoint/path",
                         "--job-classname",

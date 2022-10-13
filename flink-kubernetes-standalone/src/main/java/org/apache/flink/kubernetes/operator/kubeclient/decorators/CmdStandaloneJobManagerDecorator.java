@@ -80,9 +80,8 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
         }
 
         Boolean allowNonRestoredState = kubernetesJobManagerParameters.getAllowNonRestoredState();
-        if (allowNonRestoredState != null) {
+        if (allowNonRestoredState != null && allowNonRestoredState) {
             args.add("--allowNonRestoredState");
-            args.add(allowNonRestoredState.toString());
         }
 
         String savepointPath = kubernetesJobManagerParameters.getSavepointPath();
