@@ -32,8 +32,6 @@ import okhttp3.Response;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 /** Kubernetes client metrics. */
 public class KubernetesClientMetrics implements Interceptor {
@@ -90,9 +88,6 @@ public class KubernetesClientMetrics implements Interceptor {
         this.responseLatency =
                 responseMetricGroup.histogram(
                         HISTO, OperatorMetricUtils.createHistogram(flinkOperatorConfiguration));
-
-        Executors.newSingleThreadScheduledExecutor()
-                .scheduleAtFixedRate(this::updateMeters, 0, 1, TimeUnit.SECONDS);
     }
 
     @Override
@@ -139,11 +134,5 @@ public class KubernetesClientMetrics implements Interceptor {
                 key ->
                         OperatorMetricUtils.synchronizedCounter(
                                 responseMetricGroup.addGroup(key).counter(COUNTER)));
-    }
-
-    private void updateMeters() {
-        this.requestRateMeter.update();
-        this.requestFailedRateMeter.update();
-        this.responseRateMeter.update();
     }
 }
