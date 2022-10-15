@@ -90,6 +90,13 @@ public class StandaloneKubernetesJobManagerParameters extends KubernetesJobManag
         return null;
     }
 
+    public String getSavepointPath() {
+        if (flinkConfig.contains(SavepointConfigOptions.SAVEPOINT_PATH)) {
+            return flinkConfig.get(SavepointConfigOptions.SAVEPOINT_PATH);
+        }
+        return null;
+    }
+
     public boolean isPipelineClasspathDefined() {
         return flinkConfig.contains(PipelineOptions.CLASSPATHS);
     }
