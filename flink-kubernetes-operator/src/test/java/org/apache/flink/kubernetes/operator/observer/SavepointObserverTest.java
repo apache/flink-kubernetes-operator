@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -144,12 +145,11 @@ public class SavepointObserverTest {
     public void testPeriodicSavepoint() {
         var conf = new Configuration();
         var deployment = TestUtils.buildApplicationCluster();
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
+        var spec = deployment.getSpec();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        status.getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
-
-        var jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setState("RUNNING");
 
         var savepointInfo = jobStatus.getSavepointInfo();
@@ -159,6 +159,7 @@ public class SavepointObserverTest {
         assertEquals(0L, savepointInfo.getLastPeriodicSavepointTimestamp());
         assertEquals(SavepointTriggerType.PERIODIC, savepointInfo.getTriggerType());
         assertTrue(SavepointUtils.savepointInProgress(jobStatus));
+        assertEquals(SavepointStatus.PENDING, SavepointUtils.getLastSavepointStatus(deployment));
         assertTrue(triggerTs > 0);
 
         // Pending
@@ -167,6 +168,7 @@ public class SavepointObserverTest {
         observer.observeSavepointStatus(deployment, conf);
         assertEquals(triggerTs, savepointInfo.getLastPeriodicSavepointTimestamp());
         assertFalse(SavepointUtils.savepointInProgress(jobStatus));
+        assertEquals(SavepointUtils.getLastSavepointStatus(deployment), SavepointStatus.SUCCEEDED);
         assertEquals(savepointInfo.getLastSavepoint(), savepointInfo.getSavepointHistory().get(0));
         assertEquals(
                 SavepointTriggerType.PERIODIC, savepointInfo.getLastSavepoint().getTriggerType());

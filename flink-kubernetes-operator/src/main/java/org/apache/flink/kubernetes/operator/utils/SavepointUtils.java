@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointStatus;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -35,6 +36,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
@@ -46,6 +48,41 @@ public class SavepointUtils {
 
     public static boolean savepointInProgress(JobStatus jobStatus) {
         return StringUtils.isNotEmpty(jobStatus.getSavepointInfo().getTriggerId());
+    }
+
+    public static SavepointStatus getLastSavepointStatus(AbstractFlinkResource<?, ?> resource) {
+        var status = resource.getStatus();
+        var jobStatus = status.getJobStatus();
+        var savepointInfo = jobStatus.getSavepointInfo();
+
+        // For non-manual savepointing, we always report SUCCEEDED if no longer pending
+        if (savepointInfo.getTriggerType() != SavepointTriggerType.MANUAL) {
+            return savepointInProgress(jobStatus)
+                    ? SavepointStatus.PENDING
+                    : SavepointStatus.SUCCEEDED;
+        }
+
+        var targetSavepointTriggerNonce = resource.getSpec().getJob().getSavepointTriggerNonce();
+        var reconcileSavepointTriggerNonce =
+                status.getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getSavepointTriggerNonce();
+
+        // if savepointTriggerNonce is cleared, savepoint is not triggered.
+        // For manual savepointing, we report pending status
+        // during retries while the triggerId gets reset between retries.
+        if (targetSavepointTriggerNonce != null
+                && !Objects.equals(targetSavepointTriggerNonce, reconcileSavepointTriggerNonce)) {
+            return SavepointStatus.PENDING;
+        }
+        if (savepointInfo.getLastSavepoint() != null
+                && Objects.equals(
+                        reconcileSavepointTriggerNonce,
+                        savepointInfo.getLastSavepoint().getTriggerNonce())) {
+            return SavepointStatus.SUCCEEDED;
+        }
+        return SavepointStatus.ABANDONED;
     }
 
     /**
