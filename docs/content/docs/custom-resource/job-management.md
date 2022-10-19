@@ -241,6 +241,21 @@ In order this feature to work one must enable [recovery of missing job deploymen
 At the moment deployment is considered unhealthy when Flink's restarts count reaches `kubernetes.operator.cluster.health-check.restarts.threshold` (default: `64`)
 within time window of `kubernetes.operator.cluster.health-check.restarts.window` (default: 2 minutes).
 
+## Restart failed job deployments
+
+The operator can restart a failed Flink cluster deployment. This could be useful in cases when the job main task is
+able to reconfigure the job to handle these failures.
+
+For example a job could dynamically create the DAG based on some job configuration which job configuration could
+change over time. When a task detects a record which could not be handled with the current configuration then the task
+should throw a `SuppressRestartsException` to fail the job. If `kubernetes.operator.cluster.restart.failed` is set to 
+`true` (default: `false`) then the operator detects the failed job and restarts it. When the job restarts then it reads
+the new job configuration and creates the new DAG based on this new configuration. The new deployment could handle the
+incoming records and no manual intervention is needed.
+
+When this configuration is set to `true` then at the moment when the deployment status is set to `FAILED` the kubernetes
+operator will delete the current deployment and redeploys the application using the latest successful checkpoint.
+
 ## Application upgrade rollbacks (Experimental)
 
 The operator supports upgrade rollbacks as an experimental feature.

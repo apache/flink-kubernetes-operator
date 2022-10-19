@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
@@ -54,6 +55,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_RESTART_FAILED;
 
 /** Reconciler Flink Application deployments. */
 public class ApplicationReconciler
@@ -262,6 +264,15 @@ public class ApplicationReconciler
             return true;
         }
 
+        if (JobStatus.valueOf(deployment.getStatus().getJobStatus().getState()) == JobStatus.FAILED
+                && observeConfig.getBoolean(OPERATOR_CLUSTER_RESTART_FAILED)) {
+            LOG.info("Stopping failed Flink Cluster deployment...");
+            cancelJob(deployment, ctx, UpgradeMode.LAST_STATE, observeConfig);
+            deployment.getStatus().setError("");
+            resubmitJmDeployment(deployment, ctx, observeConfig, false);
+            return true;
+        }
+
         boolean shouldRestartJobBecauseUnhealthy =
                 shouldRestartJobBecauseUnhealthy(deployment, observeConfig);
         boolean shouldRecoverDeployment = shouldRecoverDeployment(observeConfig, deployment);
@@ -269,19 +280,28 @@ public class ApplicationReconciler
             if (shouldRestartJobBecauseUnhealthy) {
                 cancelJob(deployment, ctx, UpgradeMode.LAST_STATE, observeConfig);
             }
-            recoverJmDeployment(deployment, ctx, observeConfig);
+            resubmitJmDeployment(deployment, ctx, observeConfig, true);
             return true;
         }
 
         return false;
     }
 
-    private void recoverJmDeployment(
-            FlinkDeployment deployment, Context<?> ctx, Configuration observeConfig)
+    private void resubmitJmDeployment(
+            FlinkDeployment deployment,
+            Context<?> ctx,
+            Configuration observeConfig,
+            boolean requireHaMetadata)
             throws Exception {
-        LOG.info("Missing Flink Cluster deployment, trying to recover...");
+        LOG.info("Resubmitting Flink Cluster deployment...");
         FlinkDeploymentSpec specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
-        restoreJob(deployment, specToRecover, deployment.getStatus(), ctx, observeConfig, true);
+        restoreJob(
+                deployment,
+                specToRecover,
+                deployment.getStatus(),
+                ctx,
+                observeConfig,
+                requireHaMetadata);
     }
 
     private boolean shouldRestartJobBecauseUnhealthy(
