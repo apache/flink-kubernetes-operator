@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.crd.status;
 
-/** Enum encapsulating the the status of the last savepoint. */
+/** Enum encapsulating the lifecycle state of a Flink resource. */
 public enum SavepointStatus {
     /** Savepoint is pending, could be in the retry phase in the case of manual savepoint. */
     PENDING,

@@ -303,17 +303,6 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | savepointHistory | java.util.List<org.apache.flink.kubernetes.operator.crd.status.Savepoint> | List of recent savepoints. |
 | lastPeriodicSavepointTimestamp | long | Trigger timestamp of last periodic savepoint operation. |
 
-### SavepointStatus
-**Class**: org.apache.flink.kubernetes.operator.crd.status.SavepointStatus
-
-**Description**: Enum encapsulating the the status of the last savepoint.
-
-| Value | Docs |
-| ----- | ---- |
-| PENDING | Savepoint is pending, could be in the retry phase in the case of manual savepoint. |
-| SUCCEEDED | Savepoint is completed successfully. |
-| ABANDONED | Manual savepoint is abandoned after defined retries. |
-
 ### SavepointTriggerType
 **Class**: org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType
 
