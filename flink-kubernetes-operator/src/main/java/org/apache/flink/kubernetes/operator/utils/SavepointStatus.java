@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.crd.status;
+package org.apache.flink.kubernetes.operator.utils;
 
 /** Enum encapsulating the lifecycle state of a Flink resource. */
 public enum SavepointStatus {
