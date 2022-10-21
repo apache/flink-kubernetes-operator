@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler.diff;
 
 import org.apache.flink.configuration.CoreOptions;
-import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
@@ -27,7 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.SpecUtils;
 
 import org.junit.jupiter.api.Test;
 
@@ -35,7 +35,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL;
-import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Spec diff test. */
@@ -44,22 +44,22 @@ public class SpecDiffTest {
     @Test
     public void testFlinkDeploymentSpecChanges() {
         var left = new FlinkDeploymentSpec();
-        var right = ReconciliationUtils.clone(left);
+        var right = SpecUtils.clone(left);
         var diff = left.diff(right);
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(0, diff.getNumDiffs());
 
-        left = TestUtils.buildSessionCluster().getSpec();
-        right = ReconciliationUtils.clone(left);
+        left = BaseTestUtils.buildSessionCluster().getSpec();
+        right = SpecUtils.clone(left);
         diff = left.diff(right);
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(0, diff.getNumDiffs());
 
-        left = TestUtils.buildApplicationCluster().getSpec();
-        left.setPodTemplate(TestUtils.getTestPod("localhost", "v1", List.of()));
+        left = BaseTestUtils.buildApplicationCluster().getSpec();
+        left.setPodTemplate(BaseTestUtils.getTestPod("localhost", "v1", List.of()));
         left.setIngress(IngressSpec.builder().template("template").build());
 
-        right = ReconciliationUtils.clone(left);
+        right = SpecUtils.clone(left);
         diff = left.diff(right);
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(0, diff.getNumDiffs());
@@ -128,13 +128,13 @@ public class SpecDiffTest {
     @Test
     public void testFlinkSessionJobSpecChanges() {
         var left = new FlinkSessionJobSpec();
-        var right = ReconciliationUtils.clone(left);
+        var right = SpecUtils.clone(left);
         var diff = left.diff(right);
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(0, diff.getNumDiffs());
 
-        left = TestUtils.buildSessionJob().getSpec();
-        right = ReconciliationUtils.clone(left);
+        left = BaseTestUtils.buildSessionJob().getSpec();
+        right = SpecUtils.clone(left);
         diff = left.diff(right);
         assertEquals(DiffType.IGNORE, diff.getType());
         assertEquals(0, diff.getNumDiffs());

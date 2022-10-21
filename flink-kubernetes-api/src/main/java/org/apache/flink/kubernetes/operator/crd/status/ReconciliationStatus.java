@@ -21,8 +21,7 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationMetadata;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.SpecUtils;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.fabric8.kubernetes.model.annotation.PrinterColumn;
@@ -71,18 +70,18 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
 
     @JsonIgnore
     public Tuple2<SPEC, ReconciliationMetadata> deserializeLastReconciledSpecWithMeta() {
-        return ReconciliationUtils.deserializeSpecWithMeta(lastReconciledSpec, getSpecClass());
+        return SpecUtils.deserializeSpecWithMeta(lastReconciledSpec, getSpecClass());
     }
 
     @JsonIgnore
     public Tuple2<SPEC, ReconciliationMetadata> deserializeLastStableSpecWithMeta() {
-        return ReconciliationUtils.deserializeSpecWithMeta(lastStableSpec, getSpecClass());
+        return SpecUtils.deserializeSpecWithMeta(lastStableSpec, getSpecClass());
     }
 
     @JsonIgnore
     public void serializeAndSetLastReconciledSpec(
             SPEC spec, AbstractFlinkResource<SPEC, ?> resource) {
-        setLastReconciledSpec(ReconciliationUtils.writeSpecWithMeta(spec, resource));
+        setLastReconciledSpec(SpecUtils.writeSpecWithMeta(spec, resource));
     }
 
     public void markReconciledSpecAsStable() {

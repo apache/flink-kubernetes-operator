@@ -21,6 +21,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorMetricOptions;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClientException;

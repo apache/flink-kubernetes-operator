@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.metrics;
+package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.ConfigOption;
 
