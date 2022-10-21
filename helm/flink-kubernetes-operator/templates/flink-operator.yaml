@@ -52,6 +52,10 @@ spec:
       {{- if .Values.operatorPod.nodeSelector }}
       nodeSelector: {{ toYaml .Values.operatorPod.nodeSelector | nindent 8 }}
       {{- end }}
+      {{- with .Values.operatorPod.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
