@@ -19,7 +19,8 @@ package org.apache.flink.kubernetes.operator.crd.status;
 
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+
+import org.apache.commons.lang3.StringUtils;
 
 import java.time.Duration;
 
@@ -51,8 +52,7 @@ public enum JobManagerDeploymentStatus {
                 break;
             case READY:
                 rescheduleAfter =
-                        SavepointUtils.savepointInProgress(
-                                        flinkDeployment.getStatus().getJobStatus())
+                        savepointInProgress(flinkDeployment.getStatus().getJobStatus())
                                 ? operatorConfiguration.getProgressCheckInterval()
                                 : operatorConfiguration.getReconcileInterval();
                 break;
@@ -67,5 +67,9 @@ public enum JobManagerDeploymentStatus {
                 throw new RuntimeException("Unknown status: " + this);
         }
         return rescheduleAfter;
+    }
+
+    private static boolean savepointInProgress(JobStatus jobStatus) {
+        return StringUtils.isNotEmpty(jobStatus.getSavepointInfo().getTriggerId());
     }
 }

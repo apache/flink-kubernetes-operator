@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.crd.status;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.crd.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
-import org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;

@@ -22,6 +22,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorMetricOptions;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;

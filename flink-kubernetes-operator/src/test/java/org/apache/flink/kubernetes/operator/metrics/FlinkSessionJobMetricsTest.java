@@ -25,8 +25,8 @@ import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkSessionJobMetrics.COUNTER_NAME;
-import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

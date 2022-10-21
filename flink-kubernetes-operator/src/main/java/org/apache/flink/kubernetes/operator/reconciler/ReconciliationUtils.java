@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.reconciler;
 
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
@@ -33,20 +32,16 @@ import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.exception.ValidationException;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
-import org.apache.flink.util.Preconditions;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nullable;
 
 import java.util.Optional;
 
@@ -59,10 +54,7 @@ public class ReconciliationUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReconciliationUtils.class);
 
-    public static final String INTERNAL_METADATA_JSON_KEY = "resource_metadata";
-
     private static final ObjectMapper objectMapper = new ObjectMapper();
-
     /**
      * Update status after successful deployment of a new resource spec. Existing reconciliation
      * errors will be cleared, lastReconciled spec will be updated and for suspended jobs it will
@@ -178,16 +170,7 @@ public class ReconciliationUtils {
     }
 
     public static <T> T clone(T object) {
-        if (object == null) {
-            return null;
-        }
-        try {
-            return (T)
-                    objectMapper.readValue(
-                            objectMapper.writeValueAsString(object), object.getClass());
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException(e);
-        }
+        return SpecUtils.clone(object);
     }
 
     public static <
@@ -258,75 +241,6 @@ public class ReconciliationUtils {
         }
         return currentReconState == ReconciliationState.ROLLING_BACK
                 || currentReconState == ReconciliationState.UPGRADING;
-    }
-
-    /**
-     * Deserializes the spec and custom metadata object from JSON.
-     *
-     * @param specWithMetaString JSON string.
-     * @param specClass Spec class for deserialization.
-     * @param <T> Spec type.
-     * @return Tuple2 of spec and meta.
-     */
-    public static <T extends AbstractFlinkSpec>
-            Tuple2<T, ReconciliationMetadata> deserializeSpecWithMeta(
-                    @Nullable String specWithMetaString, Class<T> specClass) {
-        if (specWithMetaString == null) {
-            return null;
-        }
-
-        try {
-            ObjectNode wrapper = (ObjectNode) objectMapper.readTree(specWithMetaString);
-            ObjectNode internalMeta = (ObjectNode) wrapper.remove(INTERNAL_METADATA_JSON_KEY);
-
-            if (internalMeta == null) {
-                // migrating from old format
-                wrapper.remove("apiVersion");
-                return Tuple2.of(objectMapper.treeToValue(wrapper, specClass), null);
-            } else {
-                return Tuple2.of(
-                        objectMapper.treeToValue(wrapper.get("spec"), specClass),
-                        objectMapper.convertValue(internalMeta, ReconciliationMetadata.class));
-            }
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Could not deserialize spec, this indicates a bug...", e);
-        }
-    }
-
-    /**
-     * Serializes the spec and custom meta information into a JSON string.
-     *
-     * @param spec Flink resource spec.
-     * @param relatedResource Related Flink resource for creating the meta object.
-     * @return Serialized json.
-     */
-    public static String writeSpecWithMeta(
-            AbstractFlinkSpec spec, AbstractFlinkResource<?, ?> relatedResource) {
-        return writeSpecWithMeta(spec, ReconciliationMetadata.from(relatedResource));
-    }
-
-    /**
-     * Serializes the spec and custom meta information into a JSON string.
-     *
-     * @param spec Flink resource spec.
-     * @param metadata Reconciliation meta object.
-     * @return Serialized json.
-     */
-    public static String writeSpecWithMeta(
-            AbstractFlinkSpec spec, ReconciliationMetadata metadata) {
-
-        ObjectNode wrapper = objectMapper.createObjectNode();
-
-        wrapper.set("spec", objectMapper.valueToTree(Preconditions.checkNotNull(spec)));
-        wrapper.set(
-                INTERNAL_METADATA_JSON_KEY,
-                objectMapper.valueToTree(Preconditions.checkNotNull(metadata)));
-
-        try {
-            return objectMapper.writeValueAsString(wrapper);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Could not serialize spec, this indicates a bug...", e);
-        }
     }
 
     public static boolean isJobInTerminalState(CommonStatus<?> status) {
@@ -508,6 +422,6 @@ public class ReconciliationUtils {
         }
         reconciliationStatus.setState(ReconciliationState.DEPLOYED);
         reconciliationStatus.setLastReconciledSpec(
-                ReconciliationUtils.writeSpecWithMeta(lastSpecWithMeta.f0, lastSpecWithMeta.f1));
+                SpecUtils.writeSpecWithMeta(lastSpecWithMeta.f0, lastSpecWithMeta.f1));
     }
 }

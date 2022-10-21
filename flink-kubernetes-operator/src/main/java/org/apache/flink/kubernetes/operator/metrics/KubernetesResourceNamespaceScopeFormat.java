@@ -20,7 +20,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.metrics.scope.ScopeFormat;
 
-import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR_RESOURCENS;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR_RESOURCENS;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorScopeFormat.NAME;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorScopeFormat.NAMESPACE;
 

@@ -64,10 +64,10 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
-import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE;
-import static org.apache.flink.kubernetes.operator.TestUtils.IMAGE_POLICY;
-import static org.apache.flink.kubernetes.operator.TestUtils.SAMPLE_JAR;
-import static org.apache.flink.kubernetes.operator.TestUtils.SERVICE_ACCOUNT;
+import static org.apache.flink.kubernetes.operator.BaseTestUtils.IMAGE;
+import static org.apache.flink.kubernetes.operator.BaseTestUtils.IMAGE_POLICY;
+import static org.apache.flink.kubernetes.operator.BaseTestUtils.SAMPLE_JAR;
+import static org.apache.flink.kubernetes.operator.BaseTestUtils.SERVICE_ACCOUNT;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 import static org.hamcrest.MatcherAssert.assertThat;

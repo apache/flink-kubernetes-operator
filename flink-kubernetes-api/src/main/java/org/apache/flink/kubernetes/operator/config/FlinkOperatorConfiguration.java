@@ -19,15 +19,15 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
-import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
 import io.javaoperatorsdk.operator.api.config.RetryConfiguration;
 import lombok.Value;
+import org.apache.commons.lang3.StringUtils;
 
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 /** Configuration class for operator. */
@@ -35,6 +35,7 @@ import java.util.Set;
 public class FlinkOperatorConfiguration {
 
     private static final String NAMESPACES_SPLITTER_KEY = "\\s*,\\s*";
+    private static final String ENV_KUBERNETES_SERVICE_HOST = "KUBERNETES_SERVICE_HOST";
 
     Duration reconcileInterval;
     int reconcilerMaxParallelism;
@@ -113,7 +114,7 @@ public class FlinkOperatorConfiguration {
                                 .OPERATOR_EXCEPTION_THROWABLE_LIST_MAX_COUNT);
 
         String flinkServiceHostOverride = null;
-        if (EnvUtils.get(EnvUtils.ENV_KUBERNETES_SERVICE_HOST).isEmpty()) {
+        if (getEnv(ENV_KUBERNETES_SERVICE_HOST).isEmpty()) {
             // not running in k8s, simplify local development
             flinkServiceHostOverride = "localhost";
         }
@@ -209,5 +210,9 @@ public class FlinkOperatorConfiguration {
         public long getMaxInterval() {
             return (long) (initialInterval * Math.pow(intervalMultiplier, maxAttempts));
         }
+    }
+
+    private static Optional<String> getEnv(String key) {
+        return Optional.ofNullable(StringUtils.getIfBlank(System.getenv().get(key), () -> null));
     }
 }
