@@ -341,9 +341,9 @@ public class KubernetesOperatorConfigOptions {
                                     + "If the restart count is reaching the threshold then full cluster restart is initiated.");
 
     @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<Boolean> OPERATOR_CLUSTER_RESTART_FAILED =
-            operatorConfig("cluster.restart.failed")
+    public static final ConfigOption<Boolean> OPERATOR_JOB_RESTART_FAILED =
+            operatorConfig("job.restart.failed")
                     .booleanType()
                     .defaultValue(false)
-                    .withDescription("Whether to restart healthy clusters on failed jobs.");
+                    .withDescription("Whether to restart failed jobs.");
 }

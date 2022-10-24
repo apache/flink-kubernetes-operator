@@ -38,7 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_RESTART_FAILED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -56,7 +56,7 @@ public class FailedDeploymentRestartTest {
     @BeforeEach
     public void setup() {
         var configuration = new Configuration();
-        configuration.set(OPERATOR_CLUSTER_RESTART_FAILED, true);
+        configuration.set(OPERATOR_JOB_RESTART_FAILED, true);
         configManager = new FlinkConfigManager(configuration);
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
