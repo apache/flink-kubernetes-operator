@@ -245,10 +245,10 @@ public abstract class AbstractJobReconciler<
                         resource.getStatus().getJobStatus().getState());
         if (jobStatus == org.apache.flink.api.common.JobStatus.FAILED
                 && observeConfig.getBoolean(OPERATOR_JOB_RESTART_FAILED)) {
-            LOG.info("Stopping failed Flink Cluster deployment...");
+            LOG.info("Stopping failed Flink job...");
             cancelJob(resource, context, UpgradeMode.LAST_STATE, observeConfig);
             resource.getStatus().setError("");
-            resubmitJmDeployment(resource, context, observeConfig, false);
+            resubmitJob(resource, context, observeConfig, false);
             return true;
         } else {
             return SavepointUtils.triggerSavepointIfNeeded(
@@ -256,10 +256,10 @@ public abstract class AbstractJobReconciler<
         }
     }
 
-    protected void resubmitJmDeployment(
+    protected void resubmitJob(
             CR deployment, Context<?> ctx, Configuration observeConfig, boolean requireHaMetadata)
             throws Exception {
-        LOG.info("Resubmitting Flink Cluster deployment...");
+        LOG.info("Resubmitting Flink job...");
         SPEC specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
         restoreJob(
                 deployment,

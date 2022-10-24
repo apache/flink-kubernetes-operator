@@ -269,7 +269,7 @@ public class ApplicationReconciler
             if (shouldRestartJobBecauseUnhealthy) {
                 cancelJob(deployment, ctx, UpgradeMode.LAST_STATE, observeConfig);
             }
-            resubmitJmDeployment(deployment, ctx, observeConfig, true);
+            resubmitJob(deployment, ctx, observeConfig, true);
             return true;
         }
 
