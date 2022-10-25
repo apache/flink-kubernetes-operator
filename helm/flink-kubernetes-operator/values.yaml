@@ -23,7 +23,7 @@
 # watchNamespaces: ["flink"]
 
 image:
-  repository: flink-kubernetes-operator
+  repository: apache/flink-kubernetes-operator
   pullPolicy: IfNotPresent
   tag: latest
 
