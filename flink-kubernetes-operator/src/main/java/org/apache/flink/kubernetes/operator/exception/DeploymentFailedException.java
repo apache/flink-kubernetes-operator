@@ -24,6 +24,7 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 public class DeploymentFailedException extends RuntimeException {
 
     public static final String REASON_CRASH_LOOP_BACKOFF = "CrashLoopBackOff";
+    public static final String REASON_IMAGE_PULL_BACKOFF = "ImagePullBackOff";
 
     private static final long serialVersionUID = -1070179896083579221L;
 

@@ -48,6 +48,7 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /** Base observer for session and application clusters. */
 public abstract class AbstractFlinkDeploymentObserver
@@ -145,7 +146,7 @@ public abstract class AbstractFlinkDeploymentObserver
             try {
                 checkFailedCreate(status);
                 // checking the pod is expensive; only do it when the deployment isn't ready
-                checkCrashLoopBackoff(flinkApp, effectiveConfig);
+                checkContainerBackoff(flinkApp, effectiveConfig);
             } catch (DeploymentFailedException dfe) {
                 // throw only when not already in error status to allow for spec update
                 deploymentStatus.getJobStatus().setState(JobStatus.RECONCILING.name());
@@ -179,14 +180,16 @@ public abstract class AbstractFlinkDeploymentObserver
         }
     }
 
-    private void checkCrashLoopBackoff(FlinkDeployment flinkApp, Configuration effectiveConfig) {
+    private void checkContainerBackoff(FlinkDeployment flinkApp, Configuration effectiveConfig) {
         PodList jmPods = flinkService.getJmPodList(flinkApp, effectiveConfig);
         for (Pod pod : jmPods.getItems()) {
             for (ContainerStatus cs : pod.getStatus().getContainerStatuses()) {
                 ContainerStateWaiting csw = cs.getState().getWaiting();
                 if (csw != null
-                        && DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF.equals(
-                                csw.getReason())) {
+                        && Set.of(
+                                        DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF,
+                                        DeploymentFailedException.REASON_IMAGE_PULL_BACKOFF)
+                                .contains(csw.getReason())) {
                     throw new DeploymentFailedException(csw);
                 }
             }
