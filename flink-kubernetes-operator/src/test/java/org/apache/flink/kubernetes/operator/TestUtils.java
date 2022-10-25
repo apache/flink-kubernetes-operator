@@ -38,7 +38,6 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
@@ -219,12 +218,12 @@ public class TestUtils {
         return pod;
     }
 
-    public static PodList createFailedPodList(String crashLoopMessage) {
+    public static PodList createFailedPodList(String crashLoopMessage, String reason) {
         ContainerStatus cs =
                 new ContainerStatusBuilder()
                         .withNewState()
                         .withNewWaiting()
-                        .withReason(DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF)
+                        .withReason(reason)
                         .withMessage(crashLoopMessage)
                         .endWaiting()
                         .endState()

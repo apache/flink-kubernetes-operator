@@ -56,6 +56,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -297,8 +298,13 @@ public class FlinkDeploymentControllerTest {
                 updateControl.getScheduleDelay().get());
     }
 
-    @Test
-    public void verifyInProgressDeploymentWithCrashLoopBackoff() throws Exception {
+    @ParameterizedTest()
+    @ValueSource(
+            strings = {
+                DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF,
+                DeploymentFailedException.REASON_IMAGE_PULL_BACKOFF
+            })
+    public void verifyInProgressDeploymentWithBackoff(String reason) throws Exception {
         String crashLoopMessage = "container fails";
 
         var submittedEventValidatingResponseProvider =
@@ -323,9 +329,7 @@ public class FlinkDeploymentControllerTest {
                         new EventBuilder().withNewMetadata().endMetadata().build(),
                         r -> {
                             String recordedRequestBody = r.getBody().readUtf8();
-                            assertTrue(
-                                    recordedRequestBody.contains(
-                                            DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF));
+                            assertTrue(recordedRequestBody.contains(reason));
                             assertTrue(recordedRequestBody.contains(crashLoopMessage));
                         });
         mockServer
@@ -335,7 +339,84 @@ public class FlinkDeploymentControllerTest {
                 .andReply(validatingResponseProvider)
                 .once();
 
-        flinkService.setJmPodList(TestUtils.createFailedPodList(crashLoopMessage));
+        flinkService.setJmPodList(TestUtils.createFailedPodList(crashLoopMessage, reason));
+
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        UpdateControl<FlinkDeployment> updateControl;
+
+        testController.reconcile(appCluster, context);
+        updateControl =
+                testController.reconcile(
+                        appCluster, TestUtils.createContextWithInProgressDeployment());
+        submittedEventValidatingResponseProvider.assertValidated();
+        assertFalse(updateControl.isUpdateStatus());
+        assertEquals(
+                Optional.of(
+                        configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
+                updateControl.getScheduleDelay());
+
+        assertEquals(
+                JobManagerDeploymentStatus.ERROR,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
+                appCluster.getStatus().getJobStatus().getState());
+
+        // Validate status status
+        assertNotNull(appCluster.getStatus().getError());
+
+        // next cycle should not create another event
+        updateControl =
+                testController.reconcile(
+                        appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+        assertEquals(
+                JobManagerDeploymentStatus.ERROR,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertFalse(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.READY
+                        .rescheduleAfter(appCluster, configManager.getOperatorConfiguration())
+                        .toMillis(),
+                updateControl.getScheduleDelay().get());
+        validatingResponseProvider.assertValidated();
+    }
+
+    public void verifyInProgressDeployment(String reason) throws Exception {
+        String crashLoopMessage = "container fails";
+
+        var submittedEventValidatingResponseProvider =
+                new TestUtils.ValidatingResponseProvider<>(
+                        new EventBuilder().withNewMetadata().endMetadata().build(),
+                        r ->
+                                assertTrue(
+                                        r.getBody()
+                                                .readUtf8()
+                                                .contains(
+                                                        AbstractFlinkResourceReconciler
+                                                                .MSG_SUBMIT)));
+        mockServer
+                .expect()
+                .post()
+                .withPath("/api/v1/namespaces/flink-operator-test/events")
+                .andReply(submittedEventValidatingResponseProvider)
+                .once();
+
+        var validatingResponseProvider =
+                new TestUtils.ValidatingResponseProvider<>(
+                        new EventBuilder().withNewMetadata().endMetadata().build(),
+                        r -> {
+                            String recordedRequestBody = r.getBody().readUtf8();
+                            assertTrue(recordedRequestBody.contains(reason));
+                            assertTrue(recordedRequestBody.contains(crashLoopMessage));
+                        });
+        mockServer
+                .expect()
+                .post()
+                .withPath("/api/v1/namespaces/flink-operator-test/events")
+                .andReply(validatingResponseProvider)
+                .once();
+
+        flinkService.setJmPodList(TestUtils.createFailedPodList(crashLoopMessage, reason));
 
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         UpdateControl<FlinkDeployment> updateControl;
@@ -852,7 +933,9 @@ public class FlinkDeploymentControllerTest {
     @Test
     public void testSuccessfulObservationShouldClearErrors() throws Exception {
         final String crashLoopMessage = "deploy errors";
-        flinkService.setJmPodList(TestUtils.createFailedPodList(crashLoopMessage));
+        flinkService.setJmPodList(
+                TestUtils.createFailedPodList(
+                        crashLoopMessage, DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF));
 
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
 
