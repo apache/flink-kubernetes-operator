@@ -127,6 +127,13 @@ public class SessionJobReconciler
     }
 
     @Override
+    protected void removeFailedJob(
+            FlinkSessionJob resource, Context<?> ctx, Configuration observeConfig)
+            throws Exception {
+        // The job has already stopped, nothing to clean up.
+    }
+
+    @Override
     public DeleteControl cleanupInternal(FlinkSessionJob sessionJob, Context<?> context) {
         Optional<FlinkDeployment> flinkDepOptional =
                 context.getSecondaryResource(FlinkDeployment.class);

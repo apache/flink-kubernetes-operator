@@ -52,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -62,7 +63,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class SessionJobReconcilerTest {
 
     private KubernetesClient kubernetesClient;
-    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+    private FlinkConfigManager configManager;
     private TestingFlinkService flinkService = new TestingFlinkService();
     private EventRecorder eventRecorder;
     private SessionJobReconciler reconciler;
@@ -71,6 +72,10 @@ public class SessionJobReconcilerTest {
 
     @BeforeEach
     public void before() {
+        var configuration = new Configuration();
+        configuration.set(OPERATOR_JOB_RESTART_FAILED, true);
+        configManager = new FlinkConfigManager(configuration);
+
         flinkService = new TestingFlinkService();
         flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
         eventRecorder =
@@ -149,6 +154,32 @@ public class SessionJobReconcilerTest {
                 org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 null,
                 flinkService.listJobs());
+    }
+
+    @Test
+    public void testRestartWhenFailed() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+
+        // session ready
+        reconciler.reconcile(sessionJob, readyContext);
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob,
+                JobState.RUNNING,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
+                null,
+                flinkService.listJobs());
+
+        sessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.FAILED.name());
+        reconciler.reconcile(sessionJob, readyContext);
+        assertEquals(2, flinkService.listJobs().size());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING,
+                flinkService.listJobs().get(1).f1.getJobState());
     }
 
     @Test
