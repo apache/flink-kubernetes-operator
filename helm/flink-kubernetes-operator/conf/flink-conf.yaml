@@ -39,6 +39,10 @@ parallelism.default: 2
 # kubernetes.operator.retry.initial.interval: 5 s
 # kubernetes.operator.retry.interval.multiplier: 2
 # kubernetes.operator.retry.max.attempts: 10
+# kubernetes.operator.exception.stacktrace.enabled: false
+# kubernetes.operator.exception.stacktrace.max.length: 2048
+# kubernetes.operator.exception.field.max.length: 2048
+# kubernetes.operator.exception.throwable.list.max.count: 2
 
 # kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
 # kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE

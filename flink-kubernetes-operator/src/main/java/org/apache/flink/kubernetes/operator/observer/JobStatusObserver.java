@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -34,6 +35,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 
+import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
+
 /** An observer to observe the job status. */
 public abstract class JobStatusObserver<
         R extends AbstractFlinkResource<?, ?>, CTX extends ObserverContext> {
@@ -45,10 +48,15 @@ public abstract class JobStatusObserver<
 
     protected final FlinkService flinkService;
     protected final EventRecorder eventRecorder;
+    protected final FlinkConfigManager configManager;
 
-    public JobStatusObserver(FlinkService flinkService, EventRecorder eventRecorder) {
+    public JobStatusObserver(
+            FlinkService flinkService,
+            FlinkConfigManager configManager,
+            EventRecorder eventRecorder) {
         this.flinkService = flinkService;
         this.eventRecorder = eventRecorder;
+        this.configManager = configManager;
     }
 
     /**
@@ -198,32 +206,16 @@ public abstract class JobStatusObserver<
                 result.getSerializedThrowable()
                         .ifPresent(
                                 t -> {
-                                    var error = t.getFullStringifiedStackTrace();
-                                    var trimmedError = getErrorWithMaxLength(error);
-                                    trimmedError.ifPresent(
-                                            value -> {
-                                                if (!value.equals(
-                                                        resource.getStatus().getError())) {
-                                                    resource.getStatus().setError(value);
-                                                    LOG.error(
-                                                            "Job {} failed with error: {}",
-                                                            clusterJobStatus.getJobId(),
-                                                            error);
-                                                }
-                                            });
+                                    updateFlinkResourceException(
+                                            t, resource, configManager.getOperatorConfiguration());
+                                    LOG.error(
+                                            "Job {} failed with error: {}",
+                                            clusterJobStatus.getJobId(),
+                                            t.getFullStringifiedStackTrace());
                                 });
             } catch (Exception e) {
                 LOG.warn("Failed to request the job result", e);
             }
-        }
-    }
-
-    private Optional<String> getErrorWithMaxLength(String error) {
-        if (error == null) {
-            return Optional.empty();
-        } else {
-            return Optional.of(
-                    error.substring(0, Math.min(error.length(), MAX_ERROR_STRING_LENGTH)));
         }
     }
 }

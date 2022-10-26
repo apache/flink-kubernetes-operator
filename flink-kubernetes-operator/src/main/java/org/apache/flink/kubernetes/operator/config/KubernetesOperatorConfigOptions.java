@@ -212,6 +212,38 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Maximum age for savepoint history entries to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.");
 
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Boolean> OPERATOR_EXCEPTION_STACK_TRACE_ENABLED =
+            operatorConfig("exception.stacktrace.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Enable exception stacktrace to be included in CR status error field.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Integer> OPERATOR_EXCEPTION_STACK_TRACE_MAX_LENGTH =
+            operatorConfig("exception.stacktrace.max.length")
+                    .intType()
+                    .defaultValue(2048)
+                    .withDescription(
+                            "Maximum length of stacktrace to be included in CR status error field.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Integer> OPERATOR_EXCEPTION_FIELD_MAX_LENGTH =
+            operatorConfig("exception.field.max.length")
+                    .intType()
+                    .defaultValue(2048)
+                    .withDescription(
+                            "Maximum length of each exception field including stack trace to be included in CR status error field.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Integer> OPERATOR_EXCEPTION_THROWABLE_LIST_MAX_COUNT =
+            operatorConfig("exception.throwable.list.max.count")
+                    .intType()
+                    .defaultValue(2)
+                    .withDescription(
+                            "Maximum number of throwable to be included in CR status error field.");
+
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD =
             ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE.key() + ".threshold")

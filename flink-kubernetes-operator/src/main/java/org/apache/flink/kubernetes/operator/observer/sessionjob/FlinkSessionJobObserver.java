@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.exception.MissingSessionJobException;
 import org.apache.flink.kubernetes.operator.observer.AbstractFlinkResourceObserver;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
@@ -80,7 +81,8 @@ public class FlinkSessionJobObserver
             Context<?> ctx,
             FlinkSessionJobObserverContext observerContext) {
 
-        var jobStatusObserver = new SessionJobStatusObserver(observerContext, eventRecorder);
+        var jobStatusObserver =
+                new SessionJobStatusObserver(observerContext, configManager, eventRecorder);
         var jobFound = jobStatusObserver.observe(flinkSessionJob, ctx, observerContext);
 
         if (jobFound) {
@@ -157,8 +159,10 @@ public class FlinkSessionJobObserver
             extends JobStatusObserver<FlinkSessionJob, FlinkSessionJobObserverContext> {
 
         public SessionJobStatusObserver(
-                FlinkSessionJobObserverContext observerContext, EventRecorder eventRecorder) {
-            super(observerContext.getFlinkService(), eventRecorder);
+                FlinkSessionJobObserverContext observerContext,
+                FlinkConfigManager configManager,
+                EventRecorder eventRecorder) {
+            super(observerContext.getFlinkService(), configManager, eventRecorder);
         }
 
         @Override
@@ -218,7 +222,10 @@ public class FlinkSessionJobObserver
                     .getJobStatus()
                     .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
             LOG.error(MISSING_SESSION_JOB_ERR);
-            ReconciliationUtils.updateForReconciliationError(sessionJob, MISSING_SESSION_JOB_ERR);
+            ReconciliationUtils.updateForReconciliationError(
+                    sessionJob,
+                    new MissingSessionJobException(MISSING_SESSION_JOB_ERR),
+                    configManager.getOperatorConfiguration());
             eventRecorder.triggerEvent(
                     sessionJob,
                     EventRecorder.Type.Warning,

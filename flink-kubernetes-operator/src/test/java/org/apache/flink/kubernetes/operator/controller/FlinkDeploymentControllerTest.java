@@ -208,8 +208,11 @@ public class FlinkDeploymentControllerTest {
         assertFalse(updateControl.isUpdateStatus());
 
         reconciliationStatus = appCluster.getStatus().getReconciliationStatus();
-        assertEquals(
-                "Cannot switch from job to session cluster", appCluster.getStatus().getError());
+        assertTrue(
+                appCluster
+                        .getStatus()
+                        .getError()
+                        .contains("Cannot switch from job to session cluster"));
         assertNotNull(reconciliationStatus.deserializeLastReconciledSpec().getJob());
 
         // Validate job status correct even with error
@@ -654,9 +657,11 @@ public class FlinkDeploymentControllerTest {
         appCluster.getSpec().getJobManager().setReplicas(-1);
         // Next reconcile will set error msg and observe with previous validated config
         updateControl = testController.reconcile(appCluster, context);
-        assertEquals(
-                "JobManager replicas should not be configured less than one.",
-                appCluster.getStatus().getError());
+        assertTrue(
+                appCluster
+                        .getStatus()
+                        .getError()
+                        .contains("JobManager replicas should not be configured less than one."));
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
@@ -865,7 +870,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.ERROR,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertEquals(crashLoopMessage, appCluster.getStatus().getError());
+        assertTrue(appCluster.getStatus().getError().contains(crashLoopMessage));
 
         // JobManager deployment becomes ready and successful observation should clear the errors
         testController.reconcile(appCluster, context);

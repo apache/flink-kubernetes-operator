@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
+import org.apache.flink.kubernetes.operator.exception.UnknownJobException;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthObserver;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
@@ -53,7 +54,8 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
         super(flinkService, configManager, eventRecorder);
         this.savepointObserver =
                 new SavepointObserver<>(flinkService, configManager, eventRecorder);
-        this.jobStatusObserver = new ApplicationJobObserver(flinkService, eventRecorder);
+        this.jobStatusObserver =
+                new ApplicationJobObserver(flinkService, configManager, eventRecorder);
         this.clusterHealthObserver = new ClusterHealthObserver(flinkService);
     }
 
@@ -76,8 +78,11 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
 
     private class ApplicationJobObserver
             extends JobStatusObserver<FlinkDeployment, FlinkDeploymentObserverContext> {
-        public ApplicationJobObserver(FlinkService flinkService, EventRecorder eventRecorder) {
-            super(flinkService, eventRecorder);
+        public ApplicationJobObserver(
+                FlinkService flinkService,
+                FlinkConfigManager configManager,
+                EventRecorder eventRecorder) {
+            super(flinkService, configManager, eventRecorder);
         }
 
         @Override
@@ -117,7 +122,10 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
                     .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
             String err = "Unrecognized Job for Application deployment";
             logger.error(err);
-            ReconciliationUtils.updateForReconciliationError(deployment, err);
+            ReconciliationUtils.updateForReconciliationError(
+                    deployment,
+                    new UnknownJobException(err),
+                    configManager.getOperatorConfiguration());
             eventRecorder.triggerEvent(
                     deployment,
                     EventRecorder.Type.Warning,
