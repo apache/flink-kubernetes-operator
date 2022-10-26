@@ -127,7 +127,7 @@ public class SessionJobReconciler
     }
 
     @Override
-    protected void removeFailedJob(
+    protected void cleanupAfterFailedJob(
             FlinkSessionJob resource, Context<?> ctx, Configuration observeConfig)
             throws Exception {
         // The job has already stopped, nothing to clean up.

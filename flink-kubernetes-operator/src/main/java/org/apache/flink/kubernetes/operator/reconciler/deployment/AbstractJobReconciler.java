@@ -246,7 +246,7 @@ public abstract class AbstractJobReconciler<
         if (jobStatus == org.apache.flink.api.common.JobStatus.FAILED
                 && observeConfig.getBoolean(OPERATOR_JOB_RESTART_FAILED)) {
             LOG.info("Stopping failed Flink job...");
-            removeFailedJob(resource, context, observeConfig);
+            cleanupAfterFailedJob(resource, context, observeConfig);
             resource.getStatus().setError("");
             resubmitJob(resource, context, observeConfig, false);
             return true;
@@ -289,6 +289,6 @@ public abstract class AbstractJobReconciler<
      * @param observeConfig Observe configuration.
      * @throws Exception Error during cancellation.
      */
-    protected abstract void removeFailedJob(
+    protected abstract void cleanupAfterFailedJob(
             CR resource, Context<?> ctx, Configuration observeConfig) throws Exception;
 }

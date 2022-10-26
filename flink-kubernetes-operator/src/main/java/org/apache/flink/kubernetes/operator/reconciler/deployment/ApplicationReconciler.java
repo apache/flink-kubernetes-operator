@@ -237,7 +237,7 @@ public class ApplicationReconciler
     }
 
     @Override
-    protected void removeFailedJob(
+    protected void cleanupAfterFailedJob(
             FlinkDeployment deployment, Context<?> ctx, Configuration observeConfig) {
         // The job has already stopped. Delete the deployment and we are ready.
         flinkService.deleteClusterDeployment(
@@ -275,7 +275,7 @@ public class ApplicationReconciler
         boolean shouldRecoverDeployment = shouldRecoverDeployment(observeConfig, deployment);
         if (shouldRestartJobBecauseUnhealthy || shouldRecoverDeployment) {
             if (shouldRestartJobBecauseUnhealthy) {
-                removeFailedJob(deployment, ctx, observeConfig);
+                cleanupAfterFailedJob(deployment, ctx, observeConfig);
             }
             resubmitJob(deployment, ctx, observeConfig, true);
             return true;
