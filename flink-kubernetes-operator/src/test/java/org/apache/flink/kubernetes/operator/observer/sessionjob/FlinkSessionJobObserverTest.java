@@ -164,8 +164,11 @@ public class FlinkSessionJobObserverTest {
         observer.observe(sessionJob2, readyContext);
         Assertions.assertEquals(
                 JobStatus.RECONCILING.name(), sessionJob2.getStatus().getJobStatus().getState());
-        Assertions.assertEquals(
-                JobStatusObserver.MISSING_SESSION_JOB_ERR, sessionJob2.getStatus().getError());
+        Assertions.assertTrue(
+                sessionJob2
+                        .getStatus()
+                        .getError()
+                        .contains(JobStatusObserver.MISSING_SESSION_JOB_ERR));
         Assertions.assertEquals(
                 JobStatusObserver.MISSING_SESSION_JOB_ERR,
                 eventCollector.events.peek().getMessage());

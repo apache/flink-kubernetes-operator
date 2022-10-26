@@ -31,7 +31,7 @@ import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo;
-import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.exception.ValidationException;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.util.Preconditions;
@@ -52,6 +52,7 @@ import java.util.Optional;
 
 import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
+import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
 
 /** Reconciliation utilities. */
 public class ReconciliationUtils {
@@ -172,8 +173,8 @@ public class ReconciliationUtils {
     }
 
     public static void updateForReconciliationError(
-            AbstractFlinkResource<?, ?> target, String error) {
-        target.getStatus().setError(error);
+            AbstractFlinkResource<?, ?> target, Throwable error, FlinkOperatorConfiguration conf) {
+        updateFlinkResourceException(error, target, conf);
     }
 
     public static <T> T clone(T object) {
@@ -355,12 +356,15 @@ public class ReconciliationUtils {
      *     reconcile.
      */
     public static <SPEC extends AbstractFlinkSpec> boolean applyValidationErrorAndResetSpec(
-            AbstractFlinkResource<SPEC, ?> deployment, String validationError) {
+            AbstractFlinkResource<SPEC, ?> deployment,
+            String validationError,
+            FlinkOperatorConfiguration conf) {
 
         var status = deployment.getStatus();
         if (!validationError.equals(status.getError())) {
             LOG.error("Validation failed: " + validationError);
-            ReconciliationUtils.updateForReconciliationError(deployment, validationError);
+            ReconciliationUtils.updateForReconciliationError(
+                    deployment, new ValidationException(validationError), conf);
         }
 
         var lastReconciledSpec = status.getReconciliationStatus().deserializeLastReconciledSpec();
@@ -383,12 +387,13 @@ public class ReconciliationUtils {
      * Update the resource error status and metrics when the operator encountered an exception
      * during reconciliation.
      *
+     * @param <STATUS> Status type.
+     * @param <R> Resource type.
      * @param resource Flink Resource to be updated
      * @param retryInfo Current RetryInformation
      * @param e Exception that caused the retry
      * @param statusRecorder statusRecorder object for patching status
-     * @param <STATUS> Status type.
-     * @param <R> Resource type.
+     * @param operatorConfiguration
      * @return This always returns Empty optional currently, due to the status update logic
      */
     public static <STATUS extends CommonStatus<?>, R extends AbstractFlinkResource<?, STATUS>>
@@ -396,7 +401,8 @@ public class ReconciliationUtils {
                     R resource,
                     Optional<RetryInfo> retryInfo,
                     Exception e,
-                    StatusRecorder<R, STATUS> statusRecorder) {
+                    StatusRecorder<R, STATUS> statusRecorder,
+                    FlinkOperatorConfiguration operatorConfiguration) {
 
         retryInfo.ifPresent(
                 r ->
@@ -406,9 +412,7 @@ public class ReconciliationUtils {
                                 r.isLastAttempt()));
 
         statusRecorder.updateStatusFromCache(resource);
-        ReconciliationUtils.updateForReconciliationError(
-                resource,
-                (e instanceof ReconciliationException) ? e.getCause().toString() : e.toString());
+        ReconciliationUtils.updateForReconciliationError(resource, e, operatorConfiguration);
         statusRecorder.patchAndCacheStatus(resource);
 
         // Status was updated already, no need to return anything

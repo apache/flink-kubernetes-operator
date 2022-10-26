@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.exception.MissingJobManagerException;
 import org.apache.flink.kubernetes.operator.observer.AbstractFlinkResourceObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -230,7 +231,10 @@ public abstract class AbstractFlinkDeploymentObserver
     private void onMissingDeployment(FlinkDeployment deployment) {
         String err = "Missing JobManager deployment";
         logger.error(err);
-        ReconciliationUtils.updateForReconciliationError(deployment, err);
+        ReconciliationUtils.updateForReconciliationError(
+                deployment,
+                new MissingJobManagerException(err),
+                configManager.getOperatorConfiguration());
         eventRecorder.triggerEvent(
                 deployment,
                 EventRecorder.Type.Warning,

@@ -143,7 +143,8 @@ public class FlinkDeploymentController
         LOG.error("Flink Deployment failed", dfe);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
         flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
-        ReconciliationUtils.updateForReconciliationError(flinkApp, dfe.getMessage());
+        ReconciliationUtils.updateForReconciliationError(
+                flinkApp, dfe, configManager.getOperatorConfiguration());
         eventRecorder.triggerEvent(
                 flinkApp,
                 EventRecorder.Type.Warning,
@@ -164,7 +165,11 @@ public class FlinkDeploymentController
     public ErrorStatusUpdateControl<FlinkDeployment> updateErrorStatus(
             FlinkDeployment flinkDeployment, Context<FlinkDeployment> context, Exception e) {
         return ReconciliationUtils.toErrorStatusUpdateControl(
-                flinkDeployment, context.getRetryInfo(), e, statusRecorder);
+                flinkDeployment,
+                context.getRetryInfo(),
+                e,
+                statusRecorder,
+                configManager.getOperatorConfiguration());
     }
 
     private boolean validateDeployment(FlinkDeployment deployment) {
@@ -178,7 +183,9 @@ public class FlinkDeploymentController
                         EventRecorder.Component.Operator,
                         validationError.get());
                 return ReconciliationUtils.applyValidationErrorAndResetSpec(
-                        deployment, validationError.get());
+                        deployment,
+                        validationError.get(),
+                        configManager.getOperatorConfiguration());
             }
         }
         return true;

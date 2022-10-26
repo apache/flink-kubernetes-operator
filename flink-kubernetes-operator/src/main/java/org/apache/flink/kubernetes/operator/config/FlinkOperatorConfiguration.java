@@ -53,6 +53,10 @@ public class FlinkOperatorConfiguration {
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
     RetryConfiguration retryConfiguration;
+    Boolean exceptionStackTraceEnabled;
+    int exceptionStackTraceLengthThreshold;
+    int exceptionFieldLengthThreshold;
+    int exceptionThrowableCountThreshold;
     String labelSelector;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
@@ -94,6 +98,19 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions
                                 .OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD);
+        Boolean exceptionStackTraceEnabled =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_STACK_TRACE_ENABLED);
+        int exceptionStackTraceLengthThreshold =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_STACK_TRACE_MAX_LENGTH);
+        int exceptionFieldLengthThreshold =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_FIELD_MAX_LENGTH);
+        int exceptionThrowableCountThreshold =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_EXCEPTION_THROWABLE_LIST_MAX_COUNT);
 
         String flinkServiceHostOverride = null;
         if (EnvUtils.get(EnvUtils.ENV_KUBERNETES_SERVICE_HOST).isEmpty()) {
@@ -147,6 +164,10 @@ public class FlinkOperatorConfiguration {
                 savepointHistoryCountThreshold,
                 savepointHistoryAgeThreshold,
                 retryConfiguration,
+                exceptionStackTraceEnabled,
+                exceptionStackTraceLengthThreshold,
+                exceptionFieldLengthThreshold,
+                exceptionThrowableCountThreshold,
                 labelSelector);
     }
 

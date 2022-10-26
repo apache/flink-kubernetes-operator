@@ -123,7 +123,11 @@ public class FlinkSessionJobController
     public ErrorStatusUpdateControl<FlinkSessionJob> updateErrorStatus(
             FlinkSessionJob sessionJob, Context<FlinkSessionJob> context, Exception e) {
         return ReconciliationUtils.toErrorStatusUpdateControl(
-                sessionJob, context.getRetryInfo(), e, statusRecorder);
+                sessionJob,
+                context.getRetryInfo(),
+                e,
+                statusRecorder,
+                configManager.getOperatorConfiguration());
     }
 
     @Override
@@ -146,7 +150,9 @@ public class FlinkSessionJobController
                         EventRecorder.Component.Operator,
                         validationError.get());
                 return ReconciliationUtils.applyValidationErrorAndResetSpec(
-                        sessionJob, validationError.get());
+                        sessionJob,
+                        validationError.get(),
+                        configManager.getOperatorConfiguration());
             }
         }
         return true;
