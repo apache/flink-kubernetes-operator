@@ -236,6 +236,14 @@ public class ApplicationReconciler
         flinkService.cancelJob(deployment, upgradeMode, observeConfig);
     }
 
+    @Override
+    protected void cleanupAfterFailedJob(
+            FlinkDeployment deployment, Context<?> ctx, Configuration observeConfig) {
+        // The job has already stopped. Delete the deployment and we are ready.
+        flinkService.deleteClusterDeployment(
+                deployment.getMetadata(), deployment.getStatus(), false);
+    }
+
     // Workaround for https://issues.apache.org/jira/browse/FLINK-27569
     private static void setRandomJobResultStorePath(Configuration effectiveConfig) {
         if (effectiveConfig.contains(HighAvailabilityOptions.HA_STORAGE_PATH)) {
@@ -267,21 +275,13 @@ public class ApplicationReconciler
         boolean shouldRecoverDeployment = shouldRecoverDeployment(observeConfig, deployment);
         if (shouldRestartJobBecauseUnhealthy || shouldRecoverDeployment) {
             if (shouldRestartJobBecauseUnhealthy) {
-                cancelJob(deployment, ctx, UpgradeMode.LAST_STATE, observeConfig);
+                cleanupAfterFailedJob(deployment, ctx, observeConfig);
             }
-            recoverJmDeployment(deployment, ctx, observeConfig);
+            resubmitJob(deployment, ctx, observeConfig, true);
             return true;
         }
 
         return false;
-    }
-
-    private void recoverJmDeployment(
-            FlinkDeployment deployment, Context<?> ctx, Configuration observeConfig)
-            throws Exception {
-        LOG.info("Missing Flink Cluster deployment, trying to recover...");
-        FlinkDeploymentSpec specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
-        restoreJob(deployment, specToRecover, deployment.getStatus(), ctx, observeConfig, true);
     }
 
     private boolean shouldRestartJobBecauseUnhealthy(

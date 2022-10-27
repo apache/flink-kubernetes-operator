@@ -40,6 +40,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
+
 /**
  * Reconciler responsible for handling the job lifecycle according to the desired and current
  * states.
@@ -238,8 +240,34 @@ public abstract class AbstractJobReconciler<
     @Override
     public boolean reconcileOtherChanges(
             CR resource, Context<?> context, Configuration observeConfig) throws Exception {
-        return SavepointUtils.triggerSavepointIfNeeded(
-                getFlinkService(resource, context), resource, observeConfig);
+        var jobStatus =
+                org.apache.flink.api.common.JobStatus.valueOf(
+                        resource.getStatus().getJobStatus().getState());
+        if (jobStatus == org.apache.flink.api.common.JobStatus.FAILED
+                && observeConfig.getBoolean(OPERATOR_JOB_RESTART_FAILED)) {
+            LOG.info("Stopping failed Flink job...");
+            cleanupAfterFailedJob(resource, context, observeConfig);
+            resource.getStatus().setError("");
+            resubmitJob(resource, context, observeConfig, false);
+            return true;
+        } else {
+            return SavepointUtils.triggerSavepointIfNeeded(
+                    getFlinkService(resource, context), resource, observeConfig);
+        }
+    }
+
+    protected void resubmitJob(
+            CR deployment, Context<?> ctx, Configuration observeConfig, boolean requireHaMetadata)
+            throws Exception {
+        LOG.info("Resubmitting Flink job...");
+        SPEC specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
+        restoreJob(
+                deployment,
+                specToRecover,
+                deployment.getStatus(),
+                ctx,
+                observeConfig,
+                requireHaMetadata);
     }
 
     /**
@@ -253,4 +281,14 @@ public abstract class AbstractJobReconciler<
     protected abstract void cancelJob(
             CR resource, Context<?> ctx, UpgradeMode upgradeMode, Configuration observeConfig)
             throws Exception;
+
+    /**
+     * Removes a failed job.
+     *
+     * @param resource The failed job.
+     * @param observeConfig Observe configuration.
+     * @throws Exception Error during cancellation.
+     */
+    protected abstract void cleanupAfterFailedJob(
+            CR resource, Context<?> ctx, Configuration observeConfig) throws Exception;
 }
