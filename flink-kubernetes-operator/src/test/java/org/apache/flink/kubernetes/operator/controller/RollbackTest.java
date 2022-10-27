@@ -62,6 +62,8 @@ public class RollbackTest {
 
     private KubernetesClient kubernetesClient;
 
+    private static final int ROLLBACK_DELAY = 600;
+
     @BeforeEach
     public void setup() {
         flinkService = new TestingFlinkService(kubernetesClient);
@@ -104,7 +106,7 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
 
                     // Trigger rollback by delaying the recovery
-                    Thread.sleep(500);
+                    Thread.sleep(ROLLBACK_DELAY);
                     testController.reconcile(dep, context);
                 },
                 () -> {
@@ -139,7 +141,7 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
 
                     // Trigger rollback by delaying the recovery
-                    Thread.sleep(200);
+                    Thread.sleep(ROLLBACK_DELAY);
                     testController.reconcile(dep, context);
                 },
                 () -> {
@@ -174,7 +176,7 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
 
                     // Trigger rollback by delaying the recovery
-                    Thread.sleep(200);
+                    Thread.sleep(ROLLBACK_DELAY);
                     testController.reconcile(dep, context);
                 },
                 () -> {
@@ -237,7 +239,7 @@ public class RollbackTest {
                                     "true");
 
                     // Trigger rollback by delaying the recovery
-                    Thread.sleep(200);
+                    Thread.sleep(ROLLBACK_DELAY);
                     dep.getStatus()
                             .getJobStatus()
                             .getSavepointInfo()
@@ -266,7 +268,7 @@ public class RollbackTest {
                     dep.getSpec().getFlinkConfiguration().put("random", "config");
                     testController.reconcile(dep, context);
                     // Trigger rollback by delaying the recovery
-                    Thread.sleep(500);
+                    Thread.sleep(ROLLBACK_DELAY);
                     testController.reconcile(dep, context);
                 },
                 () -> {
@@ -289,7 +291,7 @@ public class RollbackTest {
         flinkConfiguration.put(
                 KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(), "true");
         flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "100");
+                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "400");
 
         testController.reconcile(deployment, context);
 
@@ -378,7 +380,7 @@ public class RollbackTest {
             deployment.getSpec().getJob().setState(JobState.RUNNING);
             testController.reconcile(deployment, context);
             // Make sure we do not roll back to suspended state
-            Thread.sleep(200);
+            Thread.sleep(ROLLBACK_DELAY);
             testController.reconcile(deployment, context);
             testController.reconcile(deployment, context);
             assertTrue(
