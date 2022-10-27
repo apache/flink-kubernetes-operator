@@ -262,7 +262,7 @@ public class ApplicationObserverTest {
         observer.observe(deployment, readyContext);
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
         assertEquals(
-                0,
+                1,
                 kubernetesClient
                         .v1()
                         .events()
@@ -298,7 +298,7 @@ public class ApplicationObserverTest {
                                                                 + timedOutNonce))
                         .count());
         assertEquals(
-                1,
+                2,
                 kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
                         .list().getItems().stream()
                         .filter(e -> e.getReason().contains("SavepointError"))
