@@ -17,8 +17,8 @@
 ################################################################################
 
 # Flink job/cluster related configs
-taskmanager.numberOfTaskSlots: 2
-parallelism.default: 2
+taskmanager.numberOfTaskSlots: 1
+parallelism.default: 1
 
 # Flink operator related configs
 # kubernetes.operator.reconcile.interval: 60 s
