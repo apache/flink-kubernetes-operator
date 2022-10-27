@@ -109,17 +109,16 @@ public class SavepointObserver<
                                 + err);
                 ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                         savepointInfo, resource);
-                eventRecorder.triggerEvent(
-                        resource,
-                        EventRecorder.Type.Warning,
-                        EventRecorder.Reason.SavepointError,
-                        EventRecorder.Component.Operator,
-                        SavepointUtils.createSavepointError(
-                                savepointInfo,
-                                resource.getSpec().getJob().getSavepointTriggerNonce()));
             } else {
                 LOG.warn("Savepoint failed within grace period, retrying: " + err);
             }
+            eventRecorder.triggerEvent(
+                    resource,
+                    EventRecorder.Type.Warning,
+                    EventRecorder.Reason.SavepointError,
+                    EventRecorder.Component.Operator,
+                    SavepointUtils.createSavepointError(
+                            savepointInfo, resource.getSpec().getJob().getSavepointTriggerNonce()));
             savepointInfo.resetTrigger();
             return;
         }
