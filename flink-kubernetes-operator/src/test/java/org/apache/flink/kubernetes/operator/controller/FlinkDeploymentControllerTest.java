@@ -32,9 +32,10 @@ import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.JobStatus;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationStatus;
-import org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.crd.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
+import org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -295,8 +296,10 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
-                JobManagerDeploymentStatus.ERROR
-                        .rescheduleAfter(appCluster, configManager.getOperatorConfiguration())
+                ReconciliationUtils.rescheduleAfter(
+                                JobManagerDeploymentStatus.ERROR,
+                                appCluster,
+                                configManager.getOperatorConfiguration())
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
     }
@@ -377,8 +380,10 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
-                JobManagerDeploymentStatus.READY
-                        .rescheduleAfter(appCluster, configManager.getOperatorConfiguration())
+                ReconciliationUtils.rescheduleAfter(
+                                JobManagerDeploymentStatus.READY,
+                                appCluster,
+                                configManager.getOperatorConfiguration())
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
         validatingResponseProvider.assertValidated();
@@ -454,8 +459,10 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
-                JobManagerDeploymentStatus.READY
-                        .rescheduleAfter(appCluster, configManager.getOperatorConfiguration())
+                ReconciliationUtils.rescheduleAfter(
+                                JobManagerDeploymentStatus.READY,
+                                appCluster,
+                                configManager.getOperatorConfiguration())
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
         validatingResponseProvider.assertValidated();
@@ -609,8 +616,10 @@ public class FlinkDeploymentControllerTest {
                 EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
 
         assertEquals(
-                JobManagerDeploymentStatus.DEPLOYING
-                        .rescheduleAfter(appCluster, configManager.getOperatorConfiguration())
+                ReconciliationUtils.rescheduleAfter(
+                                JobManagerDeploymentStatus.DEPLOYING,
+                                appCluster,
+                                configManager.getOperatorConfiguration())
                         .toMillis(),
                 updateControl.getScheduleDelay().get());
 
@@ -979,7 +988,8 @@ public class FlinkDeploymentControllerTest {
 
         assertEquals(1, testController.events().size());
         assertEquals(
-                ResourceLifecycleState.FAILED, flinkDeployment.getStatus().getLifecycleState());
+                ResourceLifecycleState.FAILED,
+                OperatorMetricUtils.getLifecycleState(flinkDeployment.getStatus()));
 
         var event = testController.events().remove();
         assertEquals("Warning", event.getType());

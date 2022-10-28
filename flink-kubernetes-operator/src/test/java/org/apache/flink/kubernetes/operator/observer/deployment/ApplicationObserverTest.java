@@ -693,9 +693,9 @@ public class ApplicationObserverTest {
                 status.getJobManagerDeploymentStatus());
 
         var specWithMeta = status.getReconciliationStatus().deserializeLastReconciledSpecWithMeta();
-        assertEquals(321L, specWithMeta.f1.getMetadata().getGeneration());
-        assertEquals(JobState.RUNNING, specWithMeta.f0.getJob().getState());
-        assertEquals(5, specWithMeta.f0.getJob().getParallelism());
+        assertEquals(321L, specWithMeta.getMeta().getMetadata().getGeneration());
+        assertEquals(JobState.RUNNING, specWithMeta.getSpec().getJob().getState());
+        assertEquals(5, specWithMeta.getSpec().getJob().getParallelism());
     }
 
     @Test
@@ -709,7 +709,8 @@ public class ApplicationObserverTest {
                         .getDeployConfig(deployment.getMetadata(), deployment.getSpec()));
         var reconStatus = deployment.getStatus().getReconciliationStatus();
 
-        assertTrue(reconStatus.deserializeLastReconciledSpecWithMeta().f1.isFirstDeployment());
+        assertTrue(
+                reconStatus.deserializeLastReconciledSpecWithMeta().getMeta().isFirstDeployment());
         assertFalse(reconStatus.isBeforeFirstDeployment());
 
         observer.observe(deployment, TestUtils.createEmptyContext());

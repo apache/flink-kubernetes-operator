@@ -20,11 +20,10 @@ package org.apache.flink.kubernetes.operator.metrics.lifecycle;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorMetricOptions;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.metrics.CustomResourceMetrics;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.metrics.Histogram;
 import org.apache.flink.metrics.MetricGroup;
@@ -42,13 +41,13 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.CREATED;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.DEPLOYED;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.ROLLED_BACK;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.ROLLING_BACK;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.STABLE;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.SUSPENDED;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.UPGRADING;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.CREATED;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.DEPLOYED;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.ROLLED_BACK;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.ROLLING_BACK;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.STABLE;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.SUSPENDED;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.UPGRADING;
 
 /**
  * Utility for tracking resource lifecycle metrics globally and per namespace.
@@ -96,7 +95,9 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
 
     @Override
     public void onUpdate(CR cr) {
-        getLifecycleMetricTracker(cr).onUpdate(cr.getStatus().getLifecycleState(), clock.instant());
+        var status = cr.getStatus();
+        getLifecycleMetricTracker(cr)
+                .onUpdate(OperatorMetricUtils.getLifecycleState(status), clock.instant());
     }
 
     @Override
@@ -111,7 +112,7 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
         return lifecycleTrackers.computeIfAbsent(
                 Tuple2.of(cr.getMetadata().getNamespace(), cr.getMetadata().getName()),
                 k -> {
-                    var initialState = cr.getStatus().getLifecycleState();
+                    var initialState = OperatorMetricUtils.getLifecycleState(cr.getStatus());
                     var time =
                             initialState == CREATED
                                     ? Instant.parse(cr.getMetadata().getCreationTimestamp())

@@ -23,14 +23,13 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorMetricOptions;
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;
 import org.apache.flink.kubernetes.operator.crd.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.metrics.CustomResourceMetrics;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.metrics.TestingMetricListener;
@@ -45,14 +44,14 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.LongStream;
 
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.CREATED;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.DEPLOYED;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.FAILED;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.ROLLED_BACK;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.ROLLING_BACK;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.STABLE;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.SUSPENDED;
-import static org.apache.flink.kubernetes.operator.crd.status.ResourceLifecycleState.UPGRADING;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.CREATED;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.DEPLOYED;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.FAILED;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.ROLLED_BACK;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.ROLLING_BACK;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.STABLE;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.SUSPENDED;
+import static org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState.UPGRADING;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -64,22 +63,22 @@ public class ResourceLifecycleMetricsTest {
     @Test
     public void lifecycleStateTest() {
         var application = TestUtils.buildApplicationCluster();
-        assertEquals(CREATED, application.getStatus().getLifecycleState());
+        assertEquals(CREATED, OperatorMetricUtils.getLifecycleState(application.getStatus()));
 
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(application, new Configuration());
-        assertEquals(UPGRADING, application.getStatus().getLifecycleState());
+        assertEquals(UPGRADING, OperatorMetricUtils.getLifecycleState(application.getStatus()));
 
         ReconciliationUtils.updateStatusForDeployedSpec(application, new Configuration());
-        assertEquals(DEPLOYED, application.getStatus().getLifecycleState());
+        assertEquals(DEPLOYED, OperatorMetricUtils.getLifecycleState(application.getStatus()));
 
         application.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
-        assertEquals(STABLE, application.getStatus().getLifecycleState());
+        assertEquals(STABLE, OperatorMetricUtils.getLifecycleState(application.getStatus()));
 
         application.getStatus().setError("errr");
-        assertEquals(STABLE, application.getStatus().getLifecycleState());
+        assertEquals(STABLE, OperatorMetricUtils.getLifecycleState(application.getStatus()));
 
         application.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
-        assertEquals(FAILED, application.getStatus().getLifecycleState());
+        assertEquals(FAILED, OperatorMetricUtils.getLifecycleState(application.getStatus()));
 
         application.getStatus().setError("");
 
@@ -87,19 +86,19 @@ public class ResourceLifecycleMetricsTest {
                 .getStatus()
                 .getReconciliationStatus()
                 .setState(ReconciliationState.ROLLING_BACK);
-        assertEquals(ROLLING_BACK, application.getStatus().getLifecycleState());
+        assertEquals(ROLLING_BACK, OperatorMetricUtils.getLifecycleState(application.getStatus()));
 
         application.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
         application.getStatus().getReconciliationStatus().setState(ReconciliationState.ROLLED_BACK);
-        assertEquals(ROLLED_BACK, application.getStatus().getLifecycleState());
+        assertEquals(ROLLED_BACK, OperatorMetricUtils.getLifecycleState(application.getStatus()));
 
         application.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
-        assertEquals(FAILED, application.getStatus().getLifecycleState());
+        assertEquals(FAILED, OperatorMetricUtils.getLifecycleState(application.getStatus()));
 
         application.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
         application.getSpec().getJob().setState(JobState.SUSPENDED);
         ReconciliationUtils.updateStatusForDeployedSpec(application, new Configuration());
-        assertEquals(SUSPENDED, application.getStatus().getLifecycleState());
+        assertEquals(SUSPENDED, OperatorMetricUtils.getLifecycleState(application.getStatus()));
     }
 
     @Test

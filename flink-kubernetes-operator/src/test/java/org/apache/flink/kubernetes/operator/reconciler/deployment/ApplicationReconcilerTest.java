@@ -115,7 +115,7 @@ public class ApplicationReconcilerTest {
                         .getStatus()
                         .getReconciliationStatus()
                         .deserializeLastReconciledSpecWithMeta()
-                        .f1
+                        .getMeta()
                         .isFirstDeployment());
 
         JobID jobId = runningJobs.get(0).f1.getJobId();
@@ -131,7 +131,7 @@ public class ApplicationReconcilerTest {
                         .getStatus()
                         .getReconciliationStatus()
                         .deserializeLastReconciledSpecWithMeta()
-                        .f1
+                        .getMeta()
                         .isFirstDeployment());
 
         assertEquals(0, flinkService.getRunningCount());
@@ -142,7 +142,7 @@ public class ApplicationReconcilerTest {
                         .getStatus()
                         .getReconciliationStatus()
                         .deserializeLastReconciledSpecWithMeta()
-                        .f1
+                        .getMeta()
                         .isFirstDeployment());
 
         runningJobs = flinkService.listJobs();
