@@ -74,7 +74,7 @@ The Webhook follow the Kubernetes principles, notably the [dynamic admission con
 It's deployed by default when the Operator is installed on a Kubernetes cluster using [Helm](https://helm.sh).
 Please see further details how to deploy the Operator/Webhook [here](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/try-flink-kubernetes-operator/quick-start/#deploying-the-operator).
 
-The Webhook is using TLS protocol for communication by default. It automatically loads/re-loads keytore file when the file
+The Webhook is using TLS protocol for communication by default. It automatically loads/re-loads keystore file when the file
 has changed and provides the following endpoints:
 
 {{< img src="/img/concepts/webhook.svg" alt="Webhook" >}}
