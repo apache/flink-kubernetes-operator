@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.crd.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.crd.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.crd.status.Savepoint;
+import org.apache.flink.kubernetes.operator.crd.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.crd.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -79,7 +80,7 @@ public interface FlinkService {
     void triggerSavepoint(
             String jobId,
             SavepointTriggerType triggerType,
-            org.apache.flink.kubernetes.operator.crd.status.SavepointInfo savepointInfo,
+            SavepointInfo savepointInfo,
             Configuration conf)
             throws Exception;
 

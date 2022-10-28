@@ -58,7 +58,7 @@ under the License.
 
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-kubernetes-api</artifactId>
+            <artifactId>flink-kubernetes-operator-api</artifactId>
             <version>${project.version}</version>
         </dependency>
 
@@ -67,13 +67,6 @@ under the License.
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
             <version>${snakeyaml.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>io.fabric8</groupId>
-            <artifactId>crd-generator-apt</artifactId>
-            <version>${fabric8.version}</version>
-            <scope>provided</scope>
         </dependency>
 
         <!-- Flink -->
@@ -159,7 +152,7 @@ under the License.
 
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-kubernetes-api</artifactId>
+            <artifactId>flink-kubernetes-operator-api</artifactId>
             <version>${project.version}</version>
             <classifier>tests</classifier>
             <scope>test</scope>
@@ -209,32 +202,6 @@ under the License.
         </resources>
 
         <plugins>
-            <plugin>
-                <artifactId>maven-resources-plugin</artifactId>
-                <version>${maven-resources-plugin.version}</version>
-                <executions>
-                    <execution>
-                        <id>copy-resources</id>
-                        <phase>process-classes</phase>
-                        <goals>
-                            <goal>copy-resources</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.basedir}/../helm/flink-kubernetes-operator/crds</outputDirectory>
-                            <resources>
-                                <resource>
-                                    <directory>${project.build.outputDirectory}/META-INF/fabric8</directory>
-                                    <includes>
-                                        <include>flinkdeployments.flink.apache.org-v1.yml</include>
-                                        <include>flinksessionjobs.flink.apache.org-v1.yml</include>
-                                    </includes>
-                                    <filtering>false</filtering>
-                                </resource>
-                            </resources>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
@@ -378,51 +345,6 @@ under the License.
                     <commitIdGenerationMode>full</commitIdGenerationMode>
                 </configuration>
             </plugin>
-            <plugin>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>deployment-crd-compatibility-check</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <target>
-                                <java classname="org.apache.flink.kubernetes.operator.validation.CrdCompatibilityChecker"
-                                      fork="true" failonerror="true">
-                                    <classpath refid="maven.compile.classpath"/>
-                                    <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.1/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.1.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.2.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
-                                </java>
-                            </target>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>sessionjob-crd-compatibility-check</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>run</goal>
-                        </goals>
-                        <configuration>
-                            <target>
-                                <java classname="org.apache.flink.kubernetes.operator.validation.CrdCompatibilityChecker"
-                                      fork="true" failonerror="true">
-                                    <classpath refid="maven.compile.classpath"/>
-                                    <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.0.1/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.1.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
-                                    <arg value="https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.2.0/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>
-                                </java>
-                            </target>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
     <profiles>
@@ -446,24 +368,6 @@ under the License.
                                 </goals>
                             </execution>
                         </executions>
-                        <configuration>
-                            <doclet>org.apache.flink.kubernetes.operator.docs.CrdReferenceDoclet</doclet>
-                            <docletArtifacts>
-                                <docletArtifact>
-                                    <groupId>org.apache.flink</groupId>
-                                    <artifactId>flink-kubernetes-operator</artifactId>
-                                    <version>${project.version}</version>
-                                </docletArtifact>
-                            </docletArtifacts>
-                            <additionalOptions>
-                                <additionalOption>--outputFile</additionalOption>
-                                <additionalOption>${project.basedir}/../docs/content/docs/custom-resource/reference.md
-                                </additionalOption>
-                                <additionalOption>--templateFile</additionalOption>
-                                <additionalOption>${project.basedir}/../docs/template/crd-ref.template</additionalOption>
-                            </additionalOptions>
-                            <useStandardDocletOptions>false</useStandardDocletOptions>
-                        </configuration>
                     </plugin>
                 </plugins>
             </build>

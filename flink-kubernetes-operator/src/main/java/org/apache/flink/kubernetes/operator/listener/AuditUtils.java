@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.listener;
 
 import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 
 import io.fabric8.kubernetes.api.model.Event;
 import lombok.NonNull;
@@ -41,12 +42,13 @@ public class AuditUtils {
     }
 
     private static String format(@NonNull CommonStatus<?> status) {
+        var lifeCycleState = OperatorMetricUtils.getLifecycleState(status);
         return String.format(
                 ">>> Status | %-7s | %-15s | %s ",
                 StringUtils.isEmpty(status.getError()) ? "Info" : "Error",
-                status.getLifecycleState(),
+                lifeCycleState,
                 StringUtils.isEmpty(status.getError())
-                        ? status.getLifecycleState().getDescription()
+                        ? lifeCycleState.getDescription()
                         : status.getError());
     }
 

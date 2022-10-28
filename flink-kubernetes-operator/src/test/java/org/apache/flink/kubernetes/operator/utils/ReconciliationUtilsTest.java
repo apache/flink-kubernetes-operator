@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.crd.spec.JobState;

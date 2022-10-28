@@ -51,10 +51,10 @@ under the License.
     </scm>
 
     <modules>
-        <module>flink-kubernetes-api</module>
         <module>flink-kubernetes-standalone</module>
         <module>flink-kubernetes-shaded</module>
         <module>flink-kubernetes-operator</module>
+        <module>flink-kubernetes-operator-api</module>
         <module>flink-kubernetes-webhook</module>
         <module>flink-kubernetes-docs</module>
         <module>examples/flink-sql-runner-example</module>
@@ -77,6 +77,7 @@ under the License.
         <fabric8.version>5.12.3</fabric8.version>
         <lombok.version>1.18.22</lombok.version>
         <commons-lang3.version>3.12.0</commons-lang3.version>
+        <commons-io.version>2.11.0</commons-io.version>
         <flink.version>1.15.2</flink.version>
 
         <slf4j.version>1.7.36</slf4j.version>
