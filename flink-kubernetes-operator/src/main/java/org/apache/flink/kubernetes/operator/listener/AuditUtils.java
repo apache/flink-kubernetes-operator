@@ -17,8 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.listener;
 
-import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.crd.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 
 import io.fabric8.kubernetes.api.model.Event;

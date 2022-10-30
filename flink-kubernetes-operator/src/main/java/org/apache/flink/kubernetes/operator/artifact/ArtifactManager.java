@@ -18,8 +18,8 @@
 package org.apache.flink.kubernetes.operator.artifact;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec;
 import org.apache.flink.util.FlinkRuntimeException;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;

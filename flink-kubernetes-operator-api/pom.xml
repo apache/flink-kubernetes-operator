@@ -154,7 +154,7 @@ under the License.
                             </execution>
                         </executions>
                         <configuration>
-                            <doclet>org.apache.flink.kubernetes.operator.docs.CrdReferenceDoclet</doclet>
+                            <doclet>org.apache.flink.kubernetes.operator.api.docs.CrdReferenceDoclet</doclet>
                             <docletArtifacts>
                                 <docletArtifact>
                                     <groupId>org.apache.flink</groupId>
@@ -215,7 +215,7 @@ under the License.
                         </goals>
                         <configuration>
                             <target>
-                                <java classname="org.apache.flink.kubernetes.operator.validation.CrdCompatibilityChecker"
+                                <java classname="org.apache.flink.kubernetes.operator.api.validation.CrdCompatibilityChecker"
                                       fork="true" failonerror="true">
                                     <classpath refid="maven.compile.classpath"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml"/>
@@ -235,7 +235,7 @@ under the License.
                         </goals>
                         <configuration>
                             <target>
-                                <java classname="org.apache.flink.kubernetes.operator.validation.CrdCompatibilityChecker"
+                                <java classname="org.apache.flink.kubernetes.operator.api.validation.CrdCompatibilityChecker"
                                       fork="true" failonerror="true">
                                     <classpath refid="maven.compile.classpath"/>
                                     <arg value="file://${rootDir}/helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.apache.org-v1.yml"/>

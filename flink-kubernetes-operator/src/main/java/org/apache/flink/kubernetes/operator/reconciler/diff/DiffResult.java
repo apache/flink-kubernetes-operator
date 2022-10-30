@@ -18,8 +18,8 @@
 package org.apache.flink.kubernetes.operator.reconciler.diff;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.diff.DiffType;
-import org.apache.flink.kubernetes.operator.diff.Diffable;
+import org.apache.flink.kubernetes.operator.api.diff.DiffType;
+import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 
 import lombok.Getter;
 import lombok.NonNull;
