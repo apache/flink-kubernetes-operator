@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 
 import java.util.Map;
 import java.util.Set;

@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.admission.informer;
 
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;

@@ -18,7 +18,7 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.kubernetes.operator.crd.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 
 import io.fabric8.kubernetes.api.model.Event;
 

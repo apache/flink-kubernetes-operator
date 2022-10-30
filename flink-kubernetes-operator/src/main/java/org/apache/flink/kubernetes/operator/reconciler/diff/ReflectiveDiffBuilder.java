@@ -18,9 +18,9 @@
 package org.apache.flink.kubernetes.operator.reconciler.diff;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.diff.DiffType;
-import org.apache.flink.kubernetes.operator.diff.Diffable;
-import org.apache.flink.kubernetes.operator.diff.SpecDiff;
+import org.apache.flink.kubernetes.operator.api.diff.DiffType;
+import org.apache.flink.kubernetes.operator.api.diff.Diffable;
+import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
 
 import lombok.NonNull;
 import org.apache.commons.lang3.ClassUtils;
@@ -35,7 +35,7 @@ import java.util.HashSet;
 import java.util.Map;
 
 import static org.apache.commons.lang3.reflect.FieldUtils.readField;
-import static org.apache.flink.kubernetes.operator.diff.DiffType.UPGRADE;
+import static org.apache.flink.kubernetes.operator.api.diff.DiffType.UPGRADE;
 
 /**
  * Assists in comparing {@link Diffable} objects with reflection.

@@ -17,9 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.service;
 
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.spec.KubernetesDeploymentMode;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;

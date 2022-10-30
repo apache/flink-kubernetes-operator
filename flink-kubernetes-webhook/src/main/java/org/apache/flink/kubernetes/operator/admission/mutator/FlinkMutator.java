@@ -17,8 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.admission.mutator;
 
-import org.apache.flink.kubernetes.operator.crd.CrdConstants;
-import org.apache.flink.kubernetes.operator.crd.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.HasMetadata;

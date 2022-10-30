@@ -18,8 +18,8 @@
 
 package org.apache.flink.kubernetes.operator.config;
 
-import org.apache.flink.kubernetes.operator.crd.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 
 /** The mode of {@link FlinkDeployment}. */
 public enum Mode {
