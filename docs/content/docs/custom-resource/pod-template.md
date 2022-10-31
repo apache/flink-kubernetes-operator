@@ -49,8 +49,8 @@ metadata:
   namespace: default
   name: pod-template-example
 spec:
-  image: flink:1.15
-  flinkVersion: v1_15
+  image: flink:1.16
+  flinkVersion: v1_16
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"
   podTemplate:
