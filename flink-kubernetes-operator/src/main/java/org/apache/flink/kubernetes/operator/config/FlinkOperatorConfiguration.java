@@ -21,6 +21,7 @@ package org.apache.flink.kubernetes.operator.config;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
 import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
 import io.javaoperatorsdk.operator.api.config.RetryConfiguration;
@@ -32,6 +33,8 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+
+import static org.apache.flink.kubernetes.operator.utils.EnvUtils.ENV_WATCH_NAMESPACES;
 
 /** Configuration class for operator. */
 @Value
@@ -122,14 +125,26 @@ public class FlinkOperatorConfiguration {
             // not running in k8s, simplify local development
             flinkServiceHostOverride = "localhost";
         }
-        var watchedNamespaces =
-                new HashSet<>(
-                        Arrays.asList(
-                                operatorConfig
-                                        .get(
-                                                KubernetesOperatorConfigOptions
-                                                        .OPERATOR_WATCHED_NAMESPACES)
-                                        .split(NAMESPACES_SPLITTER_KEY)));
+        Set<String> watchedNamespaces = null;
+        if (EnvUtils.get(ENV_WATCH_NAMESPACES).isEmpty()) {
+            // if the env var is not set use the config file, the default if neither set is
+            // all namespaces
+            watchedNamespaces =
+                    new HashSet<>(
+                            Arrays.asList(
+                                    operatorConfig
+                                            .get(
+                                                    KubernetesOperatorConfigOptions
+                                                            .OPERATOR_WATCHED_NAMESPACES)
+                                            .split(NAMESPACES_SPLITTER_KEY)));
+        } else {
+            watchedNamespaces =
+                    new HashSet<>(
+                            Arrays.asList(
+                                    EnvUtils.get(ENV_WATCH_NAMESPACES)
+                                            .get()
+                                            .split(NAMESPACES_SPLITTER_KEY)));
+        }
 
         boolean dynamicNamespacesEnabled =
                 operatorConfig.get(
