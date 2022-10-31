@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
@@ -41,9 +42,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_WATCHED_NAMESPACES;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -193,5 +197,47 @@ public class FlinkConfigManagerTest {
         var conf =
                 FlinkConfigManager.loadGlobalConfiguration(Optional.of(confOverrideDir.toString()));
         Assertions.assertEquals(Map.of("foo", "1", "bar", "2"), conf.toMap());
+    }
+
+    @Test
+    public void testWatchNamespaceOverride() {
+        Map<String, String> originalEnv = System.getenv();
+        try {
+            Map<String, String> systemEnv = new HashMap<>(originalEnv);
+            // Set the env var to override the predefined config
+            systemEnv.put(EnvUtils.ENV_WATCH_NAMESPACES, "ns2,ns3");
+            TestUtils.setEnv(systemEnv);
+            // set config to watch different namespace
+            Configuration config =
+                    Configuration.fromMap(Map.of(OPERATOR_WATCHED_NAMESPACES.key(), "ns1"));
+            FlinkConfigManager configManager = new FlinkConfigManager(config);
+            Set<String> namespaces =
+                    configManager.getOperatorConfiguration().getWatchedNamespaces();
+            // expect namespaces to be those defined from env var
+            Assertions.assertArrayEquals(new String[] {"ns2", "ns3"}, namespaces.toArray());
+        } finally {
+            TestUtils.setEnv(originalEnv);
+        }
+    }
+
+    @Test
+    public void testWatchNamespaceOverrideWhenEmpty() {
+        Map<String, String> originalEnv = System.getenv();
+        try {
+            Map<String, String> systemEnv = new HashMap<>(originalEnv);
+            // Set the env var to override the predefined config in this case empty
+            systemEnv.put(EnvUtils.ENV_WATCH_NAMESPACES, "");
+            TestUtils.setEnv(systemEnv);
+            // set config to watch different namespace
+            Configuration config =
+                    Configuration.fromMap(Map.of(OPERATOR_WATCHED_NAMESPACES.key(), "ns1"));
+            FlinkConfigManager configManager = new FlinkConfigManager(config);
+            Set<String> namespaces =
+                    configManager.getOperatorConfiguration().getWatchedNamespaces();
+            // expect namespaces to be those defined from env var
+            Assertions.assertArrayEquals(new String[] {"ns1"}, namespaces.toArray());
+        } finally {
+            TestUtils.setEnv(originalEnv);
+        }
     }
 }
