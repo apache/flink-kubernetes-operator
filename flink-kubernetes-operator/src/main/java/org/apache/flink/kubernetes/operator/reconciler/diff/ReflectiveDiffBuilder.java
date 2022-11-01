@@ -106,7 +106,7 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
 
                 } catch (final IllegalAccessException ex) {
                     throw new RuntimeException(
-                            "Unexpected IllegalAccessException: " + ex.getMessage());
+                            "Unexpected IllegalAccessException: " + ex.getMessage(), ex);
                 }
             }
         }

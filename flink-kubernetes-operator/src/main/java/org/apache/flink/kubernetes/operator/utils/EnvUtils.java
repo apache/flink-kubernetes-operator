@@ -192,7 +192,7 @@ public class EnvUtils {
                                             Instant::from));
         } catch (DateTimeParseException e) {
             LOG.error("{} : {}", FAIL_MESSAGE, e);
-            throw new IllegalStateException(FAIL_MESSAGE);
+            throw new IllegalStateException(FAIL_MESSAGE, e);
         }
     }
 
