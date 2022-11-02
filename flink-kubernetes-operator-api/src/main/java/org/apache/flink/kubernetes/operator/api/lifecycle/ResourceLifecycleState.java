@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.metrics.lifecycle;
+package org.apache.flink.kubernetes.operator.api.lifecycle;
 
 import lombok.Getter;
 
