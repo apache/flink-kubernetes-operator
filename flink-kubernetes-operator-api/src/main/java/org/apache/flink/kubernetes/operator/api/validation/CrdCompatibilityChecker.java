@@ -82,7 +82,12 @@ public class CrdCompatibilityChecker {
                 var field = fieldNamesIt.next();
                 var fieldPath = path + "." + field;
                 if (!newProps.has(field)) {
-                    err(fieldPath + " has been removed");
+                    // This field was removed from Kubernetes ObjectMeta v1 in 1.25 as it was unused
+                    // for a long time. If set for any reason (very unlikely as it does nothing),
+                    // the property will be dropped / ignored by the api server.
+                    if (!fieldPath.endsWith(".metadata.clusterName")) {
+                        err(fieldPath + " has been removed");
+                    }
                 } else {
                     checkObjectCompatibility(fieldPath, oldProps.get(field), newProps.get(field));
                 }

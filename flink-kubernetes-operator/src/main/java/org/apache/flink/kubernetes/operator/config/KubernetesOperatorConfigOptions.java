@@ -25,7 +25,6 @@ import org.apache.flink.core.execution.SavepointFormatType;
 
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
 import io.javaoperatorsdk.operator.api.reconciler.Constants;
-import org.jetbrains.annotations.NotNull;
 
 import java.time.Duration;
 import java.util.Map;
@@ -39,7 +38,6 @@ public class KubernetesOperatorConfigOptions {
     public static final String SECTION_ADVANCED = "system_advanced";
     public static final String SECTION_DYNAMIC = "dynamic";
 
-    @NotNull
     public static ConfigOptions.OptionBuilder operatorConfig(String key) {
         return ConfigOptions.key(K8S_OP_CONF_PREFIX + key);
     }

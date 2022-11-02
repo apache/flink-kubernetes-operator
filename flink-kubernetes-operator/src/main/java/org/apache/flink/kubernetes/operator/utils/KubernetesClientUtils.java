@@ -24,18 +24,17 @@ import org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics;
 import org.apache.flink.metrics.MetricGroup;
 
 import io.fabric8.kubernetes.client.Config;
-import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory;
-import io.fabric8.kubernetes.client.okhttp.OkHttpClientImpl;
+import okhttp3.OkHttpClient;
 
 /** Kubernetes client utils. */
 public class KubernetesClientUtils {
 
     public static KubernetesClient getKubernetesClient(
             FlinkOperatorConfiguration operatorConfig, MetricGroup metricGroup) {
-        return getKubernetesClient(
-                operatorConfig, metricGroup, new DefaultKubernetesClient().getConfiguration());
+        return getKubernetesClient(operatorConfig, metricGroup, null);
     }
 
     @VisibleForTesting
@@ -43,16 +42,25 @@ public class KubernetesClientUtils {
             FlinkOperatorConfiguration operatorConfig,
             MetricGroup metricGroup,
             Config kubernetesClientConfig) {
-        var httpClientBuilder =
-                new OkHttpClientFactory()
-                        .createHttpClient(kubernetesClientConfig)
-                        .getOkHttpClient()
-                        .newBuilder();
+
+        var clientBuilder = new KubernetesClientBuilder().withConfig(kubernetesClientConfig);
+
         if (operatorConfig.isKubernetesClientMetricsEnabled()) {
-            httpClientBuilder.addInterceptor(
-                    new KubernetesClientMetrics(metricGroup, operatorConfig));
+            clientBuilder =
+                    clientBuilder.withHttpClientFactory(
+                            // This logic should be replaced with a more generic solution once the
+                            // fabric8 Interceptor class is improved to the point where this can be
+                            // implemented.
+                            new OkHttpClientFactory() {
+                                @Override
+                                protected void additionalConfig(OkHttpClient.Builder builder) {
+                                    builder.addInterceptor(
+                                            new KubernetesClientMetrics(
+                                                    metricGroup, operatorConfig));
+                                }
+                            });
         }
-        return new DefaultKubernetesClient(
-                new OkHttpClientImpl(httpClientBuilder.build()), kubernetesClientConfig);
+
+        return clientBuilder.build();
     }
 }

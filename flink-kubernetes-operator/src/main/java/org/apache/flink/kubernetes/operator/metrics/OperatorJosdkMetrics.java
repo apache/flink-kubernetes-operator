@@ -35,7 +35,6 @@ import io.javaoperatorsdk.operator.processing.GroupVersionKind;
 import io.javaoperatorsdk.operator.processing.event.Event;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import io.javaoperatorsdk.operator.processing.event.source.controller.ResourceEvent;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -196,7 +195,6 @@ public class OperatorJosdkMetrics implements Metrics {
                                 rid.getNamespace().orElse("default")));
     }
 
-    @NotNull
     private Optional<Class<? extends AbstractFlinkResource<?, ?>>> getResourceClass(
             Map<String, Object> metadata) {
         var resourceGvk = (GroupVersionKind) metadata.get(Constants.RESOURCE_GVK_KEY);

@@ -47,7 +47,7 @@ import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
 
 import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.client.internal.SerializationUtils;
+import io.fabric8.kubernetes.client.utils.Serialization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -426,7 +426,7 @@ public class FlinkConfigBuilder {
 
     private static String createTempFile(Pod podTemplate) throws IOException {
         final File tmp = File.createTempFile(GENERATED_FILE_PREFIX + "podTemplate_", ".yaml");
-        Files.write(tmp.toPath(), SerializationUtils.dumpAsYaml(podTemplate).getBytes());
+        Files.write(tmp.toPath(), Serialization.asYaml(podTemplate).getBytes());
         tmp.deleteOnExit();
         return tmp.getAbsolutePath();
     }

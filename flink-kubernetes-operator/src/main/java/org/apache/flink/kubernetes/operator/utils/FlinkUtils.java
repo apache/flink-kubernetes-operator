@@ -148,7 +148,11 @@ public class FlinkUtils {
                         .getItems();
 
         return configMaps.stream()
-                .anyMatch(map -> !map.isMarkedForDeletion() && map.getData() != null);
+                .anyMatch(
+                        map ->
+                                !map.isMarkedForDeletion()
+                                        && map.getData() != null
+                                        && !map.getData().isEmpty());
     }
 
     private static boolean isJobGraphKey(Map.Entry<String, String> entry) {
