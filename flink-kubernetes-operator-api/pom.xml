@@ -68,20 +68,12 @@ under the License.
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-client</artifactId>
             <version>${fabric8.version}</version>
-            <!-- FLINK-29384, can be removed when fabric8 pulls snakeyaml 1.32+ -->
             <exclusions>
                 <exclusion>
-                    <groupId>org.yaml</groupId>
-                    <artifactId>snakeyaml</artifactId>
+                    <groupId>com.squareup.okhttp3</groupId>
+                    <artifactId>*</artifactId>
                 </exclusion>
-            </exclusions>
-        </dependency>
-
-        <!-- FLINK-29384, can be removed when fabric8 pulls snakeyaml 1.32+ -->
-        <dependency>
-            <groupId>org.yaml</groupId>
-            <artifactId>snakeyaml</artifactId>
-            <version>${snakeyaml.version}</version>
+              </exclusions>
         </dependency>
 
         <!-- Utils -->
@@ -95,13 +87,6 @@ under the License.
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
             <version>${commons-io.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.jetbrains</groupId>
-            <artifactId>annotations</artifactId>
-            <version>${jetbrains.version}</version>
-            <scope>provided</scope>
         </dependency>
 
         <dependency>

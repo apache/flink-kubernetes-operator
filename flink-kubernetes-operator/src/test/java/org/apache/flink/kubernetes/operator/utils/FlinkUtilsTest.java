@@ -42,7 +42,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** FlinkUtilsTest. */
@@ -101,7 +100,7 @@ public class FlinkUtilsTest {
                 .andReturn(HttpURLConnection.HTTP_INTERNAL_ERROR, new ConfigMapBuilder().build())
                 .once();
         createHAConfigMapWithData(name, clusterId, null);
-        assertNull(kubernetesClient.configMaps().withName(name).get().getData());
+        assertTrue(kubernetesClient.configMaps().withName(name).get().getData().isEmpty());
         FlinkUtils.deleteJobGraphInKubernetesHA(
                 clusterId, kubernetesClient.getNamespace(), kubernetesClient);
     }
@@ -136,6 +135,6 @@ public class FlinkUtilsTest {
                         .withData(data)
                         .build();
 
-        kubernetesClient.configMaps().create(kubernetesConfigMap);
+        kubernetesClient.configMaps().resource(kubernetesConfigMap).createOrReplace();
     }
 }

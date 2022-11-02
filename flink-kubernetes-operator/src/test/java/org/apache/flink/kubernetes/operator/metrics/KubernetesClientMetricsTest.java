@@ -70,8 +70,8 @@ public class KubernetesClientMetricsTest {
             String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, COUNTER);
     private static final String RESPONSE_METER_ID =
             String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, METER);
-    private static final String RESPONSE_200_COUNTER_ID =
-            String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "200", COUNTER);
+    private static final String RESPONSE_201_COUNTER_ID =
+            String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "201", COUNTER);
     private static final String RESPONSE_404_COUNTER_ID =
             String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "404", COUNTER);
     private static final String RESPONSE_LATENCY_ID =
@@ -157,7 +157,7 @@ public class KubernetesClientMetricsTest {
                 1, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
         assertEquals(
                 1,
-                listener.getCounter(listener.getMetricId(RESPONSE_200_COUNTER_ID))
+                listener.getCounter(listener.getMetricId(RESPONSE_201_COUNTER_ID))
                         .get()
                         .getCount());
         assertTrue(

@@ -30,8 +30,6 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpObject;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVersion;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -62,7 +60,6 @@ public class OperatorHealthHandler extends SimpleChannelInboundHandler<HttpObjec
         }
     }
 
-    @NotNull
     private DefaultFullHttpResponse createResponse(String content, HttpResponseStatus status) {
         ByteBuf buff = Unpooled.copiedBuffer(content, StandardCharsets.UTF_8);
         DefaultFullHttpResponse response =

@@ -71,10 +71,11 @@ under the License.
         <maven-resources-plugin.version>3.2.0</maven-resources-plugin.version>
         <git-commit-id-maven-plugin.version>5.0.0</git-commit-id-maven-plugin.version>
 
-        <operator.sdk.version>3.2.2</operator.sdk.version>
+        <operator.sdk.version>4.1.0</operator.sdk.version>
         <operator.sdk.admission-controller.version>0.2.0</operator.sdk.admission-controller.version>
 
-        <fabric8.version>5.12.3</fabric8.version>
+        <fabric8.version>6.2.0</fabric8.version>
+
         <lombok.version>1.18.22</lombok.version>
         <commons-lang3.version>3.12.0</commons-lang3.version>
         <commons-io.version>2.11.0</commons-io.version>
@@ -92,7 +93,7 @@ under the License.
 
         <okhttp.version>4.10.0</okhttp.version>
 
-        <snakeyaml.version>1.32</snakeyaml.version>
+        <snakeyaml.version>1.33</snakeyaml.version>
     </properties>
 
     <dependencyManagement>
