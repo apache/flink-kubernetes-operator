@@ -18,12 +18,16 @@
 package org.apache.flink.kubernetes.operator.api.status;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
+import org.apache.flink.kubernetes.operator.api.spec.JobState;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
+import org.apache.commons.lang3.StringUtils;
 
 /** Last observed common status of the Flink deployment/Flink SessionJob. */
 @Experimental
@@ -45,4 +49,43 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
      * @return Current {@link ReconciliationStatus}.
      */
     public abstract ReconciliationStatus<SPEC> getReconciliationStatus();
+
+    @JsonIgnore
+    public <STATUS extends CommonStatus<?>> ResourceLifecycleState getLifecycleState() {
+        var reconciliationStatus = getReconciliationStatus();
+
+        if (reconciliationStatus.isBeforeFirstDeployment()) {
+            return StringUtils.isEmpty(error)
+                    ? ResourceLifecycleState.CREATED
+                    : ResourceLifecycleState.FAILED;
+        }
+
+        switch (reconciliationStatus.getState()) {
+            case UPGRADING:
+                return ResourceLifecycleState.UPGRADING;
+            case ROLLING_BACK:
+                return ResourceLifecycleState.ROLLING_BACK;
+        }
+
+        var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        if (lastReconciledSpec.getJob() != null
+                && lastReconciledSpec.getJob().getState() == JobState.SUSPENDED) {
+            return ResourceLifecycleState.SUSPENDED;
+        }
+
+        var jobState = getJobStatus().getState();
+        /* Ideally we should compare via org.apache.flink.api.common.JobStatus.valueOf(jobState),
+        however this would introduce a dependency on flink-core */
+        if (jobState != null && jobState.equals("FAILED")) {
+            return ResourceLifecycleState.FAILED;
+        }
+
+        if (reconciliationStatus.getState() == ReconciliationState.ROLLED_BACK) {
+            return ResourceLifecycleState.ROLLED_BACK;
+        } else if (reconciliationStatus.isLastReconciledSpecStable()) {
+            return ResourceLifecycleState.STABLE;
+        }
+
+        return ResourceLifecycleState.DEPLOYED;
+    }
 }

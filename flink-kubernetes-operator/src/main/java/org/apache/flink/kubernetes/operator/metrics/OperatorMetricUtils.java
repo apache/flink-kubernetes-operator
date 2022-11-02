@@ -21,11 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.core.plugin.PluginUtils;
-import org.apache.flink.kubernetes.operator.api.spec.JobState;
-import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
-import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
-import org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
@@ -41,7 +37,6 @@ import org.apache.flink.runtime.metrics.MetricRegistryImpl;
 import org.apache.flink.runtime.metrics.ReporterSetup;
 import org.apache.flink.runtime.metrics.util.MetricUtils;
 
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,45 +91,6 @@ public class OperatorMetricUtils {
                             }
                         });
         return Configuration.fromMap(metricConf);
-    }
-
-    public static <STATUS extends CommonStatus<?>> ResourceLifecycleState getLifecycleState(
-            STATUS status) {
-        var reconciliationStatus = status.getReconciliationStatus();
-
-        if (reconciliationStatus.isBeforeFirstDeployment()) {
-            return StringUtils.isEmpty(status.getError())
-                    ? ResourceLifecycleState.CREATED
-                    : ResourceLifecycleState.FAILED;
-        }
-
-        switch (reconciliationStatus.getState()) {
-            case UPGRADING:
-                return ResourceLifecycleState.UPGRADING;
-            case ROLLING_BACK:
-                return ResourceLifecycleState.ROLLING_BACK;
-        }
-
-        var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
-        if (lastReconciledSpec.getJob() != null
-                && lastReconciledSpec.getJob().getState() == JobState.SUSPENDED) {
-            return ResourceLifecycleState.SUSPENDED;
-        }
-
-        var jobState = status.getJobStatus().getState();
-        /* Ideally we should compare via org.apache.flink.api.common.JobStatus.valueOf(jobState),
-        however this would introduce a dependency on flink-core */
-        if (jobState != null && jobState.equals("FAILED")) {
-            return ResourceLifecycleState.FAILED;
-        }
-
-        if (reconciliationStatus.getState() == ReconciliationState.ROLLED_BACK) {
-            return ResourceLifecycleState.ROLLED_BACK;
-        } else if (reconciliationStatus.isLastReconciledSpecStable()) {
-            return ResourceLifecycleState.STABLE;
-        }
-
-        return ResourceLifecycleState.DEPLOYED;
     }
 
     private static MetricRegistryImpl createMetricRegistry(

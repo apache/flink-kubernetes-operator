@@ -21,14 +21,13 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 import org.apache.flink.kubernetes.operator.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
-import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
-import org.apache.flink.kubernetes.operator.metrics.lifecycle.ResourceLifecycleState;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -142,8 +141,7 @@ public class StatusRecorder<
         } else {
             // Initialize cache with current status copy
             statusCache.put(key, objectMapper.convertValue(resource.getStatus(), ObjectNode.class));
-            if (ResourceLifecycleState.CREATED.equals(
-                    OperatorMetricUtils.getLifecycleState(resource.getStatus()))) {
+            if (ResourceLifecycleState.CREATED.equals(resource.getStatus().getLifecycleState())) {
                 statusUpdateListener.accept(resource, resource.getStatus());
             }
         }

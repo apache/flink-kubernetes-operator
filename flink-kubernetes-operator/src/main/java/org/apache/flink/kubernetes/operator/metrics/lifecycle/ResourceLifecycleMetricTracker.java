@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.metrics.lifecycle;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.metrics.Histogram;
 
 import org.slf4j.Logger;
