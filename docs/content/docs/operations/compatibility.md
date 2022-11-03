@@ -44,7 +44,7 @@ For example when in the future we upgrade from `v1beta1 -> v1`, while it is guar
 
 ## Contents of the resource status
 
-Currently, the `FlinkDeployment` and `FlinkSessionJob` resources contain a very detailed status information that contains everything necessary for the operator to manage the resources.  
+Currently, the `FlinkDeployment` and `FlinkSessionJob` resources contain a very detailed status information that contains everything necessary for the operator to manage the resources.
 Most of this information should be considered ***internal*** to operator logic and is subject to change/disappear in the future.
 
 In general, we are aiming to slim down the status to only contain information that is relevant to users/client for the next major CRD version (`v1`).

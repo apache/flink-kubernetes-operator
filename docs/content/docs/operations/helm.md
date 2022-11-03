@@ -78,18 +78,18 @@ The configurable parameters of the Helm chart and which default values as detail
 | jobServiceAccount.annotations | The annotations of job service account. | "helm.sh/resource-policy": keep |
 | jobServiceAccount.name | The name of job service account. | flink |
 | operatorVolumeMounts.create | Whether to enable operator volume mounts to create for flink-kubernetes-operator. | false |
-| operatorVolumeMounts.data | List of mount paths of operator volume mounts.  | - name: flink-artifacts<br/>&nbsp;&nbsp;mountPath: /opt/flink/artifacts |
+| operatorVolumeMounts.data | List of mount paths of operator volume mounts. | - name: flink-artifacts<br/>&nbsp;&nbsp;mountPath: /opt/flink/artifacts |
 | operatorVolumes.create | Whether to enable operator volumes to create for flink-kubernetes-operator. | false |
 | operatorVolumes.data | The ConfigMap of operator volumes. | - name: flink-artifacts<br/>&nbsp;&nbsp;hostPath:<br/>&nbsp;&nbsp;&nbsp;&nbsp;path: /tmp/flink/artifacts<br/>&nbsp;&nbsp;&nbsp;&nbsp;type: DirectoryOrCreate |
-| podSecurityContext | Defines privilege and access control settings for a pod or container for pod security context.  | runAsUser: 9999<br/>runAsGroup: 9999 |
-| operatorSecurityContext | Defines privilege and access control settings for a pod or container for operator security context.  | |
+| podSecurityContext | Defines privilege and access control settings for a pod or container for pod security context. | runAsUser: 9999<br/>runAsGroup: 9999 |
+| operatorSecurityContext | Defines privilege and access control settings for a pod or container for operator security context. | |
 | webhookSecurityContext | Defines privilege and access control settings for a pod or container for webhook security context. | |
-| webhook.create | Whether to enable validating and mutating webhooks for flink-kubernetes-operator.                        | true |
+| webhook.create | Whether to enable validating and mutating webhooks for flink-kubernetes-operator. | true |
 | webhook.mutator.create | Enable or disable mutating webhook, overrides `webhook.create` | |
 | webhook.validator.create | Enable or disable validating webhook, overrides `webhook.create` | |
 | webhook.keystore | The ConfigMap of webhook key store. | useDefaultPassword: true |
 | defaultConfiguration.create | Whether to enable default configuration to create for flink-kubernetes-operator. | true |
-| defaultConfiguration.append | Whether to append configuration files with configs.  | true |
+| defaultConfiguration.append | Whether to append configuration files with configs. | true |
 | defaultConfiguration.flink-conf.yaml | The default configuration of flink-conf.yaml. | kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory<br/>kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE<br/>kubernetes.operator.reconcile.interval: 15 s<br/>kubernetes.operator.observer.progress-check.interval: 5 s |
 | defaultConfiguration.log4j-operator.properties | The default configuration of log4j-operator.properties. | |
 | defaultConfiguration.log4j-console.properties | The default configuration of log4j-console.properties. | |
@@ -98,10 +98,10 @@ The configurable parameters of the Helm chart and which default values as detail
 | nameOverride | Overrides the name with the specified name. | |
 | fullnameOverride | Overrides the fullname with the specified full name. | |
 | jvmArgs.webhook | The JVM start up options for webhook. | |
-| jvmArgs.operator |  The JVM start up options for operator. | |
-| operatorHealth.port |  Operator health endpoint port to be used by the probes. | 8085 |
-| operatorHealth.livenessProbe |  Liveness probe configuration for the operator using the health endpoint. Only time settings should be configured, endpoint is set automatically based on port. | |
-| operatorHealth.startupProbe |  Startup probe configuration for the operator using the health endpoint. Only time settings should be configured, endpoint is set automatically based on port. | |
+| jvmArgs.operator | The JVM start up options for operator. | |
+| operatorHealth.port | Operator health endpoint port to be used by the probes. | 8085 |
+| operatorHealth.livenessProbe | Liveness probe configuration for the operator using the health endpoint. Only time settings should be configured, endpoint is set automatically based on port. | |
+| operatorHealth.startupProbe | Startup probe configuration for the operator using the health endpoint. Only time settings should be configured, endpoint is set automatically based on port. | |
 
 For more information check the [Helm documentation](https://helm.sh/docs/helm/helm_install/).
 

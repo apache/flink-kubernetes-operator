@@ -58,7 +58,7 @@ Flink Kubernetes Operator aims to capture the responsibilities of a human operat
   - Pluggable metrics reporters
   - Detailed resources and kubernetes api access metrics
 - Fully-customizable [Logging]({{< ref "docs/operations/metrics-logging#logging" >}})
-  - Default log configuration  
+  - Default log configuration
   - Per job log configuration
   - Sidecar based log forwarders
 - Flink Web UI and REST Endpoint Access

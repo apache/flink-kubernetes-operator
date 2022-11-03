@@ -46,17 +46,17 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
-| restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger  restart, change the number to anything other than the current value. |
+| restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger restart, change the number to anything other than the current value. |
 | flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment or Flink session job. |
 | image | java.lang.String | Flink docker image used to start the Job and TaskManager pods. |
 | imagePullPolicy | java.lang.String | Image pull policy of the Flink docker image. |
 | serviceAccount | java.lang.String | Kubernetes service used by the Flink deployment. |
 | flinkVersion | org.apache.flink.kubernetes.operator.api.spec.FlinkVersion | Flink image version. |
 | ingress | org.apache.flink.kubernetes.operator.api.spec.IngressSpec | Ingress specs. |
-| podTemplate | io.fabric8.kubernetes.api.model.Pod | Base pod template for job and task manager pods. Can be overridden by the jobManager and  taskManager pod templates. |
+| podTemplate | io.fabric8.kubernetes.api.model.Pod | Base pod template for job and task manager pods. Can be overridden by the jobManager and taskManager pod templates. |
 | jobManager | org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec | JobManager specs. |
 | taskManager | org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec | TaskManager specs. |
-| logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the Flink deployment. Format logConfigFileName ->  configContent. |
+| logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the Flink deployment. Format logConfigFileName -> configContent. |
 | mode | org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode | Deployment mode of the Flink cluster, native or standalone. |
 
 ### FlinkSessionJobSpec
@@ -67,7 +67,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
-| restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger  restart, change the number to anything other than the current value. |
+| restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger restart, change the number to anything other than the current value. |
 | flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment or Flink session job. |
 | deploymentName | java.lang.String | The name of the target session cluster deployment. |
 
@@ -112,13 +112,13 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| jarURI | java.lang.String | Optional URI of the job jar within the Flink docker container. For example:  local:///opt/flink/examples/streaming/StateMachineExample.jar. If not specified the job jar  should be available in the system classpath. |
+| jarURI | java.lang.String | Optional URI of the job jar within the Flink docker container. For example: local:///opt/flink/examples/streaming/StateMachineExample.jar. If not specified the job jar  should be available in the system classpath. |
 | parallelism | int | Parallelism of the Flink job. |
 | entryClass | java.lang.String | Fully qualified main class name of the Flink job. |
 | args | java.lang.String[] | Arguments for the Flink job main class. |
 | state | org.apache.flink.kubernetes.operator.api.spec.JobState | Desired state for the job. |
-| savepointTriggerNonce | java.lang.Long | Nonce used to manually trigger savepoint for the running job. In order to trigger a  savepoint, change the number to anything other than the current value. |
-| initialSavepointPath | java.lang.String | Savepoint path used by the job the first time it is deployed. Upgrades/redeployments will not  be affected. |
+| savepointTriggerNonce | java.lang.Long | Nonce used to manually trigger savepoint for the running job. In order to trigger a savepoint, change the number to anything other than the current value. |
+| initialSavepointPath | java.lang.String | Savepoint path used by the job the first time it is deployed. Upgrades/redeployments will not be affected. |
 | upgradeMode | org.apache.flink.kubernetes.operator.api.spec.UpgradeMode | Upgrade mode of the Flink job. |
 | allowNonRestoredState | java.lang.Boolean | Allow checkpoint state that cannot be mapped to any job vertex in tasks. |
 
@@ -139,7 +139,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Value | Docs |
 | ----- | ---- |
-| NATIVE | Deploys Flink using Flinks native Kubernetes support. Only supported for newer versions of  Flink |
+| NATIVE | Deploys Flink using Flinks native Kubernetes support. Only supported for newer versions of Flink |
 | STANDALONE | Deploys Flink on-top of kubernetes in standalone mode. |
 
 ### Resource
@@ -170,7 +170,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Value | Docs |
 | ----- | ---- |
-| SAVEPOINT | Job is upgraded by first taking a savepoint of the running job, shutting it down and  restoring from the savepoint. |
+| SAVEPOINT | Job is upgraded by first taking a savepoint of the running job, shutting it down and restoring from the savepoint. |
 | LAST_STATE | Job is upgraded using any latest checkpoint or savepoint available. |
 | STATELESS | Job is upgraded with empty state. |
 
@@ -184,8 +184,8 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | reconciliationTimestamp | long | Epoch timestamp of the last successful reconcile operation. |
-| lastReconciledSpec | java.lang.String | Last reconciled deployment spec. Used to decide whether further reconciliation steps are  necessary. |
-| lastStableSpec | java.lang.String | Last stable deployment spec according to the specified stability condition. If a rollback  strategy is defined this will be the target to roll back to. |
+| lastReconciledSpec | java.lang.String | Last reconciled deployment spec. Used to decide whether further reconciliation steps are necessary. |
+| lastStableSpec | java.lang.String | Last stable deployment spec according to the specified stability condition. If a rollback strategy is defined this will be the target to roll back to. |
 | state | org.apache.flink.kubernetes.operator.api.status.ReconciliationState | Deployment state of the last reconciled spec. |
 
 ### FlinkDeploymentStatus
@@ -210,8 +210,8 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
 | reconciliationTimestamp | long | Epoch timestamp of the last successful reconcile operation. |
-| lastReconciledSpec | java.lang.String | Last reconciled deployment spec. Used to decide whether further reconciliation steps are  necessary. |
-| lastStableSpec | java.lang.String | Last stable deployment spec according to the specified stability condition. If a rollback  strategy is defined this will be the target to roll back to. |
+| lastReconciledSpec | java.lang.String | Last reconciled deployment spec. Used to decide whether further reconciliation steps are necessary. |
+| lastStableSpec | java.lang.String | Last stable deployment spec according to the specified stability condition. If a rollback strategy is defined this will be the target to roll back to. |
 | state | org.apache.flink.kubernetes.operator.api.status.ReconciliationState | Deployment state of the last reconciled spec. |
 
 ### FlinkSessionJobStatus
@@ -274,7 +274,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | timeStamp | long | Millisecond timestamp at the start of the savepoint operation. |
 | location | java.lang.String | External pointer of the savepoint can be used to recover jobs. |
 | triggerType | org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType | Savepoint trigger mechanism. |
-| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType |  |
+| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType | |
 | triggerNonce | java.lang.Long | Nonce value used when the savepoint was triggered manually {@link SavepointTriggerType#MANUAL}, defaults to 0. |
 
 ### SavepointFormatType
@@ -299,7 +299,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | triggerId | java.lang.String | Trigger id of a pending savepoint operation. |
 | triggerTimestamp | long | Trigger timestamp of a pending savepoint operation. |
 | triggerType | org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType | Savepoint trigger mechanism. |
-| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType |  |
+| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType | |
 | savepointHistory | java.util.List<org.apache.flink.kubernetes.operator.api.status.Savepoint> | List of recent savepoints. |
 | lastPeriodicSavepointTimestamp | long | Trigger timestamp of last periodic savepoint operation. |
 
