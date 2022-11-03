@@ -53,7 +53,7 @@ apiVersion: networking.k8s.io/v1
     annotations:
       nginx.ingress.kubernetes.io/rewrite-target: /$2
     name: advanced-ingress
-    namespace: default 
+    namespace: default
   spec:
     ingressClassName: nginx
     rules:
