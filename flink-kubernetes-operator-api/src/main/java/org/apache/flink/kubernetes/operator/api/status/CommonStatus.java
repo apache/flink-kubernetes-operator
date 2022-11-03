@@ -51,7 +51,7 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     public abstract ReconciliationStatus<SPEC> getReconciliationStatus();
 
     @JsonIgnore
-    public <STATUS extends CommonStatus<?>> ResourceLifecycleState getLifecycleState() {
+    public ResourceLifecycleState getLifecycleState() {
         var reconciliationStatus = getReconciliationStatus();
 
         if (reconciliationStatus.isBeforeFirstDeployment()) {
@@ -74,9 +74,9 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
         }
 
         var jobState = getJobStatus().getState();
-        /* Ideally we should compare via org.apache.flink.api.common.JobStatus.valueOf(jobState),
-        however this would introduce a dependency on flink-core */
-        if (jobState != null && jobState.equals("FAILED")) {
+        if (jobState != null
+                && org.apache.flink.api.common.JobStatus.valueOf(jobState)
+                        .equals(org.apache.flink.api.common.JobStatus.FAILED)) {
             return ResourceLifecycleState.FAILED;
         }
 

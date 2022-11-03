@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.listener;
+package org.apache.flink.kubernetes.operator.api.listener;
 
 import org.apache.flink.core.plugin.Plugin;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;

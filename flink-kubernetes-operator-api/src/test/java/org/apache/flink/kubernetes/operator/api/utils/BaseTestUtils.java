@@ -17,6 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.api.utils;
 
+import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
@@ -141,11 +144,13 @@ public class BaseTestUtils {
 
     public static FlinkDeploymentSpec getTestFlinkDeploymentSpec(FlinkVersion version) {
         Map<String, String> conf = new HashMap<>();
-        conf.put("taskmanager.numberOfTaskSlots", "2");
-        conf.put("high-availability", KubernetesHaServicesFactory.class.getCanonicalName());
-        conf.put("high-availability.storageDir", "test");
-        conf.put("state.savepoints.dir", "test-savepoint-dir");
-        conf.put("state.checkpoints.dir", "test-checkpoint-dir");
+        conf.put(TaskManagerOptions.NUM_TASK_SLOTS.key(), "2");
+        conf.put(
+                HighAvailabilityOptions.HA_MODE.key(),
+                KubernetesHaServicesFactory.class.getCanonicalName());
+        conf.put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), "test");
+        conf.put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), "test-savepoint-dir");
+        conf.put(CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(), "test-checkpoint-dir");
 
         return FlinkDeploymentSpec.builder()
                 .image(IMAGE)
