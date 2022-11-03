@@ -28,7 +28,7 @@ RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl !flink-kubern
 RUN cd /app/tools/license; mkdir jars; cd jars; \
     cp /app/flink-kubernetes-operator/target/flink-kubernetes-operator-*-shaded.jar . && \
     cp /app/flink-kubernetes-webhook/target/flink-kubernetes-webhook-*-shaded.jar . && \
-    cp /app/flink-kubernetes-shaded/target/flink-kubernetes-shaded-*.jar . && \
+    cp /app/flink-kubernetes-standalone/target/flink-kubernetes-shaded-*.jar . && \
     cp -r /app/flink-kubernetes-operator/target/plugins ./plugins && \
     cd ../ && ./collect_license_files.sh ./jars ./licenses-output
 
@@ -46,7 +46,7 @@ RUN groupadd --system --gid=9999 flink && \
 
 COPY --from=build /app/flink-kubernetes-operator/target/$OPERATOR_JAR .
 COPY --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR .
-COPY --from=build /app/flink-kubernetes-shaded/target/$FLINK_KUBERNETES_SHADED_JAR .
+COPY --from=build /app/flink-kubernetes-standalone/target/$FLINK_KUBERNETES_SHADED_JAR .
 COPY --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
 COPY --from=build /app/tools/license/licenses-output/NOTICE .
 COPY --from=build /app/tools/license/licenses-output/licenses ./licenses
