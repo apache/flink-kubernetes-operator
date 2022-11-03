@@ -73,7 +73,7 @@ under the License.
                     <groupId>com.squareup.okhttp3</groupId>
                     <artifactId>*</artifactId>
                 </exclusion>
-              </exclusions>
+            </exclusions>
         </dependency>
 
         <!-- Utils -->

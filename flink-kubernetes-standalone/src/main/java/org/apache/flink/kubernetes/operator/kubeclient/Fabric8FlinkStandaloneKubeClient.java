@@ -17,7 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.kubeclient;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 
@@ -35,6 +37,7 @@ public class Fabric8FlinkStandaloneKubeClient extends Fabric8FlinkKubeClient
 
     private final NamespacedKubernetesClient internalClient;
 
+    @VisibleForTesting
     public Fabric8FlinkStandaloneKubeClient(
             Configuration flinkConfig,
             NamespacedKubernetesClient client,
@@ -65,7 +68,11 @@ public class Fabric8FlinkStandaloneKubeClient extends Fabric8FlinkKubeClient
                 .delete();
     }
 
-    public static NamespacedKubernetesClient createNamespacedKubeClient(String namespace) {
-        return new DefaultKubernetesClient().inNamespace(namespace);
+    public static Fabric8FlinkStandaloneKubeClient create(
+            Configuration conf, ExecutorService executorService) {
+        var client =
+                new DefaultKubernetesClient()
+                        .inNamespace(conf.get(KubernetesConfigOptions.NAMESPACE));
+        return new Fabric8FlinkStandaloneKubeClient(conf, client, executorService);
     }
 }

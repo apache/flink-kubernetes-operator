@@ -99,8 +99,7 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @VisibleForTesting
-    protected FlinkStandaloneKubeClient createNamespacedKubeClient(
-            Configuration configuration, String namespace) {
+    protected FlinkStandaloneKubeClient createNamespacedKubeClient(Configuration configuration) {
         final int poolSize =
                 configuration.get(KubernetesConfigOptions.KUBERNETES_CLIENT_IO_EXECUTOR_POOL_SIZE);
 
@@ -109,17 +108,12 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                         poolSize,
                         new ExecutorThreadFactory("flink-kubeclient-io-for-standalone-service"));
 
-        return new Fabric8FlinkStandaloneKubeClient(
-                configuration,
-                Fabric8FlinkStandaloneKubeClient.createNamespacedKubeClient(namespace),
-                executorService);
+        return Fabric8FlinkStandaloneKubeClient.create(configuration, executorService);
     }
 
     protected void submitClusterInternal(Configuration conf, Mode mode)
             throws ClusterDeploymentException {
-        final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
-
-        FlinkStandaloneKubeClient client = createNamespacedKubeClient(conf, namespace);
+        FlinkStandaloneKubeClient client = createNamespacedKubeClient(conf);
         try (final KubernetesStandaloneClusterDescriptor kubernetesClusterDescriptor =
                 new KubernetesStandaloneClusterDescriptor(conf, client)) {
             switch (mode) {
