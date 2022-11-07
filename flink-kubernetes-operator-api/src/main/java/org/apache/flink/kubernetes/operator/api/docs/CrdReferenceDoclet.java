@@ -146,7 +146,7 @@ public class CrdReferenceDoclet implements Doclet {
     }
 
     private String cleanDoc(String doc) {
-        return doc.replaceAll("[\\t]+", " ").replaceAll("[\\n\\r]+","");
+        return doc.replaceAll("[\\t]+", " ").replaceAll("[\\n\\r]+", "");
     }
 
     private Set<? extends Element> sortedByName(Set<? extends Element> elements) {
