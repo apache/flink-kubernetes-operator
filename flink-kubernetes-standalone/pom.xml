@@ -93,7 +93,8 @@ under the License.
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <finalName>flink-kubernetes-shaded-${project.version}</finalName>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <shadedClassifierName>shaded</shadedClassifierName>
                             <artifactSet>
                                 <includes combine.children="append">
                                     <include>org.apache.flink:flink-kubernetes</include>
