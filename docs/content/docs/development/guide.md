@@ -71,10 +71,19 @@ docker@minikube:~$ exit
 ```
 
 ### Installing the operator locally
+
 ```bash
 helm install flink-kubernetes-operator helm/flink-kubernetes-operator --set image.repository=<repo>/flink-kubernetes-operator --set image.tag=latest
 ```
-### Running the operator locally
+
+To uninstall you can simply call:
+
+```bash
+helm uninstall flink-kubernetes-operator
+```
+
+### Running the operator from the IDE
+
 You can run or debug the `FlinkOperator` from your preferred IDE. The operator itself is accessing the deployed Flink clusters through the REST interface. When running locally the `rest.port`, `rest.address` and `kubernetes.rest-service.exposed.type` Flink configuration parameters must be modified.
 
 When using `minikube tunnel` the rest service is exposed on `localhost:8081`
@@ -94,10 +103,25 @@ rest.address: localhost
 kubernetes.rest-service.exposed.type: LoadBalancer
 ```
 
-### Uninstalling the operator locally
-```bash
-helm uninstall flink-kubernetes-operator
+Due to fabric8 conflicts between core Flink and the operator, the `flink-kubernetes-operator` module depends on the shaded `flink-kubernetes-standalone` jar which contains the relocated version of the old fabric8 Kubernetes client. Unfortunately IntelliJ is not great at handling dependencies with classifiers so you might get the following error when trying to run `FlinkOperator#main`:
+
 ```
+java.lang.NoSuchMethodError: 'java.lang.Object io.fabric8.kubernetes.client.dsl.ServiceResource.fromServer()'
+```
+
+There are two solutions to this problem, both requires you to first build the project.
+
+First:
+
+```bash
+mvn clean install
+```
+
+Then either:
+
+ 1. Import the `flink-kubernetes-operator` submodule as a separate IntelliJ project. This will resolve the classifier dependency correctly from your local maven cache.
+ 2. If you want to keep a single multi-module project, you need to add the `flink-kubernetes-standalone-XX-shaded.jar` on the classpath manually when running the main method:
+ `Edit Run Configuration/Modify Options/Modify Classpath`
 
 ### Generating and Upgrading the CRD
 
@@ -119,6 +143,7 @@ helm install flink-operator helm/flink-operator --set operatorVolumeMounts.creat
 
 
 ## CI/CD
+
 We use [GitHub Actions](https://help.github.com/en/actions/getting-started-with-github-actions/about-github-actions) to help you automate your software development workflows in the same place you store code and collaborate on pull requests and issues.
 You can write individual tasks, called actions, and combine them to create a custom workflow.
 Workflows are custom automated processes that you can set up in your repository to build, test, package, release, or deploy any code project on GitHub.
