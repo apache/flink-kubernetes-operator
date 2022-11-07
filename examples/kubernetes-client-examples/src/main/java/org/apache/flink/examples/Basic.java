@@ -27,9 +27,8 @@ import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 
 import java.util.Map;
 
@@ -68,12 +67,8 @@ public class Basic {
                                 .upgradeMode(UpgradeMode.STATELESS)
                                 .build());
 
-        try (KubernetesClient kubernetesClient = new DefaultKubernetesClient()) {
-            FlinkDeployment orReplace =
-                    kubernetesClient.resource(flinkDeployment).createOrReplace();
-        } catch (KubernetesClientException e) {
-            // some error while connecting to kube cluster
-            e.printStackTrace();
+        try (KubernetesClient kubernetesClient = new KubernetesClientBuilder().build()) {
+            kubernetesClient.resource(flinkDeployment).createOrReplace();
         }
     }
 }

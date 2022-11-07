@@ -19,13 +19,13 @@ package org.apache.flink.kubernetes.operator.api;
 
 import org.apache.flink.annotation.Experimental;
 
-import io.fabric8.kubernetes.client.CustomResourceList;
+import io.fabric8.kubernetes.api.model.DefaultKubernetesResourceList;
 
 /**
  * Multiple Flink deployments. Please do not delete. This class is used by downstream projects
  * interacting with the FlinkDeployment CRD via the Fabric8 Java client.
  */
 @Experimental
-public class FlinkDeploymentList extends CustomResourceList<FlinkDeployment> {
+public class FlinkDeploymentList extends DefaultKubernetesResourceList<FlinkDeployment> {
     public FlinkDeploymentList() {}
 }

@@ -76,10 +76,6 @@ public class StatusRecorder<
      */
     @SneakyThrows
     public void patchAndCacheStatus(CR resource) {
-        Class<CR> resourceClass = (Class<CR>) resource.getClass();
-        String namespace = resource.getMetadata().getNamespace();
-        String name = resource.getMetadata().getName();
-
         // This is necessary so the client wouldn't fail of the underlying resource spec was updated
         // in the meantime
         resource.getMetadata().setResourceVersion(null);
@@ -104,10 +100,7 @@ public class StatusRecorder<
             // In any case we retry the status update 3 times to avoid some intermittent
             // connectivity errors if any
             try {
-                client.resources(resourceClass)
-                        .inNamespace(namespace)
-                        .withName(name)
-                        .patchStatus(resource);
+                client.resource(resource).patchStatus();
                 statusUpdateListener.accept(resource, prevStatus);
                 metricManager.onUpdate(resource);
                 return;

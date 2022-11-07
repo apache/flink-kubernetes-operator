@@ -19,13 +19,13 @@ package org.apache.flink.kubernetes.operator.api;
 
 import org.apache.flink.annotation.Experimental;
 
-import io.fabric8.kubernetes.client.CustomResourceList;
+import io.fabric8.kubernetes.api.model.DefaultKubernetesResourceList;
 
 /**
  * Multiple Flink session jobs. Please do not delete. This class is used by downstream projects
  * interacting with the FlinkSessionJobs CRD via the Fabric8 Java client.
  */
 @Experimental
-public class FlinkSessionJobList extends CustomResourceList<FlinkSessionJob> {
+public class FlinkSessionJobList extends DefaultKubernetesResourceList<FlinkSessionJob> {
     public FlinkSessionJobList() {}
 }

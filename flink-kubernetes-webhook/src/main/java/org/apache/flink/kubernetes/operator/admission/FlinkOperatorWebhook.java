@@ -37,7 +37,7 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpServerCode
 import org.apache.flink.shaded.netty4.io.netty.handler.ssl.SslContext;
 import org.apache.flink.shaded.netty4.io.netty.handler.stream.ChunkedWriteHandler;
 
-import io.fabric8.kubernetes.client.DefaultKubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,7 +56,7 @@ public class FlinkOperatorWebhook {
 
     public static void main(String[] args) throws Exception {
         EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
-        var informerManager = new InformerManager(new DefaultKubernetesClient());
+        var informerManager = new InformerManager(new KubernetesClientBuilder().build());
         var configManager = new FlinkConfigManager(informerManager::setNamespaces);
         if (!configManager.getOperatorConfiguration().isDynamicNamespacesEnabled()) {
             informerManager.setNamespaces(

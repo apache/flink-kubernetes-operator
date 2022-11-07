@@ -145,7 +145,6 @@ public class NativeFlinkService extends AbstractFlinkService {
                 .deployments()
                 .inNamespace(namespace)
                 .withName(KubernetesUtils.getDeploymentName(clusterId))
-                .cascading(true)
                 .delete();
 
         if (deleteHaConfigmaps) {

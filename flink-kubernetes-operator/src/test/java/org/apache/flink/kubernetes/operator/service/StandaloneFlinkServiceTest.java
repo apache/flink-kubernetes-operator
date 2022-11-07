@@ -230,10 +230,9 @@ public class StandaloneFlinkServiceTest {
                 StandaloneKubernetesUtils.getJobManagerDeploymentName(cr.getMetadata().getName()));
         jmDeployment.setMetadata(jmMetadata);
         kubernetesClient
-                .apps()
-                .deployments()
+                .resource(jmDeployment)
                 .inNamespace(cr.getMetadata().getNamespace())
-                .createOrReplace(jmDeployment);
+                .createOrReplace();
 
         Deployment tmDeployment = new Deployment();
         ObjectMeta tmMetadata = new ObjectMeta();
@@ -242,9 +241,8 @@ public class StandaloneFlinkServiceTest {
         tmDeployment.setMetadata(tmMetadata);
         tmDeployment.setSpec(new DeploymentSpec());
         kubernetesClient
-                .apps()
-                .deployments()
+                .resource(tmDeployment)
                 .inNamespace(cr.getMetadata().getNamespace())
-                .createOrReplace(tmDeployment);
+                .createOrReplace();
     }
 }

@@ -31,8 +31,8 @@ import io.fabric8.kubernetes.api.model.ServiceAccount;
 import io.fabric8.kubernetes.api.model.ServiceAccountBuilder;
 import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBinding;
 import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBindingBuilder;
-import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,7 +57,7 @@ public class FlinkOperatorITCase {
 
     @BeforeEach
     public void setup() {
-        client = new DefaultKubernetesClient();
+        client = new KubernetesClientBuilder().build();
         LOG.info("Cleaning up namespace {}", TEST_NAMESPACE);
         client.namespaces().withName(TEST_NAMESPACE).delete();
         await().atMost(1, MINUTES)
@@ -68,7 +68,7 @@ public class FlinkOperatorITCase {
                 new NamespaceBuilder()
                         .withMetadata(new ObjectMetaBuilder().withName(TEST_NAMESPACE).build())
                         .build();
-        client.namespaces().create(testNs);
+        client.resource(testNs).create();
         rbacSetup();
     }
 
@@ -131,7 +131,8 @@ public class FlinkOperatorITCase {
                         .withNamespace(TEST_NAMESPACE)
                         .endMetadata()
                         .build();
-        client.serviceAccounts().inNamespace(TEST_NAMESPACE).createOrReplace(serviceAccount);
+
+        client.resource(serviceAccount).createOrReplace();
 
         ClusterRoleBinding current =
                 client.rbac().clusterRoleBindings().withName(CLUSTER_ROLE_BINDING).get();
