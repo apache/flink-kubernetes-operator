@@ -146,7 +146,6 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                 .deployments()
                 .inNamespace(namespace)
                 .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
-                .cascading(true)
                 .delete();
 
         LOG.info("Deleting Flink Standalone cluster JM resources");
@@ -155,7 +154,6 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                 .deployments()
                 .inNamespace(namespace)
                 .withName(StandaloneKubernetesUtils.getJobManagerDeploymentName(clusterId))
-                .cascading(true)
                 .delete();
 
         if (deleteHaConfigmaps) {

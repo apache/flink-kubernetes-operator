@@ -160,10 +160,8 @@ public class NativeFlinkServiceTest {
                 new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final FlinkService flinkService = createFlinkService(testingClusterClient);
 
-        client.apps()
-                .deployments()
-                .inNamespace(TestUtils.TEST_NAMESPACE)
-                .create(createTestingDeployment());
+        client.resource(createTestingDeployment()).create();
+
         assertNotNull(
                 client.apps()
                         .deployments()
