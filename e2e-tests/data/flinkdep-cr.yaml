@@ -22,8 +22,8 @@ metadata:
   namespace: default
   name: flink-example-statemachine
 spec:
-  image: flink:1.15
-  flinkVersion: v1_15
+  image: flink:1.16
+  flinkVersion: v1_16
   ingress:
     template: "/{{namespace}}/{{name}}(/|$)(.*)"
     className: "nginx"
