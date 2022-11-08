@@ -24,6 +24,7 @@ import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
+import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Constants;
 
 import java.time.Duration;
@@ -384,4 +385,41 @@ public class KubernetesOperatorConfigOptions {
                     .booleanType()
                     .defaultValue(false)
                     .withDescription("Whether to restart failed jobs.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Boolean> OPERATOR_LEADER_ELECTION_ENABLED =
+            operatorConfig("leader-election.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Enable leader election for the operator to allow running standby instances.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<String> OPERATOR_LEADER_ELECTION_LEASE_NAME =
+            operatorConfig("leader-election.lease-name")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Leader election lease name, must be unique for leases in the same namespace.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Duration> OPERATOR_LEADER_ELECTION_LEASE_DURATION =
+            operatorConfig("leader-election.lease-duration")
+                    .durationType()
+                    .defaultValue(LeaderElectionConfiguration.LEASE_DURATION_DEFAULT_VALUE)
+                    .withDescription("Leader election lease duration.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Duration> OPERATOR_LEADER_ELECTION_RENEW_DEADLINE =
+            operatorConfig("leader-election.renew-deadline")
+                    .durationType()
+                    .defaultValue(LeaderElectionConfiguration.RENEW_DEADLINE_DEFAULT_VALUE)
+                    .withDescription("Leader election renew deadline.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Duration> OPERATOR_LEADER_ELECTION_RETRY_PERIOD =
+            operatorConfig("leader-election.retry-period")
+                    .durationType()
+                    .defaultValue(LeaderElectionConfiguration.RETRY_PERIOD_DEFAULT_VALUE)
+                    .withDescription("Leader election retry period.");
 }

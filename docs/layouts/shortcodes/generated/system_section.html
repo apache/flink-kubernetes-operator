@@ -51,6 +51,36 @@
             <td>The timeout for the observer to wait the flink rest client to return.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.leader-election.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Enable leader election for the operator to allow running standby instances.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.leader-election.lease-duration</h5></td>
+            <td style="word-wrap: break-word;">15 s</td>
+            <td>Duration</td>
+            <td>Leader election lease duration.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.leader-election.lease-name</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>String</td>
+            <td>Leader election lease name, must be unique for leases in the same namespace.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.leader-election.renew-deadline</h5></td>
+            <td style="word-wrap: break-word;">10 s</td>
+            <td>Duration</td>
+            <td>Leader election renew deadline.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.leader-election.retry-period</h5></td>
+            <td style="word-wrap: break-word;">2 s</td>
+            <td>Duration</td>
+            <td>Leader election retry period.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.reconcile.interval</h5></td>
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>

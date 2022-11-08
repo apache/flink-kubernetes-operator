@@ -29,6 +29,13 @@ image:
 
 imagePullSecrets: []
 
+# Replicas must be 1 unless operator leader election is configured
+replicas: 1
+
+# Strategy type must be Recreate unless leader election is configured
+strategy:
+  type: Recreate
+
 rbac:
   create: true
   # kubernetes.rest-service.exposed.type: NodePort requires

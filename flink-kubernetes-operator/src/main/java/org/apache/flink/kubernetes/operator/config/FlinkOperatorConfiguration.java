@@ -19,8 +19,10 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
 
+import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
 import io.javaoperatorsdk.operator.api.config.RetryConfiguration;
 import lombok.Value;
 import org.apache.commons.lang3.StringUtils;
@@ -60,6 +62,7 @@ public class FlinkOperatorConfiguration {
     int exceptionFieldLengthThreshold;
     int exceptionThrowableCountThreshold;
     String labelSelector;
+    LeaderElectionConfiguration leaderElectionConfiguration;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -170,7 +173,30 @@ public class FlinkOperatorConfiguration {
                 exceptionStackTraceLengthThreshold,
                 exceptionFieldLengthThreshold,
                 exceptionThrowableCountThreshold,
-                labelSelector);
+                labelSelector,
+                getLeaderElectionConfig(operatorConfig));
+    }
+
+    private static LeaderElectionConfiguration getLeaderElectionConfig(Configuration conf) {
+        if (!conf.get(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_ENABLED)) {
+            return null;
+        }
+
+        return new LeaderElectionConfiguration(
+                conf.getOptional(
+                                KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_LEASE_NAME)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalConfigurationException(
+                                                KubernetesOperatorConfigOptions
+                                                                .OPERATOR_LEADER_ELECTION_LEASE_NAME
+                                                                .key()
+                                                        + " must be defined when operator leader election is enabled.")),
+                null,
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_LEASE_DURATION),
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_RENEW_DEADLINE),
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_RETRY_PERIOD),
+                null);
     }
 
     /** Enables configurable retry mechanism for reconciliation errors. */
