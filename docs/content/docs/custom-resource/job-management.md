@@ -95,7 +95,7 @@ The `upgradeMode` setting controls both the stop and restore mechanisms as detai
 
 *\* When Kubernetes HA is enabled the `savepoint` upgrade mode may fall back to the `last-state` behaviour in cases where the job is in an unhealthy state.*
 
-The three  upgrade modes are intended to support different scenarios:
+The three upgrade modes are intended to support different scenarios:
 
  1. **stateless**: Stateless application upgrades from empty state
  2. **last-state**: Quick upgrades in any application state (even for failing jobs), does not require a healthy job as it always uses the latest checkpoint information. Manual recovery may be necessary if HA metadata is lost.

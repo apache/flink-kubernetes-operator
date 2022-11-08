@@ -52,7 +52,7 @@ To learn more about metrics and logging configuration please refer to the dedica
 
 ## Dynamic Operator Configuration
 
-The Kubernetes operator supports dynamic config changes through the operator ConfigMaps. Dynamic operator configuration is enabled by default, and can be disabled by setting `kubernetes.operator.dynamic.config.enabled`  to false. Time interval for checking dynamic config changes is specified by `kubernetes.operator.dynamic.config.check.interval` of which default value is 5 minutes.
+The Kubernetes operator supports dynamic config changes through the operator ConfigMaps. Dynamic operator configuration is enabled by default, and can be disabled by setting `kubernetes.operator.dynamic.config.enabled` to false. Time interval for checking dynamic config changes is specified by `kubernetes.operator.dynamic.config.check.interval` of which default value is 5 minutes.
 
 Verify whether dynamic operator configuration updates is enabled via the `deploy/flink-kubernetes-operator` log has:
 
