@@ -24,9 +24,9 @@ metadata:
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicas }}
   strategy:
-    type: Recreate
+    {{- toYaml .Values.strategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "flink-operator.selectorLabels" . | nindent 6 }}

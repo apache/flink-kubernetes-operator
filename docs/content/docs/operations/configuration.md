@@ -68,6 +68,19 @@ Verify whether the config value of `kubernetes.operator.reconcile.interval` is u
 2022-05-28 13:08:30,115 o.a.f.k.o.c.FlinkConfigManager [INFO ] Updating default configuration to {kubernetes.operator.reconcile.interval=PT30S}
 ```
 
+## Leader Election and High Availability
+
+The operator supports high availability through leader election and standby operator instances. To enable leader election you need to add the following two mandatory operator configuration parameters.
+
+```yaml
+kubernetes.operator.leader-election.enabled: true
+kubernetes.operator.leader-election.lease-name: flink-operator-lease
+```
+
+Lease name must be unique in the current lease namespace. For other more advanced config parameters please refer to the configuration reference.
+
+Once you enabled leader election you can increase the `replicas` for the operator Deployment using the Helm chart to enable high availability.
+
 ## Operator Configuration Reference
 
 ### System Configuration

@@ -107,7 +107,8 @@ public class FlinkOperator {
     }
 
     private void overrideOperatorConfigs(ConfigurationServiceOverrider overrider) {
-        int parallelism = configManager.getOperatorConfiguration().getReconcilerMaxParallelism();
+        var operatorConf = configManager.getOperatorConfiguration();
+        int parallelism = operatorConf.getReconcilerMaxParallelism();
         if (parallelism == -1) {
             LOG.info("Configuring operator with unbounded reconciliation thread pool.");
             overrider.withExecutorService(Executors.newCachedThreadPool());
@@ -115,7 +116,8 @@ public class FlinkOperator {
             LOG.info("Configuring operator with {} reconciliation threads.", parallelism);
             overrider.withConcurrentReconciliationThreads(parallelism);
         }
-        if (configManager.getOperatorConfiguration().isJosdkMetricsEnabled()) {
+
+        if (operatorConf.isJosdkMetricsEnabled()) {
             overrider.withMetrics(new OperatorJosdkMetrics(metricGroup, configManager));
         }
 
@@ -123,6 +125,14 @@ public class FlinkOperator {
                 configManager
                         .getDefaultConfig()
                         .get(KubernetesOperatorConfigOptions.OPERATOR_STOP_ON_INFORMER_ERROR));
+
+        var leaderElectionConf = operatorConf.getLeaderElectionConfiguration();
+        if (leaderElectionConf != null) {
+            overrider.withLeaderElectionConfiguration(leaderElectionConf);
+            LOG.info("Operator leader election is enabled.");
+        } else {
+            LOG.info("Operator leader election is disabled.");
+        }
     }
 
     @VisibleForTesting
@@ -172,16 +182,14 @@ public class FlinkOperator {
     }
 
     private void overrideControllerConfigs(ControllerConfigurationOverrider<?> overrider) {
-        var watchNamespaces = configManager.getOperatorConfiguration().getWatchedNamespaces();
+        var operatorConf = configManager.getOperatorConfiguration();
+        var watchNamespaces = operatorConf.getWatchedNamespaces();
         LOG.info("Configuring operator to watch the following namespaces: {}.", watchNamespaces);
-        overrider.settingNamespaces(
-                configManager.getOperatorConfiguration().getWatchedNamespaces());
+        overrider.settingNamespaces(operatorConf.getWatchedNamespaces());
 
-        overrider.withRetry(
-                GenericRetry.fromConfiguration(
-                        configManager.getOperatorConfiguration().getRetryConfiguration()));
+        overrider.withRetry(GenericRetry.fromConfiguration(operatorConf.getRetryConfiguration()));
 
-        var labelSelector = configManager.getOperatorConfiguration().getLabelSelector();
+        var labelSelector = operatorConf.getLabelSelector();
         LOG.info(
                 "Configuring operator to select custom resources with the {} labels.",
                 labelSelector);

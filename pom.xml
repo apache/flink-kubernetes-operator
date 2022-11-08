@@ -69,7 +69,7 @@ under the License.
         <maven-resources-plugin.version>3.2.0</maven-resources-plugin.version>
         <git-commit-id-maven-plugin.version>5.0.0</git-commit-id-maven-plugin.version>
 
-        <operator.sdk.version>4.1.0</operator.sdk.version>
+        <operator.sdk.version>4.1.1</operator.sdk.version>
         <operator.sdk.admission-controller.version>0.2.0</operator.sdk.admission-controller.version>
 
         <fabric8.version>6.2.0</fabric8.version>
