@@ -7,6 +7,13 @@ github:
     - flink
     - big-data
     - java
+  protected_branches:
+    main: {}
+    release-0.1: {}
+    release-1.0: {}
+    release-1.1: {}
+    release-1.2: {}
+
 notifications:
   commits:      commits@flink.apache.org
   issues:       issues@flink.apache.org
