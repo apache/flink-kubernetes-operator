@@ -346,6 +346,14 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(8085)
                     .withDescription("The port the health probe will use to expose the status.");
 
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Boolean> OPERATOR_STOP_ON_INFORMER_ERROR =
+            operatorConfig("startup.stop-on-informer-error")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Whether informer errors should stop operator startup. If false, the startup will ignore recoverable errors, caused for example by RBAC issues and will retry periodically.");
+
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED =
             operatorConfig("cluster.health-check.enabled")

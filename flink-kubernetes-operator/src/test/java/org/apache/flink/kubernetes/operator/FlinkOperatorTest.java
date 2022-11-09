@@ -45,6 +45,7 @@ public class FlinkOperatorTest {
         operatorConfig.setInteger(
                 KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_PARALLELISM, testParallelism);
         operatorConfig.set(KubernetesOperatorConfigOptions.OPERATOR_LABEL_SELECTOR, testSelector);
+        operatorConfig.set(KubernetesOperatorConfigOptions.OPERATOR_STOP_ON_INFORMER_ERROR, false);
 
         var testOperator = new FlinkOperator(operatorConfig);
         testOperator.registerDeploymentController();
@@ -64,6 +65,8 @@ public class FlinkOperatorTest {
                         .map(ControllerConfiguration::getLabelSelector);
 
         labelSelectors.forEach(selector -> Assertions.assertEquals(testSelector, selector));
+        Assertions.assertFalse(
+                ConfigurationServiceProvider.instance().stopOnInformerErrorDuringStartup());
 
         // TODO: Overriding operator configuration twice in JOSDK v3 yields IllegalStateException
         var secondParallelism = 420;

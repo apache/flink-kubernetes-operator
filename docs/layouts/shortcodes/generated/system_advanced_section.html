@@ -74,5 +74,11 @@
             <td>Integer</td>
             <td>Maximum number threshold of savepoint history entries to retain.</td>
         </tr>
+        <tr>
+            <td><h5>kubernetes.operator.startup.stop-on-informer-error</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Whether informer errors should stop operator startup. If false, the startup will ignore recoverable errors, caused for example by RBAC issues and will retry periodically.</td>
+        </tr>
     </tbody>
 </table>
