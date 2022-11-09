@@ -24,6 +24,7 @@ import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
 import org.apache.flink.kubernetes.operator.health.OperatorHealthService;
@@ -117,6 +118,11 @@ public class FlinkOperator {
         if (configManager.getOperatorConfiguration().isJosdkMetricsEnabled()) {
             overrider.withMetrics(new OperatorJosdkMetrics(metricGroup, configManager));
         }
+
+        overrider.withStopOnInformerErrorDuringStartup(
+                configManager
+                        .getDefaultConfig()
+                        .get(KubernetesOperatorConfigOptions.OPERATOR_STOP_ON_INFORMER_ERROR));
     }
 
     @VisibleForTesting
