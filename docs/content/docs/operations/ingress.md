@@ -51,9 +51,9 @@ apiVersion: networking.k8s.io/v1
   kind: Ingress
   metadata:
     annotations:
-      nginx.ingress.kubernetes.io/rewrite-target: /$2    
+      nginx.ingress.kubernetes.io/rewrite-target: /$2
     name: advanced-ingress
-    namespace: default   
+    namespace: default
   spec:
     ingressClassName: nginx
     rules:
@@ -80,7 +80,7 @@ Beyond the example above the Operator understands other template formats too:
 **Simple domain based routing:**
 ```yaml
 ingress:
-  template: "{{name}}.{{namespace}}.flink.k8s.io"    
+  template: "{{name}}.{{namespace}}.flink.k8s.io"
 ```
 This example requires that anything `*.flink.k8s.io` must be routed to the Ingress Controller with a wildcard DNS entry:
 ```shell
@@ -93,7 +93,7 @@ The Flink Web UI can be accessed at https://sample-job.default.flink.k8s.io
 **Simple path based routing:**
 ```yaml
 ingress:
-  template: "/{{namespace}}/{{name}}(/|$)(.*)"    
+  template: "/{{namespace}}/{{name}}(/|$)(.*)"
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: "/$2"
 ```
@@ -105,5 +105,5 @@ NAMESPACE   NAME               CLASS   HOSTS          ADDRESS     PORTS   AGE
 default     sample-job         nginx   *              localhost   80      54m
 ```
 The Flink Web UI can be accessed at https://localhost/default/sample-job/
->Note: All the examples  were created on a minikube cluster. Check the [description](https://kubernetes.io/docs/tasks/access-application-cluster/ingress-minikube/) for enabling the NGINX Ingress Controller on minikube.
+>Note: All the examples were created on a minikube cluster. Check the [description](https://kubernetes.io/docs/tasks/access-application-cluster/ingress-minikube/) for enabling the NGINX Ingress Controller on minikube.
 
