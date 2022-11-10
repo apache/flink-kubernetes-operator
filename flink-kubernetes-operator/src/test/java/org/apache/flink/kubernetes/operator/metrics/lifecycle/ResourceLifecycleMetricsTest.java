@@ -81,7 +81,7 @@ public class ResourceLifecycleMetricsTest {
         application.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
         assertEquals(FAILED, application.getStatus().getLifecycleState());
 
-        application.getStatus().setError("");
+        application.getStatus().setError(null);
 
         application
                 .getStatus()

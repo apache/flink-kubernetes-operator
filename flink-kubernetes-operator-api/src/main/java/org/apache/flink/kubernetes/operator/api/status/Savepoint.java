@@ -22,6 +22,8 @@ import org.apache.flink.annotation.Experimental;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import javax.annotation.Nullable;
+
 /** Represents information about a finished savepoint. */
 @Experimental
 @Data
@@ -36,42 +38,43 @@ public class Savepoint {
     /** Savepoint trigger mechanism. */
     private SavepointTriggerType triggerType = SavepointTriggerType.UNKNOWN;
 
+    /** Savepoint format. */
     private SavepointFormatType formatType = SavepointFormatType.UNKNOWN;
 
     /**
      * Nonce value used when the savepoint was triggered manually {@link
-     * SavepointTriggerType#MANUAL}, defaults to 0.
+     * SavepointTriggerType#MANUAL}, null for other types of savepoints.
      */
-    private Long triggerNonce = 0L;
+    private Long triggerNonce;
 
     public Savepoint(
             long timeStamp,
             String location,
-            SavepointTriggerType triggerType,
-            SavepointFormatType formatType,
-            Long triggerNonce) {
+            @Nullable SavepointTriggerType triggerType,
+            @Nullable SavepointFormatType formatType,
+            @Nullable Long triggerNonce) {
         this.timeStamp = timeStamp;
         this.location = location;
-        this.triggerType = triggerType;
-        this.formatType = formatType;
-        setTriggerNonce(triggerNonce);
+        if (triggerType != null) {
+            this.triggerType = triggerType;
+        }
+        if (formatType != null) {
+            this.formatType = formatType;
+        }
+        this.triggerNonce = triggerNonce;
     }
 
     public static Savepoint of(String location, SavepointTriggerType triggerType) {
         return new Savepoint(
-                System.currentTimeMillis(), location, triggerType, SavepointFormatType.UNKNOWN, 0L);
+                System.currentTimeMillis(),
+                location,
+                triggerType,
+                SavepointFormatType.UNKNOWN,
+                null);
     }
 
     public static Savepoint of(
             String location, SavepointTriggerType triggerType, SavepointFormatType formatType) {
-        return new Savepoint(System.currentTimeMillis(), location, triggerType, formatType, 0L);
-    }
-
-    public void setTriggerNonce(Long triggerNonce) {
-        if (triggerNonce == null) {
-            this.triggerNonce = 0L;
-        } else {
-            this.triggerNonce = triggerNonce;
-        }
+        return new Savepoint(System.currentTimeMillis(), location, triggerType, formatType, null);
     }
 }

@@ -43,6 +43,7 @@ import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link SavepointObserver}. */
@@ -172,6 +173,6 @@ public class SavepointObserverTest {
         assertEquals(savepointInfo.getLastSavepoint(), savepointInfo.getSavepointHistory().get(0));
         assertEquals(
                 SavepointTriggerType.PERIODIC, savepointInfo.getLastSavepoint().getTriggerType());
-        assertEquals(0L, savepointInfo.getLastSavepoint().getTriggerNonce());
+        assertNull(savepointInfo.getLastSavepoint().getTriggerNonce());
     }
 }

@@ -54,13 +54,6 @@ public class SavepointUtils {
         var jobStatus = status.getJobStatus();
         var savepointInfo = jobStatus.getSavepointInfo();
 
-        // For non-manual savepointing, we always report SUCCEEDED if no longer pending
-        if (savepointInfo.getTriggerType() != SavepointTriggerType.MANUAL) {
-            return savepointInProgress(jobStatus)
-                    ? SavepointStatus.PENDING
-                    : SavepointStatus.SUCCEEDED;
-        }
-
         var targetSavepointTriggerNonce = resource.getSpec().getJob().getSavepointTriggerNonce();
         var reconcileSavepointTriggerNonce =
                 status.getReconciliationStatus()
@@ -68,19 +61,36 @@ public class SavepointUtils {
                         .getJob()
                         .getSavepointTriggerNonce();
 
+        if (savepointInfo.getTriggerId() != null) {
+            return SavepointStatus.PENDING;
+        }
+
         // if savepointTriggerNonce is cleared, savepoint is not triggered.
-        // For manual savepointing, we report pending status
+        // For manual savepoints, we report pending status
         // during retries while the triggerId gets reset between retries.
         if (targetSavepointTriggerNonce != null
                 && !Objects.equals(targetSavepointTriggerNonce, reconcileSavepointTriggerNonce)) {
             return SavepointStatus.PENDING;
         }
-        if (savepointInfo.getLastSavepoint() != null
-                && Objects.equals(
-                        reconcileSavepointTriggerNonce,
-                        savepointInfo.getLastSavepoint().getTriggerNonce())) {
+
+        var lastSavepoint = savepointInfo.getLastSavepoint();
+        if (lastSavepoint != null) {
+            // Last savepoint was manual and triggerNonce matches
+            if (Objects.equals(
+                    reconcileSavepointTriggerNonce,
+                    savepointInfo.getLastSavepoint().getTriggerNonce())) {
+                return SavepointStatus.SUCCEEDED;
+            }
+
+            // Last savepoint was not manual
+            if (lastSavepoint.getTriggerType() != SavepointTriggerType.MANUAL) {
+                return SavepointStatus.SUCCEEDED;
+            }
+        } else {
+            // Currently, we return SUCCEEDED if no savepoints were ever taken
             return SavepointStatus.SUCCEEDED;
         }
+
         return SavepointStatus.ABANDONED;
     }
 

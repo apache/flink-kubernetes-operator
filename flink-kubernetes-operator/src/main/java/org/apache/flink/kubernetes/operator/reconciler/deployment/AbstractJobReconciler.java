@@ -247,7 +247,7 @@ public abstract class AbstractJobReconciler<
                 && observeConfig.getBoolean(OPERATOR_JOB_RESTART_FAILED)) {
             LOG.info("Stopping failed Flink job...");
             cleanupAfterFailedJob(resource, context, observeConfig);
-            resource.getStatus().setError("");
+            resource.getStatus().setError(null);
             resubmitJob(resource, context, observeConfig, false);
             return true;
         } else {

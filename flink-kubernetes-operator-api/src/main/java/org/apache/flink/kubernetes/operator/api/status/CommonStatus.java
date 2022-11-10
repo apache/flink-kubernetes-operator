@@ -41,7 +41,7 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     private JobStatus jobStatus = new JobStatus();
 
     /** Error information about the FlinkDeployment/FlinkSessionJob. */
-    private String error = "";
+    private String error;
 
     /**
      * Current reconciliation status of this resource.

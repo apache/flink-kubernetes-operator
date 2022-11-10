@@ -207,7 +207,7 @@ public abstract class AbstractFlinkDeploymentObserver
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.ERROR
                 && !JobStatus.FAILED.name().equals(dep.getStatus().getJobStatus().getState())
                 && reconciliationStatus.isLastReconciledSpecStable()) {
-            status.setError("");
+            status.setError(null);
         }
     }
 
