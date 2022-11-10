@@ -76,6 +76,7 @@ public class BaseTestUtils {
                         .withNamespace(namespace)
                         .withCreationTimestamp(Instant.now().toString())
                         .withUid(UUID.randomUUID().toString())
+                        .withResourceVersion("1")
                         .build());
         deployment.setSpec(getTestFlinkDeploymentSpec(version));
         return deployment;
@@ -119,6 +120,7 @@ public class BaseTestUtils {
                         .withCreationTimestamp(Instant.now().toString())
                         .withUid(UUID.randomUUID().toString())
                         .withGeneration(1L)
+                        .withResourceVersion("1")
                         .build());
 
         Map<String, String> conf = new HashMap<>();

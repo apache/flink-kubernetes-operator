@@ -18,7 +18,6 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
@@ -26,13 +25,16 @@ import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.exception.StatusConflictException;
 import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,7 +52,7 @@ public class StatusRecorder<
 
     protected final ObjectMapper objectMapper = new ObjectMapper();
 
-    protected final ConcurrentHashMap<Tuple2<String, String>, ObjectNode> statusCache =
+    protected final ConcurrentHashMap<ResourceID, ObjectNode> statusCache =
             new ConcurrentHashMap<>();
 
     private final KubernetesClient client;
@@ -76,13 +78,10 @@ public class StatusRecorder<
      */
     @SneakyThrows
     public void patchAndCacheStatus(CR resource) {
-        // This is necessary so the client wouldn't fail of the underlying resource spec was updated
-        // in the meantime
-        resource.getMetadata().setResourceVersion(null);
-
         ObjectNode newStatusNode =
                 objectMapper.convertValue(resource.getStatus(), ObjectNode.class);
-        ObjectNode previousStatusNode = statusCache.put(getKey(resource), newStatusNode);
+        var resourceId = ResourceID.fromResource(resource);
+        ObjectNode previousStatusNode = statusCache.get(resourceId);
 
         if (newStatusNode.equals(previousStatusNode)) {
             LOG.debug("No status change.");
@@ -97,20 +96,79 @@ public class StatusRecorder<
 
         Exception err = null;
         for (int i = 0; i < 3; i++) {
-            // In any case we retry the status update 3 times to avoid some intermittent
-            // connectivity errors if any
+            // We retry the status update 3 times to avoid some intermittent connectivity errors
             try {
-                client.resource(resource).patchStatus();
-                statusUpdateListener.accept(resource, prevStatus);
-                metricManager.onUpdate(resource);
-                return;
-            } catch (Exception e) {
+                replaceStatus(resource, prevStatus);
+                err = null;
+            } catch (KubernetesClientException e) {
                 LOG.error("Error while patching status, retrying {}/3...", (i + 1), e);
                 Thread.sleep(1000);
                 err = e;
             }
         }
-        throw err;
+
+        if (err != null) {
+            throw err;
+        }
+
+        statusCache.put(resourceId, newStatusNode);
+        statusUpdateListener.accept(resource, prevStatus);
+        metricManager.onUpdate(resource);
+    }
+
+    private void replaceStatus(CR resource, STATUS prevStatus) throws JsonProcessingException {
+        int retries = 0;
+        while (true) {
+            try {
+                var updated = client.resource(resource).lockResourceVersion().replaceStatus();
+
+                // If we successfully replaced the status, update the resource version so we know
+                // what to lock next in the same reconciliation loop
+                resource.getMetadata()
+                        .setResourceVersion(updated.getMetadata().getResourceVersion());
+                return;
+            } catch (KubernetesClientException kce) {
+                // 409 is the error code for conflicts resulting from the locking
+                if (kce.getCode() == 409) {
+                    var currentVersion = resource.getMetadata().getResourceVersion();
+                    LOG.debug(
+                            "Could not apply status update for resource version {}",
+                            currentVersion);
+
+                    var latest = client.resource(resource).fromServer().get();
+                    var latestVersion = latest.getMetadata().getResourceVersion();
+
+                    if (latestVersion.equals(currentVersion)) {
+                        // This should not happen as long as the client works consistently
+                        LOG.error("Unable to fetch latest resource version");
+                        throw kce;
+                    }
+
+                    if (latest.getStatus().equals(prevStatus)) {
+                        if (retries++ < 3) {
+                            LOG.debug(
+                                    "Retrying status update for latest version {}", latestVersion);
+                            resource.getMetadata().setResourceVersion(latestVersion);
+                        } else {
+                            // If we cannot get the latest version in 3 tries we throw the error to
+                            // retry with delay
+                            throw kce;
+                        }
+                    } else {
+                        throw new StatusConflictException(
+                                "Status have been modified externally in version "
+                                        + latestVersion
+                                        + " Previous: "
+                                        + objectMapper.writeValueAsString(prevStatus)
+                                        + " Latest: "
+                                        + objectMapper.writeValueAsString(latest.getStatus()));
+                    }
+                } else {
+                    // We simply throw non conflict errors, to trigger retry with delay
+                    throw kce;
+                }
+            }
+        }
     }
 
     /**
@@ -124,7 +182,7 @@ public class StatusRecorder<
      * @param resource Resource for which the status should be updated from the cache
      */
     public void updateStatusFromCache(CR resource) {
-        var key = getKey(resource);
+        var key = ResourceID.fromResource(resource);
         var cachedStatus = statusCache.get(key);
         if (cachedStatus != null) {
             resource.setStatus(
@@ -147,12 +205,8 @@ public class StatusRecorder<
      * @param resource Flink resource.
      */
     public void removeCachedStatus(CR resource) {
-        statusCache.remove(getKey(resource));
+        statusCache.remove(ResourceID.fromResource(resource));
         metricManager.onRemove(resource);
-    }
-
-    protected static Tuple2<String, String> getKey(HasMetadata resource) {
-        return Tuple2.of(resource.getMetadata().getNamespace(), resource.getMetadata().getName());
     }
 
     public static <S extends CommonStatus<?>, CR extends AbstractFlinkResource<?, S>>

@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
 /** Testing statusRecorder. */
 public class TestingStatusRecorder<
@@ -37,7 +38,7 @@ public class TestingStatusRecorder<
     @Override
     public void patchAndCacheStatus(CR resource) {
         statusCache.put(
-                getKey(resource),
+                ResourceID.fromResource(resource),
                 objectMapper.convertValue(resource.getStatus(), ObjectNode.class));
     }
 }
