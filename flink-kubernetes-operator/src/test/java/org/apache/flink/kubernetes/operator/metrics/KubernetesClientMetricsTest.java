@@ -92,7 +92,7 @@ public class KubernetesClientMetricsTest {
                         mockServer.createClient().getConfiguration());
 
         var deployment = TestUtils.buildApplicationCluster();
-        kubernetesClient.resource(deployment).get();
+        kubernetesClient.resource(deployment).fromServer().get();
         assertFalse(listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).isPresent());
         assertFalse(listener.getMeter(listener.getMetricId(REQUEST_METER_ID)).isPresent());
         assertFalse(

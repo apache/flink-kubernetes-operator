@@ -23,6 +23,10 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
+import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.exception.StatusConflictException;
+import org.apache.flink.kubernetes.operator.metrics.MetricManager;
+import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.api.model.Namespace;
 import io.fabric8.kubernetes.api.model.NamespaceBuilder;
@@ -43,6 +47,7 @@ import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.awaitility.Awaitility.await;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /** Flink Operator integration test. */
 public class FlinkOperatorITCase {
@@ -50,10 +55,11 @@ public class FlinkOperatorITCase {
     private static final String TEST_NAMESPACE = "flink-operator-test";
     private static final String SERVICE_ACCOUNT = "flink-operator";
     private static final String CLUSTER_ROLE_BINDING = "flink-operator-role-binding";
-    private static final String FLINK_VERSION = "1.15.1";
+    private static final String FLINK_VERSION = "1.15";
     private static final String IMAGE = String.format("flink:%s", FLINK_VERSION);
     private static final Logger LOG = LoggerFactory.getLogger(FlinkOperatorITCase.class);
-    private KubernetesClient client;
+    public static final String SESSION_NAME = "test-session-cluster";
+    private static KubernetesClient client;
 
     @BeforeEach
     public void setup() {
@@ -83,7 +89,7 @@ public class FlinkOperatorITCase {
     public void test() {
         FlinkDeployment flinkDeployment = buildSessionCluster();
         LOG.info("Deploying {}", flinkDeployment.getMetadata().getName());
-        client.resource(flinkDeployment).createOrReplace();
+        var v1 = client.resource(flinkDeployment).createOrReplace();
 
         await().atMost(1, MINUTES)
                 .untilAsserted(
@@ -92,16 +98,28 @@ public class FlinkOperatorITCase {
                                         client.apps()
                                                 .deployments()
                                                 .inNamespace(TEST_NAMESPACE)
-                                                .withName(flinkDeployment.getMetadata().getName())
+                                                .withName(SESSION_NAME)
                                                 .isReady(),
                                         is(true)));
+
+        // Test status recorder locking logic
+        var statusRecorder =
+                new StatusRecorder<FlinkDeployment, FlinkDeploymentStatus>(
+                        client, new MetricManager<>(), (a, b) -> {});
+        try {
+            v1.getStatus().setError("e2");
+            // Should throw error as status was modified externally
+            statusRecorder.patchAndCacheStatus(v1);
+            fail();
+        } catch (StatusConflictException expected) {
+        }
     }
 
     private static FlinkDeployment buildSessionCluster() {
         FlinkDeployment deployment = new FlinkDeployment();
         deployment.setMetadata(
                 new ObjectMetaBuilder()
-                        .withName("test-session-cluster")
+                        .withName(SESSION_NAME)
                         .withNamespace(TEST_NAMESPACE)
                         .build());
         FlinkDeploymentSpec spec = new FlinkDeploymentSpec();
@@ -122,7 +140,7 @@ public class FlinkOperatorITCase {
         return deployment;
     }
 
-    private void rbacSetup() {
+    private static void rbacSetup() {
         LOG.info("Creating service account {}", SERVICE_ACCOUNT);
         ServiceAccount serviceAccount =
                 new ServiceAccountBuilder()
