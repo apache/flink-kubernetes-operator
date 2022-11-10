@@ -274,8 +274,8 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | timeStamp | long | Millisecond timestamp at the start of the savepoint operation. |
 | location | java.lang.String | External pointer of the savepoint can be used to recover jobs. |
 | triggerType | org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType | Savepoint trigger mechanism. |
-| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType |  |
-| triggerNonce | java.lang.Long | Nonce value used when the savepoint was triggered manually {@link SavepointTriggerType#MANUAL}, defaults to 0. |
+| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType | Savepoint format. |
+| triggerNonce | java.lang.Long | Nonce value used when the savepoint was triggered manually {@link SavepointTriggerType#MANUAL}, null for other types of savepoints. |
 
 ### SavepointFormatType
 **Class**: org.apache.flink.kubernetes.operator.api.status.SavepointFormatType
@@ -297,9 +297,9 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | lastSavepoint | org.apache.flink.kubernetes.operator.api.status.Savepoint | Last completed savepoint by the operator. |
 | triggerId | java.lang.String | Trigger id of a pending savepoint operation. |
-| triggerTimestamp | long | Trigger timestamp of a pending savepoint operation. |
+| triggerTimestamp | java.lang.Long | Trigger timestamp of a pending savepoint operation. |
 | triggerType | org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType | Savepoint trigger mechanism. |
-| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType |  |
+| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType | Savepoint format. |
 | savepointHistory | java.util.List<org.apache.flink.kubernetes.operator.api.status.Savepoint> | List of recent savepoints. |
 | lastPeriodicSavepointTimestamp | long | Trigger timestamp of last periodic savepoint operation. |
 

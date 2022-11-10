@@ -131,7 +131,7 @@ public class FlinkDeploymentControllerTest {
         // Validate reconciliation status
         ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
                 appCluster.getStatus().getReconciliationStatus();
-        assertEquals("", appCluster.getStatus().getError());
+        assertNull(appCluster.getStatus().getError());
         assertEquals(appCluster.getSpec(), reconciliationStatus.deserializeLastReconciledSpec());
         assertNull(appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
 
@@ -971,7 +971,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertEquals("", appCluster.getStatus().getError());
+        assertNull(appCluster.getStatus().getError());
 
         assertEquals(
                 appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec(),

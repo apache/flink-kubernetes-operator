@@ -103,7 +103,7 @@ public class ReconciliationUtils {
         var reconciliationStatus = status.getReconciliationStatus();
 
         // Clear errors
-        status.setError("");
+        status.setError(null);
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
         reconciliationStatus.setState(
                 upgrading ? ReconciliationState.UPGRADING : ReconciliationState.DEPLOYED);

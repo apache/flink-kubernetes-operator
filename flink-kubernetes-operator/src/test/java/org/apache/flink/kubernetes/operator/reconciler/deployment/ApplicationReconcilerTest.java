@@ -283,23 +283,13 @@ public class ApplicationReconcilerTest {
                 SavepointTriggerType.MANUAL,
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
 
-        spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
         ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                 spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
+        spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
 
         // don't trigger when nonce is the same
         reconciler.reconcile(spDeployment, context);
         assertFalse(SavepointUtils.savepointInProgress(spDeployment.getStatus().getJobStatus()));
-
-        spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
-                spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
-        // If manual savepointing is done but the last savepont is not updated, it is considered
-        // abandoned.
-        assertEquals(
-                SavepointStatus.ABANDONED, SavepointUtils.getLastSavepointStatus(spDeployment));
-
-        updateLastSavepoint(spDeployment);
         assertEquals(
                 SavepointStatus.SUCCEEDED, SavepointUtils.getLastSavepointStatus(spDeployment));
 
@@ -325,7 +315,6 @@ public class ApplicationReconcilerTest {
         assertEquals(
                 SavepointTriggerType.MANUAL,
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
-        spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
         ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                 spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
         updateLastSavepoint(spDeployment);
