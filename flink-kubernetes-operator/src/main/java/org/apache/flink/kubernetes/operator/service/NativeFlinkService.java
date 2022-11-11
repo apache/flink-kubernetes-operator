@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.service;
 
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.cli.ApplicationDeployer;
 import org.apache.flink.client.deployment.ClusterClientFactory;
 import org.apache.flink.client.deployment.ClusterClientServiceLoader;
@@ -30,8 +29,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
-import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
@@ -89,19 +86,6 @@ public class NativeFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void deleteClusterDeployment(
-            ObjectMeta meta, FlinkDeploymentStatus status, boolean deleteHaData) {
-        deleteCluster(
-                status,
-                meta,
-                deleteHaData,
-                configManager
-                        .getOperatorConfiguration()
-                        .getFlinkShutdownClusterTimeout()
-                        .toSeconds());
-    }
-
-    @Override
     protected PodList getJmPodList(String namespace, String clusterId) {
         return kubernetesClient
                 .pods()
@@ -124,20 +108,8 @@ public class NativeFlinkService extends AbstractFlinkService {
         LOG.info("Session cluster successfully deployed");
     }
 
-    /**
-     * Delete Flink kubernetes cluster by deleting the kubernetes resources directly. Optionally
-     * allows deleting the native kubernetes HA resources as well.
-     *
-     * @param status Deployment status object
-     * @param meta ObjectMeta of the deployment
-     * @param deleteHaConfigmaps Flag to indicate whether k8s HA metadata should be removed as well
-     * @param shutdownTimeout maximum time allowed for cluster shutdown
-     */
-    private void deleteCluster(
-            FlinkDeploymentStatus status,
-            ObjectMeta meta,
-            boolean deleteHaConfigmaps,
-            long shutdownTimeout) {
+    @Override
+    protected void deleteClusterInternal(ObjectMeta meta, boolean deleteHaConfigmaps) {
 
         String namespace = meta.getNamespace();
         String clusterId = meta.getName();
@@ -154,7 +126,13 @@ public class NativeFlinkService extends AbstractFlinkService {
 
         if (deleteHaConfigmaps) {
             // We need to wait for cluster shutdown otherwise HA configmaps might be recreated
-            waitForClusterShutdown(namespace, clusterId, shutdownTimeout);
+            waitForClusterShutdown(
+                    namespace,
+                    clusterId,
+                    configManager
+                            .getOperatorConfiguration()
+                            .getFlinkShutdownClusterTimeout()
+                            .toSeconds());
             kubernetesClient
                     .configMaps()
                     .inNamespace(namespace)
@@ -163,7 +141,5 @@ public class NativeFlinkService extends AbstractFlinkService {
                                     clusterId, LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
                     .delete();
         }
-        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
-        status.getJobStatus().setState(JobStatus.FINISHED.name());
     }
 }

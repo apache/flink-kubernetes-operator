@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.kubeclient.Fabric8FlinkStandaloneKubeClient;
@@ -84,12 +83,6 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void deleteClusterDeployment(
-            ObjectMeta meta, FlinkDeploymentStatus status, boolean deleteHaData) {
-        deleteClusterInternal(meta, deleteHaData);
-    }
-
-    @Override
     protected PodList getJmPodList(String namespace, String clusterId) {
         return kubernetesClient
                 .pods()
@@ -136,7 +129,8 @@ public class StandaloneFlinkService extends AbstractFlinkService {
         return new KubernetesClusterClientFactory().getClusterSpecification(conf);
     }
 
-    private void deleteClusterInternal(ObjectMeta meta, boolean deleteHaConfigmaps) {
+    @Override
+    protected void deleteClusterInternal(ObjectMeta meta, boolean deleteHaConfigmaps) {
         final String clusterId = meta.getName();
         final String namespace = meta.getNamespace();
 

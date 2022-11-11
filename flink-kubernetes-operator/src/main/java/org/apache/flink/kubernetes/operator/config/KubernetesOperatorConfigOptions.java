@@ -422,4 +422,12 @@ public class KubernetesOperatorConfigOptions {
                     .durationType()
                     .defaultValue(LeaderElectionConfiguration.RETRY_PERIOD_DEFAULT_VALUE)
                     .withDescription("Leader election retry period.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Duration> OPERATOR_JM_SHUTDOWN_TTL =
+            operatorConfig("jm-deployment.shutdown-ttl")
+                    .durationType()
+                    .defaultValue(Duration.ofDays(1))
+                    .withDescription(
+                            "Time after which jobmanager pods of terminal application deployments are shut down.");
 }

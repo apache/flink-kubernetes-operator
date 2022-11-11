@@ -63,6 +63,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.platform.commons.util.StringUtils;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -626,5 +630,39 @@ public class ApplicationReconcilerTest {
         List<Map<String, String>> or =
                 deployConfig.get(KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE);
         Assertions.assertEquals(expectedOwnerReferences, or);
+    }
+
+    @Test
+    public void testTerminalJmTtl() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        deployment.getSpec().getJob().setState(JobState.SUSPENDED);
+        reconciler.reconcile(deployment, context);
+        var status = deployment.getStatus();
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.FINISHED.toString(),
+                status.getJobStatus().getState());
+        assertEquals(JobManagerDeploymentStatus.READY, status.getJobManagerDeploymentStatus());
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.OPERATOR_JM_SHUTDOWN_TTL.key(),
+                        String.valueOf(Duration.ofMinutes(5).toMillis()));
+
+        var now = Instant.now();
+        status.getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
+
+        reconciler.setClock(Clock.fixed(now.plus(Duration.ofMinutes(3)), ZoneId.systemDefault()));
+        reconciler.reconcile(deployment, context);
+        assertEquals(JobManagerDeploymentStatus.READY, status.getJobManagerDeploymentStatus());
+
+        reconciler.setClock(Clock.fixed(now.plus(Duration.ofMinutes(6)), ZoneId.systemDefault()));
+        reconciler.reconcile(deployment, context);
+        assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
     }
 }
