@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
@@ -47,6 +48,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -76,6 +78,8 @@ public abstract class AbstractFlinkResourceReconciler<
             "%s change(s) detected (%s), starting reconciliation.";
     public static final String MSG_ROLLBACK = "Rolling back failed deployment.";
     public static final String MSG_SUBMIT = "Starting deployment";
+
+    protected Clock clock = Clock.systemDefaultZone();
 
     public AbstractFlinkResourceReconciler(
             KubernetesClient kubernetesClient,
@@ -358,7 +362,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
         Duration readinessTimeout =
                 configuration.get(KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT);
-        if (!Instant.now()
+        if (!clock.instant()
                 .minus(readinessTimeout)
                 .isAfter(Instant.ofEpochMilli(reconciliationStatus.getReconciliationTimestamp()))) {
             return false;
@@ -446,5 +450,10 @@ public abstract class AbstractFlinkResourceReconciler<
                         "controller", "false");
         deployConfig.set(
                 KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE, List.of(ownerReference));
+    }
+
+    @VisibleForTesting
+    protected void setClock(Clock clock) {
+        this.clock = clock;
     }
 }

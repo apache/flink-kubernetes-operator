@@ -50,6 +50,7 @@ import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -281,7 +282,7 @@ public class ApplicationReconciler
             return true;
         }
 
-        return false;
+        return cleanupTerminalJmAfterTtl(deployment, observeConfig);
     }
 
     private boolean shouldRestartJobBecauseUnhealthy(
@@ -316,6 +317,31 @@ public class ApplicationReconciler
         }
 
         return restartNeeded;
+    }
+
+    private boolean cleanupTerminalJmAfterTtl(
+            FlinkDeployment deployment, Configuration observeConfig) {
+        var status = deployment.getStatus();
+        boolean terminal = ReconciliationUtils.isJobInTerminalState(status);
+        boolean jmStillRunning =
+                status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.MISSING;
+
+        if (terminal && jmStillRunning) {
+            var ttl = observeConfig.get(KubernetesOperatorConfigOptions.OPERATOR_JM_SHUTDOWN_TTL);
+            boolean ttlPassed =
+                    clock.instant()
+                            .isAfter(
+                                    Instant.ofEpochMilli(
+                                                    Long.parseLong(
+                                                            status.getJobStatus().getUpdateTime()))
+                                            .plus(ttl));
+            if (ttlPassed) {
+                LOG.info("Removing JobManager deployment for terminal application.");
+                flinkService.deleteClusterDeployment(deployment.getMetadata(), status, false);
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

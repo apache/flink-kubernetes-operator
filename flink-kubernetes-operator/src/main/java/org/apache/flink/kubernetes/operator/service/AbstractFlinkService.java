@@ -34,6 +34,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
@@ -882,6 +883,31 @@ public abstract class AbstractFlinkService implements FlinkService {
             return responseBody.getMetrics().stream()
                     .map(metric -> Tuple2.of(metric.getId(), metric.getValue()))
                     .collect(Collectors.toMap((t) -> t.f0, (t) -> t.f1));
+        }
+    }
+
+    @Override
+    public final void deleteClusterDeployment(
+            ObjectMeta meta, FlinkDeploymentStatus status, boolean deleteHaData) {
+        deleteClusterInternal(meta, deleteHaData);
+        updateStatusAfterClusterDeletion(status);
+    }
+
+    /**
+     * Delete Flink kubernetes cluster by deleting the kubernetes resources directly. Optionally
+     * allows deleting the native kubernetes HA resources as well.
+     *
+     * @param meta ObjectMeta of the deployment
+     * @param deleteHaConfigmaps Flag to indicate whether k8s HA metadata should be removed as well
+     */
+    protected abstract void deleteClusterInternal(ObjectMeta meta, boolean deleteHaConfigmaps);
+
+    protected void updateStatusAfterClusterDeletion(FlinkDeploymentStatus status) {
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        var currentJobState = status.getJobStatus().getState();
+        if (currentJobState == null
+                || !JobStatus.valueOf(currentJobState).isGloballyTerminalState()) {
+            status.getJobStatus().setState(JobStatus.FINISHED.name());
         }
     }
 }
