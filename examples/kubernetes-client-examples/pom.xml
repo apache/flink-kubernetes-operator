@@ -28,8 +28,13 @@ under the License.
         <relativePath>../..</relativePath>
     </parent>
 
+    <!-- Given that this is an example skip maven deployment -->
+    <properties>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <artifactId>kubernetes-client-examples</artifactId>
-    <name>Flink Kubernetes client code Example</name>
+    <name>Flink Kubernetes Client Code Example</name>
 
     <dependencies>
         <dependency>
