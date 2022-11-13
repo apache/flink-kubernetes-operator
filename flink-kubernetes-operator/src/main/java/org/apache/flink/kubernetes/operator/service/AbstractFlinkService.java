@@ -326,6 +326,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                 exception);
                     }
                     if (deleteClusterAfterSavepoint) {
+                        LOG.info("Cleaning up deployment after stop-with-savepoint");
                         deleteClusterDeployment(deployment.getMetadata(), deploymentStatus, true);
                     }
                     break;
