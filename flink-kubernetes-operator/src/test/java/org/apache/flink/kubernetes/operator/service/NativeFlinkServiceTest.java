@@ -56,6 +56,8 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -114,8 +116,9 @@ public class NativeFlinkServiceTest {
         assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
     }
 
-    @Test
-    public void testCancelJobWithSavepointUpgradeMode() throws Exception {
+    @ParameterizedTest
+    @EnumSource(FlinkVersion.class)
+    public void testCancelJobWithSavepointUpgradeMode(FlinkVersion flinkVersion) throws Exception {
         final TestingClusterClient<String> testingClusterClient =
                 new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         final CompletableFuture<Tuple3<JobID, Boolean, String>> stopWithSavepointFuture =
@@ -143,6 +146,7 @@ public class NativeFlinkServiceTest {
         jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
+        deployment.getSpec().setFlinkVersion(flinkVersion);
         flinkService.cancelJob(
                 deployment, UpgradeMode.SAVEPOINT, configManager.getObserveConfig(deployment));
         assertTrue(stopWithSavepointFuture.isDone());
@@ -150,6 +154,17 @@ public class NativeFlinkServiceTest {
         assertFalse(stopWithSavepointFuture.get().f1);
         assertEquals(savepointPath, stopWithSavepointFuture.get().f2);
         assertEquals(savepointPath, jobStatus.getSavepointInfo().getLastSavepoint().getLocation());
+
+        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED.name());
+        if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_14)) {
+            assertEquals(
+                    deployment.getStatus().getJobManagerDeploymentStatus(),
+                    JobManagerDeploymentStatus.READY);
+        } else {
+            assertEquals(
+                    deployment.getStatus().getJobManagerDeploymentStatus(),
+                    JobManagerDeploymentStatus.MISSING);
+        }
     }
 
     @Test

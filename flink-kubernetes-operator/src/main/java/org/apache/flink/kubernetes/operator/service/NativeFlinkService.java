@@ -27,6 +27,7 @@ import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
@@ -80,7 +81,11 @@ public class NativeFlinkService extends AbstractFlinkService {
     public void cancelJob(
             FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration configuration)
             throws Exception {
-        cancelJob(deployment, upgradeMode, configuration, false);
+        // prior to Flink 1.15, ensure removal of orphaned config maps
+        // https://issues.apache.org/jira/browse/FLINK-30004
+        boolean deleteClusterAfterSavepoint =
+                !deployment.getSpec().getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_14);
+        cancelJob(deployment, upgradeMode, configuration, deleteClusterAfterSavepoint);
     }
 
     @Override
