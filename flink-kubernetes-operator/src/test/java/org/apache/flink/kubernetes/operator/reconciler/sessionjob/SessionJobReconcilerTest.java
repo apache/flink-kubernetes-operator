@@ -233,6 +233,44 @@ public class SessionJobReconcilerTest {
     }
 
     @Test
+    public void testAlreadyCancelledJob() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+
+        reconciler.reconcile(sessionJob, readyContext);
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob,
+                JobState.RUNNING,
+                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
+                null,
+                flinkService.listJobs());
+
+        var statelessSessionJob = ReconciliationUtils.clone(sessionJob);
+        var jobConfig = flinkService.listJobs().get(0).f2;
+
+        statelessSessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
+        statelessSessionJob.getSpec().getJob().setParallelism(2);
+        // job suspended first
+        reconciler.reconcile(statelessSessionJob, readyContext);
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.FINISHED,
+                flinkService.listJobs().get(0).f1.getJobState());
+
+        verifyJobState(statelessSessionJob, JobState.SUSPENDED, "FINISHED");
+
+        var exception =
+                Assertions.assertThrows(
+                        RuntimeException.class,
+                        () ->
+                                flinkService.cancelSessionJob(
+                                        statelessSessionJob, UpgradeMode.STATELESS, jobConfig));
+
+        Assertions.assertTrue(exception.getMessage().equals("Job is Already in FINISHED state"));
+    }
+
+    @Test
     public void testSavepointUpgrade() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
 

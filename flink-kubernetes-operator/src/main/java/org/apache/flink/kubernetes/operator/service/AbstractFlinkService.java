@@ -362,11 +362,27 @@ public abstract class AbstractFlinkService implements FlinkService {
             FlinkSessionJob sessionJob, UpgradeMode upgradeMode, Configuration conf)
             throws Exception {
 
+        // Not allowing the jobs which are already in the completed state.
+        String[] jobStateCannotBeCancelled =
+                new String[] {
+                    JobStatus.CANCELLING.name(),
+                    JobStatus.CANCELED.name(),
+                    JobStatus.FAILING.name(),
+                    JobStatus.FAILED.name(),
+                    JobStatus.FINISHED.name()
+                };
+
         var jobStatus = sessionJob.getStatus().getJobStatus();
+
+        if (Arrays.stream(jobStateCannotBeCancelled).anyMatch(jobStatus.getState()::contains)) {
+            throw new RuntimeException("Job is Already in " + jobStatus.getState() + " state");
+        }
+
         var jobIdString = jobStatus.getJobId();
         Preconditions.checkNotNull(jobIdString, "The job to be suspend should not be null");
         var jobId = JobID.fromHexString(jobIdString);
         Optional<String> savepointOpt = Optional.empty();
+
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
             final String clusterId = clusterClient.getClusterId();
             switch (upgradeMode) {
