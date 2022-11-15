@@ -30,6 +30,11 @@ under the License.
 	<artifactId>flink-sql-runner-example</artifactId>
 	<name>Flink SQL Runner Example</name>
 
+	<!-- Given that this is an example skip maven deployment -->
+	<properties>
+		<maven.deploy.skip>true</maven.deploy.skip>
+	</properties>
+
 	<dependencies>
 		<!-- Apache Flink dependencies -->
 		<!-- These dependencies are provided, because they should not be packaged into the JAR file. -->
