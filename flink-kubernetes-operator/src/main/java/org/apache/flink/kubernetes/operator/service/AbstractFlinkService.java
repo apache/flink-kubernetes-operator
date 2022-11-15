@@ -371,6 +371,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
         if (ReconciliationUtils.isJobInTerminalState(sessionJobStatus)) {
             LOG.info("Job is already in terminal state.");
+            return;
         } else if (!ReconciliationUtils.isJobRunning(sessionJobStatus)) {
             throw new RuntimeException(
                     "Unexpected non-terminal status: "
