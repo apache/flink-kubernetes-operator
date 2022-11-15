@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -233,7 +234,7 @@ public class SessionJobReconcilerTest {
     }
 
     @Test
-    public void testAlreadyCancelledJob() throws Exception {
+    public void testAlreadyCompletedJob() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
@@ -259,15 +260,10 @@ public class SessionJobReconcilerTest {
                 flinkService.listJobs().get(0).f1.getJobState());
 
         verifyJobState(statelessSessionJob, JobState.SUSPENDED, "FINISHED");
-
-        var exception =
-                Assertions.assertThrows(
-                        RuntimeException.class,
-                        () ->
-                                flinkService.cancelSessionJob(
-                                        statelessSessionJob, UpgradeMode.STATELESS, jobConfig));
-
-        Assertions.assertTrue(exception.getMessage().equals("Job is Already in FINISHED state"));
+        assertDoesNotThrow(
+                () ->
+                        flinkService.cancelSessionJob(
+                                statelessSessionJob, UpgradeMode.STATELESS, jobConfig));
     }
 
     @Test
