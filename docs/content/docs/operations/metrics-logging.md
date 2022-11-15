@@ -62,17 +62,35 @@ In addition to the simple counts we further track a few selected state transitio
 
 The Operator gathers various metrics related to Kubernetes API server access.
 
-| Scope  | Metrics                                            | Description                                                                                                                                                  | Type      |
-|--------|----------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
-| System | KubeClient.HttpRequest.Count                       | Number of HTTP request sent to the Kubernetes API Server                                                                                                     | Counter   |
-| System | KubeClient.HttpRequest.&lt;RequestMethod&gt;.Count | Number of HTTP request sent to the Kubernetes API Server per request method. &lt;RequestMethod&gt; can take values from: GET, POST, PUT, PATCH, DELETE, etc. | Counter   |
-| System | KubeClient.HttpRequest.Failed.Count                | Number of failed HTTP requests that has no response from the Kubernetes API Server                                                                           | Counter   |
-| System | KubeClient.HttpResponse.Count                      | Number of HTTP responses received from the Kubernetes API Server                                                                                             | Counter   |
-| System | KubeClient.HttpResponse.&lt;ResponseCode&gt;.Count | Number of HTTP responses received from the Kubernetes API Server per response code. &lt;ResponseCode&gt; can take values from: 200, 404, 503, etc.           | Counter   |
-| System | KubeClient.HttpRequest.NumPerSecond                | Number of HTTP requests sent to the Kubernetes API Server per second                                                                                         | Meter     |
-| System | KubeClient.HttpRequest.Failed.NumPerSecond         | Number of failed HTTP requests sent to the Kubernetes API Server per second                                                                                  | Meter     |
-| System | KubeClient.HttpResponse.NumPerSecond               | Number of HTTP responses received from the Kubernetes API Server per second                                                                                  | Meter     |
-| System | KubeClient.HttpResponse.TimeNanos                  | Latency statistics obtained from the HTTP responses received from the Kubernetes API Server                                                                  | Histogram |
+| Scope  | Metrics                                                   | Description                                                                                                                                                  | Type      |
+|--------|-----------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
+| System | KubeClient.HttpRequest.Count                              | Number of HTTP request sent to the Kubernetes API Server                                                                                                     | Counter   |
+| System | KubeClient.HttpRequest.&lt;RequestMethod&gt;.Count        | Number of HTTP request sent to the Kubernetes API Server per request method. &lt;RequestMethod&gt; can take values from: GET, POST, PUT, PATCH, DELETE, etc. | Counter   |
+| System | KubeClient.HttpRequest.Failed.Count                       | Number of failed HTTP requests that has no response from the Kubernetes API Server                                                                           | Counter   |
+| System | KubeClient.HttpResponse.Count                             | Number of HTTP responses received from the Kubernetes API Server                                                                                             | Counter   |
+| System | KubeClient.HttpResponse.&lt;ResponseCode&gt;.Count        | Number of HTTP responses received from the Kubernetes API Server per response code. &lt;ResponseCode&gt; can take values from: 200, 404, 503, etc.           | Counter   |
+| System | KubeClient.HttpResponse.&lt;ResponseCode&gt;.NumPerSecond | Number of HTTP responses received from the Kubernetes API Server per response code per second. &lt;ResponseCode&gt; can take values from: 200, 404, 503, etc.| Meter     |
+| System | KubeClient.HttpRequest.NumPerSecond                       | Number of HTTP requests sent to the Kubernetes API Server per second                                                                                         | Meter     |
+| System | KubeClient.HttpRequest.Failed.NumPerSecond                | Number of failed HTTP requests sent to the Kubernetes API Server per second                                                                                  | Meter     |
+| System | KubeClient.HttpResponse.NumPerSecond                      | Number of HTTP responses received from the Kubernetes API Server per second                                                                                  | Meter     |
+| System | KubeClient.HttpResponse.TimeNanos                         | Latency statistics obtained from the HTTP responses received from the Kubernetes API Server                                                                  | Histogram |
+
+#### Kubernetes client metrics by Http Response Code
+
+It's possible to publish additional metrics by Http response code received from API server by setting `kubernetes.client.metrics.http.response.code.groups.enabled` to `true` .
+
+| Scope  | Metrics                                                   | Description                                                                                                                                                  | Type      |
+|--------|-----------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|
+| System | KubeClient.HttpResponse.1xx.Count                         | Number of HTTP Code 1xx responses (informational) received from the Kubernetes API Server per response code.                                                 | Counter   |
+| System | KubeClient.HttpResponse.2xx.Count                         | Number of HTTP Code 2xx responses (success) received from the Kubernetes API Server per response code.                                                       | Counter   |
+| System | KubeClient.HttpResponse.3xx.Count                         | Number of HTTP Code 3xx responses (redirection) received from the Kubernetes API Server per response code.                                                   | Counter   |
+| System | KubeClient.HttpResponse.4xx.Count                         | Number of HTTP Code 4xx responses (client error) received from the Kubernetes API Server per response code.                                                  | Counter   |
+| System | KubeClient.HttpResponse.5xx.Count                         | Number of HTTP Code 5xx responses (server error) received from the Kubernetes API Server per response code.                                                  | Counter   |
+| System | KubeClient.HttpResponse.1xx.NumPerSecond                  | Number of HTTP Code 1xx responses (informational) received from the Kubernetes API Server per response code per second.                                      | Meter     |
+| System | KubeClient.HttpResponse.2xx.NumPerSecond                  | Number of HTTP Code 2xx responses (success) received from the Kubernetes API Server per response code per second.                                            | Meter     |
+| System | KubeClient.HttpResponse.3xx.NumPerSecond                  | Number of HTTP Code 3xx responses (redirection) received from the Kubernetes API Server per response code per second.                                        | Meter     |
+| System | KubeClient.HttpResponse.4xx.NumPerSecond                  | Number of HTTP Code 4xx responses (client error) received from the Kubernetes API Server per response code per second.                                       | Meter     |
+| System | KubeClient.HttpResponse.5xx.NumPerSecond                  | Number of HTTP Code 5xx responses (server error) received from the Kubernetes API Server per response code per second.                                       | Meter     |
 
 ### JVM Metrics
 

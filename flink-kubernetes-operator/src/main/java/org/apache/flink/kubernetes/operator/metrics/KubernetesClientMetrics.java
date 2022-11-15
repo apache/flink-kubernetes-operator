@@ -30,6 +30,8 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -40,6 +42,11 @@ public class KubernetesClientMetrics implements Interceptor {
     public static final String HTTP_REQUEST_GROUP = "HttpRequest";
     public static final String HTTP_REQUEST_FAILED_GROUP = "Failed";
     public static final String HTTP_RESPONSE_GROUP = "HttpResponse";
+    public static final String HTTP_RESPONSE_1XX = "1xx";
+    public static final String HTTP_RESPONSE_2XX = "2xx";
+    public static final String HTTP_RESPONSE_3XX = "3xx";
+    public static final String HTTP_RESPONSE_4XX = "4xx";
+    public static final String HTTP_RESPONSE_5XX = "5xx";
     public static final String COUNTER = "Count";
     public static final String METER = "NumPerSecond";
     public static final String HISTO = "TimeNanos";
@@ -57,7 +64,10 @@ public class KubernetesClientMetrics implements Interceptor {
     private final SynchronizedMeterView requestFailedRateMeter;
     private final SynchronizedMeterView responseRateMeter;
 
-    private final Map<Integer, Counter> responseCodeCounters = new ConcurrentHashMap<>();
+    private final boolean httpResponseCodeGroupsEnabled;
+    private final List<SynchronizedMeterView> responseCodeGroupMeters = new ArrayList<>(5);
+    private final Map<Integer, SynchronizedMeterView> responseCodeMeters =
+            new ConcurrentHashMap<>();
     private final Map<String, Counter> requestMethodCounter = new ConcurrentHashMap<>();
 
     public KubernetesClientMetrics(
@@ -88,6 +98,26 @@ public class KubernetesClientMetrics implements Interceptor {
         this.responseLatency =
                 responseMetricGroup.histogram(
                         HISTO, OperatorMetricUtils.createHistogram(flinkOperatorConfiguration));
+
+        this.httpResponseCodeGroupsEnabled =
+                flinkOperatorConfiguration.isKubernetesClientMetricsHttpResponseCodeGroupsEnabled();
+        if (this.httpResponseCodeGroupsEnabled) {
+            this.responseCodeGroupMeters.add(
+                    createMeterViewForMetricsGroup(
+                            responseMetricGroup.addGroup(HTTP_RESPONSE_1XX)));
+            this.responseCodeGroupMeters.add(
+                    createMeterViewForMetricsGroup(
+                            responseMetricGroup.addGroup(HTTP_RESPONSE_2XX)));
+            this.responseCodeGroupMeters.add(
+                    createMeterViewForMetricsGroup(
+                            responseMetricGroup.addGroup(HTTP_RESPONSE_3XX)));
+            this.responseCodeGroupMeters.add(
+                    createMeterViewForMetricsGroup(
+                            responseMetricGroup.addGroup(HTTP_RESPONSE_4XX)));
+            this.responseCodeGroupMeters.add(
+                    createMeterViewForMetricsGroup(
+                            responseMetricGroup.addGroup(HTTP_RESPONSE_5XX)));
+        }
     }
 
     @Override
@@ -114,7 +144,10 @@ public class KubernetesClientMetrics implements Interceptor {
         if (response != null) {
             this.responseRateMeter.markEvent();
             this.responseLatency.update(latency);
-            getCounterByResponseCode(response.code()).inc();
+            getMeterViewByResponseCode(response.code()).markEvent();
+            if (this.httpResponseCodeGroupsEnabled) {
+                responseCodeGroupMeters.get(response.code() / 100 - 1).markEvent();
+            }
         } else {
             this.requestFailedRateMeter.markEvent();
         }
@@ -128,11 +161,17 @@ public class KubernetesClientMetrics implements Interceptor {
                                 requestMetricGroup.addGroup(key).counter(COUNTER)));
     }
 
-    private Counter getCounterByResponseCode(int code) {
-        return responseCodeCounters.computeIfAbsent(
-                code,
-                key ->
-                        OperatorMetricUtils.synchronizedCounter(
-                                responseMetricGroup.addGroup(key).counter(COUNTER)));
+    private SynchronizedMeterView getMeterViewByResponseCode(int code) {
+        return responseCodeMeters.computeIfAbsent(
+                code, key -> createMeterViewForMetricsGroup(responseMetricGroup.addGroup(key)));
+    }
+
+    private SynchronizedMeterView createMeterViewForMetricsGroup(MetricGroup metricGroup) {
+        return OperatorMetricUtils.synchronizedMeterView(
+                metricGroup.meter(
+                        METER,
+                        new MeterView(
+                                OperatorMetricUtils.synchronizedCounter(
+                                        metricGroup.counter(COUNTER)))));
     }
 }
