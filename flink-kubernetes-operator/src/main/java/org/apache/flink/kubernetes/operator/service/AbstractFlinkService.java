@@ -369,22 +369,28 @@ public abstract class AbstractFlinkService implements FlinkService {
         var jobId = JobID.fromHexString(jobIdString);
         Optional<String> savepointOpt = Optional.empty();
 
+        if (ReconciliationUtils.isJobInTerminalState(sessionJobStatus)) {
+            LOG.info("Job is already in terminal state.");
+        } else if (!ReconciliationUtils.isJobRunning(sessionJobStatus)) {
+            throw new RuntimeException(
+                    "Unexpected non-terminal status: "
+                            + sessionJobStatus.getJobStatus().getState());
+        }
+
         try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
             final String clusterId = clusterClient.getClusterId();
             switch (upgradeMode) {
                 case STATELESS:
-                    if (ReconciliationUtils.isJobRunning(sessionJobStatus)) {
-                        LOG.info("Cancelling job.");
-                        clusterClient
-                                .cancel(jobId)
-                                .get(
-                                        configManager
-                                                .getOperatorConfiguration()
-                                                .getFlinkCancelJobTimeout()
-                                                .toSeconds(),
-                                        TimeUnit.SECONDS);
-                        LOG.info("Job successfully cancelled.");
-                    }
+                    LOG.info("Cancelling job.");
+                    clusterClient
+                            .cancel(jobId)
+                            .get(
+                                    configManager
+                                            .getOperatorConfiguration()
+                                            .getFlinkCancelJobTimeout()
+                                            .toSeconds(),
+                                    TimeUnit.SECONDS);
+                    LOG.info("Job successfully cancelled.");
                     break;
                 case SAVEPOINT:
                     LOG.info("Suspending job with savepoint.");
@@ -395,30 +401,22 @@ public abstract class AbstractFlinkService implements FlinkService {
                             conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT)
                                     .getSeconds();
                     try {
-                        if (ReconciliationUtils.isJobRunning(sessionJobStatus)) {
-                            String savepoint =
-                                    clusterClient
-                                            .stopWithSavepoint(
-                                                    jobId,
-                                                    false,
-                                                    savepointDirectory,
-                                                    conf.get(FLINK_VERSION)
-                                                                    .isNewerVersionThan(
-                                                                            FlinkVersion.v1_14)
-                                                            ? conf.get(
-                                                                    KubernetesOperatorConfigOptions
-                                                                            .OPERATOR_SAVEPOINT_FORMAT_TYPE)
-                                                            : null)
-                                            .get(timeout, TimeUnit.SECONDS);
-                            savepointOpt = Optional.of(savepoint);
-                            LOG.info("Job successfully suspended with savepoint {}.", savepoint);
-                        } else if (ReconciliationUtils.isJobInTerminalState(sessionJobStatus)) {
-                            LOG.info(
-                                    "Job is already in terminal state skipping cancel-with-savepoint operation.");
-                        } else {
-                            throw new RuntimeException(
-                                    "Unexpected non-terminal status: " + sessionJobStatus);
-                        }
+                        String savepoint =
+                                clusterClient
+                                        .stopWithSavepoint(
+                                                jobId,
+                                                false,
+                                                savepointDirectory,
+                                                conf.get(FLINK_VERSION)
+                                                                .isNewerVersionThan(
+                                                                        FlinkVersion.v1_14)
+                                                        ? conf.get(
+                                                                KubernetesOperatorConfigOptions
+                                                                        .OPERATOR_SAVEPOINT_FORMAT_TYPE)
+                                                        : null)
+                                        .get(timeout, TimeUnit.SECONDS);
+                        savepointOpt = Optional.of(savepoint);
+                        LOG.info("Job successfully suspended with savepoint {}.", savepoint);
                     } catch (TimeoutException exception) {
                         throw new FlinkException(
                                 String.format(
