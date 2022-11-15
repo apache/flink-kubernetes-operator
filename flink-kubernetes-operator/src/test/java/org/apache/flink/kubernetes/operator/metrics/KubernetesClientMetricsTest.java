@@ -72,8 +72,20 @@ public class KubernetesClientMetricsTest {
             String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, METER);
     private static final String RESPONSE_201_COUNTER_ID =
             String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "201", COUNTER);
+    private static final String RESPONSE_201_METER_ID =
+            String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "201", METER);
+    private static final String RESPONSE_2xx_COUNTER_ID =
+            String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "2xx", COUNTER);
+    private static final String RESPONSE_2xx_METER_ID =
+            String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "2xx", METER);
     private static final String RESPONSE_404_COUNTER_ID =
             String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "404", COUNTER);
+    private static final String RESPONSE_404_METER_ID =
+            String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "404", METER);
+    private static final String RESPONSE_4xx_COUNTER_ID =
+            String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "4xx", COUNTER);
+    private static final String RESPONSE_4xx_METER_ID =
+            String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, "4xx", METER);
     private static final String RESPONSE_LATENCY_ID =
             String.join(".", KUBE_CLIENT_GROUP, HTTP_RESPONSE_GROUP, HISTO);
 
@@ -201,6 +213,160 @@ public class KubernetesClientMetricsTest {
                                                     .getRate()
                                             > 0.01
                                     && listener.getMeter(listener.getMetricId(RESPONSE_METER_ID))
+                                                    .get()
+                                                    .getRate()
+                                            > 0.01
+                                    && listener.getMeter(
+                                                            listener.getMetricId(
+                                                                    RESPONSE_201_METER_ID))
+                                                    .get()
+                                                    .getRate()
+                                            > 0.01
+                                    && listener.getMeter(
+                                                            listener.getMetricId(
+                                                                    RESPONSE_404_METER_ID))
+                                                    .get()
+                                                    .getRate()
+                                            > 0.01;
+                        });
+    }
+
+    @Test
+    @Order(3)
+    public void testMetricsHttpResponseCodeGroupsEnabled() {
+        var configuration = new Configuration();
+        configuration.set(
+                KubernetesOperatorMetricOptions
+                        .OPERATOR_KUBERNETES_CLIENT_METRICS_HTTP_RESPONSE_CODE_GROUPS_ENABLED,
+                true);
+        var flinkConfigManager = new FlinkConfigManager(configuration);
+        var listener = new TestingMetricListener(configuration);
+        var kubernetesClient =
+                KubernetesClientUtils.getKubernetesClient(
+                        flinkConfigManager.getOperatorConfiguration(),
+                        listener.getMetricGroup(),
+                        mockServer.createClient().getConfiguration());
+
+        var deployment = TestUtils.buildApplicationCluster();
+        assertEquals(
+                0, listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).get().getCount());
+        assertEquals(
+                0.0, listener.getMeter(listener.getMetricId(REQUEST_METER_ID)).get().getRate());
+        assertEquals(
+                0,
+                listener.getCounter(listener.getMetricId(REQUEST_FAILED_COUNTER_ID))
+                        .get()
+                        .getCount());
+        assertEquals(
+                0.0,
+                listener.getMeter(listener.getMetricId(REQUEST_FAILED_METER_ID)).get().getRate());
+        assertEquals(
+                0, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
+        assertEquals(
+                0.0, listener.getMeter(listener.getMetricId(RESPONSE_METER_ID)).get().getRate());
+        assertEquals(
+                0,
+                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                        .get()
+                        .getStatistics()
+                        .getMin());
+        assertEquals(
+                0,
+                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                        .get()
+                        .getStatistics()
+                        .getMax());
+
+        kubernetesClient.resource(deployment).createOrReplace();
+        assertEquals(
+                1, listener.getCounter(listener.getMetricId(REQUEST_COUNTER_ID)).get().getCount());
+        assertEquals(
+                1,
+                listener.getCounter(listener.getMetricId(REQUEST_POST_COUNTER_ID))
+                        .get()
+                        .getCount());
+        assertEquals(
+                1, listener.getCounter(listener.getMetricId(RESPONSE_COUNTER_ID)).get().getCount());
+        assertEquals(
+                1,
+                listener.getCounter(listener.getMetricId(RESPONSE_201_COUNTER_ID))
+                        .get()
+                        .getCount());
+        assertEquals(
+                1,
+                listener.getCounter(listener.getMetricId(RESPONSE_2xx_COUNTER_ID))
+                        .get()
+                        .getCount());
+        assertTrue(
+                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                                .get()
+                                .getStatistics()
+                                .getMin()
+                        > 0);
+        assertTrue(
+                listener.getHistogram(listener.getMetricId(RESPONSE_LATENCY_ID))
+                                .get()
+                                .getStatistics()
+                                .getMax()
+                        > 0);
+
+        kubernetesClient.resource(deployment).delete();
+        assertEquals(
+                1,
+                listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
+                        .get()
+                        .getCount());
+
+        kubernetesClient.resource(deployment).delete();
+        assertEquals(
+                2,
+                listener.getCounter(listener.getMetricId(REQUEST_DELETE_COUNTER_ID))
+                        .get()
+                        .getCount());
+        assertEquals(
+                1,
+                listener.getCounter(listener.getMetricId(RESPONSE_404_COUNTER_ID))
+                        .get()
+                        .getCount());
+        assertEquals(
+                1,
+                listener.getCounter(listener.getMetricId(RESPONSE_4xx_COUNTER_ID))
+                        .get()
+                        .getCount());
+        Awaitility.await()
+                .atMost(1, TimeUnit.MINUTES)
+                .until(
+                        () -> {
+                            kubernetesClient.resource(deployment).createOrReplace();
+                            return listener.getMeter(listener.getMetricId(REQUEST_METER_ID))
+                                                    .get()
+                                                    .getRate()
+                                            > 0.01
+                                    && listener.getMeter(listener.getMetricId(RESPONSE_METER_ID))
+                                                    .get()
+                                                    .getRate()
+                                            > 0.01
+                                    && listener.getMeter(
+                                                            listener.getMetricId(
+                                                                    RESPONSE_201_METER_ID))
+                                                    .get()
+                                                    .getRate()
+                                            > 0.01
+                                    && listener.getMeter(
+                                                            listener.getMetricId(
+                                                                    RESPONSE_404_METER_ID))
+                                                    .get()
+                                                    .getRate()
+                                            > 0.01
+                                    && listener.getMeter(
+                                                            listener.getMetricId(
+                                                                    RESPONSE_2xx_METER_ID))
+                                                    .get()
+                                                    .getRate()
+                                            > 0.01
+                                    && listener.getMeter(
+                                                            listener.getMetricId(
+                                                                    RESPONSE_4xx_METER_ID))
                                                     .get()
                                                     .getRate()
                                             > 0.01;

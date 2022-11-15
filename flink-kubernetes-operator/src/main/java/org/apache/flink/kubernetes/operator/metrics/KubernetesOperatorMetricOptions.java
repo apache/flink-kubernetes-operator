@@ -44,6 +44,14 @@ public class KubernetesOperatorMetricOptions {
                     .withDescription(
                             "Enable KubernetesClient metrics for measuring the HTTP traffic to the Kubernetes API Server.");
 
+    public static final ConfigOption<Boolean>
+            OPERATOR_KUBERNETES_CLIENT_METRICS_HTTP_RESPONSE_CODE_GROUPS_ENABLED =
+                    operatorConfig("kubernetes.client.metrics.http.response.code.groups.enabled")
+                            .booleanType()
+                            .defaultValue(false)
+                            .withDescription(
+                                    "Enable KubernetesClient metrics for measuring the HTTP traffic to the Kubernetes API Server by response code group, e.g. 1xx, 2xx.");
+
     public static final ConfigOption<Boolean> OPERATOR_RESOURCE_METRICS_ENABLED =
             operatorConfig("resource.metrics.enabled")
                     .booleanType()
