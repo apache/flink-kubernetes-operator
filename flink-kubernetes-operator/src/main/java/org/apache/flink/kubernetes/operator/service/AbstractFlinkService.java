@@ -370,7 +370,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         Optional<String> savepointOpt = Optional.empty();
 
         if (ReconciliationUtils.isJobInTerminalState(sessionJobStatus)) {
-            LOG.info("Job is already in terminal state.");
+            LOG.info("Job is already in terminal state. JobID {}", jobId.toHexString());
             return;
         } else if (!ReconciliationUtils.isJobRunning(sessionJobStatus)) {
             throw new RuntimeException(

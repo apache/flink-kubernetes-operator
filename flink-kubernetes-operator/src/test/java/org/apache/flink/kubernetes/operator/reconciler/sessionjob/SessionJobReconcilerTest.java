@@ -251,6 +251,11 @@ public class SessionJobReconcilerTest {
         var statelessSessionJob = ReconciliationUtils.clone(sessionJob);
         var jobConfig = flinkService.listJobs().get(0).f2;
 
+        // JobID must be equal.
+        assertEquals(
+                statelessSessionJob.getStatus().getJobStatus().getJobId(),
+                flinkService.listJobs().get(0).f1.getJobId().toHexString());
+
         statelessSessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         statelessSessionJob.getSpec().getJob().setParallelism(2);
         // job suspended first
@@ -258,12 +263,26 @@ public class SessionJobReconcilerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.FINISHED,
                 flinkService.listJobs().get(0).f1.getJobState());
-
         verifyJobState(statelessSessionJob, JobState.SUSPENDED, "FINISHED");
+
         assertDoesNotThrow(
                 () ->
                         flinkService.cancelSessionJob(
                                 statelessSessionJob, UpgradeMode.STATELESS, jobConfig));
+
+        statelessSessionJob
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.FAILING.name());
+        reconciler.reconcile(statelessSessionJob, readyContext);
+
+        var exception =
+                Assertions.assertThrows(
+                        RuntimeException.class,
+                        () ->
+                                flinkService.cancelSessionJob(
+                                        statelessSessionJob, UpgradeMode.STATELESS, jobConfig));
+        Assertions.assertTrue(exception.getMessage().contains("Unexpected non-terminal status"));
     }
 
     @Test
