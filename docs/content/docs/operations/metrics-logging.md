@@ -195,7 +195,7 @@ Users have the freedom to override the default `log4j-console.properties` settin
 spec:
   ...
   logConfiguration:
-    "log4j-console.properties": |
+    log4j-console.properties: |+
       rootLogger.level = DEBUG
       rootLogger.appenderRef.file.ref = LogFile
       ...
