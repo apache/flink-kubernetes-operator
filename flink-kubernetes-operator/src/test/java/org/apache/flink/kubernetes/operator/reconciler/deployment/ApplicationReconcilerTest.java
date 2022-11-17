@@ -148,7 +148,7 @@ public class ApplicationReconcilerTest {
                         .deserializeLastReconciledSpecWithMeta()
                         .getMeta()
                         .isFirstDeployment());
-
+        assertEquals(null, SavepointUtils.getLastSavepointStatus(statelessUpgrade));
         runningJobs = flinkService.listJobs();
         assertEquals(1, flinkService.getRunningCount());
         assertNull(runningJobs.get(0).f0);
@@ -181,7 +181,8 @@ public class ApplicationReconcilerTest {
                         .getSavepointInfo()
                         .getLastSavepoint()
                         .getTriggerType());
-
+        assertEquals(
+                SavepointStatus.SUCCEEDED, SavepointUtils.getLastSavepointStatus(statefulUpgrade));
         verifyJobId(deployment, runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
 
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
@@ -249,15 +250,16 @@ public class ApplicationReconcilerTest {
         var runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
-        assertEquals(SavepointStatus.SUCCEEDED, SavepointUtils.getLastSavepointStatus(deployment));
+        assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
+        assertEquals(null, SavepointUtils.getLastSavepointStatus(deployment));
 
         FlinkDeployment spDeployment = ReconciliationUtils.clone(deployment);
 
         // don't trigger if nonce is missing
         reconciler.reconcile(spDeployment, context);
         assertFalse(SavepointUtils.savepointInProgress(spDeployment.getStatus().getJobStatus()));
-        assertEquals(
-                SavepointStatus.SUCCEEDED, SavepointUtils.getLastSavepointStatus(spDeployment));
+        assertNull(spDeployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
+        assertEquals(null, SavepointUtils.getLastSavepointStatus(spDeployment));
 
         // trigger when nonce is defined
         spDeployment
@@ -294,8 +296,7 @@ public class ApplicationReconcilerTest {
         // don't trigger when nonce is the same
         reconciler.reconcile(spDeployment, context);
         assertFalse(SavepointUtils.savepointInProgress(spDeployment.getStatus().getJobStatus()));
-        assertEquals(
-                SavepointStatus.SUCCEEDED, SavepointUtils.getLastSavepointStatus(spDeployment));
+        assertEquals(null, SavepointUtils.getLastSavepointStatus(spDeployment));
 
         // trigger when new nonce is defined
         spDeployment
@@ -319,22 +320,31 @@ public class ApplicationReconcilerTest {
         assertEquals(
                 SavepointTriggerType.MANUAL,
                 spDeployment.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
+        //  reconciled and savepoint is updated
         ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
                 spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
         updateLastSavepoint(spDeployment);
         assertEquals(
                 SavepointStatus.SUCCEEDED, SavepointUtils.getLastSavepointStatus(spDeployment));
 
-        // don't trigger nonce is cleared
+        // re-trigger, reconciled but savepoint is not updated
+        spDeployment
+                .getSpec()
+                .getJob()
+                .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
+        reconciler.reconcile(spDeployment, context);
+        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
+                spDeployment.getStatus().getJobStatus().getSavepointInfo(), spDeployment);
+        spDeployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
+        assertEquals(
+                SavepointStatus.ABANDONED, SavepointUtils.getLastSavepointStatus(spDeployment));
+
+        // don't trigger when nonce is cleared
         spDeployment.getSpec().getJob().setSavepointTriggerNonce(null);
         reconciler.reconcile(spDeployment, context);
         assertFalse(SavepointUtils.savepointInProgress(spDeployment.getStatus().getJobStatus()));
-        assertEquals(
-                SavepointStatus.SUCCEEDED, SavepointUtils.getLastSavepointStatus(spDeployment));
 
-        reconciler.reconcile(spDeployment, context);
-        assertFalse(SavepointUtils.savepointInProgress(spDeployment.getStatus().getJobStatus()));
-
+        // trigger by periodic settings
         spDeployment
                 .getSpec()
                 .getFlinkConfiguration()

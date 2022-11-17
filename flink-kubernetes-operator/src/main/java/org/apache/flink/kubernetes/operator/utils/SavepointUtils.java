@@ -87,8 +87,8 @@ public class SavepointUtils {
                 return SavepointStatus.SUCCEEDED;
             }
         } else {
-            // Currently, we return SUCCEEDED if no savepoints were ever taken
-            return SavepointStatus.SUCCEEDED;
+            // Return null if no savepoint was ever taken
+            return null;
         }
 
         return SavepointStatus.ABANDONED;
