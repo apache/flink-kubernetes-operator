@@ -82,10 +82,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: WATCH_NAMESPACES
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.annotations['olm.targetNamespaces']
             - name: OPERATOR_NAME
               value: {{ include "flink-operator.name" . }}
             - name: FLINK_CONF_DIR
@@ -164,10 +160,6 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            - name: WATCH_NAMESPACES
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.annotations['olm.targetNamespaces']
           securityContext:
             {{- toYaml .Values.webhookSecurityContext | nindent 12 }}
           volumeMounts:
