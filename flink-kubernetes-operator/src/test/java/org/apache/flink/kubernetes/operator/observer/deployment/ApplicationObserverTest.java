@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.SavepointTestUtils;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -27,6 +28,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -54,6 +56,7 @@ import java.util.stream.Collectors;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -228,6 +231,15 @@ public class ApplicationObserverTest {
 
     @Test
     public void observeSavepoint() throws Exception {
+        observeSavepoint(false);
+    }
+
+    @Test
+    public void observeSavepointWithOldCR() throws Exception {
+        observeSavepoint(true);
+    }
+
+    private void observeSavepoint(boolean withOldCR) throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Long timedOutNonce = 1L;
         deployment.getSpec().getJob().setSavepointTriggerNonce(timedOutNonce);
@@ -241,7 +253,11 @@ public class ApplicationObserverTest {
                 deployment.getStatus().getJobStatus().getJobId(),
                 SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
+                timedOutNonce,
                 conf);
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
+
         // pending savepoint
         assertEquals(
                 "trigger_0",
@@ -250,6 +266,8 @@ public class ApplicationObserverTest {
         assertTrue(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
         deployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId("unknown");
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
         // savepoint error within grace period
         assertEquals(
                 0,
@@ -276,12 +294,19 @@ public class ApplicationObserverTest {
                 .getStatus()
                 .getJobStatus()
                 .getSavepointInfo()
-                .setTriggerType(SavepointTriggerType.MANUAL);
+                .retrieveLastCompletedSavepoint()
+                .ifPresent(x -> x.setTriggerType(SavepointTriggerType.MANUAL));
         deployment
                 .getStatus()
                 .getJobStatus()
                 .getSavepointInfo()
-                .setTriggerTimestamp(Instant.now().minus(Duration.ofHours(1)).toEpochMilli());
+                .retrieveLastCompletedSavepoint()
+                .ifPresent(
+                        x ->
+                                x.setTimeStamp(
+                                        Instant.now().minus(Duration.ofHours(1)).toEpochMilli()));
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
 
         observer.observe(deployment, readyContext);
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
@@ -319,29 +344,28 @@ public class ApplicationObserverTest {
                 deployment.getStatus().getJobStatus().getJobId(),
                 SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
+                firstNonce,
                 conf);
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
         assertEquals(
                 "trigger_1",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         observer.observe(deployment, readyContext);
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
         observer.observe(deployment, readyContext);
 
-        assertEquals(
-                "savepoint_0",
+        var lastCompletedSavepoint =
                 deployment
                         .getStatus()
                         .getJobStatus()
                         .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
-        assertEquals(
-                firstNonce,
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getTriggerNonce());
+                        .retrieveLastCompletedSavepoint()
+                        .get();
+        assertNotNull(lastCompletedSavepoint);
+        assertEquals("savepoint_0", lastCompletedSavepoint.getLocation());
+        assertEquals(firstNonce, lastCompletedSavepoint.getTriggerNonce());
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
         // second attempt success
@@ -351,7 +375,10 @@ public class ApplicationObserverTest {
                 deployment.getStatus().getJobStatus().getJobId(),
                 SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
+                secondNonce,
                 conf);
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
         assertEquals(
                 "trigger_2",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
@@ -360,22 +387,16 @@ public class ApplicationObserverTest {
         observer.observe(deployment, readyContext);
         observer.observe(deployment, readyContext);
 
-        assertEquals(
-                "savepoint_1",
+        lastCompletedSavepoint =
                 deployment
                         .getStatus()
                         .getJobStatus()
                         .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
-        assertEquals(
-                secondNonce,
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getTriggerNonce());
+                        .retrieveLastCompletedSavepoint()
+                        .get();
+        assertNotNull(lastCompletedSavepoint);
+        assertEquals("savepoint_1", lastCompletedSavepoint.getLocation());
+        assertEquals(secondNonce, lastCompletedSavepoint.getTriggerNonce());
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
         // application failure after checkpoint trigger
@@ -385,31 +406,31 @@ public class ApplicationObserverTest {
                 deployment.getStatus().getJobStatus().getJobId(),
                 SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
+                thirdNonce,
                 conf);
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
+
         assertEquals(
                 "trigger_3",
                 deployment.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         assertTrue(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
         flinkService.setPortReady(false);
         observer.observe(deployment, readyContext);
-        assertEquals(
-                "savepoint_1",
+        lastCompletedSavepoint =
                 deployment
                         .getStatus()
                         .getJobStatus()
                         .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
-        assertEquals(
-                secondNonce,
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getTriggerNonce());
+                        .retrieveLastCompletedSavepoint()
+                        .get();
+        assertNotNull(lastCompletedSavepoint);
+        assertEquals("savepoint_1", lastCompletedSavepoint.getLocation());
+        assertEquals(secondNonce, lastCompletedSavepoint.getTriggerNonce());
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
         assertEquals(
                 1,
                 kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
@@ -448,23 +469,36 @@ public class ApplicationObserverTest {
                         jobTuple.f1.getJobName(),
                         org.apache.flink.api.common.JobStatus.FAILED,
                         jobTuple.f1.getStartTime());
+
+        var lastSavepoint =
+                new Savepoint(
+                        123L,
+                        null,
+                        SavepointTriggerType.PERIODIC,
+                        SavepointFormatType.UNKNOWN,
+                        null);
+        deployment.getStatus().getJobStatus().getSavepointInfo().setLastSavepoint(lastSavepoint);
         deployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId("test");
-        deployment.getStatus().getJobStatus().getSavepointInfo().setTriggerTimestamp(123L);
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
 
         observer.observe(deployment, readyContext);
         assertEquals(
                 org.apache.flink.api.common.JobStatus.FAILED.name(),
                 deployment.getStatus().getJobStatus().getState());
-        assertEquals(
-                "last-SP",
+        lastCompletedSavepoint =
                 deployment
                         .getStatus()
                         .getJobStatus()
                         .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
+                        .retrieveLastCompletedSavepoint()
+                        .get();
+        assertNotNull(lastCompletedSavepoint);
+        assertEquals("last-SP", lastCompletedSavepoint.getLocation());
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
 
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
         observer.observe(deployment, readyContext);
         assertEquals(
                 3,
@@ -481,6 +515,8 @@ public class ApplicationObserverTest {
                 .put(
                         KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT.key(),
                         "1");
+        SavepointTestUtils.setupCRV1_2TrigerInfo(
+                deployment.getStatus().getJobStatus().getSavepointInfo(), withOldCR);
         observer.observe(deployment, readyContext);
         assertEquals(
                 1,
@@ -508,27 +544,22 @@ public class ApplicationObserverTest {
                 deployment.getStatus().getJobStatus().getJobId(),
                 SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
+                firstNonce,
                 conf);
 
         observer.observe(deployment, readyContext);
         observer.observe(deployment, readyContext);
+        var lastCompletedSavepoint =
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .retrieveLastCompletedSavepoint()
+                        .get();
+        assertNotNull(lastCompletedSavepoint);
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
-        assertEquals(
-                firstNonce,
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getTriggerNonce());
-        assertEquals(
-                SavepointFormatType.CANONICAL,
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getFormatType());
+        assertEquals(firstNonce, lastCompletedSavepoint.getTriggerNonce());
+        assertEquals(SavepointFormatType.CANONICAL, lastCompletedSavepoint.getFormatType());
 
         // native savepoint
         Long secondNonce = 456L;
@@ -544,27 +575,22 @@ public class ApplicationObserverTest {
                 deployment.getStatus().getJobStatus().getJobId(),
                 SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
+                secondNonce,
                 conf);
 
         observer.observe(deployment, readyContext);
         observer.observe(deployment, readyContext);
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
-        assertEquals(
-                secondNonce,
+        lastCompletedSavepoint =
                 deployment
                         .getStatus()
                         .getJobStatus()
                         .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getTriggerNonce());
-        assertEquals(
-                SavepointFormatType.NATIVE,
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getFormatType());
+                        .retrieveLastCompletedSavepoint()
+                        .get();
+        assertNotNull(lastCompletedSavepoint);
+        assertEquals(secondNonce, lastCompletedSavepoint.getTriggerNonce());
+        assertEquals(SavepointFormatType.NATIVE, lastCompletedSavepoint.getFormatType());
 
         // canonical for flink savepoint
         Long thirdNonce = 789L;
@@ -581,27 +607,22 @@ public class ApplicationObserverTest {
                 deployment.getStatus().getJobStatus().getJobId(),
                 SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
+                thirdNonce,
                 conf);
 
         observer.observe(deployment, readyContext);
         observer.observe(deployment, readyContext);
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
-        assertEquals(
-                thirdNonce,
+        lastCompletedSavepoint =
                 deployment
                         .getStatus()
                         .getJobStatus()
                         .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getTriggerNonce());
-        assertEquals(
-                SavepointFormatType.CANONICAL,
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getFormatType());
+                        .retrieveLastCompletedSavepoint()
+                        .get();
+        assertNotNull(lastCompletedSavepoint);
+        assertEquals(thirdNonce, lastCompletedSavepoint.getTriggerNonce());
+        assertEquals(SavepointFormatType.CANONICAL, lastCompletedSavepoint.getFormatType());
     }
 
     private void bringToReadyStatus(FlinkDeployment deployment) {

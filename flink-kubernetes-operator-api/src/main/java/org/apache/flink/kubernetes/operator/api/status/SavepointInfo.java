@@ -23,9 +23,11 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /** Stores savepoint related information. */
 @Experimental
@@ -34,19 +36,40 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class SavepointInfo {
-    /** Last completed savepoint by the operator. */
+    /**
+     * Last savepoint attempted or completed by the operator. For the last completed savepoint, call
+     * retrieveLastCompletedSavepoint().
+     */
     private Savepoint lastSavepoint;
 
     /** Trigger id of a pending savepoint operation. */
     private String triggerId;
 
-    /** Trigger timestamp of a pending savepoint operation. */
+    /**
+     * Trigger timestamp of a pending savepoint operation.
+     *
+     * @deprecated This field is deprecated and will always be null. Use information from
+     *     lastSavepoint instead
+     */
+    @Deprecated(since = "1.3", forRemoval = true)
     private Long triggerTimestamp;
 
-    /** Savepoint trigger mechanism. */
+    /**
+     * Savepoint trigger mechanism of a pending savepoint operation.
+     *
+     * @deprecated This field is deprecated and will always be null. Use information from
+     *     lastSavepoint instead
+     */
+    @Deprecated(since = "1.3", forRemoval = true)
     private SavepointTriggerType triggerType;
 
-    /** Savepoint format. */
+    /**
+     * Savepoint format type of a pending savepoint operation.
+     *
+     * @deprecated This field is deprecated and will always be null. Use information from
+     *     lastSavepoint instead
+     */
+    @Deprecated(since = "1.3", forRemoval = true)
     private SavepointFormatType formatType;
 
     /** List of recent savepoints. */
@@ -56,18 +79,22 @@ public class SavepointInfo {
     private long lastPeriodicSavepointTimestamp = 0L;
 
     public void setTrigger(
-            String triggerId, SavepointTriggerType triggerType, SavepointFormatType formatType) {
+            String triggerId,
+            SavepointTriggerType triggerType,
+            SavepointFormatType formatType,
+            Long triggerNonce) {
         this.triggerId = triggerId;
-        this.triggerTimestamp = System.currentTimeMillis();
-        this.triggerType = triggerType;
-        this.formatType = formatType;
+        lastSavepoint =
+                new Savepoint(
+                        System.currentTimeMillis(), null, triggerType, formatType, triggerNonce);
     }
 
     public void resetTrigger() {
-        this.triggerId = null;
-        this.triggerTimestamp = null;
-        this.triggerType = null;
-        this.formatType = null;
+        triggerId = null;
+        // clear the deprecated field set by old version
+        triggerType = null;
+        triggerTimestamp = null;
+        formatType = null;
     }
 
     /**
@@ -77,7 +104,14 @@ public class SavepointInfo {
      * @param savepoint Savepoint to be added.
      */
     public void updateLastSavepoint(Savepoint savepoint) {
-        if (lastSavepoint == null || !lastSavepoint.getLocation().equals(savepoint.getLocation())) {
+        if (savepoint == null) {
+            return;
+        }
+        if (lastSavepoint == null
+                || retrieveLastCompletedSavepoint().isEmpty()
+                || !StringUtils.equals(
+                        savepoint.getLocation(),
+                        retrieveLastCompletedSavepoint().get().getLocation())) {
             lastSavepoint = savepoint;
             savepointHistory.add(savepoint);
             if (savepoint.getTriggerType() == SavepointTriggerType.PERIODIC) {
@@ -85,5 +119,16 @@ public class SavepointInfo {
             }
         }
         resetTrigger();
+    }
+
+    /**
+     * @return only the last completed savepoint. If no savepoint was ever completed, return
+     *     Optional.empty().
+     */
+    public Optional<Savepoint> retrieveLastCompletedSavepoint() {
+        if (savepointHistory == null || savepointHistory.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(savepointHistory.get(savepointHistory.size() - 1));
     }
 }

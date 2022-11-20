@@ -24,7 +24,7 @@ import lombok.NoArgsConstructor;
 
 import javax.annotation.Nullable;
 
-/** Represents information about a finished savepoint. */
+/** Represents information about an attempted or finished savepoint. */
 @Experimental
 @Data
 @NoArgsConstructor
@@ -76,5 +76,9 @@ public class Savepoint {
     public static Savepoint of(
             String location, SavepointTriggerType triggerType, SavepointFormatType formatType) {
         return new Savepoint(System.currentTimeMillis(), location, triggerType, formatType, null);
+    }
+
+    public Savepoint copy() {
+        return new Savepoint(timeStamp, location, triggerType, formatType, triggerNonce);
     }
 }

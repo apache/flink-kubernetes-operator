@@ -52,6 +52,13 @@ public abstract class AbstractFlinkResourceObserver<
             return;
         }
 
+        // If the CR has lingering savepoint trigger data at deprecated fields, migrate them.
+        if (SavepointUtils.savepointInProgress(resource.getStatus().getJobStatus())) {
+            SavepointUtils.checkAndMigrateDeprecatedTriggerFields(
+                    resource.getStatus().getJobStatus().getSavepointInfo(),
+                    resource.getSpec().getJob().getSavepointTriggerNonce());
+        }
+
         // Trigger resource specific observe logic
         observeInternal(resource, context, observerContext);
 

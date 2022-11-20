@@ -203,7 +203,9 @@ public abstract class AbstractJobReconciler<
 
         if (spec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
             savepointOpt =
-                    Optional.ofNullable(status.getJobStatus().getSavepointInfo().getLastSavepoint())
+                    status.getJobStatus()
+                            .getSavepointInfo()
+                            .retrieveLastCompletedSavepoint()
                             .flatMap(s -> Optional.ofNullable(s.getLocation()));
         }
 

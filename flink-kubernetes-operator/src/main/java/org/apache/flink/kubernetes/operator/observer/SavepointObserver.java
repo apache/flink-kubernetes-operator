@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -123,18 +122,10 @@ public class SavepointObserver<
             return;
         }
 
-        var savepoint =
-                new Savepoint(
-                        savepointInfo.getTriggerTimestamp(),
-                        savepointFetchResult.getLocation(),
-                        savepointInfo.getTriggerType(),
-                        savepointInfo.getFormatType(),
-                        SavepointTriggerType.MANUAL == savepointInfo.getTriggerType()
-                                ? resource.getSpec().getJob().getSavepointTriggerNonce()
-                                : null);
-
+        var lastSavepoint = savepointInfo.getLastSavepoint().copy();
+        lastSavepoint.setLocation(savepointFetchResult.getLocation());
         ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(savepointInfo, resource);
-        savepointInfo.updateLastSavepoint(savepoint);
+        savepointInfo.updateLastSavepoint(lastSavepoint);
     }
 
     /** Clean up and dispose savepoints according to the configured max size/age. */

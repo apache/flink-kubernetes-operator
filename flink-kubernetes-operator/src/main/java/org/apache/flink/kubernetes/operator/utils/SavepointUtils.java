@@ -23,6 +23,7 @@ import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -49,49 +50,62 @@ public class SavepointUtils {
         return StringUtils.isNotEmpty(jobStatus.getSavepointInfo().getTriggerId());
     }
 
-    public static SavepointStatus getLastSavepointStatus(AbstractFlinkResource<?, ?> resource) {
-        var status = resource.getStatus();
+    /**
+     * @param deployment
+     * @return the current status of last attempted and/or completed savepoint in three states:
+     *     PENDING, SUCCEEDED and FAILED. If no savepoints was ever completed or attempted,
+     *     Optional.empty() is returned.
+     */
+    public static Optional<SavepointStatus> getLastSavepointStatus(
+            AbstractFlinkResource<?, ?> deployment) {
+        var status = deployment.getStatus();
         var jobStatus = status.getJobStatus();
         var savepointInfo = jobStatus.getSavepointInfo();
+        var lastSavepoint = savepointInfo.getLastSavepoint();
 
-        var targetSavepointTriggerNonce = resource.getSpec().getJob().getSavepointTriggerNonce();
+        // The first condition is for backward compatibility if the CR is old
+        // where lastSavepoint is not created for pending savepoint
+        if (savepointInfo.getTriggerType() == null && lastSavepoint == null) {
+            return Optional.empty();
+        }
+
+        // The first condition is for backward compatibility if the CR is old
+        // where lastSavepoint is not created for pending savepoint
+        if ((savepointInfo.getTriggerType() != null
+                        && savepointInfo.getTriggerType() != SavepointTriggerType.MANUAL)
+                || lastSavepoint != null
+                        && lastSavepoint.getTriggerType() != SavepointTriggerType.MANUAL) {
+            return SavepointUtils.savepointInProgress(jobStatus)
+                    ? Optional.of(SavepointStatus.PENDING)
+                    : Optional.of(SavepointStatus.SUCCEEDED);
+        }
+
+        var targetSavepointTriggerNonce = deployment.getSpec().getJob().getSavepointTriggerNonce();
         var reconcileSavepointTriggerNonce =
                 status.getReconciliationStatus()
                         .deserializeLastReconciledSpec()
                         .getJob()
                         .getSavepointTriggerNonce();
 
-        if (savepointInfo.getTriggerId() != null) {
-            return SavepointStatus.PENDING;
-        }
-
         // if savepointTriggerNonce is cleared, savepoint is not triggered.
         // For manual savepoints, we report pending status
         // during retries while the triggerId gets reset between retries.
         if (targetSavepointTriggerNonce != null
                 && !Objects.equals(targetSavepointTriggerNonce, reconcileSavepointTriggerNonce)) {
-            return SavepointStatus.PENDING;
+            return Optional.of(SavepointStatus.PENDING);
         }
 
-        var lastSavepoint = savepointInfo.getLastSavepoint();
-        if (lastSavepoint != null) {
-            // Last savepoint was manual and triggerNonce matches
-            if (Objects.equals(
-                    reconcileSavepointTriggerNonce,
-                    savepointInfo.getLastSavepoint().getTriggerNonce())) {
-                return SavepointStatus.SUCCEEDED;
-            }
-
-            // Last savepoint was not manual
-            if (lastSavepoint.getTriggerType() != SavepointTriggerType.MANUAL) {
-                return SavepointStatus.SUCCEEDED;
-            }
-        } else {
-            // Return null if no savepoint was ever taken
-            return null;
+        // Last savepoint was manual and triggerNonce matches
+        var lastCompletedSavepoint = savepointInfo.retrieveLastCompletedSavepoint();
+        if (lastCompletedSavepoint.isEmpty()) {
+            return Optional.of(SavepointStatus.FAILED);
         }
 
-        return SavepointStatus.ABANDONED;
+        return Objects.equals(
+                        reconcileSavepointTriggerNonce,
+                        lastCompletedSavepoint.get().getTriggerNonce())
+                ? Optional.of(SavepointStatus.SUCCEEDED)
+                : Optional.of(SavepointStatus.FAILED);
     }
 
     /**
@@ -117,6 +131,9 @@ public class SavepointUtils {
                 resource.getStatus().getJobStatus().getJobId(),
                 triggerType,
                 resource.getStatus().getJobStatus().getSavepointInfo(),
+                triggerType == SavepointTriggerType.MANUAL
+                        ? resource.getSpec().getJob().getSavepointTriggerNonce()
+                        : null,
                 conf);
 
         return true;
@@ -185,7 +202,8 @@ public class SavepointUtils {
         Duration gracePeriod =
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_TRIGGER_GRACE_PERIOD);
         var endOfGracePeriod =
-                Instant.ofEpochMilli(savepointInfo.getTriggerTimestamp()).plus(gracePeriod);
+                Instant.ofEpochMilli(savepointInfo.getLastSavepoint().getTimeStamp())
+                        .plus(gracePeriod);
         return endOfGracePeriod.isBefore(Instant.now());
     }
 
@@ -210,7 +228,10 @@ public class SavepointUtils {
     }
 
     public static String createSavepointError(SavepointInfo savepointInfo, Long triggerNonce) {
-        return SavepointTriggerType.PERIODIC == savepointInfo.getTriggerType()
+        if (savepointInfo.getLastSavepoint() == null) {
+            return "";
+        }
+        return SavepointTriggerType.PERIODIC == savepointInfo.getLastSavepoint().getTriggerType()
                 ? "Periodic savepoint failed"
                 : "Savepoint failed for savepointTriggerNonce: " + triggerNonce;
     }
@@ -224,5 +245,33 @@ public class SavepointUtils {
                             KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
         }
         return savepointFormatType;
+    }
+
+    /**
+     * Check if the CR has lingering deprecated fields from older version and migrate them.
+     *
+     * @param savepointInfo
+     * @param triggerNonce
+     */
+    public static void checkAndMigrateDeprecatedTriggerFields(
+            SavepointInfo savepointInfo, Long triggerNonce) {
+        if (savepointInfo.getTriggerTimestamp() == null
+                && savepointInfo.getTriggerType() == null
+                && savepointInfo.getFormatType() == null) {
+            return;
+        }
+        var lastSavepoint =
+                new Savepoint(
+                        savepointInfo.getTriggerTimestamp(),
+                        null,
+                        savepointInfo.getTriggerType(),
+                        savepointInfo.getFormatType(),
+                        savepointInfo.getTriggerType() == SavepointTriggerType.MANUAL
+                                ? triggerNonce
+                                : null);
+        savepointInfo.setFormatType(null);
+        savepointInfo.setTriggerTimestamp(null);
+        savepointInfo.setTriggerType(null);
+        savepointInfo.setLastSavepoint(lastSavepoint);
     }
 }

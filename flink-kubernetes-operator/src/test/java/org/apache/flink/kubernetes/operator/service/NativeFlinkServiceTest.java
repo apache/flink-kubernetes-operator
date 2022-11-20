@@ -232,6 +232,7 @@ public class NativeFlinkServiceTest {
                 flinkDeployment.getStatus().getJobStatus().getJobId(),
                 SavepointTriggerType.MANUAL,
                 flinkDeployment.getStatus().getJobStatus().getSavepointInfo(),
+                0L,
                 configuration);
         assertTrue(triggerSavepointFuture.isDone());
         assertEquals(jobID, triggerSavepointFuture.get().f0);
@@ -438,6 +439,7 @@ public class NativeFlinkServiceTest {
                 deployment.getStatus().getJobStatus().getJobId(),
                 SavepointTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
+                0L,
                 new Configuration(configuration)
                         .set(OPERATOR_SAVEPOINT_FORMAT_TYPE, SavepointFormatType.NATIVE));
         assertTrue(triggerSavepointFuture.isDone());

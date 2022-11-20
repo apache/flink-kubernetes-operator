@@ -40,9 +40,11 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.Collections;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -145,22 +147,19 @@ public class SavepointObserverTest {
     @Test
     public void testPeriodicSavepoint() {
         var conf = new Configuration();
-        var deployment = TestUtils.buildApplicationCluster();
-        var spec = deployment.getSpec();
+        var deployment = triggerSavepointOnTestDeployment(conf);
         var status = deployment.getStatus();
         var jobStatus = status.getJobStatus();
-        status.getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
-        jobStatus.setState("RUNNING");
-
         var savepointInfo = jobStatus.getSavepointInfo();
-        flinkService.triggerSavepoint(null, SavepointTriggerType.PERIODIC, savepointInfo, conf);
-
-        var triggerTs = savepointInfo.getTriggerTimestamp();
+        var lastSavepoint = savepointInfo.getLastSavepoint();
+        var triggerTs = lastSavepoint.getTimeStamp();
+        assertNotNull(lastSavepoint);
         assertEquals(0L, savepointInfo.getLastPeriodicSavepointTimestamp());
-        assertEquals(SavepointTriggerType.PERIODIC, savepointInfo.getTriggerType());
+        assertEquals(SavepointTriggerType.PERIODIC, lastSavepoint.getTriggerType());
         assertTrue(SavepointUtils.savepointInProgress(jobStatus));
-        assertEquals(SavepointStatus.PENDING, SavepointUtils.getLastSavepointStatus(deployment));
+        assertEquals(
+                Optional.of(SavepointStatus.PENDING),
+                SavepointUtils.getLastSavepointStatus(deployment));
         assertTrue(triggerTs > 0);
 
         // Pending
@@ -168,11 +167,37 @@ public class SavepointObserverTest {
         // Completed
         observer.observeSavepointStatus(deployment, conf);
         assertEquals(triggerTs, savepointInfo.getLastPeriodicSavepointTimestamp());
+        verifyCompletedSavepoint(deployment);
+    }
+
+    private FlinkDeployment triggerSavepointOnTestDeployment(Configuration conf) {
+        var deployment = TestUtils.buildApplicationCluster();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        status.getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
+        jobStatus.setState("RUNNING");
+        var savepointInfo = jobStatus.getSavepointInfo();
+        flinkService.triggerSavepoint(
+                null, SavepointTriggerType.PERIODIC, savepointInfo, null, conf);
+        return deployment;
+    }
+
+    private void verifyCompletedSavepoint(FlinkDeployment deployment) {
+        var jobStatus = deployment.getStatus().getJobStatus();
+        var savepointInfo = jobStatus.getSavepointInfo();
         assertFalse(SavepointUtils.savepointInProgress(jobStatus));
-        assertEquals(SavepointUtils.getLastSavepointStatus(deployment), SavepointStatus.SUCCEEDED);
-        assertEquals(savepointInfo.getLastSavepoint(), savepointInfo.getSavepointHistory().get(0));
+        assertEquals(
+                Optional.of(SavepointStatus.SUCCEEDED),
+                SavepointUtils.getLastSavepointStatus(deployment));
+        assertEquals(
+                Optional.ofNullable(savepointInfo.getLastSavepoint()),
+                savepointInfo.retrieveLastCompletedSavepoint());
         assertEquals(
                 SavepointTriggerType.PERIODIC, savepointInfo.getLastSavepoint().getTriggerType());
         assertNull(savepointInfo.getLastSavepoint().getTriggerNonce());
+        assertNull(savepointInfo.getFormatType());
+        assertNull(savepointInfo.getTriggerTimestamp());
+        assertNull(savepointInfo.getTriggerType());
     }
 }

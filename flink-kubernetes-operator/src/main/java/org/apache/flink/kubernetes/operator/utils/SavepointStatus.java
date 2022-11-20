@@ -24,5 +24,5 @@ public enum SavepointStatus {
     /** Savepoint is completed successfully. */
     SUCCEEDED,
     /** Manual savepoint is abandoned after defined retries. */
-    ABANDONED
+    FAILED
 }

@@ -234,7 +234,7 @@ public class ApplicationReconcilerUpgradeModeTest {
                 .getStatus()
                 .getJobStatus()
                 .getSavepointInfo()
-                .setLastSavepoint(Savepoint.of("finished_sp", SavepointTriggerType.UPGRADE));
+                .updateLastSavepoint(Savepoint.of("finished_sp", SavepointTriggerType.UPGRADE));
         deployment.getStatus().getJobStatus().setState("FINISHED");
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         deployment

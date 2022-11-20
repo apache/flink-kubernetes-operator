@@ -51,6 +51,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link FlinkSessionJobObserver}. */
@@ -218,7 +219,7 @@ public class FlinkSessionJobObserverTest {
         Long firstNonce = 123L;
         sessionJob.getSpec().getJob().setSavepointTriggerNonce(firstNonce);
         flinkService.triggerSavepoint(
-                jobID, SavepointTriggerType.MANUAL, savepointInfo, new Configuration());
+                jobID, SavepointTriggerType.MANUAL, savepointInfo, firstNonce, new Configuration());
         Assertions.assertTrue(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
         Assertions.assertEquals("trigger_0", savepointInfo.getTriggerId());
@@ -226,18 +227,34 @@ public class FlinkSessionJobObserverTest {
         Long secondNonce = 456L;
         sessionJob.getSpec().getJob().setSavepointTriggerNonce(secondNonce);
         flinkService.triggerSavepoint(
-                jobID, SavepointTriggerType.MANUAL, savepointInfo, new Configuration());
+                jobID,
+                SavepointTriggerType.MANUAL,
+                savepointInfo,
+                secondNonce,
+                new Configuration());
         Assertions.assertTrue(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
         Assertions.assertEquals("trigger_1", savepointInfo.getTriggerId());
         flinkService.triggerSavepoint(
-                jobID, SavepointTriggerType.MANUAL, savepointInfo, new Configuration());
+                jobID,
+                SavepointTriggerType.MANUAL,
+                savepointInfo,
+                secondNonce,
+                new Configuration());
         Assertions.assertTrue(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
         observer.observe(sessionJob, readyContext); // pending
         observer.observe(sessionJob, readyContext); // success
-        Assertions.assertEquals("savepoint_0", savepointInfo.getLastSavepoint().getLocation());
-        Assertions.assertEquals(secondNonce, savepointInfo.getLastSavepoint().getTriggerNonce());
+        var lastCompletedSavepoint =
+                sessionJob
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .retrieveLastCompletedSavepoint()
+                        .get();
+        assertNotNull(lastCompletedSavepoint);
+        Assertions.assertEquals("savepoint_0", lastCompletedSavepoint.getLocation());
+        Assertions.assertEquals(secondNonce, lastCompletedSavepoint.getTriggerNonce());
         Assertions.assertFalse(
                 SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
     }

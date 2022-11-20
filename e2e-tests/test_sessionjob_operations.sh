@@ -47,7 +47,6 @@ assert_available_slots 0 $CLUSTER_ID
 kubectl patch sessionjob ${SESSION_JOB_NAME} --type merge --patch '{"spec":{"job": {"savepointTriggerNonce": 123456 } } }'
 wait_for_logs $jm_pod_name "Triggering savepoint for job" ${TIMEOUT} || exit 1
 wait_for_status $SESSION_JOB_IDENTIFIER '.status.jobStatus.savepointInfo.triggerId' null $TIMEOUT || exit 1
-wait_for_status $SESSION_JOB_IDENTIFIER '.status.jobStatus.savepointInfo.triggerTimestamp' null $TIMEOUT || exit 1
 location=$(kubectl get $SESSION_JOB_IDENTIFIER -o yaml | yq '.status.jobStatus.savepointInfo.lastSavepoint.location')
 if [ "$location" == "" ];then
   echo "lost savepoint location"

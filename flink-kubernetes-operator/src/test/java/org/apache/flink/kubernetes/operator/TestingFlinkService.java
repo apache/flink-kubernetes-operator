@@ -255,12 +255,16 @@ public class TestingFlinkService extends AbstractFlinkService {
             String jobId,
             SavepointTriggerType triggerType,
             SavepointInfo savepointInfo,
+            Long triggerNonce,
             Configuration conf) {
         var triggerId = "trigger_" + triggerCounter++;
 
         var savepointFormatType = SavepointUtils.getSavepointFormatType(conf);
         savepointInfo.setTrigger(
-                triggerId, triggerType, SavepointFormatType.valueOf(savepointFormatType.name()));
+                triggerId,
+                triggerType,
+                SavepointFormatType.valueOf(savepointFormatType.name()),
+                triggerNonce);
         savepointTriggers.put(triggerId, false);
     }
 

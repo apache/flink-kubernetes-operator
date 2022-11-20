@@ -139,9 +139,10 @@ public class ReconciliationUtils {
 
     public static <SPEC extends AbstractFlinkSpec> void updateLastReconciledSavepointTriggerNonce(
             SavepointInfo savepointInfo, AbstractFlinkResource<SPEC, ?> target) {
-
         // We only need to update for MANUAL triggers
-        if (savepointInfo.getTriggerType() != SavepointTriggerType.MANUAL) {
+        if (savepointInfo.getLastSavepoint() == null
+                || savepointInfo.getLastSavepoint().getTriggerType()
+                        != SavepointTriggerType.MANUAL) {
             return;
         }
 

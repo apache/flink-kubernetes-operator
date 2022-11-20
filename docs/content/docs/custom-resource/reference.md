@@ -267,7 +267,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 ### Savepoint
 **Class**: org.apache.flink.kubernetes.operator.api.status.Savepoint
 
-**Description**: Represents information about a finished savepoint.
+**Description**: Represents information about an attempted or finished savepoint.
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
@@ -295,11 +295,11 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| lastSavepoint | org.apache.flink.kubernetes.operator.api.status.Savepoint | Last completed savepoint by the operator. |
+| lastSavepoint | org.apache.flink.kubernetes.operator.api.status.Savepoint | Last savepoint attempted or completed by the operator. For the last completed savepoint, call retrieveLastCompletedSavepoint(). |
 | triggerId | java.lang.String | Trigger id of a pending savepoint operation. |
-| triggerTimestamp | java.lang.Long | Trigger timestamp of a pending savepoint operation. |
-| triggerType | org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType | Savepoint trigger mechanism. |
-| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType | Savepoint format. |
+| triggerTimestamp | java.lang.Long | Trigger timestamp of a pending savepoint operation.@deprecated This field is deprecated and will always be null. Use information from     lastSavepoint instead |
+| triggerType | org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType | Savepoint trigger mechanism of a pending savepoint operation.@deprecated This field is deprecated and will always be null. Use information from     lastSavepoint instead |
+| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType | Savepoint format type of a pending savepoint operation.@deprecated This field is deprecated and will always be null. Use information from     lastSavepoint instead |
 | savepointHistory | java.util.List<org.apache.flink.kubernetes.operator.api.status.Savepoint> | List of recent savepoints. |
 | lastPeriodicSavepointTimestamp | long | Trigger timestamp of last periodic savepoint operation. |
 

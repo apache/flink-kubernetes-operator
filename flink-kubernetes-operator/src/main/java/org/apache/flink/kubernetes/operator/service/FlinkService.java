@@ -81,6 +81,7 @@ public interface FlinkService {
             String jobId,
             SavepointTriggerType triggerType,
             SavepointInfo savepointInfo,
+            Long triggerNonce,
             Configuration conf)
             throws Exception;
 

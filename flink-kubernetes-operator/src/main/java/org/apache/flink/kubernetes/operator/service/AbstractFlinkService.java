@@ -438,6 +438,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             String jobId,
             SavepointTriggerType triggerType,
             org.apache.flink.kubernetes.operator.api.status.SavepointInfo savepointInfo,
+            Long triggerNonce,
             Configuration conf)
             throws Exception {
         LOG.info("Triggering new savepoint");
@@ -474,7 +475,8 @@ public abstract class AbstractFlinkService implements FlinkService {
             savepointInfo.setTrigger(
                     response.getTriggerId().toHexString(),
                     triggerType,
-                    SavepointFormatType.valueOf(savepointFormatType.name()));
+                    SavepointFormatType.valueOf(savepointFormatType.name()),
+                    triggerNonce);
         }
     }
 
