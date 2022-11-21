@@ -83,6 +83,11 @@ function wait_for_jobmanager_running() {
     wait_for_logs $jm_pod_name "Rest endpoint listening at" ${TIMEOUT} || exit 1
 }
 
+function get_operator_pod_name() {
+   operator_pod_name=$(kubectl get pods --selector="app.kubernetes.io/name=flink-kubernetes-operator" -o jsonpath='{..metadata.name}')
+   echo "${operator_pod_name}"
+}
+
 function get_jm_pod_name() {
    CLUSTER_ID=$1
    jm_pod_name=$(kubectl get pods --selector="app=${CLUSTER_ID},component=jobmanager" -o jsonpath='{..metadata.name}')
@@ -108,11 +113,35 @@ function retry_times() {
     return 1
 }
 
+function check_operator_log_for_errors {
+  echo "Checking for operator log errors..."
+  operator_pod_name=$(get_operator_pod_name)
+  errors=$(kubectl logs "${operator_pod_name}" \
+      | grep -v "Exception while listing jobs" `#https://issues.apache.org/jira/browse/FLINK-30146` \
+      | grep -v "Failed to submit a listener notification task" `#https://issues.apache.org/jira/browse/FLINK-30147` \
+      | grep -v "Failed to submit job to session cluster" `#https://issues.apache.org/jira/browse/FLINK-30148` \
+      | grep -v "Error during event processing" `#https://issues.apache.org/jira/browse/FLINK-30149` \
+      | grep -v "REST service in session cluster is bad now" `#https://issues.apache.org/jira/browse/FLINK-30150` \
+      | grep -v "AuditUtils" `#https://issues.apache.org/jira/browse/FLINK-30151` \
+      | grep -i "error" || true)
+  if [ -z "${errors}" ]; then
+    echo "No errors in log files."
+    return 0
+  else
+    echo -e "Found error in log files.\n\n${errors}"
+    return 1
+  fi
+}
+
 function debug_and_show_logs {
     echo "Debugging failed e2e test:"
     echo "Currently existing Kubernetes resources"
     kubectl get all
     kubectl describe all
+
+    echo "Operator logs:"
+    operator_pod_name=$(get_operator_pod_name)
+    kubectl logs "${operator_pod_name}"
 
     echo "Flink logs:"
     kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | while read pod;do

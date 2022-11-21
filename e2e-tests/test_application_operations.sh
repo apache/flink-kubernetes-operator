@@ -67,4 +67,6 @@ wait_for_status flinkdep/flink-example-statemachine '.status.jobManagerDeploymen
 wait_for_status flinkdep/flink-example-statemachine '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 assert_available_slots 1 $CLUSTER_ID
 
+check_operator_log_for_errors || exit 1
+
 echo "Successfully run the last-state upgrade test"
