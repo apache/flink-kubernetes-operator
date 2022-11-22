@@ -126,6 +126,8 @@ public class EventRecorder {
         Cleanup,
         CleanupFailed,
         Missing,
-        ValidationError
+        ValidationError,
+        RecoverDeployment,
+        RestartUnhealthyJob
     }
 }

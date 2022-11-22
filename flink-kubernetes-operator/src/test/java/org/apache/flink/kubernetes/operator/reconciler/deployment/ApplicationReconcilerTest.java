@@ -44,7 +44,10 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
+import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointStatus;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -72,6 +75,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
+import static org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler.MSG_SUBMIT;
+import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.MSG_RECOVERY;
+import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.MSG_RESTART_UNHEALTHY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -90,10 +97,12 @@ public class ApplicationReconcilerTest {
     private Context<FlinkDeployment> context;
     private StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
 
+    private EventCollector eventCollector = new EventCollector();
+
     @BeforeEach
     public void before() {
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
-        var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
+        var eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
         statusRecorder = new TestingStatusRecorder<FlinkDeployment, FlinkDeploymentStatus>();
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
@@ -663,5 +672,40 @@ public class ApplicationReconcilerTest {
         reconciler.setClock(Clock.fixed(now.plus(Duration.ofMinutes(6)), ZoneId.systemDefault()));
         reconciler.reconcile(deployment, context);
         assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
+    }
+
+    @Test
+    public void testDeploymentRecoveryEvent() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        reconciler.reconcile(deployment, context);
+        Assertions.assertEquals(MSG_SUBMIT, eventCollector.events.remove().getMessage());
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        flinkService.clear();
+        FlinkDeploymentStatus deploymentStatus = deployment.getStatus();
+        deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        deploymentStatus
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        reconciler.reconcile(deployment, context);
+        Assertions.assertEquals(MSG_RECOVERY, eventCollector.events.remove().getMessage());
+    }
+
+    @Test
+    public void testRestartUnhealthyEvent() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED.key(), "true");
+        reconciler.reconcile(deployment, context);
+        Assertions.assertEquals(MSG_SUBMIT, eventCollector.events.remove().getMessage());
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        var clusterHealthInfo = new ClusterHealthInfo(System.currentTimeMillis(), 2, false);
+        ClusterHealthEvaluator.setLastValidClusterHealthInfo(
+                deployment.getStatus().getClusterInfo(), clusterHealthInfo);
+        reconciler.reconcile(deployment, context);
+        Assertions.assertEquals(MSG_RESTART_UNHEALTHY, eventCollector.events.remove().getMessage());
     }
 }

@@ -61,6 +61,8 @@ public class ApplicationReconciler
         extends AbstractJobReconciler<FlinkDeployment, FlinkDeploymentSpec, FlinkDeploymentStatus> {
 
     private static final Logger LOG = LoggerFactory.getLogger(ApplicationReconciler.class);
+    static final String MSG_RECOVERY = "Recovering lost deployment";
+    static final String MSG_RESTART_UNHEALTHY = "Restarting unhealthy job";
     protected final FlinkService flinkService;
 
     public ApplicationReconciler(
@@ -275,7 +277,22 @@ public class ApplicationReconciler
                 shouldRestartJobBecauseUnhealthy(deployment, observeConfig);
         boolean shouldRecoverDeployment = shouldRecoverDeployment(observeConfig, deployment);
         if (shouldRestartJobBecauseUnhealthy || shouldRecoverDeployment) {
+            if (shouldRecoverDeployment) {
+                eventRecorder.triggerEvent(
+                        deployment,
+                        EventRecorder.Type.Warning,
+                        EventRecorder.Reason.RecoverDeployment,
+                        EventRecorder.Component.Job,
+                        MSG_RECOVERY);
+            }
+
             if (shouldRestartJobBecauseUnhealthy) {
+                eventRecorder.triggerEvent(
+                        deployment,
+                        EventRecorder.Type.Warning,
+                        EventRecorder.Reason.RestartUnhealthyJob,
+                        EventRecorder.Component.Job,
+                        MSG_RESTART_UNHEALTHY);
                 cleanupAfterFailedJob(deployment, ctx, observeConfig);
             }
             resubmitJob(deployment, ctx, observeConfig, true);
