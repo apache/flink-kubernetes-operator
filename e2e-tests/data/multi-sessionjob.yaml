@@ -30,6 +30,7 @@ spec:
     annotations:
       nginx.ingress.kubernetes.io/rewrite-target: "/$2"
   flinkConfiguration:
+    kubernetes.operator.flink.client.timeout: 60 s
     taskmanager.numberOfTaskSlots: "2"
     high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
     high-availability.storageDir: file:///opt/flink/volume/flink-ha

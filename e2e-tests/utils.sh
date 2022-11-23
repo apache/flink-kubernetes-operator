@@ -141,7 +141,6 @@ function check_operator_log_for_errors {
       | grep -v "Failed to submit job to session cluster" `#https://issues.apache.org/jira/browse/FLINK-30148` \
       | grep -v "Error during event processing" `#https://issues.apache.org/jira/browse/FLINK-30149` \
       | grep -v "REST service in session cluster is bad now" `#https://issues.apache.org/jira/browse/FLINK-30150` \
-      | grep -v "AuditUtils" `#https://issues.apache.org/jira/browse/FLINK-30151` \
       | grep -i "error" || true)
   if [ -z "${errors}" ]; then
     echo "No errors in log files."
