@@ -60,7 +60,12 @@ function wait_for_status {
 function assert_available_slots() {
   expected=$1
   CLUSTER_ID=$2
-  ip=$(minikube ip)
+  if [[ $OSTYPE == 'darwin'* ]]; then
+    # docker ingress forwards the ports to the localhost instead of the minikube ip on MacOS
+    ip="localhost"
+  else
+    ip=$(minikube ip)
+  fi
   actual=$(curl "http://$ip/default/${CLUSTER_ID}/overview" 2>/dev/null | grep -E -o '"slots-available":[0-9]+' | awk -F':' '{print $2}')
   if [[ "${expected}" != "${actual}" ]]; then
     echo "Expected available slots: ${expected}, actual: ${actual}"
@@ -212,7 +217,7 @@ function stop_minikube {
 }
 
 function cleanup_and_exit() {
-    if [ $TRAPPED_EXIT_CODE != 0 ];then
+    if [[ $TRAPPED_EXIT_CODE != 0 && -n $DEBUG ]]; then
       debug_and_show_logs
     fi
 
@@ -264,4 +269,77 @@ function create_namespace() {
     kubectl create namespace $NAMESPACE_NAME;
   fi;
 
+}
+
+function install_cert_manager() {
+  if [[ -n ${DEBUG} ]]; then
+    kubectl get pods -A
+  fi
+  kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.2/cert-manager.yaml
+  kubectl -n cert-manager wait --all=true --for=condition=Available --timeout=300s deploy
+}
+
+function build_image() {
+  export SHELL=/bin/bash
+  export DOCKER_BUILDKIT=1
+  eval $(minikube docker-env)
+  docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain .
+  if [[ -n ${DEBUG} ]]; then
+    docker images
+  fi
+}
+
+function install_operator() {
+  local namespace=$1
+
+  create_namespace flink
+  if [[ -n ${DEBUG} ]]; then
+    debug="--debug"
+  fi
+  echo "helm ${debug} install flink-kubernetes-operator -n ${namespace} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest --create-namespace --set 'watchNamespaces={default,flink}'"
+  helm ${debug} install flink-kubernetes-operator -n ${namespace} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest --create-namespace --set 'watchNamespaces={default,flink}'
+  kubectl wait --for=condition=Available --timeout=120s -n ${namespace} deploy/flink-kubernetes-operator
+  if [[ -n ${DEBUG} ]]; then
+    kubectl get pods
+  fi
+}
+
+function uninstall_operator() {
+  local namespace=$1
+
+  helm uninstall -n ${namespace} flink-kubernetes-operator
+  kubectl delete namespace flink
+  kubectl delete serviceaccount flink
+  kubectl delete role flink
+  kubectl delete rolebinding flink-role-binding
+}
+
+function prepare_tests() {
+  local image=$1
+  local flink_version=$2
+  local mode="$3"
+
+  sed -i -e "s/image: flink:.*/image: ${image}/" e2e-tests/data/*.yaml
+  sed -i -e "s/flinkVersion: .*/flinkVersion: ${flink_version}/" e2e-tests/data/*.yaml
+  sed -i -e "s/mode: .*/mode: ${mode}/" e2e-tests/data/*.yaml
+  if [[ -n ${DEBUG} ]]; then
+    git --no-pager diff HEAD
+  fi
+}
+
+function revert_tests() {
+  git checkout e2e-tests/data
+  rm e2e-tests/data/*.yaml-e
+}
+
+function get_position() {
+  local input_value=$1
+  shift
+  local input_array=("$@")
+
+  for i in "${!input_array[@]}"; do
+     if [[ "${input_array[$i]}" = "${input_value}" ]]; then
+         echo "${i}";
+     fi
+  done
 }
