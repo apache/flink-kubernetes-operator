@@ -35,7 +35,7 @@ spec:
       memory: "2048m"
       cpu: 1
   job:
-    jarURI: local:///opt/flink/opt/flink-python_2.12-1.15.0.jar # Note, this jarURI is actually a placeholder
+    jarURI: local:///opt/flink/opt/flink-python_2.12-1.15.3.jar # Note, this jarURI is actually a placeholder
     entryClass: "org.apache.flink.client.python.PythonDriver"
     args: ["-pyclientexec", "/usr/local/bin/python3", "-py", "/opt/flink/usrlib/python_demo.py"]
     parallelism: 1
