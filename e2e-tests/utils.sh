@@ -61,9 +61,9 @@ function assert_available_slots() {
   expected=$1
   CLUSTER_ID=$2
   ip=$(minikube ip)
-  actual=$(curl http://$ip/default/${CLUSTER_ID}/overview 2>/dev/null | grep -E -o '"slots-available":[0-9]+' | awk -F':' '{print $2}')
-  if [[ expected -ne actual ]]; then
-    echo "Expected available slots: $expected, actual: $actual"
+  actual=$(curl "http://$ip/default/${CLUSTER_ID}/overview" 2>/dev/null | grep -E -o '"slots-available":[0-9]+' | awk -F':' '{print $2}')
+  if [[ "${expected}" != "${actual}" ]]; then
+    echo "Expected available slots: ${expected}, actual: ${actual}"
     exit 1
   fi
   echo "Successfully assert available slots"
