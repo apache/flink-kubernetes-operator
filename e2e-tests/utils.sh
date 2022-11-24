@@ -83,15 +83,32 @@ function wait_for_jobmanager_running() {
     wait_for_logs $jm_pod_name "Rest endpoint listening at" ${TIMEOUT} || exit 1
 }
 
+function get_operator_pod_namespace() {
+    operator_pod_namespace=$(kubectl get pods --selector="app.kubernetes.io/name=flink-kubernetes-operator" -o jsonpath='{..metadata.namespace}' --all-namespaces)
+    if [ "$(grep -c . <<<"${operator_pod_namespace}")" != 1 ]; then
+      echo "Invalid operator pod namespace: ${operator_pod_namespace}" >&2
+      exit 1
+    fi
+    echo "${operator_pod_namespace}"
+}
+
 function get_operator_pod_name() {
-   operator_pod_name=$(kubectl get pods --selector="app.kubernetes.io/name=flink-kubernetes-operator" -o jsonpath='{..metadata.name}')
-   echo "${operator_pod_name}"
+    operator_pod_name=$(kubectl get pods --selector="app.kubernetes.io/name=flink-kubernetes-operator" -o jsonpath='{..metadata.name}' --all-namespaces)
+    if [ "$(grep -c . <<<"${operator_pod_name}")" != 1 ]; then
+      echo "Invalid operator pod name: ${operator_pod_name}" >&2
+      exit 1
+    fi
+    echo "${operator_pod_name}"
 }
 
 function get_jm_pod_name() {
-   CLUSTER_ID=$1
-   jm_pod_name=$(kubectl get pods --selector="app=${CLUSTER_ID},component=jobmanager" -o jsonpath='{..metadata.name}')
-   echo $jm_pod_name
+    CLUSTER_ID=$1
+    jm_pod_name=$(kubectl get pods --selector="app=${CLUSTER_ID},component=jobmanager" -o jsonpath='{..metadata.name}')
+    if [ "$(grep -c . <<<"${jm_pod_name}")" != 1 ]; then
+      echo "Invalid job manager pod name: ${jm_pod_name}" >&2
+      exit 1
+    fi
+    echo "${jm_pod_name}"
 }
 
 function retry_times() {
@@ -115,8 +132,10 @@ function retry_times() {
 
 function check_operator_log_for_errors {
   echo "Checking for operator log errors..."
+  operator_pod_namespace=$(get_operator_pod_namespace)
   operator_pod_name=$(get_operator_pod_name)
-  errors=$(kubectl logs "${operator_pod_name}" \
+  echo "Operator namespace: ${operator_pod_namespace} pod: ${operator_pod_name}"
+  errors=$(kubectl logs -n "${operator_pod_namespace}" "${operator_pod_name}" \
       | grep -v "Exception while listing jobs" `#https://issues.apache.org/jira/browse/FLINK-30146` \
       | grep -v "Failed to submit a listener notification task" `#https://issues.apache.org/jira/browse/FLINK-30147` \
       | grep -v "Failed to submit job to session cluster" `#https://issues.apache.org/jira/browse/FLINK-30148` \
