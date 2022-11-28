@@ -44,7 +44,7 @@ mkdir -p docs/target/api
 mvn javadoc:aggregate -B \
     -DadditionalJOption="-Xdoclint:none" \
     -DadditionalJOption="--allow-script-in-comments" \
-    -DexcludePackageNames="org.apache.flink.examples"
+    -DexcludePackageNames="org.apache.flink.examples" \
     -Dmaven.javadoc.failOnError=false \
     -Dcheckstyle.skip=true \
     -Dspotless.check.skip=true \
