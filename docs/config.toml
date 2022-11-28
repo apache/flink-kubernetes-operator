@@ -53,10 +53,13 @@ pygmentsUseClasses = true
 
   ProjectHomepage = "//flink.apache.org"
 
+  JavaDocs = "//nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/api/java/"
+
   # External links at the bottom
   # of the menu
   MenuLinks = [
-    ["Project Homepage", "//flink.apache.org"]
+    ["Project Homepage", "//flink.apache.org"],
+    ["JavaDocs", "//nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/api/java/"]
   ]
 
   PreviousDocs = [
