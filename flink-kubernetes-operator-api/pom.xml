@@ -143,8 +143,33 @@ under the License.
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-javadoc-plugin</artifactId>
-                        <version>3.3.2</version>
+                        <version>${maven-javadoc-plugin.version}</version>
                         <executions>
+                            <execution>
+                                <id>doc-crd</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>javadoc</goal>
+                                </goals>
+                                <configuration>
+                                    <doclet>org.apache.flink.kubernetes.operator.api.docs.CrdReferenceDoclet</doclet>
+                                    <docletArtifacts>
+                                        <docletArtifact>
+                                            <groupId>org.apache.flink</groupId>
+                                            <artifactId>flink-kubernetes-operator-api</artifactId>
+                                            <version>${project.version}</version>
+                                        </docletArtifact>
+                                    </docletArtifacts>
+                                    <additionalOptions>
+                                        <additionalOption>--outputFile</additionalOption>
+                                        <additionalOption>${project.basedir}/../docs/content/docs/custom-resource/reference.md
+                                        </additionalOption>
+                                        <additionalOption>--templateFile</additionalOption>
+                                        <additionalOption>${project.basedir}/../docs/template/crd-ref.template</additionalOption>
+                                    </additionalOptions>
+                                    <useStandardDocletOptions>false</useStandardDocletOptions>
+                                </configuration>
+                            </execution>
                             <execution>
                                 <id>doc</id>
                                 <phase>package</phase>
@@ -153,24 +178,6 @@ under the License.
                                 </goals>
                             </execution>
                         </executions>
-                        <configuration>
-                            <doclet>org.apache.flink.kubernetes.operator.api.docs.CrdReferenceDoclet</doclet>
-                            <docletArtifacts>
-                                <docletArtifact>
-                                    <groupId>org.apache.flink</groupId>
-                                    <artifactId>flink-kubernetes-operator-api</artifactId>
-                                    <version>${project.version}</version>
-                                </docletArtifact>
-                            </docletArtifacts>
-                            <additionalOptions>
-                                <additionalOption>--outputFile</additionalOption>
-                                <additionalOption>${project.basedir}/../docs/content/docs/custom-resource/reference.md
-                                </additionalOption>
-                                <additionalOption>--templateFile</additionalOption>
-                                <additionalOption>${project.basedir}/../docs/template/crd-ref.template</additionalOption>
-                            </additionalOptions>
-                            <useStandardDocletOptions>false</useStandardDocletOptions>
-                        </configuration>
                     </plugin>
                 </plugins>
             </build>
