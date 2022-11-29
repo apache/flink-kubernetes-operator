@@ -160,9 +160,10 @@ public class FlinkUtils {
     }
 
     public static boolean isKubernetesHAActivated(Configuration configuration) {
-        return configuration
-                .get(HighAvailabilityOptions.HA_MODE)
-                .equalsIgnoreCase(KubernetesHaServicesFactory.class.getCanonicalName());
+        String haMode = configuration.get(HighAvailabilityOptions.HA_MODE);
+        return haMode.equalsIgnoreCase(KubernetesHaServicesFactory.class.getCanonicalName())
+                // Hardcoded config value should be removed when upgrading Flink dependency to 1.16
+                || haMode.equalsIgnoreCase("kubernetes");
     }
 
     public static boolean clusterShutdownDisabled(FlinkDeploymentSpec spec) {

@@ -416,6 +416,18 @@ public class DefaultValidatorTest {
                 "spec.serviceAccount must be defined. If you use helm, its value should be the same with the name of jobServiceAccount.");
 
         testSuccess(dep -> dep.getSpec().setServiceAccount("flink"));
+
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+                    dep.getSpec()
+                            .getFlinkConfiguration()
+                            .put(
+                                    HighAvailabilityOptions.HA_MODE.key(),
+                                    // Hardcoded config value should be removed when upgrading Flink
+                                    // dependency to 1.16
+                                    "kubernetes");
+                });
     }
 
     @Test
