@@ -92,6 +92,10 @@ jobs:
           stop_minikube
   e2e_ci:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: [ "v1_16","v1_15","v1_14","v1_13" ]
+        namespace: [ "default","flink" ]
     name: e2e_ci
     steps:
       - uses: actions/checkout@v2
@@ -110,7 +114,7 @@ jobs:
       - name: Run the tests
         run: |
           source e2e-tests/utils.sh
-          bash e2e-tests/run_tests.sh -f v1_16,v1_15,v1_14,v1_13 -m native,standalone -n flink,default -d test_multi_sessionjob.sh test_application_operations.sh test_application_kubernetes_ha.sh test_sessionjob_kubernetes_ha.sh test_sessionjob_operations.sh || exit 1
+          bash e2e-tests/run_tests.sh -f ${{ matrix.version }} -n ${{ matrix.namespace }} -m native,standalone -d test_multi_sessionjob.sh test_application_operations.sh test_application_kubernetes_ha.sh test_sessionjob_kubernetes_ha.sh test_sessionjob_operations.sh || exit 1
       - name: Stop minikube
         run: |
           source e2e-tests/utils.sh

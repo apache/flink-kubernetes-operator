@@ -296,7 +296,6 @@ function install_operator() {
   if [[ -n ${DEBUG} ]]; then
     debug="--debug"
   fi
-  echo "helm ${debug} install flink-kubernetes-operator -n ${namespace} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest --create-namespace --set 'watchNamespaces={default,flink}'"
   helm ${debug} install flink-kubernetes-operator -n ${namespace} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest --create-namespace --set 'watchNamespaces={default,flink}'
   kubectl wait --for=condition=Available --timeout=120s -n ${namespace} deploy/flink-kubernetes-operator
   if [[ -n ${DEBUG} ]]; then
