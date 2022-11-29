@@ -416,8 +416,8 @@ public abstract class AbstractFlinkService implements FlinkService {
                             LOG.info("Job successfully suspended with savepoint {}.", savepoint);
                         } else if (ReconciliationUtils.isJobInTerminalState(sessionJobStatus)) {
                             LOG.info(
-                                    "Job is already in terminal state skipping cancel-with-savepoint operation: "
-                                            + jobStatus.getState());
+                                    "Job is already in terminal state skipping cancel-with-savepoint operation: {}",
+                                    jobStatus.getState());
                         } else {
                             throw new RuntimeException(
                                     "Unexpected non-terminal status: " + jobStatus.getState());
