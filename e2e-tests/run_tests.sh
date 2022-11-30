@@ -17,6 +17,20 @@
 # limitations under the License.
 ################################################################################
 
+
+readlink -f "$0" 2>/dev/null
+if [[ $? -ne 0 ]]; then
+  echo
+  echo "-----------------------------------"
+  echo "Please make sure that 'readlink -f \"$0\"' works."
+  echo "Maybe:"
+  echo " brew install coreutils"
+  echo " alias readlink=greadlink"
+  echo "-----------------------------------"
+  echo
+  exit 1
+fi
+
 ROOT_DIR=$(dirname $(dirname "$(readlink -f "$0")"))
 source "${ROOT_DIR}/e2e-tests/utils.sh"
 
@@ -183,7 +197,7 @@ for flink_version in ${flink_version_list[@]}; do
         if [[ ${script} = "test_multi_sessionjob.sh" && ${namespace} = "default" ]]; then
           echo
           echo "-----------------------------------"
-          echo "Skipping ${script} on ${namespace} namespace"
+          echo "Skipping ${script} on 'default' namespace, since an equivalent test will/should run on the 'flink' namespace and we want to save CPU time"
           echo "-----------------------------------"
           echo
           continue

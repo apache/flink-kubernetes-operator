@@ -82,6 +82,28 @@ To uninstall you can simply call:
 helm uninstall flink-kubernetes-operator
 ```
 
+### Installing the operator locally using the e2e test scripts
+
+Alternatively you can skip [Building docker images](#building-docker-images) and
+[Installing the operator locally](#installing-the-operator-locally) altogether and with the
+use of the e2e test scripts you can install the Flink Kubernetes Operator from the local codebase.
+
+You still need to install [Docker Desktop](https://www.docker.com/products/docker-desktop),
+[minikube](https://minikube.sigs.k8s.io/docs/start/) and [helm](https://helm.sh/docs/intro/quickstart/) locally.
+
+The e2e test scripts automate the following steps:
+- Starting minikube (if needed)
+- Installing the Certification Manager (overwriting the existing one if already installed)
+- Compiling the Flink Kubernetes Operator binary from the local codebase
+- Building the Flink Kubernetes Operator Docker image using the previously compiled binary
+- Installing the freshly created Kubernetes Operator to the specified namespace
+- Run a single test to check if the operator is working as expected
+
+It could be done simplz by calling the following script:
+```bash
+./e2e-tests/run_tests.sh -k
+```
+
 ### Running the operator from the IDE
 
 You can run or debug the `FlinkOperator` from your preferred IDE. The operator itself is accessing the deployed Flink clusters through the REST interface. When running locally the `rest.port`, `rest.address` and `kubernetes.rest-service.exposed.type` Flink configuration parameters must be modified.
@@ -152,3 +174,14 @@ Considering the cost of running the builds, the stability, and the maintainabili
 All the unit tests, integration tests, and the end-to-end tests will be triggered for each PR.
 
 Note: Please make sure the CI passed before merging.
+
+## Running the e2e tests locally
+
+After installing [Docker Desktop](https://www.docker.com/products/docker-desktop),
+[minikube](https://minikube.sigs.k8s.io/docs/start/) and [helm](https://helm.sh/docs/intro/quickstart/) locally
+you will be able to run the end-to-end tests locally using the `e2e-tests/run_tests.sh` script.
+
+For usage examples, please execute it with the following command:
+```bash
+./e2e-tests/run_tests.sh -h
+```
