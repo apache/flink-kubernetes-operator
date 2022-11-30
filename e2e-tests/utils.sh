@@ -159,12 +159,14 @@ function debug_and_show_logs {
     kubectl describe all
 
     echo "Operator logs:"
+    operator_pod_namespace=$(get_operator_pod_namespace)
     operator_pod_name=$(get_operator_pod_name)
-    kubectl logs "${operator_pod_name}"
+    echo "Operator namespace: ${operator_pod_namespace} pod: ${operator_pod_name}"
+    kubectl logs -n "${operator_pod_namespace}" "${operator_pod_name}"
 
     echo "Flink logs:"
     kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | while read pod;do
-        containers=(`kubectl get pods  $pod -o jsonpath='{.spec.containers[*].name}'`)
+        containers=(`kubectl get pods $pod -o jsonpath='{.spec.containers[*].name}'`)
         i=0
         for container in "${containers[@]}"; do
           echo "Current logs for $pod:$container: "
