@@ -59,9 +59,8 @@ jobs:
           start_minikube
       - name: Install cert-manager
         run: |
-          kubectl get pods -A
-          kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.2/cert-manager.yaml
-          kubectl -n cert-manager wait --all=true --for=condition=Available --timeout=300s deploy
+          source e2e-tests/utils.sh
+          install_cert_manager
       - name: Build image
         run: |
           export SHELL=/bin/bash
@@ -95,29 +94,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: ["v1_16","v1_15","v1_14","v1_13"]
-        namespace: ["default","flink"]
-        mode: ["native", "standalone"]
-        test:
-          - test_application_kubernetes_ha.sh
-          - test_application_operations.sh
-          - test_sessionjob_kubernetes_ha.sh
-          - test_sessionjob_operations.sh
-          - test_multi_sessionjob.sh
-        include:
-          - namespace: flink
-            extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
-          - version: v1_16
-            image: flink:1.16
-          - version: v1_15
-            image: flink:1.15
-          - version: v1_14
-            image: flink:1.14
-          - version: v1_13
-            image: flink:1.13
-        exclude:
-          - namespace: default
-            test: test_multi_sessionjob.sh
+        version: [ "v1_16","v1_15","v1_14","v1_13" ]
+        namespace: [ "default","flink" ]
     name: e2e_ci
     steps:
       - uses: actions/checkout@v2
@@ -133,39 +111,10 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
-      - name: Start minikube
+      - name: Run the tests
         run: |
           source e2e-tests/utils.sh
-          start_minikube
-      - name: Install cert-manager
-        run: |
-          kubectl get pods -A
-          kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.2/cert-manager.yaml
-          kubectl -n cert-manager wait --all=true --for=condition=Available --timeout=300s deploy
-      - name: Build image
-        run: |
-          export SHELL=/bin/bash
-          export DOCKER_BUILDKIT=1
-          eval $(minikube -p minikube docker-env)
-          docker build --progress=plain --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest --progress plain .
-          docker images
-      - name: Start the operator
-        run: |
-          helm --debug install flink-kubernetes-operator -n ${{ matrix.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.extraArgs }}
-          kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.namespace }} deploy/flink-kubernetes-operator
-          kubectl get pods
-      - name: Run Flink e2e tests
-        run: |
-          sed -i "s/image: flink:.*/image: ${{ matrix.image }}/" e2e-tests/data/*.yaml
-          sed -i "s/flinkVersion: .*/flinkVersion: ${{ matrix.version }}/" e2e-tests/data/*.yaml
-          sed -i "s/mode: .*/mode: ${{ matrix.mode }}/" e2e-tests/data/*.yaml
-          git diff HEAD
-          echo "Running e2e-tests/$test"
-          bash e2e-tests/${{ matrix.test }} || exit 1
-          git reset --hard
-      - name: Stop the operator
-        run: |
-          helm uninstall -n ${{ matrix.namespace }} flink-kubernetes-operator
+          bash e2e-tests/run_tests.sh -f ${{ matrix.version }} -n ${{ matrix.namespace }} -m native,standalone -d test_multi_sessionjob.sh test_application_operations.sh test_application_kubernetes_ha.sh test_sessionjob_kubernetes_ha.sh test_sessionjob_operations.sh || exit 1
       - name: Stop minikube
         run: |
           source e2e-tests/utils.sh
