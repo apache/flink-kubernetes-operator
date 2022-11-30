@@ -1,0 +1,40 @@
+################################################################################
+#  Licensed to the Apache Software Foundation (ASF) under one
+#  or more contributor license agreements.  See the NOTICE file
+#  distributed with this work for additional information
+#  regarding copyright ownership.  The ASF licenses this file
+#  to you under the Apache License, Version 2.0 (the
+#  "License"); you may not use this file except in compliance
+#  with the License.  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+# limitations under the License.
+################################################################################
+initContainers:
+  - name: import-cert
+    image: docker.io/apache/flink-kubernetes-operator:latest
+    imagePullPolicy: IfNotPresent
+    command: [ "sh", "-ce","/usr/bin/openssl pkcs12 -export -in /apiserver.local.config/certificates/apiserver.crt -inkey /apiserver.local.config/certificates/apiserver.key -name 1 -passout pass:${WEBHOOK_KEYSTORE_PASSWORD} -out /certs/keystore.p12" ]
+    volumeMounts:
+      - name: keystore
+        mountPath: "/certs"
+      # ToDo: The name: apiservice-cert volume is injected by the OLM into deployment at runtime. The import-cert initContainer may
+      # fail if this mechanism is removed in the future.
+      # https://github.com/operator-framework/operator-lifecycle-manager/blob/master/doc/design/building-your-csv.md#apiservice-serving-certs
+      - name: apiservice-cert
+        # This is the default location for OLM managed cert.
+        mountPath: /apiserver.local.config/certificates
+    env:
+      - name: WEBHOOK_KEYSTORE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: flink-operator-webhook-secret
+            key: password
+
+
+
