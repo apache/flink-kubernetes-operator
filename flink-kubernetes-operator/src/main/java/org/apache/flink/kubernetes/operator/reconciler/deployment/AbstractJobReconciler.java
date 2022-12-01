@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -58,8 +59,9 @@ public abstract class AbstractJobReconciler<
             KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<CR, STATUS> statusRecorder) {
-        super(kubernetesClient, configManager, eventRecorder, statusRecorder);
+            StatusRecorder<CR, STATUS> statusRecorder,
+            KubernetesOperatorMetricGroup operatorMetricGroup) {
+        super(kubernetesClient, configManager, eventRecorder, statusRecorder, operatorMetricGroup);
     }
 
     @Override

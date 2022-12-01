@@ -112,7 +112,8 @@ public class ApplicationReconcilerTest {
                         flinkService,
                         configManager,
                         eventRecorder,
-                        statusRecorder);
+                        statusRecorder,
+                        TestUtils.createTestMetricGroup(new Configuration()));
     }
 
     @ParameterizedTest

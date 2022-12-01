@@ -58,6 +58,7 @@ under the License.
         <module>flink-kubernetes-docs</module>
         <module>examples/flink-sql-runner-example</module>
         <module>examples/kubernetes-client-examples</module>
+        <module>examples/autoscaling</module>
     </modules>
 
     <properties>

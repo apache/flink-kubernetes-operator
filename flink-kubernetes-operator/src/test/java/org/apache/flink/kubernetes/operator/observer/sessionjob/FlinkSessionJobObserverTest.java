@@ -79,7 +79,8 @@ public class FlinkSessionJobObserverTest {
                         flinkServiceFactory,
                         configManager,
                         eventRecorder,
-                        statusRecorder);
+                        statusRecorder,
+                        TestUtils.createTestMetricGroup(new Configuration()));
     }
 
     @Test

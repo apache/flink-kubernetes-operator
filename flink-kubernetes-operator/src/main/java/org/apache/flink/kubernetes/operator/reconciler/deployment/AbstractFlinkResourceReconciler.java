@@ -30,8 +30,10 @@ import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.autoscaler.JobAutoScaler;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.diff.ReflectiveDiffBuilder;
@@ -72,6 +74,7 @@ public abstract class AbstractFlinkResourceReconciler<
     protected final EventRecorder eventRecorder;
     protected final StatusRecorder<CR, STATUS> statusRecorder;
     protected final KubernetesClient kubernetesClient;
+    protected final JobAutoScaler resourceScaler;
 
     public static final String MSG_SUSPENDED = "Suspending existing deployment.";
     public static final String MSG_SPEC_CHANGED =
@@ -85,11 +88,14 @@ public abstract class AbstractFlinkResourceReconciler<
             KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<CR, STATUS> statusRecorder) {
+            StatusRecorder<CR, STATUS> statusRecorder,
+            KubernetesOperatorMetricGroup operatorMetricGroup) {
         this.kubernetesClient = kubernetesClient;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
         this.statusRecorder = statusRecorder;
+        this.resourceScaler =
+                JobAutoScaler.create(kubernetesClient, configManager, operatorMetricGroup);
     }
 
     @Override
@@ -176,7 +182,9 @@ public abstract class AbstractFlinkResourceReconciler<
                     MSG_ROLLBACK);
             rollback(cr, ctx, observeConfig);
         } else if (!reconcileOtherChanges(cr, ctx, observeConfig)) {
-            LOG.info("Resource fully reconciled, nothing to do...");
+            if (!resourceScaler.scale(cr, flinkService, observeConfig, ctx)) {
+                LOG.info("Resource fully reconciled, nothing to do...");
+            }
         }
     }
 
@@ -253,6 +261,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
     @Override
     public final DeleteControl cleanup(CR resource, Context<?> context) {
+        resourceScaler.cleanup(resource);
         return cleanupInternal(resource, context);
     }
 

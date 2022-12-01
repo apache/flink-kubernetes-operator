@@ -286,7 +286,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    protected ClusterClient<String> getClusterClient(Configuration config) throws Exception {
+    public ClusterClient<String> getClusterClient(Configuration config) throws Exception {
         TestingClusterClient<String> clusterClient = new TestingClusterClient<>(config);
         FlinkVersion flinkVersion = config.get(FlinkConfigBuilder.FLINK_VERSION);
         clusterClient.setListJobsFunction(

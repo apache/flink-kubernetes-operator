@@ -80,7 +80,8 @@ public class ApplicationReconcilerUpgradeModeTest {
                         flinkService,
                         configManager,
                         eventRecorder,
-                        statusRecoder);
+                        statusRecoder,
+                        TestUtils.createTestMetricGroup(new Configuration()));
     }
 
     @ParameterizedTest

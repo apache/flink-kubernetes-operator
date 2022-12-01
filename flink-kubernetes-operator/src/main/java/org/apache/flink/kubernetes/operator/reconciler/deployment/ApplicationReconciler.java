@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -69,8 +70,9 @@ public class ApplicationReconciler
             FlinkService flinkService,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder) {
-        super(kubernetesClient, configManager, eventRecorder, statusRecorder);
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
+            KubernetesOperatorMetricGroup operatorMetricGroup) {
+        super(kubernetesClient, configManager, eventRecorder, statusRecorder, operatorMetricGroup);
         this.flinkService = flinkService;
     }
 

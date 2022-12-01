@@ -80,7 +80,8 @@ public class SessionReconcilerTest {
                         flinkService,
                         configManager,
                         eventRecorder,
-                        new TestingStatusRecorder<>());
+                        new TestingStatusRecorder<>(),
+                        TestUtils.createTestMetricGroup(new Configuration()));
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         kubernetesClient.resource(deployment).createOrReplace();
         reconciler.reconcile(deployment, flinkService.getContext());
@@ -96,7 +97,8 @@ public class SessionReconcilerTest {
                         flinkService,
                         configManager,
                         eventRecorder,
-                        new TestingStatusRecorder<>());
+                        new TestingStatusRecorder<>(),
+                        TestUtils.createTestMetricGroup(new Configuration()));
 
         FlinkDeployment deployment = TestUtils.buildSessionCluster();
         kubernetesClient.resource(deployment).createOrReplace();
@@ -145,7 +147,8 @@ public class SessionReconcilerTest {
                         flinkService,
                         configManager,
                         eventRecorder,
-                        new TestingStatusRecorder<>());
+                        new TestingStatusRecorder<>(),
+                        TestUtils.createTestMetricGroup(new Configuration()));
 
         FlinkDeployment flinkApp = TestUtils.buildApplicationCluster();
         ObjectMeta deployMeta = flinkApp.getMetadata();
