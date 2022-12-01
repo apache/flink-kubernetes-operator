@@ -46,6 +46,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /** Flink Utility methods used by the operator. */
 public class FlinkUtils {
@@ -147,12 +148,7 @@ public class FlinkUtils {
                         .list()
                         .getItems();
 
-        return configMaps.stream()
-                .anyMatch(
-                        map ->
-                                !map.isMarkedForDeletion()
-                                        && map.getData() != null
-                                        && !map.getData().isEmpty());
+        return configMaps.stream().anyMatch(Predicate.not(ConfigMap::isMarkedForDeletion));
     }
 
     private static boolean isJobGraphKey(Map.Entry<String, String> entry) {
