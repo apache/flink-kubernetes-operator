@@ -19,6 +19,7 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics;
 import org.apache.flink.metrics.MetricGroup;
@@ -28,9 +29,13 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory;
 import okhttp3.OkHttpClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Kubernetes client utils. */
 public class KubernetesClientUtils {
+
+    private static final Logger LOG = LoggerFactory.getLogger(KubernetesClientUtils.class);
 
     public static KubernetesClient getKubernetesClient(
             FlinkOperatorConfiguration operatorConfig, MetricGroup metricGroup) {
@@ -62,5 +67,19 @@ public class KubernetesClientUtils {
         }
 
         return clientBuilder.build();
+    }
+
+    public static void replaceSpecAfterScaling(
+            KubernetesClient kubernetesClient, AbstractFlinkResource<?, ?> cr) {
+        var inKube = kubernetesClient.resource(cr).get();
+
+        if (cr.getMetadata().getGeneration() == inKube.getMetadata().getGeneration()) {
+            kubernetesClient
+                    .resource(cr)
+                    .lockResourceVersion(inKube.getMetadata().getResourceVersion())
+                    .replace();
+        } else {
+            LOG.info("Spec already upgrading in kube, skipping scale operation.");
+        }
     }
 }

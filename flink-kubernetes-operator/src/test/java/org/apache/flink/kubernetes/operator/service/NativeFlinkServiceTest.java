@@ -502,7 +502,7 @@ public class NativeFlinkServiceTest {
     private FlinkService createFlinkService(ClusterClient<String> clusterClient) {
         return new NativeFlinkService(client, new FlinkConfigManager(configuration)) {
             @Override
-            protected ClusterClient<String> getClusterClient(Configuration config) {
+            public ClusterClient<String> getClusterClient(Configuration config) {
                 return clusterClient;
             }
         };

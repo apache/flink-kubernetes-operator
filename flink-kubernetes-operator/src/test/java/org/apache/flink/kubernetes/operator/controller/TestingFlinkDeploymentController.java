@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingFlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -82,7 +84,8 @@ public class TestingFlinkDeploymentController
                                 flinkServiceFactory,
                                 configManager,
                                 eventRecorder,
-                                statusRecorder),
+                                statusRecorder,
+                                TestUtils.createTestMetricGroup(new Configuration())),
                         new FlinkDeploymentObserverFactory(
                                 flinkServiceFactory, configManager, statusRecorder, eventRecorder),
                         statusRecorder,

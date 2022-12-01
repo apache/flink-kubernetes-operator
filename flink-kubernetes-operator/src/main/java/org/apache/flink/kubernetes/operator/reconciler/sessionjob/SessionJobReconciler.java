@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
@@ -52,8 +53,9 @@ public class SessionJobReconciler
             FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder) {
-        super(kubernetesClient, configManager, eventRecorder, statusRecorder);
+            StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder,
+            KubernetesOperatorMetricGroup operatorMetricGroup) {
+        super(kubernetesClient, configManager, eventRecorder, statusRecorder, operatorMetricGroup);
         this.flinkServiceFactory = flinkServiceFactory;
     }
 

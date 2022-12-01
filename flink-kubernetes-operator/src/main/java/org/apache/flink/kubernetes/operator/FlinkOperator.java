@@ -143,7 +143,12 @@ public class FlinkOperator {
         var eventRecorder = EventRecorder.create(client, listeners);
         var reconcilerFactory =
                 new ReconcilerFactory(
-                        client, flinkServiceFactory, configManager, eventRecorder, statusRecorder);
+                        client,
+                        flinkServiceFactory,
+                        configManager,
+                        eventRecorder,
+                        statusRecorder,
+                        metricGroup);
         var observerFactory =
                 new FlinkDeploymentObserverFactory(
                         flinkServiceFactory, configManager, statusRecorder, eventRecorder);
@@ -167,7 +172,12 @@ public class FlinkOperator {
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
         var reconciler =
                 new SessionJobReconciler(
-                        client, flinkServiceFactory, configManager, eventRecorder, statusRecorder);
+                        client,
+                        flinkServiceFactory,
+                        configManager,
+                        eventRecorder,
+                        statusRecorder,
+                        metricGroup);
         var observer =
                 new FlinkSessionJobObserver(flinkServiceFactory, configManager, eventRecorder);
         var controller =

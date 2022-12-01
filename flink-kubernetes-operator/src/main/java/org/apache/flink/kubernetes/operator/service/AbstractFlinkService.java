@@ -647,8 +647,8 @@ public abstract class AbstractFlinkService implements FlinkService {
                         .toSeconds());
     }
 
-    @VisibleForTesting
-    protected ClusterClient<String> getClusterClient(Configuration conf) throws Exception {
+    @Override
+    public ClusterClient<String> getClusterClient(Configuration conf) throws Exception {
         final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
         final int port = conf.getInteger(RestOptions.PORT);

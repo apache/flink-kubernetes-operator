@@ -107,14 +107,15 @@ public class SessionJobReconcilerTest {
                     }
                 };
         statusRecoder = new TestingStatusRecorder<>();
+        kubernetesClient.resource(TestUtils.buildSessionJob()).createOrReplace();
         reconciler =
                 new SessionJobReconciler(
                         kubernetesClient,
                         flinkServiceFactory,
                         configManager,
                         eventRecorder,
-                        statusRecoder);
-        kubernetesClient.resource(TestUtils.buildSessionJob()).createOrReplace();
+                        statusRecoder,
+                        TestUtils.createTestMetricGroup(new Configuration()));
     }
 
     @Test
@@ -610,7 +611,12 @@ public class SessionJobReconcilerTest {
         // Force upgrade when savepoint is in progress.
         reconciler =
                 new SessionJobReconciler(
-                        null, flinkServiceFactory, configManager, eventRecorder, statusRecoder);
+                        null,
+                        flinkServiceFactory,
+                        configManager,
+                        eventRecorder,
+                        statusRecoder,
+                        TestUtils.createTestMetricGroup(new Configuration()));
         spSessionJob.getSpec().getJob().setParallelism(100);
         reconciler.reconcile(spSessionJob, readyContext);
         assertEquals(
