@@ -217,7 +217,7 @@ function stop_minikube {
 }
 
 function cleanup_and_exit() {
-    if [[ $TRAPPED_EXIT_CODE != 0 && -n $DEBUG ]]; then
+    if [[ $TRAPPED_EXIT_CODE != 0 ]]; then
       debug_and_show_logs
     fi
 
