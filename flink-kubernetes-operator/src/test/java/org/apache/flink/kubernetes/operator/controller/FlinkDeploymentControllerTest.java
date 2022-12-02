@@ -1112,4 +1112,59 @@ public class FlinkDeploymentControllerTest {
         testController.reconcile(flinkDeployment, context);
         assertEquals("msp", flinkService.listJobs().get(0).f0);
     }
+
+    @Test
+    public void testInitialHaError() throws Exception {
+        var appCluster = TestUtils.buildApplicationCluster(FlinkVersion.v1_15);
+        appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        appCluster.getSpec().getJob().setState(JobState.SUSPENDED);
+        testController.reconcile(appCluster, context);
+
+        flinkService.setHaDataAvailable(false);
+        appCluster.getSpec().getJob().setState(JobState.RUNNING);
+        testController.events().clear();
+        testController.reconcile(appCluster, context);
+
+        assertEquals(3, testController.events().size());
+        assertEquals(
+                EventRecorder.Reason.SpecChanged,
+                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+        assertEquals(
+                EventRecorder.Reason.Submit,
+                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+        assertTrue(
+                testController
+                        .events()
+                        .poll()
+                        .getMessage()
+                        .contains("HA metadata not available to restore from last state."));
+
+        testController.events().clear();
+        testController.reconcile(appCluster, context);
+
+        assertEquals(
+                EventRecorder.Reason.Submit,
+                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+        assertTrue(
+                testController
+                        .events()
+                        .poll()
+                        .getMessage()
+                        .contains("HA metadata not available to restore from last state."));
+
+        flinkService.setHaDataAvailable(true);
+        testController.events().clear();
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.RUNNING.name(),
+                appCluster.getStatus().getJobStatus().getState());
+    }
 }

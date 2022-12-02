@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.exception.RecoverableDeploymentFailureException;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
@@ -121,8 +122,10 @@ public class FlinkDeploymentController
             }
             statusRecorder.patchAndCacheStatus(flinkApp);
             reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context);
+        } catch (RecoverableDeploymentFailureException rdfe) {
+            handleDeploymentFailed(flinkApp, rdfe, false);
         } catch (DeploymentFailedException dfe) {
-            handleDeploymentFailed(flinkApp, dfe);
+            handleDeploymentFailed(flinkApp, dfe, true);
         } catch (Exception e) {
             eventRecorder.triggerEvent(
                     flinkApp,
@@ -139,10 +142,13 @@ public class FlinkDeploymentController
                 configManager.getOperatorConfiguration(), flinkApp, previousDeployment, true);
     }
 
-    private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
+    private void handleDeploymentFailed(
+            FlinkDeployment flinkApp, DeploymentFailedException dfe, boolean updateJobStatus) {
         LOG.error("Flink Deployment failed", dfe);
-        flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-        flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
+        if (updateJobStatus) {
+            flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
+            flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
+        }
         ReconciliationUtils.updateForReconciliationError(
                 flinkApp, dfe, configManager.getOperatorConfiguration());
         eventRecorder.triggerEvent(
