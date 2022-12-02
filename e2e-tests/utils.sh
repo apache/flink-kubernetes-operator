@@ -142,7 +142,8 @@ function check_operator_log_for_errors {
       | grep -v "Error during event processing" `#https://issues.apache.org/jira/browse/FLINK-30149` \
       | grep -v "REST service in session cluster is bad now" `#https://issues.apache.org/jira/browse/FLINK-30150` \
       | grep -v "AuditUtils" `#https://issues.apache.org/jira/browse/FLINK-30151` \
-      | grep -i "error" || true)
+      | grep -v "Error while patching status" `#https://issues.apache.org/jira/browse/FLINK-30283` \
+      | grep -e "\[\s*ERROR\s*\]" || true)
   if [ -z "${errors}" ]; then
     echo "No errors in log files."
     return 0
