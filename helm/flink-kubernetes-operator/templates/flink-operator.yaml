@@ -87,7 +87,10 @@ spec:
             - name: FLINK_PLUGINS_DIR
               value: /opt/flink/plugins
             - name: LOG_CONFIG
-              value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
+              # An empty value will use the default logging config bundled with the operator
+              # Overrides can also be defined in the attached log4j-operator config map or via
+              # including a logging file in the Docker image and uncommenting the property below.
+              value: "" #-Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.operator }}
             {{- range $k, $v := .Values.operatorPod.env }}
