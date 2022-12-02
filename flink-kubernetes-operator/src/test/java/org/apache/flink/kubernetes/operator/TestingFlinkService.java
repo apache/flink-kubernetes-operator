@@ -102,6 +102,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     private final List<String> disposedSavepoints = new ArrayList<>();
     private final Map<String, Boolean> savepointTriggers = new HashMap<>();
     private int desiredReplicas = 0;
+    private int cancelJobCallCount = 0;
 
     private Map<String, String> metricsValues = new HashMap<>();
 
@@ -366,6 +367,8 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     private String cancelJob(FlinkVersion flinkVersion, JobID jobID, boolean savepoint)
             throws Exception {
+        cancelJobCallCount++;
+
         var jobOpt = jobs.stream().filter(js -> js.f1.getJobId().equals(jobID)).findAny();
 
         if (jobOpt.isEmpty()) {
@@ -509,5 +512,9 @@ public class TestingFlinkService extends AbstractFlinkService {
     public Map<String, String> getMetrics(
             Configuration conf, String jobId, List<String> metricNames) {
         return metricsValues;
+    }
+
+    public int getCancelJobCallCount() {
+        return cancelJobCallCount;
     }
 }
