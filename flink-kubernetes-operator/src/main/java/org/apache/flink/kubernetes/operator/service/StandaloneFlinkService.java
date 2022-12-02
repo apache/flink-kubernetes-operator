@@ -134,20 +134,20 @@ public class StandaloneFlinkService extends AbstractFlinkService {
         final String clusterId = meta.getName();
         final String namespace = meta.getNamespace();
 
-        LOG.info("Deleting Flink Standalone cluster TM resources");
-        kubernetesClient
-                .apps()
-                .deployments()
-                .inNamespace(namespace)
-                .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
-                .delete();
-
         LOG.info("Deleting Flink Standalone cluster JM resources");
         kubernetesClient
                 .apps()
                 .deployments()
                 .inNamespace(namespace)
                 .withName(StandaloneKubernetesUtils.getJobManagerDeploymentName(clusterId))
+                .delete();
+
+        LOG.info("Deleting Flink Standalone cluster TM resources");
+        kubernetesClient
+                .apps()
+                .deployments()
+                .inNamespace(namespace)
+                .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
                 .delete();
 
         if (deleteHaConfigmaps) {
