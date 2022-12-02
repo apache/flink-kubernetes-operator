@@ -184,7 +184,7 @@ public class FlinkSessionJobObserver
             Preconditions.checkArgument(
                     matchedList.size() <= 1,
                     String.format(
-                            "Expected one job for JobID: %s, but %d founded",
+                            "Expected one job for JobID: %s, but found %d",
                             status.getJobId(), matchedList.size()));
 
             if (matchedList.size() == 0) {

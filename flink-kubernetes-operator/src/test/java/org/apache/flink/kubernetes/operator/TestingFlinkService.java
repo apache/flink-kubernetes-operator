@@ -133,6 +133,10 @@ public class TestingFlinkService extends AbstractFlinkService {
         savepointCounter = 0;
     }
 
+    public void clearJobsInTerminalState() {
+        jobs.removeIf(job -> job.f1.getJobState().isTerminalState());
+    }
+
     public Set<String> getSessions() {
         return sessions;
     }
