@@ -241,14 +241,9 @@ public class ApplicationReconcilerTest {
 
     private void verifyJobId(
             FlinkDeployment deployment, JobStatusMessage status, Configuration conf, JobID jobId) {
-        if (deployment.getSpec().getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_15)) {
-            assertNull(conf.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID));
-        } else {
-            // jobId set by operator
-            assertEquals(jobId, status.getJobId());
-            assertEquals(
-                    conf.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID), jobId.toHexString());
-        }
+        // jobId set by operator
+        assertEquals(jobId, status.getJobId());
+        assertEquals(conf.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID), jobId.toHexString());
     }
 
     @Test

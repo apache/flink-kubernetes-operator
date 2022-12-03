@@ -24,7 +24,6 @@ import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
@@ -202,11 +201,10 @@ public class ApplicationReconciler
 
     private void setJobIdIfNecessary(
             FlinkDeploymentSpec spec, FlinkDeployment resource, Configuration deployConfig) {
+        // The jobId assigned by Flink would be constant,
+        // overwrite to avoid checkpoint path conflicts.
         // https://issues.apache.org/jira/browse/FLINK-19358
         // https://issues.apache.org/jira/browse/FLINK-29109
-        if (spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_15)) {
-            return;
-        }
 
         if (deployConfig.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID) != null) {
             // user managed, don't touch
