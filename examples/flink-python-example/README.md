@@ -63,7 +63,7 @@ Dockerfile
 
 **Step 2**: Build docker image
 
-Check this [doc](https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/resource-providers/standalone/docker/#using-flink-python-on-docker) for more details about building Pyflink image. Note, Pyflink 1.15.0 is only supported on x86 arch.  
+Check this [doc](https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/resource-providers/standalone/docker/#using-flink-python-on-docker) for more details about building Pyflink image. Note, Pyflink 1.15.3 is only supported on x86 arch.  
 ```bash
 # Uncomment when building for local minikube env:
 # eval $(minikube docker-env)
