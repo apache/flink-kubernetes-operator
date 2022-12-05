@@ -140,8 +140,8 @@ function check_operator_log_for_errors {
   logs="kubectl logs -n ${operator_pod_namespace} ${operator_pod_name}"
   listing="| grep -v 'Exception while listing jobs'" #https://issues.apache.org/jira/browse/FLINK-30146
   listener="| grep -v 'Failed to submit a listener notification task'" #https://issues.apache.org/jira/browse/FLINK-30147
-  job="| grep -v 'Failed to submit job to session cluster'" #https://issues.apache.org/jira/browse/FLINK-30148
-  event="| grep -v 'Error during event processing'" #https://issues.apache.org/jira/browse/FLINK-30149
+#  job="| grep -v 'Failed to submit job to session cluster'" #https://issues.apache.org/jira/browse/FLINK-30148
+#  event="| grep -v 'Error during event processing'" #https://issues.apache.org/jira/browse/FLINK-30149
   audit="| grep -v 'AuditUtils'" #https://issues.apache.org/jira/browse/FLINK-30151
   status="| grep -v 'Error while patching status'" #https://issues.apache.org/jira/browse/FLINK-30283
 
