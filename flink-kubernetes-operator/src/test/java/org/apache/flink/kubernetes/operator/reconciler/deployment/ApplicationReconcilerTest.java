@@ -44,6 +44,7 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -210,14 +211,14 @@ public class ApplicationReconcilerTest {
                     .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
             reconciler.reconcile(deployment, context);
             fail();
-        } catch (DeploymentFailedException expected) {
+        } catch (RecoveryFailureException expected) {
         }
 
         try {
             deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
             reconciler.reconcile(deployment, context);
             fail();
-        } catch (DeploymentFailedException expected) {
+        } catch (RecoveryFailureException expected) {
         }
 
         flinkService.clear();
