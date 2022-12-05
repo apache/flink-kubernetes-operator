@@ -42,7 +42,7 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.exception.RecoverableDeploymentFailureException;
+import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -506,7 +506,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                             .equals(
                                     NonPersistentMetadataCheckpointStorageLocation
                                             .EXTERNAL_POINTER)) {
-                throw new RecoverableDeploymentFailureException(
+                throw new RecoveryFailureException(
                         "Latest checkpoint not externally addressable, manual recovery required.",
                         "CheckpointNotFound");
             }
@@ -841,7 +841,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     private void validateHaMetadataExists(Configuration conf) {
         if (!isHaMetadataAvailable(conf)) {
-            throw new RecoverableDeploymentFailureException(
+            throw new RecoveryFailureException(
                     "HA metadata not available to restore from last state. "
                             + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
                             + "Manual restore required.",

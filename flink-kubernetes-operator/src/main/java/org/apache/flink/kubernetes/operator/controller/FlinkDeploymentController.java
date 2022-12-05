@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
-import org.apache.flink.kubernetes.operator.exception.RecoverableDeploymentFailureException;
+import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
@@ -122,10 +122,10 @@ public class FlinkDeploymentController
             }
             statusRecorder.patchAndCacheStatus(flinkApp);
             reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context);
-        } catch (RecoverableDeploymentFailureException rdfe) {
-            handleDeploymentFailed(flinkApp, rdfe, false);
+        } catch (RecoveryFailureException rfe) {
+            handleRecoveryFailed(flinkApp, rfe);
         } catch (DeploymentFailedException dfe) {
-            handleDeploymentFailed(flinkApp, dfe, true);
+            handleDeploymentFailed(flinkApp, dfe);
         } catch (Exception e) {
             eventRecorder.triggerEvent(
                     flinkApp,
@@ -142,13 +142,10 @@ public class FlinkDeploymentController
                 configManager.getOperatorConfiguration(), flinkApp, previousDeployment, true);
     }
 
-    private void handleDeploymentFailed(
-            FlinkDeployment flinkApp, DeploymentFailedException dfe, boolean updateJobStatus) {
+    private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
         LOG.error("Flink Deployment failed", dfe);
-        if (updateJobStatus) {
-            flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-            flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
-        }
+        flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
+        flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
         ReconciliationUtils.updateForReconciliationError(
                 flinkApp, dfe, configManager.getOperatorConfiguration());
         eventRecorder.triggerEvent(
@@ -156,6 +153,18 @@ public class FlinkDeploymentController
                 EventRecorder.Type.Warning,
                 dfe.getReason(),
                 dfe.getMessage(),
+                EventRecorder.Component.JobManagerDeployment);
+    }
+
+    private void handleRecoveryFailed(FlinkDeployment flinkApp, RecoveryFailureException rfe) {
+        LOG.error("Flink recovery failed", rfe);
+        ReconciliationUtils.updateForReconciliationError(
+                flinkApp, rfe, configManager.getOperatorConfiguration());
+        eventRecorder.triggerEvent(
+                flinkApp,
+                EventRecorder.Type.Warning,
+                rfe.getReason(),
+                rfe.getMessage(),
                 EventRecorder.Component.JobManagerDeployment);
     }
 
