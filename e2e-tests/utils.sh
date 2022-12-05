@@ -132,6 +132,10 @@ function retry_times() {
 
 function check_operator_log_for_errors {
   echo "Checking for operator log errors..."
+  #https://issues.apache.org/jira/browse/FLINK-30310
+  echo "Error checking is temporarily turned off."
+  return 0
+
   operator_pod_namespace=$(get_operator_pod_namespace)
   operator_pod_name=$(get_operator_pod_name)
   echo "Operator namespace: ${operator_pod_namespace} pod: ${operator_pod_name}"
