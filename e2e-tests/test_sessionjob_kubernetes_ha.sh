@@ -48,7 +48,7 @@ wait_for_logs $jm_pod_name "Completed checkpoint [0-9]+ for job" ${TIMEOUT} || e
 wait_for_status $SESSION_CLUSTER_IDENTIFIER '.status.jobManagerDeploymentStatus' READY ${TIMEOUT} || exit 1
 wait_for_status $SESSION_JOB_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 
-check_operator_log_for_errors '|grep -v "REST service in session cluster is bad now" \'|| exit 1
+check_operator_log_for_errors '|grep -v "REST service in session cluster is bad now"' || exit 1
 
 echo "Successfully run the Flink Session Job HA test"
 
