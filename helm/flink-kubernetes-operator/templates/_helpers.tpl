@@ -68,6 +68,17 @@ app.kubernetes.io/name: {{ include "flink-operator.name" . }}
 {{- end }}
 
 {{/*
+Create the path of the operator image to use
+*/}}
+{{- define "flink-operator.imagePath" -}}
+{{- if .Values.image.digest }}
+{{- .Values.image.repository }}@{{ .Values.image.digest }}
+{{- else }}
+{{- .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}
+{{- end }}
+{{- end }}
+
+{{/*
 Create the name of the operator role to use
 */}}
 {{- define "flink-operator.roleName" -}}

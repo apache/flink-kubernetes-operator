@@ -63,6 +63,7 @@ The configurable parameters of the Helm chart and which default values as detail
 | image.repository | The image repository of flink-kubernetes-operator. | ghcr.io/apache/flink-kubernetes-operator |
 | image.pullPolicy | The image pull policy of flink-kubernetes-operator. | IfNotPresent |
 | image.tag | The image tag of flink-kubernetes-operator. | latest |
+| image.digest | The image tag of flink-kubernetes-operator. If set then it takes precedence and the image tag will be ignored. | |
 | replicas | Operator replica count. Must be 1 unless leader election is configured. | 1 |
 | strategy.type | Operator pod upgrade strategy. Must be Recreate unless leader election is configured. | Recreate |
 | rbac.create | Whether to enable RBAC to create for said namespaces. | true |
