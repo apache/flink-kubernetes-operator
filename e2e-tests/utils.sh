@@ -140,7 +140,8 @@ function check_operator_log_for_errors {
   operator_pod_namespace=$(get_operator_pod_namespace)
   operator_pod_name=$(get_operator_pod_name)
   echo "Operator namespace: ${operator_pod_namespace} pod: ${operator_pod_name}"
-  logs="kubectl logs -n ${operator_pod_namespace} ${operator_pod_name}
+
+  local cmd="kubectl logs -n ${operator_pod_namespace} ${operator_pod_name}
     | grep -e '\[\s*ERROR\s*\]'
     | grep -v 'Failed to submit a listener notification task' `#https://issues.apache.org/jira/browse/FLINK-30147`
     | grep -v 'Failed to submit job to session cluster' `#https://issues.apache.org/jira/browse/FLINK-30148`
@@ -148,10 +149,9 @@ function check_operator_log_for_errors {
     | grep -v 'Error while patching status' `#https://issues.apache.org/jira/browse/FLINK-30283`
     ${ignore}"
 
-  echo "Executing: ${logs}"
-  errors=$(eval ${logs} || true)
+  echo "Filter command: ${cmd}"
+  errors=$(eval ${cmd} || true)
 
->>>>>>> 1d8ec88a ([FLINK-30150] Ignore "REST service in session cluster is bad now" where we kill the JobManager manually)
   if [ -z "${errors}" ]; then
     echo "No errors in log files."
     return 0
