@@ -35,7 +35,7 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -208,7 +208,7 @@ public class ApplicationReconcilerUpgradeModeTest {
         deployment.getStatus().getJobStatus().setState("RECONCILING");
 
         Assertions.assertThrows(
-                DeploymentFailedException.class,
+                RecoveryFailureException.class,
                 () -> {
                     deployment
                             .getStatus()
@@ -218,7 +218,7 @@ public class ApplicationReconcilerUpgradeModeTest {
                 });
 
         Assertions.assertThrows(
-                DeploymentFailedException.class,
+                RecoveryFailureException.class,
                 () -> {
                     deployment
                             .getStatus()

@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /** @link Missing deployment recovery tests */
@@ -118,9 +119,12 @@ public class DeploymentRecoveryTest {
         if (upgradeMode == UpgradeMode.SAVEPOINT) {
             // If deployment goes missing during an upgrade we should throw an error as savepoint
             // information cannot be recovered with complete certainty
-            assertEquals(
-                    JobManagerDeploymentStatus.ERROR,
-                    appCluster.getStatus().getJobManagerDeploymentStatus());
+            assertTrue(
+                    appCluster
+                            .getStatus()
+                            .getError()
+                            .contains(
+                                    "JobManager deployment is missing and HA data is not available to make stateful upgrades."));
         } else {
             flinkService.setPortReady(true);
             testController.reconcile(appCluster, context);

@@ -36,7 +36,7 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.messages.Acknowledge;
@@ -286,7 +286,7 @@ public class NativeFlinkServiceTest {
         try {
             flinkService.getLastCheckpoint(new JobID(), new Configuration());
             fail();
-        } catch (DeploymentFailedException dpe) {
+        } catch (RecoveryFailureException dpe) {
 
         }
     }
