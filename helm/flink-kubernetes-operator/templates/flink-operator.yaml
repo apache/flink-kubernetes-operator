@@ -100,14 +100,7 @@ spec:
             {{- toYaml .Values.operatorSecurityContext | nindent 12 }}
           volumeMounts:
             - name: flink-operator-config-volume
-              mountPath: /opt/flink/conf/flink-conf.yaml
-              subPath: flink-conf.yaml
-            - name: flink-operator-config-volume
-              mountPath: /opt/flink/conf/log4j-operator.properties
-              subPath: log4j-operator.properties
-            - name: flink-operator-config-volume
-              mountPath: /opt/flink/conf/log4j-console.properties
-              subPath: log4j-console.properties
+              mountPath: /opt/flink/conf
             {{- if .Values.operatorVolumeMounts.create }}
                 {{- toYaml .Values.operatorVolumeMounts.data | nindent 12 }}
             {{- end }}
@@ -167,14 +160,7 @@ spec:
             mountPath: "/certs"
             readOnly: true
           - name: flink-operator-config-volume
-            mountPath: /opt/flink/conf/flink-conf.yaml
-            subPath: flink-conf.yaml
-          - name: flink-operator-config-volume
-            mountPath: /opt/flink/conf/log4j-operator.properties
-            subPath: log4j-operator.properties
-          - name: flink-operator-config-volume
-            mountPath: /opt/flink/conf/log4j-console.properties
-            subPath: log4j-console.properties
+            mountPath: /opt/flink/conf
         {{- end }}
       {{- if index (.Values.operatorPod) "dnsPolicy" }}
       dnsPolicy: {{ .Values.operatorPod.dnsPolicy | quote }}
