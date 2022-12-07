@@ -77,7 +77,7 @@ public abstract class JobStatusObserver<
             clusterJobStatuses = new ArrayList<>(flinkService.listJobs(ctx.getDeployedConfig()));
         } catch (Exception e) {
             // Error while accessing the rest api, will try again later...
-            LOG.error("Exception while listing jobs", e);
+            LOG.warn("Exception while listing jobs", e);
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
             if (e instanceof TimeoutException) {
                 onTimeout(resource, resourceContext, ctx);
