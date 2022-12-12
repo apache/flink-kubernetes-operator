@@ -42,22 +42,24 @@ So that the `kubectl` and `helm` commands are available on your local system.
 For docker we recommend that you have [Docker Desktop](https://www.docker.com/products/docker-desktop) installed
 and configured with at least 8GB of RAM.
 For kubernetes [minikube](https://minikube.sigs.k8s.io/docs/start/) is our choice, at the time of writing this we are
-using version v1.21.5. You can start a cluster with the following command:
+using version v1.25.3 (end-to-end tests are using the same version). You can start a cluster with the following command:
 
 ```bash
-minikube start --kubernetes-version=v1.21.5
-😄 minikube v1.25.1 on Darwin 12.1
-🆕 Kubernetes 1.23.1 is now available. If you would like to upgrade, specify: --kubernetes-version=v1.23.1
-✨ Using the docker driver based on existing profile
-👍 Starting control plane node minikube in cluster minikube
-🚜 Pulling base image ...
-🏃 Updating the running docker "minikube" container ...
-🐳 Preparing Kubernetes v1.21.5 on Docker 20.10.12 ...
-▪ kubelet.housekeeping-interval=5m
-🔎 Verifying Kubernetes components...
-▪ Using image gcr.io/k8s-minikube/storage-provisioner:v5 (http://gcr.io/k8s-minikube/storage-provisioner:v5)
-🌟 Enabled addons: storage-provisioner, default-storageclass
-🏄 Done! kubectl is now configured to use "minikube" cluster and "default" namespace by default
+minikube start --kubernetes-version=v1.25.3
+😄  minikube v1.28.0 on Darwin 13.0.1
+✨  Automatically selected the docker driver. Other choices: hyperkit, ssh
+📌  Using Docker Desktop driver with root privileges
+👍  Starting control plane node minikube in cluster minikube
+🚜  Pulling base image ...
+🔥  Creating docker container (CPUs=2, Memory=4000MB) ...
+🐳  Preparing Kubernetes v1.25.3 on Docker 20.10.20 ...
+    ▪ Generating certificates and keys ...
+    ▪ Booting up control plane ...
+    ▪ Configuring RBAC rules ...
+🔎  Verifying Kubernetes components...
+    ▪ Using image gcr.io/k8s-minikube/storage-provisioner:v5
+🌟  Enabled addons: default-storageclass, storage-provisioner
+🏄  Done! kubectl is now configured to use "minikube" cluster and "default" namespace by default
 ```
 
 We also recommend [k9s](https://k9scli.io/) as GUI for kubernetes, but it is optional for this quickstart guide.
