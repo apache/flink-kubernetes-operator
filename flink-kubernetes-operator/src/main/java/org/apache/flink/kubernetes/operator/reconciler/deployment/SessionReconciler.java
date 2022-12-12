@@ -96,6 +96,19 @@ public class SessionReconciler
             Configuration deployConfig,
             DiffType type)
             throws Exception {
+        if (type == DiffType.SCALE) {
+            boolean scaled =
+                    getFlinkService(deployment, ctx)
+                            .scale(
+                                    deployment.getMetadata(),
+                                    deployment.getSpec().getJob(),
+                                    deployConfig);
+            if (scaled) {
+                LOG.info("Session cluster scaling succeeded");
+                ReconciliationUtils.updateStatusForDeployedSpec(deployment, deployConfig);
+                return;
+            }
+        }
         deleteSessionCluster(deployment, observeConfig);
 
         // We record the target spec into an upgrading state before deploying

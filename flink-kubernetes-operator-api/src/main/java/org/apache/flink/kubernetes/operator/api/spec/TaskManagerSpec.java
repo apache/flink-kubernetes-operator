@@ -18,6 +18,9 @@
 package org.apache.flink.kubernetes.operator.api.spec;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.api.diff.DiffType;
+import org.apache.flink.kubernetes.operator.api.diff.Diffable;
+import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
 
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.model.annotation.SpecReplicas;
@@ -32,12 +35,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class TaskManagerSpec {
+public class TaskManagerSpec implements Diffable<TaskManagerSpec> {
     /** Resource specification for the TaskManager pods. */
     private Resource resource;
 
     /** Number of TaskManager replicas. If defined, takes precedence over parallelism */
-    @SpecReplicas private Integer replicas;
+    @SpecDiff(DiffType.SCALE)
+    @SpecReplicas
+    private Integer replicas;
 
     /** TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
     private Pod podTemplate;

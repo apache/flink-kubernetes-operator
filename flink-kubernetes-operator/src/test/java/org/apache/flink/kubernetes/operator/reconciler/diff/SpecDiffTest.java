@@ -124,6 +124,19 @@ public class SpecDiffTest {
         diff = new ReflectiveDiffBuilder<>(left, right).build();
         assertEquals(DiffType.UPGRADE, diff.getType());
         assertEquals(22, diff.getNumDiffs());
+        left.setMode(KubernetesDeploymentMode.STANDALONE);
+        left.getTaskManager().setReplicas(2);
+        left.getTaskManager().getResource().setMemory("1024");
+        right = SpecUtils.clone(left);
+        right.getTaskManager().setReplicas(3);
+        diff = new ReflectiveDiffBuilder<>(left, right).build();
+        assertEquals(DiffType.SCALE, diff.getType());
+        assertEquals(1, diff.getNumDiffs());
+        right.getTaskManager().getResource().setMemory("2048");
+        right.getTaskManager().setReplicas(4);
+        diff = new ReflectiveDiffBuilder<>(left, right).build();
+        assertEquals(DiffType.UPGRADE, diff.getType());
+        assertEquals(2, diff.getNumDiffs());
     }
 
     @Test
