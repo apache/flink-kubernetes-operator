@@ -158,9 +158,8 @@ public abstract class AbstractFlinkResourceReconciler<
                         EventRecorder.Component.JobManagerDeployment,
                         specChangeMessage);
             }
-            if (specDiff.getType() == DiffType.SCALE) {
-                scaleCluster(cr, ctx, observeConfig, deployConfig, DiffType.SCALE);
-            } else {
+            boolean scale = scaleCluster(cr, ctx, observeConfig, deployConfig, specDiff.getType());
+            if (!scale) {
                 reconcileSpecChange(cr, ctx, observeConfig, deployConfig, specDiff.getType());
             }
         } else if (shouldRollBack(cr, observeConfig, flinkService)) {
@@ -331,22 +330,25 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param diffType Spec change type.
      * @throws Exception
      */
-    private void scaleCluster(
+    private boolean scaleCluster(
             CR cr,
             Context<?> ctx,
             Configuration observeConfig,
             Configuration deployConfig,
             DiffType diffType)
             throws Exception {
+        if (diffType != DiffType.SCALE) {
+            return false;
+        }
         boolean scaled =
                 getFlinkService(cr, ctx)
                         .scale(cr.getMetadata(), cr.getSpec().getJob(), deployConfig);
         if (scaled) {
             LOG.info("Scaling succeeded");
             ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig);
-            return;
+            return true;
         }
-        reconcileSpecChange(cr, ctx, observeConfig, deployConfig, diffType);
+        return false;
     }
 
     /**
