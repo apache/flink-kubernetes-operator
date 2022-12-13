@@ -177,11 +177,123 @@ public class StandaloneFlinkServiceTest {
                 .getSpec()
                 .getFlinkConfiguration()
                 .remove(JobManagerOptions.SCHEDULER_MODE.key());
-        assertFalse(
+        assertTrue(
                 flinkStandaloneService.scale(
                         flinkDeployment.getMetadata(),
                         flinkDeployment.getSpec().getJob(),
                         buildConfig(flinkDeployment, configuration)));
+    }
+
+    @Test
+    public void testTMReplicaScale() throws Exception {
+        var flinkDeployment = TestUtils.buildApplicationCluster();
+        var clusterId = flinkDeployment.getMetadata().getName();
+        var namespace = flinkDeployment.getMetadata().getNamespace();
+        flinkDeployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
+        // Add replicas
+        flinkDeployment.getSpec().getTaskManager().setReplicas(3);
+        createDeployments(flinkDeployment);
+        assertTrue(
+                flinkStandaloneService.scale(
+                        flinkDeployment.getMetadata(),
+                        flinkDeployment.getSpec().getJob(),
+                        buildConfig(flinkDeployment, configuration)));
+
+        assertEquals(
+                3,
+                kubernetesClient
+                        .apps()
+                        .deployments()
+                        .inNamespace(namespace)
+                        .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
+                        .get()
+                        .getSpec()
+                        .getReplicas());
+
+        // Scale the replica count of the task managers
+        flinkDeployment.getSpec().getTaskManager().setReplicas(10);
+        createDeployments(flinkDeployment);
+        assertTrue(
+                flinkStandaloneService.scale(
+                        flinkDeployment.getMetadata(),
+                        flinkDeployment.getSpec().getJob(),
+                        buildConfig(flinkDeployment, configuration)));
+
+        assertEquals(
+                10,
+                kubernetesClient
+                        .apps()
+                        .deployments()
+                        .inNamespace(namespace)
+                        .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
+                        .get()
+                        .getSpec()
+                        .getReplicas());
+
+        // Add parallelism and replica change, verify if replica change is honoured
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        JobManagerOptions.SCHEDULER_MODE.key(),
+                        SchedulerExecutionMode.REACTIVE.name());
+        flinkDeployment.getSpec().getJob().setParallelism(100);
+        flinkDeployment.getSpec().getTaskManager().setReplicas(2);
+        assertTrue(
+                flinkStandaloneService.scale(
+                        flinkDeployment.getMetadata(),
+                        flinkDeployment.getSpec().getJob(),
+                        buildConfig(flinkDeployment, configuration)));
+        assertEquals(
+                2,
+                kubernetesClient
+                        .apps()
+                        .deployments()
+                        .inNamespace(namespace)
+                        .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
+                        .get()
+                        .getSpec()
+                        .getReplicas());
+
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .remove(JobManagerOptions.SCHEDULER_MODE.key());
+        flinkDeployment.getSpec().getJob().setParallelism(100);
+        assertTrue(
+                flinkStandaloneService.scale(
+                        flinkDeployment.getMetadata(),
+                        flinkDeployment.getSpec().getJob(),
+                        buildConfig(flinkDeployment, configuration)));
+        assertEquals(
+                2,
+                kubernetesClient
+                        .apps()
+                        .deployments()
+                        .inNamespace(namespace)
+                        .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
+                        .get()
+                        .getSpec()
+                        .getReplicas());
+
+        // Verify that when we have TM replicas set, irrespective of the parallelism change,
+        // still it will not be honoured.
+        flinkDeployment.getSpec().getJob().setParallelism(50);
+        assertTrue(
+                flinkStandaloneService.scale(
+                        flinkDeployment.getMetadata(),
+                        flinkDeployment.getSpec().getJob(),
+                        buildConfig(flinkDeployment, configuration)));
+        assertEquals(
+                2,
+                kubernetesClient
+                        .apps()
+                        .deployments()
+                        .inNamespace(namespace)
+                        .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
+                        .get()
+                        .getSpec()
+                        .getReplicas());
     }
 
     @Test

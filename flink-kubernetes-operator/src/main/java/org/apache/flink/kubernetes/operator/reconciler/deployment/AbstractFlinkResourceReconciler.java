@@ -158,7 +158,11 @@ public abstract class AbstractFlinkResourceReconciler<
                         EventRecorder.Component.JobManagerDeployment,
                         specChangeMessage);
             }
-            reconcileSpecChange(cr, ctx, observeConfig, deployConfig, specDiff.getType());
+            if (specDiff.getType() == DiffType.SCALE) {
+                scaleCluster(cr, ctx, observeConfig, deployConfig, DiffType.SCALE);
+            } else {
+                reconcileSpecChange(cr, ctx, observeConfig, deployConfig, specDiff.getType());
+            }
         } else if (shouldRollBack(cr, observeConfig, flinkService)) {
             // Rollbacks are executed in two steps, we initiate it first then return
             if (initiateRollBack(status)) {
@@ -314,6 +318,35 @@ public abstract class AbstractFlinkResourceReconciler<
             return true;
         }
         return false;
+    }
+
+    /**
+     * Scale the cluster whenever there is a scaling change, based on the task manager replica
+     * update or the parallelism in case of scheduler mode.
+     *
+     * @param cr Resource being reconciled.
+     * @param ctx Reconciliation context.
+     * @param observeConfig Observe configuration.
+     * @param deployConfig Configuration to be deployed.
+     * @param diffType Spec change type.
+     * @throws Exception
+     */
+    private void scaleCluster(
+            CR cr,
+            Context<?> ctx,
+            Configuration observeConfig,
+            Configuration deployConfig,
+            DiffType diffType)
+            throws Exception {
+        boolean scaled =
+                getFlinkService(cr, ctx)
+                        .scale(cr.getMetadata(), cr.getSpec().getJob(), deployConfig);
+        if (scaled) {
+            LOG.info("Scaling succeeded");
+            ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig);
+            return;
+        }
+        reconcileSpecChange(cr, ctx, observeConfig, deployConfig, diffType);
     }
 
     /**
