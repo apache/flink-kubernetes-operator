@@ -189,7 +189,8 @@ public abstract class AbstractFlinkDeploymentObserver
                 if (csw != null
                         && Set.of(
                                         DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF,
-                                        DeploymentFailedException.REASON_IMAGE_PULL_BACKOFF)
+                                        DeploymentFailedException.REASON_IMAGE_PULL_BACKOFF,
+                                        DeploymentFailedException.REASON_ERR_IMAGE_PULL)
                                 .contains(csw.getReason())) {
                     throw new DeploymentFailedException(csw);
                 }

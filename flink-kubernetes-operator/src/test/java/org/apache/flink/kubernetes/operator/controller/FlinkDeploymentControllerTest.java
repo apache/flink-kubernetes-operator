@@ -297,88 +297,10 @@ public class FlinkDeploymentControllerTest {
     @ValueSource(
             strings = {
                 DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF,
-                DeploymentFailedException.REASON_IMAGE_PULL_BACKOFF
+                DeploymentFailedException.REASON_IMAGE_PULL_BACKOFF,
+                DeploymentFailedException.REASON_ERR_IMAGE_PULL
             })
-    public void verifyInProgressDeploymentWithBackoff(String reason) throws Exception {
-        String crashLoopMessage = "container fails";
-
-        var submittedEventValidatingResponseProvider =
-                new TestUtils.ValidatingResponseProvider<>(
-                        new EventBuilder().withNewMetadata().endMetadata().build(),
-                        r ->
-                                assertTrue(
-                                        r.getBody()
-                                                .readUtf8()
-                                                .contains(
-                                                        AbstractFlinkResourceReconciler
-                                                                .MSG_SUBMIT)));
-        mockServer
-                .expect()
-                .post()
-                .withPath("/api/v1/namespaces/flink-operator-test/events")
-                .andReply(submittedEventValidatingResponseProvider)
-                .once();
-
-        var validatingResponseProvider =
-                new TestUtils.ValidatingResponseProvider<>(
-                        new EventBuilder().withNewMetadata().endMetadata().build(),
-                        r -> {
-                            String recordedRequestBody = r.getBody().readUtf8();
-                            assertTrue(recordedRequestBody.contains(reason));
-                            assertTrue(recordedRequestBody.contains(crashLoopMessage));
-                        });
-        mockServer
-                .expect()
-                .post()
-                .withPath("/api/v1/namespaces/flink-operator-test/events")
-                .andReply(validatingResponseProvider)
-                .once();
-
-        flinkService.setJmPodList(TestUtils.createFailedPodList(crashLoopMessage, reason));
-
-        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
-        UpdateControl<FlinkDeployment> updateControl;
-
-        testController.reconcile(appCluster, context);
-        updateControl =
-                testController.reconcile(
-                        appCluster, TestUtils.createContextWithInProgressDeployment());
-        submittedEventValidatingResponseProvider.assertValidated();
-        assertFalse(updateControl.isUpdateStatus());
-        assertEquals(
-                Optional.of(
-                        configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
-                updateControl.getScheduleDelay());
-
-        assertEquals(
-                JobManagerDeploymentStatus.ERROR,
-                appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertEquals(
-                org.apache.flink.api.common.JobStatus.RECONCILING.name(),
-                appCluster.getStatus().getJobStatus().getState());
-
-        // Validate status status
-        assertNotNull(appCluster.getStatus().getError());
-
-        // next cycle should not create another event
-        updateControl =
-                testController.reconcile(
-                        appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
-        assertEquals(
-                JobManagerDeploymentStatus.ERROR,
-                appCluster.getStatus().getJobManagerDeploymentStatus());
-        assertFalse(updateControl.isUpdateStatus());
-        assertEquals(
-                ReconciliationUtils.rescheduleAfter(
-                                JobManagerDeploymentStatus.READY,
-                                appCluster,
-                                configManager.getOperatorConfiguration())
-                        .toMillis(),
-                updateControl.getScheduleDelay().get());
-        validatingResponseProvider.assertValidated();
-    }
-
-    public void verifyInProgressDeployment(String reason) throws Exception {
+    public void verifyInProgressDeploymentWithError(String reason) throws Exception {
         String crashLoopMessage = "container fails";
 
         var submittedEventValidatingResponseProvider =
