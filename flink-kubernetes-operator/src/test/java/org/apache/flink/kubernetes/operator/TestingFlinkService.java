@@ -25,6 +25,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
+import org.apache.flink.configuration.SchedulerExecutionMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -492,11 +493,8 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     public boolean scale(ObjectMeta meta, JobSpec jobSpec, Configuration conf) {
-        if (conf.get(JobManagerOptions.SCHEDULER_MODE) == null
-                && conf.get(StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE)
-                        .equals(
-                                StandaloneKubernetesConfigOptionsInternal.ClusterMode
-                                        .APPLICATION)) {
+        if (conf.get(JobManagerOptions.SCHEDULER_MODE) != SchedulerExecutionMode.REACTIVE
+                && jobSpec != null) {
             return false;
         }
         desiredReplicas =

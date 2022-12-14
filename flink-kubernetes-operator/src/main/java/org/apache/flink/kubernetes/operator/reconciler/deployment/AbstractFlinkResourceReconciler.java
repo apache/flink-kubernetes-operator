@@ -328,6 +328,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param observeConfig Observe configuration.
      * @param deployConfig Configuration to be deployed.
      * @param diffType Spec change type.
+     * @return True if the scaling is successful
      * @throws Exception
      */
     private boolean scaleCluster(

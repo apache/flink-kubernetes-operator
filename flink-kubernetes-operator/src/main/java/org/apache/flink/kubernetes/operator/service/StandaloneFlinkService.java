@@ -23,6 +23,7 @@ import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.SchedulerExecutionMode;
 import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -171,11 +172,8 @@ public class StandaloneFlinkService extends AbstractFlinkService {
 
     @Override
     public boolean scale(ObjectMeta meta, JobSpec jobSpec, Configuration conf) {
-        if (conf.get(JobManagerOptions.SCHEDULER_MODE) == null
-                && conf.get(StandaloneKubernetesConfigOptionsInternal.CLUSTER_MODE)
-                        .equals(
-                                StandaloneKubernetesConfigOptionsInternal.ClusterMode
-                                        .APPLICATION)) {
+        if (conf.get(JobManagerOptions.SCHEDULER_MODE) != SchedulerExecutionMode.REACTIVE
+                && jobSpec != null) {
             LOG.info("Reactive scaling is not enabled");
             return false;
         }
