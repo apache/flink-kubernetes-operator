@@ -93,20 +93,6 @@ public abstract class AbstractJobReconciler<
         SPEC lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
         SPEC currentDeploySpec = resource.getSpec();
 
-        if (diffType == DiffType.SCALE) {
-            boolean scaled =
-                    getFlinkService(resource, ctx)
-                            .scale(
-                                    resource.getMetadata(),
-                                    resource.getSpec().getJob(),
-                                    deployConfig);
-            if (scaled) {
-                LOG.info("Reactive scaling succeeded");
-                ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig);
-                return;
-            }
-        }
-
         JobState currentJobState = lastReconciledSpec.getJob().getState();
         JobState desiredJobState = currentDeploySpec.getJob().getState();
         if (currentJobState == JobState.RUNNING) {
