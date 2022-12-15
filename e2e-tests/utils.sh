@@ -131,6 +131,7 @@ function retry_times() {
 }
 
 function check_operator_log_for_errors {
+  local ignore=$1
   echo "Checking for operator log errors..."
   #https://issues.apache.org/jira/browse/FLINK-30310
   echo "Error checking is temporarily turned off."
@@ -139,13 +140,18 @@ function check_operator_log_for_errors {
   operator_pod_namespace=$(get_operator_pod_namespace)
   operator_pod_name=$(get_operator_pod_name)
   echo "Operator namespace: ${operator_pod_namespace} pod: ${operator_pod_name}"
-  errors=$(kubectl logs -n "${operator_pod_namespace}" "${operator_pod_name}" \
-      | grep -v "Failed to submit a listener notification task" `#https://issues.apache.org/jira/browse/FLINK-30147` \
-      | grep -v "Failed to submit job to session cluster" `#https://issues.apache.org/jira/browse/FLINK-30148` \
-      | grep -v "Error during event processing" `#https://issues.apache.org/jira/browse/FLINK-30149` \
-      | grep -v "REST service in session cluster is bad now" `#https://issues.apache.org/jira/browse/FLINK-30150` \
-      | grep -v "Error while patching status" `#https://issues.apache.org/jira/browse/FLINK-30283` \
-      | grep -e "\[\s*ERROR\s*\]" || true)
+
+  local cmd="kubectl logs -n ${operator_pod_namespace} ${operator_pod_name}
+    | grep -e '\[\s*ERROR\s*\]'
+    | grep -v 'Failed to submit a listener notification task' `#https://issues.apache.org/jira/browse/FLINK-30147`
+    | grep -v 'Failed to submit job to session cluster' `#https://issues.apache.org/jira/browse/FLINK-30148`
+    | grep -v 'Error during event processing' `#https://issues.apache.org/jira/browse/FLINK-30149`
+    | grep -v 'Error while patching status' `#https://issues.apache.org/jira/browse/FLINK-30283`
+    ${ignore}"
+
+  echo "Filter command: ${cmd}"
+  errors=$(eval ${cmd} || true)
+
   if [ -z "${errors}" ]; then
     echo "No errors in log files."
     return 0
