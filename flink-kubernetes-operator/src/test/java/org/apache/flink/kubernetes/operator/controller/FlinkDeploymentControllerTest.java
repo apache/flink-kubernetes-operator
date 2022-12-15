@@ -683,7 +683,7 @@ public class FlinkDeploymentControllerTest {
     }
 
     @Test
-    public void verifyReconcileWithAChangedOperatorMode() throws Exception {
+    public void verifyReconcileWithAChangedOperatorModeToSession() throws Exception {
 
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         UpdateControl<FlinkDeployment> updateControl;
@@ -712,6 +712,12 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertTrue(
+                appCluster
+                        .getStatus()
+                        .getError()
+                        .contains("Cannot switch from job to session cluster"));
+
         assertNotNull(ReconciliationUtils.getDeployedSpec(appCluster).getJob());
         // Verify jobStatus is running
         jobStatus = appCluster.getStatus().getJobStatus();
@@ -719,6 +725,43 @@ public class FlinkDeploymentControllerTest {
         assertEquals(expectedJobStatus.getJobId().toHexString(), jobStatus.getJobId());
         assertEquals(expectedJobStatus.getJobName(), jobStatus.getJobName());
         assertEquals(expectedJobStatus.getJobState().toString(), jobStatus.getState());
+    }
+
+    @Test
+    public void verifyReconcileWithAChangedOperatorModeToApplication() throws Exception {
+
+        FlinkDeployment appCluster = TestUtils.buildSessionCluster();
+        UpdateControl<FlinkDeployment> updateControl;
+
+        updateControl = testController.reconcile(appCluster, context);
+        assertFalse(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        updateControl = testController.reconcile(appCluster, context);
+        JobStatus jobStatus = appCluster.getStatus().getJobStatus();
+        assertFalse(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        // jobStatus has not been set at this time
+        assertNull(jobStatus.getState());
+
+        // Switches operator mode to APPLICATION
+        appCluster.getSpec().setJob(TestUtils.buildSessionJob().getSpec().getJob());
+        // Validation fails and JobObserver should still be used
+        updateControl = testController.reconcile(appCluster, context);
+        assertFalse(updateControl.isUpdateStatus());
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertTrue(
+                appCluster
+                        .getStatus()
+                        .getError()
+                        .contains("Cannot switch from session to job cluster"));
+        assertNull(ReconciliationUtils.getDeployedSpec(appCluster).getJob());
     }
 
     private void testUpgradeNotReadyCluster(FlinkDeployment appCluster) throws Exception {
