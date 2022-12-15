@@ -95,6 +95,12 @@ These options can be configured on both an operator and a per-resource level. Wh
 
 {{< generated/dynamic_section >}}
 
+### Autoscaler Configuration
+
+Like other resource options these can be configured on both an operator and a per-resource level. When set under `spec.flinkConfiguration` for the Flink resources it will override the default value provided in the operator default configuration (`flink-conf.yaml`).
+
+{{< generated/auto_scaler_configuration >}}
+
 ### System Metrics Configuration
 
 Operator system metrics configuration. Cannot be overridden on a per-resource basis.
