@@ -23,6 +23,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
@@ -41,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -77,7 +79,7 @@ public class FlinkUtilsTest {
         final Map<String, String> data = new HashMap<>();
         data.put(Constants.JOB_GRAPH_STORE_KEY_PREFIX + JobID.generate(), "job-graph-data");
         data.put("leader", "localhost");
-        createHAConfigMapWithData(name, clusterId, data);
+        createHAConfigMapWithData(name, kubernetesClient.getNamespace(), clusterId, data);
         assertNotNull(kubernetesClient.configMaps().withName(name).get());
         assertEquals(2, kubernetesClient.configMaps().withName(name).get().getData().size());
 
@@ -90,6 +92,64 @@ public class FlinkUtilsTest {
     }
 
     @Test
+    public void haMetaDataCheckTest() {
+        var cr = TestUtils.buildApplicationCluster();
+        var confManager = new FlinkConfigManager(new Configuration());
+        assertFalse(
+                FlinkUtils.isHaMetadataAvailable(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+
+        // Flink 1.15+
+        createHAConfigMapWithData(
+                cr.getMetadata().getName() + "-cluster-config-map",
+                cr.getMetadata().getNamespace(),
+                cr.getMetadata().getName(),
+                null);
+        assertFalse(
+                FlinkUtils.isHaMetadataAvailable(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+
+        createHAConfigMapWithData(
+                cr.getMetadata().getName() + "-000000000000-config-map",
+                cr.getMetadata().getNamespace(),
+                cr.getMetadata().getName(),
+                null);
+        assertTrue(
+                FlinkUtils.isHaMetadataAvailable(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+
+        // Flink 1.13-1.14
+        kubernetesClient.configMaps().inAnyNamespace().delete();
+        assertFalse(
+                FlinkUtils.isHaMetadataAvailable(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+
+        createHAConfigMapWithData(
+                cr.getMetadata().getName() + "-dispatcher-leader",
+                cr.getMetadata().getNamespace(),
+                cr.getMetadata().getName(),
+                null);
+        assertFalse(
+                FlinkUtils.isHaMetadataAvailable(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+
+        createHAConfigMapWithData(
+                cr.getMetadata().getName() + "-000000000000-jobmanager-leader",
+                cr.getMetadata().getNamespace(),
+                cr.getMetadata().getName(),
+                null);
+        assertTrue(
+                FlinkUtils.isHaMetadataAvailable(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+    }
+
+    @Test
     public void testDeleteJobGraphInKubernetesHAShouldNotUpdateWithEmptyConfigMap() {
         final String name = "empty-ha-configmap";
         final String clusterId = "cluster-id-2";
@@ -99,7 +159,7 @@ public class FlinkUtilsTest {
                 .withPath("/api/v1/namespaces/test/configmaps/" + name)
                 .andReturn(HttpURLConnection.HTTP_INTERNAL_ERROR, new ConfigMapBuilder().build())
                 .once();
-        createHAConfigMapWithData(name, clusterId, null);
+        createHAConfigMapWithData(name, kubernetesClient.getNamespace(), clusterId, null);
         assertTrue(kubernetesClient.configMaps().withName(name).get().getData().isEmpty());
         FlinkUtils.deleteJobGraphInKubernetesHA(
                 clusterId, kubernetesClient.getNamespace(), kubernetesClient);
@@ -122,11 +182,12 @@ public class FlinkUtilsTest {
     }
 
     private void createHAConfigMapWithData(
-            String configMapName, String clusterId, Map<String, String> data) {
+            String configMapName, String namespace, String clusterId, Map<String, String> data) {
         final ConfigMap kubernetesConfigMap =
                 new ConfigMapBuilder()
                         .withNewMetadata()
                         .withName(configMapName)
+                        .withNamespace(namespace)
                         .withLabels(
                                 KubernetesUtils.getConfigMapLabels(
                                         clusterId,
