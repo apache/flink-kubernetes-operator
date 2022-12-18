@@ -79,6 +79,9 @@ public class DefaultValidatorTest {
                 dep -> dep.getSpec().getJob().setState(JobState.SUSPENDED),
                 "Job must start in running state");
 
+        testError(dep -> dep.getSpec().setJobManager(null), "JobManager spec must be specified.");
+        testError(dep -> dep.getSpec().setTaskManager(null), "TaskManager spec must be specified.");
+
         testError(
                 dep -> dep.getSpec().getJob().setParallelism(0),
                 "Job parallelism must be larger than 0");

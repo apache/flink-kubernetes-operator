@@ -242,7 +242,7 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     private Optional<String> validateJmSpec(JobManagerSpec jmSpec, Map<String, String> confMap) {
         if (jmSpec == null) {
-            return Optional.empty();
+            return Optional.of("JobManager spec must be specified.");
         }
 
         return firstPresent(
@@ -263,7 +263,7 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     private Optional<String> validateTmSpec(TaskManagerSpec tmSpec) {
         if (tmSpec == null) {
-            return Optional.empty();
+            return Optional.of("TaskManager spec must be specified.");
         }
 
         if (tmSpec.getReplicas() != null && tmSpec.getReplicas() < 1) {
