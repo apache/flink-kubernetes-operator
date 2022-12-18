@@ -30,16 +30,22 @@ import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.Container;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
+import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.Test;
 
 import java.net.HttpURLConnection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -147,6 +153,43 @@ public class FlinkUtilsTest {
                 FlinkUtils.isHaMetadataAvailable(
                         confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
                         kubernetesClient));
+    }
+
+    @Test
+    public void testJmNeverStartedDetection() {
+        var jmDeployment = new Deployment();
+        jmDeployment.setMetadata(new ObjectMeta());
+        jmDeployment.getMetadata().setCreationTimestamp("create-ts");
+        jmDeployment.setStatus(new DeploymentStatus());
+        var deployStatus = jmDeployment.getStatus();
+        var jmNeverStartedCondition =
+                new DeploymentCondition("create-ts", null, null, null, "False", "Available");
+        var jmStartedButStopped =
+                new DeploymentCondition("other-ts", null, null, null, "False", "Available");
+        var jmAvailable =
+                new DeploymentCondition("other-ts", null, null, null, "True", "Available");
+
+        var context =
+                new TestUtils.TestingContext<Deployment>() {
+                    @Override
+                    public <R> Optional<R> getSecondaryResource(Class<R> aClass, String name) {
+                        return (Optional<R>) Optional.of(jmDeployment);
+                    }
+                };
+
+        deployStatus.setConditions(Collections.emptyList());
+        assertFalse(FlinkUtils.jmPodNeverStarted(context));
+
+        deployStatus.setConditions(List.of(jmNeverStartedCondition));
+        assertTrue(FlinkUtils.jmPodNeverStarted(context));
+
+        deployStatus.setConditions(List.of(jmStartedButStopped));
+        assertFalse(FlinkUtils.jmPodNeverStarted(context));
+
+        deployStatus.setConditions(List.of(jmAvailable));
+        assertFalse(FlinkUtils.jmPodNeverStarted(context));
+
+        assertFalse(FlinkUtils.jmPodNeverStarted(TestUtils.createEmptyContext()));
     }
 
     @Test

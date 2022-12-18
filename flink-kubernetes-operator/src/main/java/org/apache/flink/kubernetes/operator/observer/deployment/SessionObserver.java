@@ -51,7 +51,7 @@ public class SessionObserver extends AbstractFlinkDeploymentObserver {
                 rs.markReconciledSpecAsStable();
             }
         } catch (Exception e) {
-            logger.error("REST service in session cluster is bad now", e);
+            logger.error("REST service in session cluster timed out", e);
             if (e instanceof TimeoutException) {
                 // check for problems with the underlying deployment
                 observeJmDeployment(deployment, context, observerContext.getDeployedConfig());

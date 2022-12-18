@@ -100,9 +100,6 @@ public class UnhealthyDeploymentRestartTest {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
-        assertEquals(
-                appCluster.getSpec(),
-                appCluster.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
     }
 
     private static Stream<Arguments> applicationTestParams() {

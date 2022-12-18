@@ -102,7 +102,7 @@ public abstract class AbstractJobReconciler<
                 LOG.info("Upgrading/Restarting running job, suspending first...");
             }
             Optional<UpgradeMode> availableUpgradeMode =
-                    getAvailableUpgradeMode(resource, deployConfig, observeConfig);
+                    getAvailableUpgradeMode(resource, ctx, deployConfig, observeConfig);
             if (availableUpgradeMode.isEmpty()) {
                 return;
             }
@@ -122,7 +122,14 @@ public abstract class AbstractJobReconciler<
                 ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig);
             }
         }
+
         if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
+            // We inherit the upgrade mode unless stateless upgrade requested
+            if (currentDeploySpec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
+                currentDeploySpec
+                        .getJob()
+                        .setUpgradeMode(lastReconciledSpec.getJob().getUpgradeMode());
+            }
             // We record the target spec into an upgrading state before deploying
             ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig);
             statusRecorder.patchAndCacheStatus(resource);
@@ -141,7 +148,7 @@ public abstract class AbstractJobReconciler<
     }
 
     protected Optional<UpgradeMode> getAvailableUpgradeMode(
-            CR resource, Configuration deployConfig, Configuration observeConfig) {
+            CR resource, Context<?> ctx, Configuration deployConfig, Configuration observeConfig) {
         var status = resource.getStatus();
         var upgradeMode = resource.getSpec().getJob().getUpgradeMode();
 
@@ -150,7 +157,9 @@ public abstract class AbstractJobReconciler<
             return Optional.of(UpgradeMode.STATELESS);
         }
 
-        if (ReconciliationUtils.isJobInTerminalState(status)) {
+        var flinkService = getFlinkService(resource, ctx);
+        if (ReconciliationUtils.isJobInTerminalState(status)
+                && !flinkService.isHaMetadataAvailable(observeConfig)) {
             LOG.info(
                     "Job is in terminal state, ready for upgrade from observed latest checkpoint/savepoint");
             return Optional.of(UpgradeMode.SAVEPOINT);
@@ -203,6 +212,7 @@ public abstract class AbstractJobReconciler<
             throws Exception {
         var reconciliationStatus = resource.getStatus().getReconciliationStatus();
         var rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
+        rollbackSpec.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
 
         UpgradeMode upgradeMode = resource.getSpec().getJob().getUpgradeMode();
 
@@ -249,6 +259,7 @@ public abstract class AbstractJobReconciler<
             throws Exception {
         LOG.info("Resubmitting Flink job...");
         SPEC specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
+        specToRecover.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         restoreJob(
                 deployment,
                 specToRecover,

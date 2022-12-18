@@ -22,6 +22,7 @@ import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.TestingApplicationReconciler;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -47,10 +48,14 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -75,7 +80,7 @@ public class ApplicationReconcilerUpgradeModeTest {
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         reconciler =
-                new ApplicationReconciler(
+                new TestingApplicationReconciler(
                         kubernetesClient,
                         flinkService,
                         configManager,
@@ -260,36 +265,213 @@ public class ApplicationReconcilerUpgradeModeTest {
     }
 
     @ParameterizedTest
-    @EnumSource(UpgradeMode.class)
-    public void testUpgradeBeforeReachingStableSpec(UpgradeMode upgradeMode) throws Exception {
+    @MethodSource("testUpgradeJmDeployCannotStartParams")
+    public void testUpgradeJmDeployCannotStart(UpgradeMode fromMode, UpgradeMode toMode)
+            throws Exception {
+
+        flinkService.setHaDataAvailable(true);
+        flinkService.setJobManagerReady(true);
+
+        // Prepare running deployment
+        var deployment = TestUtils.buildApplicationCluster();
+        var jobSpec = deployment.getSpec().getJob();
+        jobSpec.setUpgradeMode(fromMode);
+
+        reconciler.reconcile(deployment, context);
+        var runningJobs = flinkService.listJobs();
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs);
+
+        // Suspend running deployment and assert that correct upgradeMode is set
+        jobSpec.setState(JobState.SUSPENDED);
+        reconciler.reconcile(deployment, context);
+
+        var lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        assertEquals(JobState.SUSPENDED, lastReconciledSpec.getJob().getState());
+        assertEquals(fromMode, lastReconciledSpec.getJob().getUpgradeMode());
+
+        // Restore deployment and assert that correct upgradeMode is set
+        jobSpec.setState(JobState.RUNNING);
+        jobSpec.setUpgradeMode(toMode);
+        reconciler.reconcile(deployment, context);
+
+        lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        assertEquals(JobState.RUNNING, lastReconciledSpec.getJob().getState());
+        assertEquals(
+                toMode == UpgradeMode.STATELESS ? UpgradeMode.STATELESS : fromMode,
+                lastReconciledSpec.getJob().getUpgradeMode());
+
+        // Simulate JM failure after deployment, we need this to test the actual upgrade behaviour
+        // with a jobmanager that never started
+        flinkService.setJobManagerReady(false);
         flinkService.setHaDataAvailable(false);
 
-        final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+
+        // Send in a new upgrade while the jobmanager still not started
+        jobSpec.setState(JobState.RUNNING);
+        jobSpec.setEntryClass("newClass");
+        reconciler.reconcile(deployment, context);
+        lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+
+        // Make sure the upgrade was executed as long as we have the savepoint information
+        if (fromMode == UpgradeMode.LAST_STATE && toMode != UpgradeMode.STATELESS) {
+            // We cant make progress as no HA meta available after LAST_STATE, upgrade. It means the
+            // job started and terminated, but we didn't see...
+            assertEquals(
+                    JobManagerDeploymentStatus.DEPLOYING,
+                    deployment.getStatus().getJobManagerDeploymentStatus());
+            assertEquals(JobState.RUNNING, lastReconciledSpec.getJob().getState());
+        } else {
+            assertEquals(
+                    JobManagerDeploymentStatus.MISSING,
+                    deployment.getStatus().getJobManagerDeploymentStatus());
+            assertEquals(JobState.SUSPENDED, lastReconciledSpec.getJob().getState());
+            assertEquals(
+                    toMode == UpgradeMode.STATELESS ? UpgradeMode.STATELESS : UpgradeMode.SAVEPOINT,
+                    lastReconciledSpec.getJob().getUpgradeMode());
+
+            // Complete upgrade and recover succesfully with the latest savepoint
+            reconciler.reconcile(deployment, context);
+            lastReconciledSpec =
+                    deployment
+                            .getStatus()
+                            .getReconciliationStatus()
+                            .deserializeLastReconciledSpec();
+
+            assertEquals(JobState.RUNNING, lastReconciledSpec.getJob().getState());
+            assertEquals(1, flinkService.listJobs().size());
+            if (fromMode == UpgradeMode.STATELESS || toMode == UpgradeMode.STATELESS) {
+                assertNull(flinkService.listJobs().get(0).f0);
+            } else {
+                assertEquals("savepoint_0", flinkService.listJobs().get(0).f0);
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("testInitialJmDeployCannotStartParams")
+    public void testInitialJmDeployCannotStart(UpgradeMode upgradeMode, boolean initSavepoint)
+            throws Exception {
+
+        // We simulate JM failure to test the initial submission/upgrade behavior when the JM can
+        // never start initially
+        flinkService.setHaDataAvailable(false);
+        flinkService.setJobManagerReady(false);
+
+        var deployment = TestUtils.buildApplicationCluster();
+        if (initSavepoint) {
+            deployment.getSpec().getJob().setInitialSavepointPath("init-sp");
+        }
 
         reconciler.reconcile(deployment, context);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
                 deployment.getStatus().getJobManagerDeploymentStatus());
 
-        // Ready for spec changes, the reconciliation should be performed
+        var lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+
+        // Make sure savepoint path is recorded in status and upgradeMode set correctly for initial
+        // startup. Either stateless or savepoint depending only on the initialSavepointPath
+        // setting.
+        if (initSavepoint) {
+            assertEquals("init-sp", flinkService.listJobs().get(0).f0);
+            assertEquals(
+                    "init-sp",
+                    deployment
+                            .getStatus()
+                            .getJobStatus()
+                            .getSavepointInfo()
+                            .getLastSavepoint()
+                            .getLocation());
+            assertEquals(UpgradeMode.SAVEPOINT, lastReconciledSpec.getJob().getUpgradeMode());
+        } else {
+            assertNull(flinkService.listJobs().get(0).f0);
+            assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
+            assertEquals(UpgradeMode.STATELESS, lastReconciledSpec.getJob().getUpgradeMode());
+        }
+
+        // JM is failed, but we submit an upgrade, this should always be possible on initial deploy
+        // failure
         final String newImage = "new-image-1";
         deployment.getSpec().getJob().setUpgradeMode(upgradeMode);
         deployment.getSpec().setImage(newImage);
         reconciler.reconcile(deployment, context);
-        if (!UpgradeMode.STATELESS.equals(upgradeMode)) {
-            assertNull(deployment.getStatus().getReconciliationStatus().getLastReconciledSpec());
-            assertEquals(
-                    ReconciliationState.UPGRADING,
-                    deployment.getStatus().getReconciliationStatus().getState());
-            reconciler.reconcile(deployment, context);
-        }
         assertEquals(
-                newImage,
-                deployment
-                        .getStatus()
-                        .getReconciliationStatus()
-                        .deserializeLastReconciledSpec()
-                        .getImage());
+                ReconciliationState.UPGRADING,
+                deployment.getStatus().getReconciliationStatus().getState());
+        lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+
+        // We make sure that stateless upgrade request is respected (drop state)
+        assertEquals(
+                upgradeMode == UpgradeMode.STATELESS
+                        ? UpgradeMode.STATELESS
+                        : UpgradeMode.SAVEPOINT,
+                lastReconciledSpec.getJob().getUpgradeMode());
+
+        reconciler.reconcile(deployment, context);
+        lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        assertEquals(newImage, lastReconciledSpec.getImage());
+        assertEquals(
+                upgradeMode == UpgradeMode.STATELESS
+                        ? UpgradeMode.STATELESS
+                        : UpgradeMode.SAVEPOINT,
+                lastReconciledSpec.getJob().getUpgradeMode());
+        assertEquals(1, flinkService.listJobs().size());
+        assertEquals(
+                initSavepoint && upgradeMode != UpgradeMode.STATELESS ? "init-sp" : null,
+                flinkService.listJobs().get(0).f0);
+    }
+
+    private static Stream<Arguments> testInitialJmDeployCannotStartParams() {
+        return Stream.of(
+                Arguments.of(UpgradeMode.LAST_STATE, true),
+                Arguments.of(UpgradeMode.LAST_STATE, false),
+                Arguments.of(UpgradeMode.SAVEPOINT, true),
+                Arguments.of(UpgradeMode.SAVEPOINT, false),
+                Arguments.of(UpgradeMode.STATELESS, true),
+                Arguments.of(UpgradeMode.STATELESS, false));
+    }
+
+    private static Stream<Arguments> testUpgradeJmDeployCannotStartParams() {
+        var args = new ArrayList<Arguments>();
+        for (UpgradeMode from : UpgradeMode.values()) {
+            for (UpgradeMode to : UpgradeMode.values()) {
+                args.add(Arguments.of(from, to));
+            }
+        }
+        return args.stream();
+    }
+
+    @Test
+    public void testLastStateOnDeletedDeployment() throws Exception {
+        // Bootstrap running deployment
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        // Delete cluster and keep HA metadata
+        flinkService.deleteClusterDeployment(
+                deployment.getMetadata(), deployment.getStatus(), false);
+        flinkService.setHaDataAvailable(true);
+
+        // Submit upgrade
+        deployment.getSpec().setRestartNonce(123L);
+        reconciler.reconcile(deployment, context);
+
+        var lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+
+        // Make sure we correctly record upgrade mode to last state
+        assertEquals(UpgradeMode.LAST_STATE, lastReconciledSpec.getJob().getUpgradeMode());
+        assertEquals(JobState.SUSPENDED, lastReconciledSpec.getJob().getState());
     }
 
     @Test
