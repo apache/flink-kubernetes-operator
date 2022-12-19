@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
@@ -121,13 +122,22 @@ public class ScalingExecutor implements Cleanup {
 
     private boolean stabilizationPeriodPassed(
             AbstractFlinkResource<?, ?> resource, Configuration conf) {
-        var now = clock.instant();
+        var jobStatus = resource.getStatus().getJobStatus();
+
+        if (!JobStatus.RUNNING.name().equals(jobStatus.getState())) {
+            // Never consider a non-running job stable
+            return false;
+        }
+
         var startTs =
                 Instant.ofEpochMilli(
-                        Long.parseLong(resource.getStatus().getJobStatus().getStartTime()));
+                        // Use the update time which will reflect the latest job state update
+                        // Do not use the start time because it doesn't tell when the job went to
+                        // RUNNING
+                        Long.parseLong(jobStatus.getUpdateTime()));
         var stableTime = startTs.plus(conf.get(STABILIZATION_INTERVAL));
 
-        if (stableTime.isAfter(now)) {
+        if (stableTime.isAfter(clock.instant())) {
             LOG.info("Waiting until {} to stabilize before new scale operation.", stableTime);
             return false;
         }
