@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -107,12 +106,8 @@ public class SessionJobReconciler
         var jobID =
                 flinkService.submitJobToSessionCluster(
                         cr.getMetadata(), sessionJobSpec, deployConfig, savepoint.orElse(null));
-        status.setJobStatus(
-                new JobStatus()
-                        .toBuilder()
-                        .jobId(jobID.toHexString())
-                        .state(org.apache.flink.api.common.JobStatus.RECONCILING.name())
-                        .build());
+        status.getJobStatus().setJobId(jobID.toHexString());
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
     }
 
     @Override
