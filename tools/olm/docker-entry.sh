@@ -98,8 +98,7 @@ generate_olm_bundle() {
   yq ea -i "del(.subjects[0].namespace)" "${ROLE_BINDING}"
 
   # Needed to replace description with new bundle values
-  sed -i "s/release-1.1/release-${BUNDLE_VERSION}/" "${CSV_FILE}"
-  sed -i "s/version: 1.2.0/version: ${BUNDLE_VERSION}/" "${CSV_FILE}"
+  sed -i "s/RELEASE_VERSION/${BUNDLE_VERSION}/" "${CSV_FILE}"
 }
 
 validate_olm_bundle() {
