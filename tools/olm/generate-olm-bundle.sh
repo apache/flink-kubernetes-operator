@@ -139,7 +139,7 @@ echo
 echo "After the operator is ready, deploy a flink job using:
 kubectl create -f ../../examples/basic.yaml
 or
-kubectl create -f https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.2/examples/basic.yaml
+kubectl create -f https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-$BUNDLE_VERSION/examples/basic.yaml
 "
 
 

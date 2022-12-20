@@ -208,7 +208,7 @@ spec:
     name: James Busche
   maturity: beta
   provider:
-    name: " "
+    name: Community
     url: https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/try-flink-kubernetes-operator/quick-start/
   replaces:
   version: 1.1.0

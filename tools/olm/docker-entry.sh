@@ -78,12 +78,6 @@ generate_olm_bundle() {
   yq ea -i '.spec.install.spec.deployments[0].spec.template.spec.containers[0].resources = {"requests": {"cpu": "10m", "memory": "100Mi"}}' "${CSV_FILE}"
   yq ea -i '.spec.install.spec.deployments[0].spec.template.spec.containers[1].resources = {"requests": {"cpu": "10m", "memory": "100Mi"}}' "${CSV_FILE}"
 
-  # Only needed until this PR gets merged: https://github.com/apache/flink-kubernetes-operator/pull/420
-  # yq ea -i '.spec.webhookdefinitions[0].rules[0].apiGroups=["flink.apache.org"]' "${CSV_FILE}"
-  # yq ea -i '.spec.webhookdefinitions[1].rules[0].apiGroups=["flink.apache.org"]' "${CSV_FILE}"
-  # yq ea -i '.spec.webhookdefinitions[0].generateName="validationwebhook.flink.apache.org"' "${CSV_FILE}"
-  # yq ea -i '.spec.webhookdefinitions[1].generateName="mutationwebhook.flink.apache.org"' "${CSV_FILE}"
-
   # The OLM lets operator to watch specified namespace with i.e.: spec.targetNamespaces:[bar, foo] in the OperatorGroup crd.
   # The OLM then automatically injects template.metadata.annotations.olm.targetNamespaces:[bar, foo] into deployment.apps/flink-kubernetes-operator
   # See PR https://github.com/apache/flink-kubernetes-operator/pull/420 see how the watchedNamespaces is assigned to targetNamespaces.
@@ -102,6 +96,10 @@ generate_olm_bundle() {
   yq ea -i ".spec.replaces = \"${PACKAGE_NAME}.v${PREVIOUS_BUNDLE_VERSION}\" | .spec.replaces style=\"\"" "${CSV_FILE}"
 
   yq ea -i "del(.subjects[0].namespace)" "${ROLE_BINDING}"
+
+  # Needed to replace description with new bundle values
+  sed -i "s/release-1.1/release-${BUNDLE_VERSION}/" "${CSV_FILE}"
+  sed -i "s/version: 1.2.0/version: ${BUNDLE_VERSION}/" "${CSV_FILE}"
 }
 
 validate_olm_bundle() {
