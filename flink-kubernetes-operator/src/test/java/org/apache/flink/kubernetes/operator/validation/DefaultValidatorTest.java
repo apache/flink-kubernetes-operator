@@ -56,6 +56,10 @@ import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
+import static org.apache.flink.configuration.JobManagerOptions.JVM_HEAP_MEMORY;
+import static org.apache.flink.configuration.TaskManagerOptions.MANAGED_MEMORY_SIZE;
+import static org.apache.flink.configuration.TaskManagerOptions.TASK_HEAP_MEMORY;
+import static org.apache.flink.configuration.TaskManagerOptions.TOTAL_FLINK_MEMORY;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -78,9 +82,6 @@ public class DefaultValidatorTest {
         testError(
                 dep -> dep.getSpec().getJob().setState(JobState.SUSPENDED),
                 "Job must start in running state");
-
-        testError(dep -> dep.getSpec().setJobManager(null), "JobManager spec must be specified.");
-        testError(dep -> dep.getSpec().setTaskManager(null), "TaskManager spec must be specified.");
 
         testError(
                 dep -> dep.getSpec().getJob().setParallelism(0),
@@ -251,13 +252,40 @@ public class DefaultValidatorTest {
         testError(
                 dep -> dep.getSpec().getJobManager().getResource().setMemory("invalid"),
                 "JobManager resource memory parse error");
-
         testError(
                 dep -> dep.getSpec().getTaskManager().getResource().setMemory(null),
-                "TaskManager resource memory must be defined");
+                "TaskManager memory configuration failed");
         testError(
                 dep -> dep.getSpec().getJobManager().getResource().setMemory(null),
-                "JobManager resource memory must be defined");
+                "JobManager memory configuration failed");
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().getResource().setMemory(null);
+                    dep.getSpec().setFlinkConfiguration(Map.of(TASK_HEAP_MEMORY.key(), "1024m"));
+                },
+                "TaskManager memory configuration failed");
+
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getJobManager().getResource().setMemory(null);
+                    dep.getSpec().setFlinkConfiguration(Map.of(JVM_HEAP_MEMORY.key(), "2048m"));
+                });
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getTaskManager().getResource().setMemory(null);
+                    dep.getSpec().setFlinkConfiguration(Map.of(TOTAL_FLINK_MEMORY.key(), "2048m"));
+                });
+        testSuccess(
+                dep -> {
+                    dep.getSpec().getTaskManager().getResource().setMemory(null);
+                    dep.getSpec()
+                            .setFlinkConfiguration(
+                                    Map.of(
+                                            TASK_HEAP_MEMORY.key(),
+                                            "1024m",
+                                            MANAGED_MEMORY_SIZE.key(),
+                                            "1024m"));
+                });
 
         // Test savepoint restore validation
         testSuccess(
