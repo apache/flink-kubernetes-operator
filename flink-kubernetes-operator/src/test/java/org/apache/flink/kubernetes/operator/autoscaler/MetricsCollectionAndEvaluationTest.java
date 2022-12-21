@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
@@ -103,6 +104,8 @@ public class MetricsCollectionAndEvaluationTest {
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
         ReconciliationUtils.updateStatusForDeployedSpec(app, conf);
         app.getStatus().getJobStatus().setStartTime(String.valueOf(System.currentTimeMillis()));
+        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(System.currentTimeMillis()));
+        app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
     }
 
     @Test

@@ -118,7 +118,9 @@ public class BacklogBasedScalingTest {
         var ctx = createAutoscalerTestContext();
         var now = Instant.now();
         setClocksTo(now);
-        app.getStatus().getJobStatus().setStartTime(String.valueOf(now.toEpochMilli()));
+        String startTime = String.valueOf(now.toEpochMilli());
+        app.getStatus().getJobStatus().setStartTime(startTime);
+        app.getStatus().getJobStatus().setUpdateTime(startTime);
         metricsCollector.setCurrentMetrics(
                 Map.of(
                         source1,

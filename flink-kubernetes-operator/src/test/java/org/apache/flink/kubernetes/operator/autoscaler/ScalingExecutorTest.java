@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
@@ -66,9 +67,10 @@ public class ScalingExecutorTest {
 
         flinkDep = TestUtils.buildApplicationCluster();
         kubernetesClient.resource(flinkDep).createOrReplace();
-        flinkDep.getStatus()
-                .getJobStatus()
-                .setStartTime(String.valueOf(System.currentTimeMillis()));
+        var jobStatus = flinkDep.getStatus().getJobStatus();
+        jobStatus.setStartTime(String.valueOf(System.currentTimeMillis()));
+        jobStatus.setUpdateTime(String.valueOf(System.currentTimeMillis()));
+        jobStatus.setState(JobStatus.RUNNING.name());
     }
 
     @Test
@@ -79,9 +81,8 @@ public class ScalingExecutorTest {
 
         var scalingInfo = new AutoScalerInfo(new HashMap<>());
         var clock = Clock.fixed(Instant.now(), ZoneId.systemDefault());
-        flinkDep.getStatus()
-                .getJobStatus()
-                .setStartTime(String.valueOf(clock.instant().toEpochMilli()));
+        var jobStatus = flinkDep.getStatus().getJobStatus();
+        jobStatus.setUpdateTime(String.valueOf(clock.instant().toEpochMilli()));
 
         scalingDecisionExecutor.setClock(clock);
         assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
@@ -98,9 +99,12 @@ public class ScalingExecutorTest {
         scalingDecisionExecutor.setClock(clock);
         assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
 
-        flinkDep.getStatus()
-                .getJobStatus()
-                .setStartTime(String.valueOf(clock.instant().toEpochMilli()));
+        // A job should not be considered stable in a non-RUNNING state
+        jobStatus.setState(JobStatus.FAILING.name());
+        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+
+        jobStatus.setState(JobStatus.RUNNING.name());
+        jobStatus.setUpdateTime(String.valueOf(clock.instant().toEpochMilli()));
         assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
 
         clock = Clock.offset(clock, Duration.ofSeconds(59));
