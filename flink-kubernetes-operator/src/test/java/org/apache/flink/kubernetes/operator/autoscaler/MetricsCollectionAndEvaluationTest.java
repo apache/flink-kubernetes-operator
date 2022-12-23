@@ -54,6 +54,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for scaling metrics collection logic. */
 @EnableKubernetesMockClient(crud = true)
@@ -70,6 +71,10 @@ public class MetricsCollectionAndEvaluationTest {
     private JobTopology topology;
 
     private KubernetesClient kubernetesClient;
+
+    private Clock clock;
+
+    private Instant startTime;
 
     @BeforeEach
     public void setup() {
@@ -98,13 +103,17 @@ public class MetricsCollectionAndEvaluationTest {
 
         var confManager = new FlinkConfigManager(new Configuration());
         conf = confManager.getDeployConfig(app.getMetadata(), app.getSpec());
-        conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
+        conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofSeconds(10));
+        conf.set(AutoScalerOptions.METRICS_WINDOW, Duration.ofSeconds(100));
         conf.set(AutoScalerOptions.RESTART_TIME, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
         ReconciliationUtils.updateStatusForDeployedSpec(app, conf);
-        app.getStatus().getJobStatus().setStartTime(String.valueOf(System.currentTimeMillis()));
-        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(System.currentTimeMillis()));
+        clock = Clock.fixed(Instant.ofEpochSecond(0), ZoneId.systemDefault());
+        metricsCollector.setClock(clock);
+        startTime = clock.instant();
+        app.getStatus().getJobStatus().setStartTime(String.valueOf(startTime.toEpochMilli()));
+        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(startTime.toEpochMilli()));
         app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
     }
 
@@ -115,23 +124,55 @@ public class MetricsCollectionAndEvaluationTest {
 
         var scalingInfo = new AutoScalerInfo(new HashMap<>());
 
-        setDefaultMetrics();
-        metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
+        setDefaultMetrics(metricsCollector);
+
+        // We haven't left the stabilization period => no metrics reporting and collection should
+        // take place
+        var collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
+        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+
+        // We haven't collected a full window yet, no metrics should be reported but metrics should
+        // still get collected.
+        clock =
+                Clock.fixed(
+                        clock.instant().plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL)),
+                        ZoneId.systemDefault());
+        metricsCollector.setClock(clock);
+        collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
+        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+
+        // We haven't collected a full window yet, no metrics should be reported but metrics should
+        // still get collected.
+        clock = Clock.fixed(clock.instant().plus(Duration.ofSeconds(1)), ZoneId.systemDefault());
+        metricsCollector.setClock(clock);
+        collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
+        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+
+        // Advance time to stabilization period + full window => metrics should be present
+        clock =
+                Clock.fixed(
+                        startTime
+                                .plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL))
+                                .plus(conf.get(AutoScalerOptions.METRICS_WINDOW)),
+                        ZoneId.systemDefault());
+        metricsCollector.setClock(clock);
+        collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
+        assertEquals(3, collectedMetrics.getMetricHistory().size());
 
         // Test resetting the collector and make sure we can deserialize the scalingInfo correctly
         metricsCollector = new TestingMetricsCollector(topology);
-        setDefaultMetrics();
-
-        var clock = Clock.fixed(Instant.now().plus(Duration.ofSeconds(3)), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
+        setDefaultMetrics(metricsCollector);
+        collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
+        assertEquals(3, collectedMetrics.getMetricHistory().size());
+
         evaluator.setClock(clock);
-
-        var collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
-
         var evaluation = evaluator.evaluate(conf, collectedMetrics);
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
+        assertEquals(4, scaledParallelism.size());
+
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(source2));
         assertEquals(6, scaledParallelism.get(map));
@@ -161,7 +202,7 @@ public class MetricsCollectionAndEvaluationTest {
         assertNull(metricsCollector.getTopologies().get(resourceID));
     }
 
-    private void setDefaultMetrics() {
+    private void setDefaultMetrics(TestingMetricsCollector metricsCollector) {
         metricsCollector.setCurrentMetrics(
                 Map.of(
                         source1,
@@ -206,7 +247,7 @@ public class MetricsCollectionAndEvaluationTest {
     public void testKafkaPartitionMaxParallelism() throws Exception {
         var scalingInfo = new AutoScalerInfo(new HashMap<>());
 
-        setDefaultMetrics();
+        setDefaultMetrics(metricsCollector);
         metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
 
         var clock = Clock.fixed(Instant.now().plus(Duration.ofSeconds(3)), ZoneId.systemDefault());

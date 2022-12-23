@@ -116,11 +116,9 @@ public class BacklogBasedScalingTest {
     @Test
     public void test() throws Exception {
         var ctx = createAutoscalerTestContext();
-        var now = Instant.now();
+        var now = Instant.ofEpochMilli(0);
         setClocksTo(now);
-        String startTime = String.valueOf(now.toEpochMilli());
-        app.getStatus().getJobStatus().setStartTime(startTime);
-        app.getStatus().getJobStatus().setUpdateTime(startTime);
+        redeployJob(now);
         metricsCollector.setCurrentMetrics(
                 Map.of(
                         source1,
@@ -180,7 +178,7 @@ public class BacklogBasedScalingTest {
 
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
-        app.getStatus().getJobStatus().setStartTime(String.valueOf(now.toEpochMilli()));
+        redeployJob(now);
         autoscaler.scale(
                 app, service, confManager.getObserveConfig(app), createAutoscalerTestContext());
         assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
@@ -332,6 +330,16 @@ public class BacklogBasedScalingTest {
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
+    }
+
+    private void redeployJob(Instant now) {
+        // Offset the update time by one metrics window to simulate collecting one entire window
+        app.getStatus()
+                .getJobStatus()
+                .setUpdateTime(
+                        String.valueOf(
+                                now.minus(AutoScalerOptions.METRICS_WINDOW.defaultValue())
+                                        .toEpochMilli()));
     }
 
     private void setClocksTo(Instant time) {

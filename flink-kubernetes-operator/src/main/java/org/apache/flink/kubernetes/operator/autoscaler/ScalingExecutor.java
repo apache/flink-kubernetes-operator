@@ -81,8 +81,7 @@ public class ScalingExecutor implements Cleanup {
             AbstractFlinkResource<?, ?> resource,
             AutoScalerInfo scalingInformation,
             Configuration conf,
-            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics)
-            throws Exception {
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
 
         if (!conf.get(SCALING_ENABLED)) {
             return false;

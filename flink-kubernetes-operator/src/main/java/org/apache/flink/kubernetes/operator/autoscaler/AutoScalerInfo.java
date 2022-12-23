@@ -56,7 +56,7 @@ public class AutoScalerInfo {
 
     private static final String COLLECTED_METRICS_KEY = "collectedMetrics";
     private static final String SCALING_HISTORY_KEY = "scalingHistory";
-    private static final String JOB_START_TS_KEY = "jobStartTs";
+    private static final String JOB_UPDATE_TS_KEY = "jobUpdateTs";
 
     private static final ObjectMapper YAML_MAPPER =
             new ObjectMapper(new YAMLFactory())
@@ -88,19 +88,19 @@ public class AutoScalerInfo {
 
     @SneakyThrows
     public void updateMetricHistory(
-            Instant jobStartTs,
+            Instant jobUpdateTs,
             SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> history) {
         configMap.getData().put(COLLECTED_METRICS_KEY, YAML_MAPPER.writeValueAsString(history));
-        configMap.getData().put(JOB_START_TS_KEY, jobStartTs.toString());
+        configMap.getData().put(JOB_UPDATE_TS_KEY, jobUpdateTs.toString());
     }
 
     public void clearMetricHistory() {
         configMap.getData().remove(COLLECTED_METRICS_KEY);
-        configMap.getData().remove(JOB_START_TS_KEY);
+        configMap.getData().remove(JOB_UPDATE_TS_KEY);
     }
 
-    public Optional<Instant> getJobStartTs() {
-        return Optional.ofNullable(configMap.getData().get(JOB_START_TS_KEY)).map(Instant::parse);
+    public Optional<Instant> getJobUpdateTs() {
+        return Optional.ofNullable(configMap.getData().get(JOB_UPDATE_TS_KEY)).map(Instant::parse);
     }
 
     @SneakyThrows
