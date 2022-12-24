@@ -133,17 +133,14 @@ public class MetricsCollectionAndEvaluationTest {
 
         // We haven't collected a full window yet, no metrics should be reported but metrics should
         // still get collected.
-        clock =
-                Clock.fixed(
-                        clock.instant().plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL)),
-                        ZoneId.systemDefault());
+        clock = Clock.offset(clock, conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
         metricsCollector.setClock(clock);
         collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
         assertTrue(collectedMetrics.getMetricHistory().isEmpty());
 
         // We haven't collected a full window yet
         // => no metrics should be reported but metrics should still get collected.
-        clock = Clock.fixed(clock.instant().plus(Duration.ofSeconds(1)), ZoneId.systemDefault());
+        clock = Clock.offset(clock, Duration.ofSeconds(1));
         metricsCollector.setClock(clock);
         collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
         assertTrue(collectedMetrics.getMetricHistory().isEmpty());
