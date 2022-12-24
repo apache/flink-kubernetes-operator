@@ -126,8 +126,8 @@ public class MetricsCollectionAndEvaluationTest {
 
         setDefaultMetrics(metricsCollector);
 
-        // We haven't left the stabilization period => no metrics reporting and collection should
-        // take place
+        // We haven't left the stabilization period
+        // => no metrics reporting and collection should take place
         var collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
         assertTrue(collectedMetrics.getMetricHistory().isEmpty());
 
@@ -141,8 +141,8 @@ public class MetricsCollectionAndEvaluationTest {
         collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
         assertTrue(collectedMetrics.getMetricHistory().isEmpty());
 
-        // We haven't collected a full window yet, no metrics should be reported but metrics should
-        // still get collected.
+        // We haven't collected a full window yet
+        // => no metrics should be reported but metrics should still get collected.
         clock = Clock.fixed(clock.instant().plus(Duration.ofSeconds(1)), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
         collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
