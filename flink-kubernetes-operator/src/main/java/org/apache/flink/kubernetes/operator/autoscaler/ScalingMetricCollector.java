@@ -88,6 +88,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
         var resourceID = ResourceID.fromResource(cr);
         var jobStatus = cr.getStatus().getJobStatus();
         var currentJobUpdateTs = Instant.ofEpochMilli(Long.parseLong(jobStatus.getUpdateTime()));
+        var now = clock.instant();
 
         if (!currentJobUpdateTs.equals(
                 scalingInformation.getJobUpdateTs().orElse(currentJobUpdateTs))) {
@@ -98,12 +99,19 @@ public abstract class ScalingMetricCollector implements Cleanup {
         var topology = getJobTopology(flinkService, cr, conf);
 
         var stabilizationDuration = conf.get(AutoScalerOptions.STABILIZATION_INTERVAL);
-        if (currentJobUpdateTs.plus(stabilizationDuration).isAfter(clock.instant())) {
+        var stableTime = currentJobUpdateTs.plus(stabilizationDuration);
+        if (now.isBefore(stableTime)) {
             // As long as we are stabilizing, collect no metrics at all
             return new CollectedMetrics(topology, Collections.emptySortedMap());
         }
 
-        var metricsWindowDuration = conf.get(AutoScalerOptions.METRICS_WINDOW);
+        // Adjust the window size until it reaches the max size
+        var metricsWindowSize =
+                Duration.ofMillis(
+                        Math.min(
+                                now.toEpochMilli() - stableTime.toEpochMilli(),
+                                conf.get(AutoScalerOptions.METRICS_WINDOW_MAX_SIZE).toMillis()));
+
         // Extract metrics history for metric window size
         var scalingMetricHistory =
                 histories.compute(
@@ -112,9 +120,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
                             if (h == null) {
                                 h = scalingInformation.getMetricHistory();
                             }
-                            return h.tailMap(
-                                    clock.instant()
-                                            .minus(conf.get(AutoScalerOptions.METRICS_WINDOW)));
+                            return h.tailMap(now.minus(metricsWindowSize));
                         });
 
         // The filtered list of metrics we want to query for each vertex
@@ -132,9 +138,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
         scalingMetricHistory.put(clock.instant(), scalingMetrics);
         scalingInformation.updateMetricHistory(currentJobUpdateTs, scalingMetricHistory);
 
-        if (currentJobUpdateTs
-                .plus(stabilizationDuration)
-                .isAfter(clock.instant().minus(metricsWindowDuration))) {
+        if (now.isBefore(stableTime.plus(conf.get(AutoScalerOptions.METRICS_WINDOW_MIN_SIZE)))) {
             // As long as we haven't had time to collect a full window,
             // collect metrics but do not return any metrics
             return new CollectedMetrics(topology, Collections.emptySortedMap());

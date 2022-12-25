@@ -101,7 +101,7 @@ public class ScalingMetricEvaluator {
                 TRUE_PROCESSING_RATE,
                 new EvaluatedScalingMetric(
                         latestVertexMetrics.get(TRUE_PROCESSING_RATE),
-                        getAverage(TRUE_PROCESSING_RATE, vertex, metricsHistory, conf)));
+                        getAverage(TRUE_PROCESSING_RATE, vertex, metricsHistory)));
 
         evaluatedMetrics.put(
                 PARALLELISM, EvaluatedScalingMetric.of(topology.getParallelisms().get(vertex)));
@@ -117,12 +117,12 @@ public class ScalingMetricEvaluator {
                     TRUE_OUTPUT_RATE,
                     new EvaluatedScalingMetric(
                             latestVertexMetrics.get(TRUE_OUTPUT_RATE),
-                            getAverage(TRUE_OUTPUT_RATE, vertex, metricsHistory, conf)));
+                            getAverage(TRUE_OUTPUT_RATE, vertex, metricsHistory)));
             evaluatedMetrics.put(
                     OUTPUT_RATIO,
                     new EvaluatedScalingMetric(
                             latestVertexMetrics.get(OUTPUT_RATIO),
-                            getAverage(OUTPUT_RATIO, vertex, metricsHistory, conf)));
+                            getAverage(OUTPUT_RATIO, vertex, metricsHistory)));
         }
 
         return evaluatedMetrics;
@@ -172,7 +172,7 @@ public class ScalingMetricEvaluator {
                     TARGET_DATA_RATE,
                     new EvaluatedScalingMetric(
                             latestVertexMetrics.get(sourceRateMetric),
-                            getAverage(sourceRateMetric, vertex, metricsHistory, conf)));
+                            getAverage(sourceRateMetric, vertex, metricsHistory)));
 
             double lag = latestVertexMetrics.getOrDefault(LAG, 0.);
             double catchUpInputRate = catchUpTargetSec == 0 ? 0 : lag / catchUpTargetSec;
@@ -208,12 +208,9 @@ public class ScalingMetricEvaluator {
     private double getAverage(
             ScalingMetric metric,
             JobVertexID jobVertexId,
-            SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory,
-            Configuration conf) {
+            SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory) {
         return StatUtils.mean(
-                metricsHistory
-                        .tailMap(clock.instant().minus(conf.get(AutoScalerOptions.METRICS_WINDOW)))
-                        .values().stream()
+                metricsHistory.values().stream()
                         .map(m -> m.get(jobVertexId))
                         .filter(m -> m.containsKey(metric))
                         .mapToDouble(m -> m.get(metric))

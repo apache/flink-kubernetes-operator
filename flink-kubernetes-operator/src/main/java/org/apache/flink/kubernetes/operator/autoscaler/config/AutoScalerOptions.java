@@ -44,11 +44,17 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Enable vertex scaling execution by the autoscaler. If disabled, the autoscaler will only collect metrics and evaluate the suggested parallelism for each vertex but will not upgrade the jobs.");
 
-    public static final ConfigOption<Duration> METRICS_WINDOW =
-            autoScalerConfig("metrics.window")
+    public static final ConfigOption<Duration> METRICS_WINDOW_MIN_SIZE =
+            autoScalerConfig("metrics.window.size.min")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(5))
-                    .withDescription("Scaling metrics aggregation window size.");
+                    .withDescription("Scaling metrics aggregation minimum window size.");
+
+    public static final ConfigOption<Duration> METRICS_WINDOW_MAX_SIZE =
+            autoScalerConfig("metrics.window.size.max")
+                    .durationType()
+                    .defaultValue(METRICS_WINDOW_MIN_SIZE.defaultValue())
+                    .withDescription("Scaling metrics aggregation maximum window size.");
 
     public static final ConfigOption<Duration> STABILIZATION_INTERVAL =
             autoScalerConfig("stabilization.interval")
