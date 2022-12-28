@@ -38,7 +38,10 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapList;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +49,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 
 /** Flink Utility methods used by the operator. */
 public class FlinkUtils {
@@ -220,5 +224,36 @@ public class FlinkUtils {
     public static JobID generateSessionJobFixedJobID(String uid, Long generation) {
         return new JobID(
                 Preconditions.checkNotNull(uid).hashCode(), Preconditions.checkNotNull(generation));
+    }
+
+    /**
+     * Check if the jobmanager pod has never successfully started. This is an important check to
+     * determine whether it is possible that the job has started and taken any checkpoints that we
+     * are unaware of.
+     *
+     * <p>The way we check this is by using the availability condition transition timestamp. If the
+     * deployment never transitioned out of the unavailable state, we can assume that the JM never
+     * started.
+     *
+     * @param context Resource context
+     * @return True only if we are sure that the jobmanager pod never started
+     */
+    public static boolean jmPodNeverStarted(Context<?> context) {
+        Optional<Deployment> depOpt = context.getSecondaryResource(Deployment.class);
+        if (depOpt.isPresent()) {
+            Deployment deployment = depOpt.get();
+            for (DeploymentCondition condition : deployment.getStatus().getConditions()) {
+                if (condition.getType().equals("Available")) {
+                    var createTs = deployment.getMetadata().getCreationTimestamp();
+                    if ("False".equals(condition.getStatus())
+                            && createTs.equals(condition.getLastTransitionTime())) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // If unsure, return false to be on the safe side
+        return false;
     }
 }

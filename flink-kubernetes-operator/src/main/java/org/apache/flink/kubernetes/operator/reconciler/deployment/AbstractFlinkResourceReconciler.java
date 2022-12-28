@@ -27,9 +27,12 @@ import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
+import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
+import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
@@ -93,7 +96,7 @@ public abstract class AbstractFlinkResourceReconciler<
     }
 
     @Override
-    public final void reconcile(CR cr, Context<?> ctx) throws Exception {
+    public void reconcile(CR cr, Context<?> ctx) throws Exception {
         var spec = cr.getSpec();
         var deployConfig = getDeployConfig(cr.getMetadata(), spec, ctx);
         var status = cr.getStatus();
@@ -109,12 +112,7 @@ public abstract class AbstractFlinkResourceReconciler<
         // No further logic is required at this point.
         if (reconciliationStatus.isBeforeFirstDeployment()) {
             LOG.info("Deploying for the first time");
-
-            // Before we try to submit the job we record the current spec in the status so we can
-            // handle subsequent deployment and status update errors
-            ReconciliationUtils.updateStatusBeforeDeploymentAttempt(cr, deployConfig);
-            statusRecorder.patchAndCacheStatus(cr);
-
+            updateStatusBeforeFirstDeployment(cr, spec, deployConfig, status);
             deploy(
                     cr,
                     spec,
@@ -175,6 +173,36 @@ public abstract class AbstractFlinkResourceReconciler<
         } else if (!reconcileOtherChanges(cr, ctx, observeConfig)) {
             LOG.info("Resource fully reconciled, nothing to do...");
         }
+    }
+
+    /**
+     * Update the status before the first deployment. We have to record the upgrade mode based on
+     * the initial savepoint path provided, and record the to-be-deployed spec in the status.
+     *
+     * @param cr Related flink resource
+     * @param spec Spec to be deployed
+     * @param deployConfig Deploy configuration
+     * @param status Resource status
+     */
+    private void updateStatusBeforeFirstDeployment(
+            CR cr, SPEC spec, Configuration deployConfig, STATUS status) {
+        if (spec.getJob() != null) {
+            var initialUpgradeMode = UpgradeMode.STATELESS;
+            var initialSp = spec.getJob().getInitialSavepointPath();
+
+            if (initialSp != null) {
+                status.getJobStatus()
+                        .getSavepointInfo()
+                        .setLastSavepoint(Savepoint.of(initialSp, SavepointTriggerType.UNKNOWN));
+                initialUpgradeMode = UpgradeMode.SAVEPOINT;
+            }
+
+            spec.getJob().setUpgradeMode(initialUpgradeMode);
+        }
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(cr, deployConfig);
+        // Before we try to submit the job we record the current spec in the status so we can
+        // handle subsequent deployment and status update errors
+        statusRecorder.patchAndCacheStatus(cr);
     }
 
     /**
@@ -249,7 +277,7 @@ public abstract class AbstractFlinkResourceReconciler<
             CR cr, Context<?> context, Configuration observeConfig) throws Exception;
 
     @Override
-    public final DeleteControl cleanup(CR resource, Context<?> context) {
+    public DeleteControl cleanup(CR resource, Context<?> context) {
         return cleanupInternal(resource, context);
     }
 

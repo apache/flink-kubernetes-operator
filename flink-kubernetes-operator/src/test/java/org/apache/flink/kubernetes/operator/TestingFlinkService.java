@@ -95,6 +95,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     private final Set<String> sessions = new HashSet<>();
     private boolean isPortReady = true;
     private boolean haDataAvailable = true;
+    private boolean jobManagerReady = true;
     private boolean deployFailure = false;
     private Runnable sessionJobSubmittedCallback;
     private PodList podList = new PodList();
@@ -122,7 +123,7 @@ public class TestingFlinkService extends AbstractFlinkService {
                 if (jobs.isEmpty() && sessions.isEmpty()) {
                     return Optional.empty();
                 }
-                return (Optional<T>) Optional.of(TestUtils.createDeployment(true));
+                return (Optional<T>) Optional.of(TestUtils.createDeployment(jobManagerReady));
             }
         };
     }
@@ -191,6 +192,10 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     public void setHaDataAvailable(boolean haDataAvailable) {
         this.haDataAvailable = haDataAvailable;
+    }
+
+    public void setJobManagerReady(boolean jmReady) {
+        this.jobManagerReady = jmReady;
     }
 
     public void setDeployFailure(boolean deployFailure) {

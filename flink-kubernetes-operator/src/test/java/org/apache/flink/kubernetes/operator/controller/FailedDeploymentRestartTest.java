@@ -96,6 +96,9 @@ public class FailedDeploymentRestartTest {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+
+        // We started without savepoint
+        appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         assertEquals(
                 appCluster.getSpec(),
                 appCluster.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
