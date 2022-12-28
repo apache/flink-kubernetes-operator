@@ -27,6 +27,7 @@ import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.configuration.SchedulerExecutionMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.TestingApplicationReconciler;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -94,6 +95,7 @@ public class ApplicationReconcilerTest {
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private TestingFlinkService flinkService;
     private ApplicationReconciler reconciler;
+
     private Context<FlinkDeployment> context;
     private StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
 
@@ -107,7 +109,7 @@ public class ApplicationReconcilerTest {
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         reconciler =
-                new ApplicationReconciler(
+                new TestingApplicationReconciler(
                         kubernetesClient,
                         flinkService,
                         configManager,

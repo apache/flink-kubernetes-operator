@@ -57,6 +57,7 @@ import java.net.HttpURLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -94,15 +95,27 @@ public class TestUtils extends BaseTestUtils {
     }
 
     public static Deployment createDeployment(boolean ready) {
-        DeploymentStatus status = new DeploymentStatus();
+        String nowTs = Instant.now().toString();
+        var status = new DeploymentStatus();
         status.setAvailableReplicas(ready ? 1 : 0);
         status.setReplicas(1);
+        var availableCondition = new DeploymentCondition();
+        availableCondition.setType("Available");
+        availableCondition.setStatus(ready ? "True" : "False");
+        availableCondition.setLastTransitionTime(nowTs);
+        status.setConditions(List.of(availableCondition));
+
         DeploymentSpec spec = new DeploymentSpec();
         spec.setReplicas(1);
+
+        var meta = new ObjectMeta();
+        meta.setCreationTimestamp(nowTs);
+
         Deployment deployment = new Deployment();
-        deployment.setMetadata(new ObjectMeta());
+        deployment.setMetadata(meta);
         deployment.setSpec(spec);
         deployment.setStatus(status);
+
         return deployment;
     }
 

@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
@@ -94,11 +95,14 @@ public class ApplicationReconciler
 
     @Override
     protected Optional<UpgradeMode> getAvailableUpgradeMode(
-            FlinkDeployment deployment, Configuration deployConfig, Configuration observeConfig) {
+            FlinkDeployment deployment,
+            Context<?> ctx,
+            Configuration deployConfig,
+            Configuration observeConfig) {
 
         var status = deployment.getStatus();
         var availableUpgradeMode =
-                super.getAvailableUpgradeMode(deployment, deployConfig, observeConfig);
+                super.getAvailableUpgradeMode(deployment, ctx, deployConfig, observeConfig);
 
         if (availableUpgradeMode.isPresent()) {
             return availableUpgradeMode;
@@ -112,20 +116,27 @@ public class ApplicationReconciler
                 && !flinkVersionChanged(
                         ReconciliationUtils.getDeployedSpec(deployment), deployment.getSpec())) {
 
-            if (!flinkService.isHaMetadataAvailable(deployConfig)) {
-                if (deployment.getStatus().getReconciliationStatus().getLastStableSpec() == null) {
-                    // initial deployment failure, reset to allow for spec change to proceed
-                    return resetOnMissingStableSpec(deployment, deployConfig);
-                }
-            } else {
+            if (flinkService.isHaMetadataAvailable(deployConfig)) {
                 LOG.info(
                         "Job is not running but HA metadata is available for last state restore, ready for upgrade");
                 return Optional.of(UpgradeMode.LAST_STATE);
             }
         }
 
-        if (status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.MISSING
-                || status.getJobManagerDeploymentStatus() == JobManagerDeploymentStatus.ERROR) {
+        var jmDeployStatus = status.getJobManagerDeploymentStatus();
+        if (jmDeployStatus != JobManagerDeploymentStatus.MISSING
+                && status.getReconciliationStatus()
+                                .deserializeLastReconciledSpec()
+                                .getJob()
+                                .getUpgradeMode()
+                        != UpgradeMode.LAST_STATE
+                && FlinkUtils.jmPodNeverStarted(ctx)) {
+            deleteJmThatNeverStarted(deployment, deployConfig);
+            return getAvailableUpgradeMode(deployment, ctx, deployConfig, observeConfig);
+        }
+
+        if (jmDeployStatus == JobManagerDeploymentStatus.MISSING
+                || jmDeployStatus == JobManagerDeploymentStatus.ERROR) {
             throw new RecoveryFailureException(
                     "JobManager deployment is missing and HA data is not available to make stateful upgrades. "
                             + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
@@ -138,21 +149,12 @@ public class ApplicationReconciler
         return Optional.empty();
     }
 
-    private Optional<UpgradeMode> resetOnMissingStableSpec(
-            FlinkDeployment deployment, Configuration deployConfig) {
-        // initial deployment failure, reset to allow for spec change to proceed
+    private void deleteJmThatNeverStarted(FlinkDeployment deployment, Configuration deployConfig) {
+        deployment.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
         flinkService.deleteClusterDeployment(
                 deployment.getMetadata(), deployment.getStatus(), false);
         flinkService.waitForClusterShutdown(deployConfig);
-        if (!flinkService.isHaMetadataAvailable(deployConfig)) {
-            LOG.info("Job never entered stable state. Resetting status for initial deploy");
-            ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(deployment);
-            return Optional.empty();
-        } else {
-            // proceed with upgrade if deployment succeeded between check and delete
-            LOG.info("Found HA state after deployment deletion, falling back to stateful upgrade");
-            return Optional.of(UpgradeMode.LAST_STATE);
-        }
+        LOG.info("Deleted jobmanager deployment that never started.");
     }
 
     @Override
