@@ -845,8 +845,12 @@ public class FlinkDeploymentControllerTest {
     private void testUpgradeNotReadyCluster(FlinkDeployment appCluster) throws Exception {
         flinkService.clear();
         testController.reconcile(appCluster, context);
+        var specClone = ReconciliationUtils.clone(appCluster.getSpec());
+        if (specClone.getJob() != null) {
+            specClone.getJob().setUpgradeMode(UpgradeMode.STATELESS);
+        }
         assertEquals(
-                appCluster.getSpec(),
+                specClone,
                 appCluster.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
 
         flinkService.setPortReady(false);
@@ -864,8 +868,15 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        var expectedSpec = ReconciliationUtils.clone(appCluster.getSpec());
+        if (expectedSpec.getJob() != null
+                && expectedSpec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
+            expectedSpec.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        }
+
         assertEquals(
-                appCluster.getSpec(),
+                expectedSpec,
                 appCluster.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
 
         flinkService.setPortReady(true);
