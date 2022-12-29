@@ -432,6 +432,7 @@ public class ApplicationReconcilerTest {
                                 .toBuilder()
                                 .jobId(runningJobs.get(0).f1.getJobId().toHexString())
                                 .jobName(runningJobs.get(0).f1.getJobName())
+                                .updateTime(Long.toString(System.currentTimeMillis()))
                                 .state("RUNNING")
                                 .build());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
@@ -705,5 +706,51 @@ public class ApplicationReconcilerTest {
                 deployment.getStatus().getClusterInfo(), clusterHealthInfo);
         reconciler.reconcile(deployment, context);
         Assertions.assertEquals(MSG_RESTART_UNHEALTHY, eventCollector.events.remove().getMessage());
+    }
+
+    @Test
+    public void testReconcileIfUpgradeModeNotAvailable() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+
+        // We disable last state fallback as we want to test that the deployment is properly
+        // recovered before upgrade
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions
+                                .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
+                                .key(),
+                        "false");
+
+        // Initial deployment
+        reconciler.reconcile(deployment, context);
+
+        // Trigger upgrade but set jobmanager status to missing -> savepoint upgrade not available
+        deployment.getSpec().setRestartNonce(123L);
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+        flinkService.clear();
+
+        reconciler.reconcile(deployment, context);
+        // We verify that deployment was recovered before upgrade
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        var lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        assertNotEquals(
+                deployment.getSpec().getRestartNonce(), lastReconciledSpec.getRestartNonce());
+
+        // Set to running to let savepoint upgrade proceed
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        reconciler.reconcile(deployment, context);
+        // Make sure upgrade is properly triggered now
+        lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        assertEquals(deployment.getSpec().getRestartNonce(), lastReconciledSpec.getRestartNonce());
+        assertEquals(JobState.SUSPENDED, lastReconciledSpec.getJob().getState());
     }
 }
