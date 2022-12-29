@@ -91,7 +91,7 @@ public class SessionReconciler
     }
 
     @Override
-    protected void reconcileSpecChange(
+    protected boolean reconcileSpecChange(
             FlinkDeployment deployment,
             Context<?> ctx,
             Configuration observeConfig,
@@ -113,6 +113,7 @@ public class SessionReconciler
                 Optional.empty(),
                 false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, deployConfig);
+        return true;
     }
 
     private void deleteSessionCluster(FlinkDeployment deployment, Configuration effectiveConfig) {

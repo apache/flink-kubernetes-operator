@@ -82,7 +82,7 @@ public abstract class AbstractJobReconciler<
     }
 
     @Override
-    protected void reconcileSpecChange(
+    protected boolean reconcileSpecChange(
             CR resource,
             Context<?> ctx,
             Configuration observeConfig,
@@ -104,7 +104,7 @@ public abstract class AbstractJobReconciler<
             Optional<UpgradeMode> availableUpgradeMode =
                     getAvailableUpgradeMode(resource, ctx, deployConfig, observeConfig);
             if (availableUpgradeMode.isEmpty()) {
-                return;
+                return false;
             }
 
             eventRecorder.triggerEvent(
@@ -145,6 +145,7 @@ public abstract class AbstractJobReconciler<
 
             ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig);
         }
+        return true;
     }
 
     protected Optional<UpgradeMode> getAvailableUpgradeMode(
