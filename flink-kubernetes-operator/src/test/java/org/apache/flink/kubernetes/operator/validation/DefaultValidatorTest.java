@@ -44,8 +44,11 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import javax.annotation.Nullable;
 
@@ -445,6 +448,52 @@ public class DefaultValidatorTest {
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
                 },
                 validatorWithDefaultConfig);
+    }
+
+    @ParameterizedTest
+    @EnumSource(UpgradeMode.class)
+    public void testFlinkVersionChangeValidation(UpgradeMode toUpgradeMode) {
+        var lastStateVersionChange =
+                createFlinkVersionChange(UpgradeMode.LAST_STATE, toUpgradeMode, JobState.SUSPENDED);
+        if (toUpgradeMode == UpgradeMode.STATELESS) {
+            testSuccess(lastStateVersionChange);
+        } else {
+            testError(
+                    lastStateVersionChange,
+                    "Changing flinkVersion after last-state suspend is not allowed.");
+        }
+
+        // Make sure validation always succeeds for running jobs
+        for (UpgradeMode fromUpgradeMode : UpgradeMode.values()) {
+            testSuccess(createFlinkVersionChange(fromUpgradeMode, toUpgradeMode, JobState.RUNNING));
+        }
+
+        // We should allow changing version after savepoint/stateless suspend
+        testSuccess(
+                createFlinkVersionChange(UpgradeMode.SAVEPOINT, toUpgradeMode, JobState.SUSPENDED));
+        testSuccess(
+                createFlinkVersionChange(UpgradeMode.STATELESS, toUpgradeMode, JobState.SUSPENDED));
+    }
+
+    @NotNull
+    private Consumer<FlinkDeployment> createFlinkVersionChange(
+            UpgradeMode fromUpgrade, UpgradeMode toUpgrade, JobState fromState) {
+        return dep -> {
+            var spec = dep.getSpec();
+            spec.setFlinkVersion(FlinkVersion.v1_15);
+            spec.getJob().setUpgradeMode(toUpgrade);
+
+            var suspendSpec = ReconciliationUtils.clone(spec);
+
+            // Stopped with LAST_STATE mode with different Flink Version
+            suspendSpec.getJob().setUpgradeMode(fromUpgrade);
+            suspendSpec.getJob().setState(fromState);
+            suspendSpec.setFlinkVersion(FlinkVersion.v1_14);
+
+            dep.getStatus()
+                    .getReconciliationStatus()
+                    .serializeAndSetLastReconciledSpec(suspendSpec, dep);
+        };
     }
 
     private void testSuccess(Consumer<FlinkDeployment> deploymentModifier) {
