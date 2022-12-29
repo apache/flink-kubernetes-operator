@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
@@ -79,7 +78,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         }
         return firstPresent(
                 validateDeploymentName(deployment.getMetadata().getName()),
-                validateFlinkVersion(spec.getFlinkVersion()),
+                validateFlinkVersion(deployment),
                 validateFlinkDeploymentConfig(effectiveConfig),
                 validateIngress(
                         spec.getIngress(),
@@ -114,10 +113,28 @@ public class DefaultValidator implements FlinkResourceValidator {
         return Optional.empty();
     }
 
-    private Optional<String> validateFlinkVersion(FlinkVersion version) {
-        if (version == null) {
+    private Optional<String> validateFlinkVersion(FlinkDeployment deployment) {
+        var spec = deployment.getSpec();
+        if (spec.getFlinkVersion() == null) {
             return Optional.of("Flink Version must be defined.");
         }
+
+        var lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+
+        if (lastReconciledSpec != null
+                && lastReconciledSpec.getJob() != null
+                && spec.getJob() != null
+                && spec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
+            var lastJob = lastReconciledSpec.getJob();
+            if (lastJob.getState() == JobState.SUSPENDED
+                    && lastJob.getUpgradeMode() == UpgradeMode.LAST_STATE
+                    && lastReconciledSpec.getFlinkVersion() != spec.getFlinkVersion()) {
+                return Optional.of(
+                        "Changing flinkVersion after last-state suspend is not allowed. Restore your cluster with the current flinkVersion and perform the version upgrade afterwards.");
+            }
+        }
+
         return Optional.empty();
     }
 
