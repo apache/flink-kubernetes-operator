@@ -133,8 +133,9 @@ public class ApplicationReconciler
             return getAvailableUpgradeMode(deployment, ctx, deployConfig, observeConfig);
         }
 
-        if (jmDeployStatus == JobManagerDeploymentStatus.MISSING
-                || jmDeployStatus == JobManagerDeploymentStatus.ERROR) {
+        if ((jmDeployStatus == JobManagerDeploymentStatus.MISSING
+                        || jmDeployStatus == JobManagerDeploymentStatus.ERROR)
+                && !flinkService.isHaMetadataAvailable(deployConfig)) {
             throw new RecoveryFailureException(
                     "JobManager deployment is missing and HA data is not available to make stateful upgrades. "
                             + "It is possible that the job has finished or terminally failed, or the configmaps have been deleted. "
@@ -143,7 +144,7 @@ public class ApplicationReconciler
         }
 
         LOG.info(
-                "Job is not running yet and HA metadata is not available, waiting for upgradeable state");
+                "Job is not running and HA metadata is not available or usable for executing the upgrade, waiting for upgradeable state");
         return Optional.empty();
     }
 

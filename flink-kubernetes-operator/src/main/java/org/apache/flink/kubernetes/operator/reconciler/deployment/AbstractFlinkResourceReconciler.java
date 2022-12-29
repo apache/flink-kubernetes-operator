@@ -139,9 +139,7 @@ public abstract class AbstractFlinkResourceReconciler<
                         || reconciliationStatus.getState() == ReconciliationState.UPGRADING;
 
         var observeConfig = getObserveConfig(cr, ctx);
-
         if (specChanged) {
-
             if (checkNewSpecAlreadyDeployed(cr, deployConfig)) {
                 return;
             }
@@ -156,11 +154,18 @@ public abstract class AbstractFlinkResourceReconciler<
                         EventRecorder.Component.JobManagerDeployment,
                         specChangeMessage);
             }
-            boolean scale = scaleCluster(cr, ctx, observeConfig, deployConfig, specDiff.getType());
-            if (!scale) {
-                reconcileSpecChange(cr, ctx, observeConfig, deployConfig, specDiff.getType());
+            boolean reconciled =
+                    scaleCluster(cr, ctx, observeConfig, deployConfig, specDiff.getType())
+                            || reconcileSpecChange(
+                                    cr, ctx, observeConfig, deployConfig, specDiff.getType());
+            if (reconciled) {
+                // If we executed a scale or spec upgrade action we return, otherwise we continue to
+                // reconcile other changes
+                return;
             }
-        } else if (shouldRollBack(cr, observeConfig, flinkService)) {
+        }
+
+        if (shouldRollBack(cr, observeConfig, flinkService)) {
             // Rollbacks are executed in two steps, we initiate it first then return
             if (initiateRollBack(status)) {
                 return;
@@ -247,8 +252,9 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param observeConfig Observe configuration.
      * @param deployConfig Deployment configuration.
      * @throws Exception Error during spec upgrade.
+     * @return True if spec change reconciliation was executed
      */
-    protected abstract void reconcileSpecChange(
+    protected abstract boolean reconcileSpecChange(
             CR cr,
             Context<?> ctx,
             Configuration observeConfig,
