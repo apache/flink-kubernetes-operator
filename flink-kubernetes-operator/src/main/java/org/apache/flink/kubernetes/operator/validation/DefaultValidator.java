@@ -19,7 +19,6 @@ package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -267,7 +266,7 @@ public class DefaultValidator implements FlinkResourceValidator {
         try {
             JobManagerProcessUtils.processSpecFromConfigWithNewOptionToInterpretLegacyHeap(
                     conf, JobManagerOptions.JVM_HEAP_MEMORY);
-        } catch (IllegalConfigurationException e) {
+        } catch (Exception e) {
             return Optional.of(e.getMessage());
         }
 
@@ -308,7 +307,7 @@ public class DefaultValidator implements FlinkResourceValidator {
     private Optional<String> validateTmMemoryConfig(Configuration conf) {
         try {
             TaskExecutorProcessUtils.processSpecFromConfig(conf);
-        } catch (IllegalConfigurationException e) {
+        } catch (Exception e) {
             return Optional.of(e.getMessage());
         }
         return Optional.empty();
