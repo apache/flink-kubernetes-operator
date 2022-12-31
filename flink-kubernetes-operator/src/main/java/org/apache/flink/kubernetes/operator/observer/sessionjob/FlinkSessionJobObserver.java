@@ -23,18 +23,17 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.MissingSessionJobException;
 import org.apache.flink.kubernetes.operator.observer.AbstractFlinkResourceObserver;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.util.Preconditions;
 
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,65 +44,40 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /** The observer of {@link FlinkSessionJob}. */
-public class FlinkSessionJobObserver
-        extends AbstractFlinkResourceObserver<FlinkSessionJob, FlinkSessionJobObserverContext> {
+public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<FlinkSessionJob> {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSessionJobObserver.class);
-    private final FlinkServiceFactory flinkServiceFactory;
 
-    public FlinkSessionJobObserver(
-            FlinkServiceFactory flinkServiceFactory,
-            FlinkConfigManager configManager,
-            EventRecorder eventRecorder) {
+    private final SessionJobStatusObserver jobStatusObserver;
+    private final SavepointObserver<FlinkSessionJob, FlinkSessionJobStatus> savepointObserver;
+
+    public FlinkSessionJobObserver(FlinkConfigManager configManager, EventRecorder eventRecorder) {
         super(configManager, eventRecorder);
-        this.flinkServiceFactory = flinkServiceFactory;
+        this.jobStatusObserver = new SessionJobStatusObserver(configManager, eventRecorder);
+        this.savepointObserver = new SavepointObserver<>(configManager, eventRecorder);
     }
 
     @Override
-    protected FlinkSessionJobObserverContext getObserverContext(
-            FlinkSessionJob resource, Context<?> context) {
-        return new FlinkSessionJobObserverContext(
-                resource, context, flinkServiceFactory, configManager);
+    protected boolean isResourceReadyToBeObserved(FlinkResourceContext<FlinkSessionJob> ctx) {
+        return super.isResourceReadyToBeObserved(ctx) && ctx.getFlinkService() != null;
     }
 
     @Override
-    protected boolean isResourceReadyToBeObserved(
-            FlinkSessionJob resource,
-            Context<?> context,
-            FlinkSessionJobObserverContext observerContext) {
-        return super.isResourceReadyToBeObserved(resource, context, observerContext)
-                && observerContext.isReadyToReconcile();
-    }
-
-    @Override
-    protected void observeInternal(
-            FlinkSessionJob flinkSessionJob,
-            Context<?> ctx,
-            FlinkSessionJobObserverContext observerContext) {
-
-        var jobStatusObserver =
-                new SessionJobStatusObserver(observerContext, configManager, eventRecorder);
-        var jobFound = jobStatusObserver.observe(flinkSessionJob, ctx, observerContext);
-
+    protected void observeInternal(FlinkResourceContext<FlinkSessionJob> ctx) {
+        var jobFound = jobStatusObserver.observe(ctx);
         if (jobFound) {
-            var savepointObserver =
-                    new SavepointObserver<FlinkSessionJob, FlinkSessionJobStatus>(
-                            observerContext.getFlinkService(), configManager, eventRecorder);
-            savepointObserver.observeSavepointStatus(
-                    flinkSessionJob, observerContext.getDeployedConfig());
+            savepointObserver.observeSavepointStatus(ctx);
         }
     }
 
     @Override
     protected void updateStatusToDeployedIfAlreadyUpgraded(
-            FlinkSessionJob flinkSessionJob,
-            Context<?> ctx,
-            FlinkSessionJobObserverContext observerContext) {
+            FlinkResourceContext<FlinkSessionJob> ctx) {
+        var flinkSessionJob = ctx.getResource();
         var uid = flinkSessionJob.getMetadata().getUid();
         Collection<JobStatusMessage> jobStatusMessages;
         try {
-            jobStatusMessages =
-                    observerContext.getFlinkService().listJobs(observerContext.getDeployedConfig());
+            jobStatusMessages = ctx.getFlinkService().listJobs(ctx.getObserveConfig());
         } catch (Exception e) {
             throw new RuntimeException("Failed to list jobs", e);
         }
@@ -155,21 +129,15 @@ public class FlinkSessionJobObserver
         }
     }
 
-    private static class SessionJobStatusObserver
-            extends JobStatusObserver<FlinkSessionJob, FlinkSessionJobObserverContext> {
+    private static class SessionJobStatusObserver extends JobStatusObserver<FlinkSessionJob> {
 
         public SessionJobStatusObserver(
-                FlinkSessionJobObserverContext observerContext,
-                FlinkConfigManager configManager,
-                EventRecorder eventRecorder) {
-            super(observerContext.getFlinkService(), configManager, eventRecorder);
+                FlinkConfigManager configManager, EventRecorder eventRecorder) {
+            super(configManager, eventRecorder);
         }
 
         @Override
-        protected void onTimeout(
-                FlinkSessionJob sessionJob,
-                Context<?> ctx,
-                FlinkSessionJobObserverContext sessionJobObserverContext) {}
+        protected void onTimeout(FlinkResourceContext<FlinkSessionJob> ctx) {}
 
         @Override
         protected Optional<JobStatusMessage> filterTargetJob(

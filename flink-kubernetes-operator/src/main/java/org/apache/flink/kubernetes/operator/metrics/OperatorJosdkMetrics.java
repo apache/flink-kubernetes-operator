@@ -222,7 +222,7 @@ public class OperatorJosdkMetrics implements Metrics {
                 resourceID,
                 rid ->
                         getResourceNsMg(rid, metadata)
-                                .createResourceNamespaceGroup(
+                                .createResourceGroup(
                                         configManager.getDefaultConfig(), rid.getName()));
     }
 }

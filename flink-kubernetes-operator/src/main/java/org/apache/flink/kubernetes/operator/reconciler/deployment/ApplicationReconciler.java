@@ -28,11 +28,10 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
-import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -43,9 +42,7 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import lombok.SneakyThrows;
 import org.slf4j.Logger;
@@ -64,55 +61,32 @@ public class ApplicationReconciler
     private static final Logger LOG = LoggerFactory.getLogger(ApplicationReconciler.class);
     static final String MSG_RECOVERY = "Recovering lost deployment";
     static final String MSG_RESTART_UNHEALTHY = "Restarting unhealthy job";
-    protected final FlinkService flinkService;
 
     public ApplicationReconciler(
             KubernetesClient kubernetesClient,
-            FlinkService flinkService,
-            FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
-            KubernetesOperatorMetricGroup operatorMetricGroup) {
-        super(kubernetesClient, configManager, eventRecorder, statusRecorder, operatorMetricGroup);
-        this.flinkService = flinkService;
-    }
-
-    @Override
-    protected FlinkService getFlinkService(FlinkDeployment resource, Context<?> context) {
-        return flinkService;
-    }
-
-    @Override
-    protected Configuration getObserveConfig(FlinkDeployment deployment, Context<?> context) {
-        return configManager.getObserveConfig(deployment);
-    }
-
-    @Override
-    protected Configuration getDeployConfig(
-            ObjectMeta deployMeta, FlinkDeploymentSpec currentDeploySpec, Context<?> context) {
-        return configManager.getDeployConfig(deployMeta, currentDeploySpec);
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder) {
+        super(kubernetesClient, eventRecorder, statusRecorder);
     }
 
     @Override
     protected Optional<UpgradeMode> getAvailableUpgradeMode(
-            FlinkDeployment deployment,
-            Context<?> ctx,
-            Configuration deployConfig,
-            Configuration observeConfig) {
+            FlinkResourceContext<FlinkDeployment> ctx, Configuration deployConfig) {
 
+        var deployment = ctx.getResource();
         var status = deployment.getStatus();
-        var availableUpgradeMode =
-                super.getAvailableUpgradeMode(deployment, ctx, deployConfig, observeConfig);
+        var availableUpgradeMode = super.getAvailableUpgradeMode(ctx, deployConfig);
 
         if (availableUpgradeMode.isPresent()) {
             return availableUpgradeMode;
         }
+        var flinkService = ctx.getFlinkService();
 
         if (deployConfig.getBoolean(
                         KubernetesOperatorConfigOptions
                                 .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED)
                 && FlinkUtils.isKubernetesHAActivated(deployConfig)
-                && FlinkUtils.isKubernetesHAActivated(observeConfig)
+                && FlinkUtils.isKubernetesHAActivated(ctx.getObserveConfig())
                 && !flinkVersionChanged(
                         ReconciliationUtils.getDeployedSpec(deployment), deployment.getSpec())) {
 
@@ -130,9 +104,9 @@ public class ApplicationReconciler
                                 .getJob()
                                 .getUpgradeMode()
                         != UpgradeMode.LAST_STATE
-                && FlinkUtils.jmPodNeverStarted(ctx)) {
-            deleteJmThatNeverStarted(deployment, deployConfig);
-            return getAvailableUpgradeMode(deployment, ctx, deployConfig, observeConfig);
+                && FlinkUtils.jmPodNeverStarted(ctx.getJosdkContext())) {
+            deleteJmThatNeverStarted(flinkService, deployment, deployConfig);
+            return getAvailableUpgradeMode(ctx, deployConfig);
         }
 
         if ((jmDeployStatus == JobManagerDeploymentStatus.MISSING
@@ -150,7 +124,8 @@ public class ApplicationReconciler
         return Optional.empty();
     }
 
-    private void deleteJmThatNeverStarted(FlinkDeployment deployment, Configuration deployConfig) {
+    private void deleteJmThatNeverStarted(
+            FlinkService flinkService, FlinkDeployment deployment, Configuration deployConfig) {
         deployment.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
         flinkService.deleteClusterDeployment(
                 deployment.getMetadata(), deployment.getStatus(), false);
@@ -159,16 +134,17 @@ public class ApplicationReconciler
     }
 
     @Override
-    protected void deploy(
-            FlinkDeployment relatedResource,
+    public void deploy(
+            FlinkResourceContext<FlinkDeployment> ctx,
             FlinkDeploymentSpec spec,
-            FlinkDeploymentStatus status,
-            Context<?> ctx,
             Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
             throws Exception {
 
+        var relatedResource = ctx.getResource();
+        var status = relatedResource.getStatus();
+        var flinkService = ctx.getFlinkService();
         if (savepoint.isPresent()) {
             deployConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, savepoint.get());
         } else {
@@ -233,21 +209,17 @@ public class ApplicationReconciler
     }
 
     @Override
-    protected void cancelJob(
-            FlinkDeployment deployment,
-            Context<?> ctx,
-            UpgradeMode upgradeMode,
-            Configuration observeConfig)
+    protected void cancelJob(FlinkResourceContext<FlinkDeployment> ctx, UpgradeMode upgradeMode)
             throws Exception {
-        flinkService.cancelJob(deployment, upgradeMode, observeConfig);
+        ctx.getFlinkService().cancelJob(ctx.getResource(), upgradeMode, ctx.getObserveConfig());
     }
 
     @Override
-    protected void cleanupAfterFailedJob(
-            FlinkDeployment deployment, Context<?> ctx, Configuration observeConfig) {
+    protected void cleanupAfterFailedJob(FlinkResourceContext<FlinkDeployment> ctx) {
         // The job has already stopped. Delete the deployment and we are ready.
-        flinkService.deleteClusterDeployment(
-                deployment.getMetadata(), deployment.getStatus(), false);
+        ctx.getFlinkService()
+                .deleteClusterDeployment(
+                        ctx.getResource().getMetadata(), ctx.getResource().getStatus(), false);
     }
 
     // Workaround for https://issues.apache.org/jira/browse/FLINK-27569
@@ -269,13 +241,14 @@ public class ApplicationReconciler
     }
 
     @Override
-    public boolean reconcileOtherChanges(
-            FlinkDeployment deployment, Context<?> ctx, Configuration observeConfig)
+    public boolean reconcileOtherChanges(FlinkResourceContext<FlinkDeployment> ctx)
             throws Exception {
-        if (super.reconcileOtherChanges(deployment, ctx, observeConfig)) {
+        if (super.reconcileOtherChanges(ctx)) {
             return true;
         }
 
+        var deployment = ctx.getResource();
+        var observeConfig = ctx.getObserveConfig();
         boolean shouldRestartJobBecauseUnhealthy =
                 shouldRestartJobBecauseUnhealthy(deployment, observeConfig);
         boolean shouldRecoverDeployment = shouldRecoverDeployment(observeConfig, deployment);
@@ -296,13 +269,13 @@ public class ApplicationReconciler
                         EventRecorder.Reason.RestartUnhealthyJob,
                         EventRecorder.Component.Job,
                         MSG_RESTART_UNHEALTHY);
-                cleanupAfterFailedJob(deployment, ctx, observeConfig);
+                cleanupAfterFailedJob(ctx);
             }
-            resubmitJob(deployment, ctx, observeConfig, true);
+            resubmitJob(ctx, true);
             return true;
         }
 
-        return cleanupTerminalJmAfterTtl(deployment, observeConfig);
+        return cleanupTerminalJmAfterTtl(ctx.getFlinkService(), deployment, observeConfig);
     }
 
     private boolean shouldRestartJobBecauseUnhealthy(
@@ -340,7 +313,7 @@ public class ApplicationReconciler
     }
 
     private boolean cleanupTerminalJmAfterTtl(
-            FlinkDeployment deployment, Configuration observeConfig) {
+            FlinkService flinkService, FlinkDeployment deployment, Configuration observeConfig) {
         var status = deployment.getStatus();
         boolean terminal = ReconciliationUtils.isJobInTerminalState(status);
         boolean jmStillRunning =
@@ -366,13 +339,14 @@ public class ApplicationReconciler
 
     @Override
     @SneakyThrows
-    protected DeleteControl cleanupInternal(FlinkDeployment deployment, Context<?> context) {
+    protected DeleteControl cleanupInternal(FlinkResourceContext<FlinkDeployment> ctx) {
+        var deployment = ctx.getResource();
         var status = deployment.getStatus();
         if (status.getReconciliationStatus().isBeforeFirstDeployment()) {
-            flinkService.deleteClusterDeployment(deployment.getMetadata(), status, true);
+            ctx.getFlinkService().deleteClusterDeployment(deployment.getMetadata(), status, true);
         } else {
-            flinkService.cancelJob(
-                    deployment, UpgradeMode.STATELESS, configManager.getObserveConfig(deployment));
+            ctx.getFlinkService()
+                    .cancelJob(deployment, UpgradeMode.STATELESS, ctx.getObserveConfig());
         }
         return DeleteControl.defaultDelete();
     }

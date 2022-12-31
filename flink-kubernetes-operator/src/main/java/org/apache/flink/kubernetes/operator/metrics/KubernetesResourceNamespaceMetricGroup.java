@@ -43,7 +43,7 @@ public class KubernetesResourceNamespaceMetricGroup
         this.resourceType = resourceType;
     }
 
-    public KubernetesResourceMetricGroup createResourceNamespaceGroup(
+    public KubernetesResourceMetricGroup createResourceGroup(
             Configuration config, String resourceName) {
         return new KubernetesResourceMetricGroup(
                 registry,

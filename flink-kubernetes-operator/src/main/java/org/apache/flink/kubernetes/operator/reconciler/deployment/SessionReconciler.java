@@ -20,23 +20,19 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
-import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,134 +49,97 @@ public class SessionReconciler
         extends AbstractFlinkResourceReconciler<
                 FlinkDeployment, FlinkDeploymentSpec, FlinkDeploymentStatus> {
 
-    protected final FlinkService flinkService;
-
     private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
+    private final FlinkConfigManager configManager;
 
     public SessionReconciler(
             KubernetesClient kubernetesClient,
-            FlinkService flinkService,
-            FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
-            KubernetesOperatorMetricGroup operatorMetricGroup) {
-        super(kubernetesClient, configManager, eventRecorder, statusRecorder, operatorMetricGroup);
-        this.flinkService = flinkService;
+            FlinkConfigManager configManager) {
+        super(kubernetesClient, eventRecorder, statusRecorder);
+        this.configManager = configManager;
     }
 
     @Override
-    protected FlinkService getFlinkService(FlinkDeployment resource, Context<?> context) {
-        return flinkService;
-    }
-
-    @Override
-    protected Configuration getDeployConfig(
-            ObjectMeta meta, FlinkDeploymentSpec spec, Context<?> ctx) {
-        return configManager.getDeployConfig(meta, spec);
-    }
-
-    @Override
-    protected Configuration getObserveConfig(FlinkDeployment resource, Context<?> context) {
-        return configManager.getObserveConfig(resource);
-    }
-
-    @Override
-    protected boolean readyToReconcile(
-            FlinkDeployment deployment, Context<?> ctx, Configuration deployConfig) {
+    protected boolean readyToReconcile(FlinkResourceContext<FlinkDeployment> ctx) {
         return true;
     }
 
     @Override
     protected boolean reconcileSpecChange(
-            FlinkDeployment deployment,
-            Context<?> ctx,
-            Configuration observeConfig,
-            Configuration deployConfig,
-            DiffType type)
+            FlinkResourceContext<FlinkDeployment> ctx, Configuration deployConfig)
             throws Exception {
-        deleteSessionCluster(deployment, observeConfig);
+        var deployment = ctx.getResource();
+        deleteSessionCluster(ctx);
 
         // We record the target spec into an upgrading state before deploying
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(deployment, deployConfig);
         statusRecorder.patchAndCacheStatus(deployment);
 
-        deploy(
-                deployment,
-                deployment.getSpec(),
-                deployment.getStatus(),
-                ctx,
-                deployConfig,
-                Optional.empty(),
-                false);
+        deploy(ctx, deployment.getSpec(), deployConfig, Optional.empty(), false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, deployConfig);
         return true;
     }
 
-    private void deleteSessionCluster(FlinkDeployment deployment, Configuration effectiveConfig) {
-        flinkService.deleteClusterDeployment(
-                deployment.getMetadata(), deployment.getStatus(), false);
-        flinkService.waitForClusterShutdown(effectiveConfig);
+    private void deleteSessionCluster(FlinkResourceContext<FlinkDeployment> ctx) {
+        var deployment = ctx.getResource();
+        ctx.getFlinkService()
+                .deleteClusterDeployment(deployment.getMetadata(), deployment.getStatus(), false);
+        ctx.getFlinkService().waitForClusterShutdown(ctx.getObserveConfig());
     }
 
     @Override
-    protected void deploy(
-            FlinkDeployment cr,
+    public void deploy(
+            FlinkResourceContext<FlinkDeployment> ctx,
             FlinkDeploymentSpec spec,
-            FlinkDeploymentStatus status,
-            Context<?> ctx,
             Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
             throws Exception {
+        var cr = ctx.getResource();
         setOwnerReference(cr, deployConfig);
-        flinkService.submitSessionCluster(deployConfig);
-        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+        ctx.getFlinkService().submitSessionCluster(deployConfig);
+        cr.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         IngressUtils.updateIngressRules(cr.getMetadata(), spec, deployConfig, kubernetesClient);
     }
 
     @Override
-    protected void rollback(FlinkDeployment deployment, Context<?> ctx, Configuration observeConfig)
-            throws Exception {
+    protected void rollback(FlinkResourceContext<FlinkDeployment> ctx) throws Exception {
+        var deployment = ctx.getResource();
         FlinkDeploymentStatus status = deployment.getStatus();
         ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
                 status.getReconciliationStatus();
         FlinkDeploymentSpec rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
-        Configuration rollbackConfig =
-                configManager.getDeployConfig(deployment.getMetadata(), rollbackSpec);
 
-        deleteSessionCluster(deployment, observeConfig);
-        deploy(
-                deployment,
-                rollbackSpec,
-                deployment.getStatus(),
-                ctx,
-                rollbackConfig,
-                Optional.empty(),
-                false);
+        deleteSessionCluster(ctx);
+        deploy(ctx, rollbackSpec, ctx.getDeployConfig(rollbackSpec), Optional.empty(), false);
 
         reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
     }
 
     @Override
-    public boolean reconcileOtherChanges(
-            FlinkDeployment flinkApp, Context<?> ctx, Configuration observeConfig)
+    public boolean reconcileOtherChanges(FlinkResourceContext<FlinkDeployment> ctx)
             throws Exception {
-        if (shouldRecoverDeployment(observeConfig, flinkApp)) {
-            recoverSession(flinkApp, observeConfig);
+        if (shouldRecoverDeployment(ctx.getObserveConfig(), ctx.getResource())) {
+            recoverSession(ctx);
             return true;
         }
         return false;
     }
 
-    private void recoverSession(FlinkDeployment deployment, Configuration effectiveConfig)
-            throws Exception {
-        flinkService.submitSessionCluster(effectiveConfig);
-        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+    private void recoverSession(FlinkResourceContext<FlinkDeployment> ctx) throws Exception {
+        ctx.getFlinkService().submitSessionCluster(ctx.getObserveConfig());
+        ctx.getResource()
+                .getStatus()
+                .setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
     }
 
     @Override
-    public DeleteControl cleanupInternal(FlinkDeployment deployment, Context<?> context) {
-        Set<FlinkSessionJob> sessionJobs = context.getSecondaryResources(FlinkSessionJob.class);
+    public DeleteControl cleanupInternal(FlinkResourceContext<FlinkDeployment> ctx) {
+        Set<FlinkSessionJob> sessionJobs =
+                ctx.getJosdkContext().getSecondaryResources(FlinkSessionJob.class);
+        var deployment = ctx.getResource();
         if (!sessionJobs.isEmpty()) {
             var error =
                     String.format(
@@ -204,8 +163,9 @@ public class SessionReconciler
                                     .toMillis());
         } else {
             LOG.info("Stopping session cluster");
-            flinkService.deleteClusterDeployment(
-                    deployment.getMetadata(), deployment.getStatus(), true);
+            ctx.getFlinkService()
+                    .deleteClusterDeployment(
+                            deployment.getMetadata(), deployment.getStatus(), true);
             return DeleteControl.defaultDelete();
         }
     }

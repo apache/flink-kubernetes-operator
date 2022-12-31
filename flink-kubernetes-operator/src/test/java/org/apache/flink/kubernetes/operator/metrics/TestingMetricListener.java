@@ -116,7 +116,7 @@ public class TestingMetricListener {
             String... identifiers) {
         return metricGroup
                 .createResourceNamespaceGroup(configuration, resourceClass, resourceNs)
-                .createResourceNamespaceGroup(configuration, resourceName)
+                .createResourceGroup(configuration, resourceName)
                 .getMetricIdentifier(String.join(DELIMITER, identifiers));
     }
 

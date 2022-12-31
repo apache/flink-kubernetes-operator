@@ -37,7 +37,7 @@ import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentO
 import org.apache.flink.kubernetes.operator.observer.sessionjob.FlinkSessionJobObserver;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
-import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
+import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
@@ -68,7 +68,7 @@ public class FlinkOperator {
     private final Operator operator;
 
     private final KubernetesClient client;
-    private final FlinkServiceFactory flinkServiceFactory;
+    private final FlinkResourceContextFactory ctxFactory;
     private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
     @VisibleForTesting final Set<RegisteredController<?>> registeredControllers = new HashSet<>();
@@ -88,7 +88,7 @@ public class FlinkOperator {
                 KubernetesClientUtils.getKubernetesClient(
                         configManager.getOperatorConfiguration(), this.metricGroup);
         this.operator = new Operator(client, this::overrideOperatorConfigs);
-        this.flinkServiceFactory = new FlinkServiceFactory(client, configManager);
+        this.ctxFactory = new FlinkResourceContextFactory(client, configManager, metricGroup);
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.listeners = ListenerUtils.discoverListeners(configManager);
         PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(defaultConfig);
@@ -142,21 +142,14 @@ public class FlinkOperator {
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
         var eventRecorder = EventRecorder.create(client, listeners);
         var reconcilerFactory =
-                new ReconcilerFactory(
-                        client,
-                        flinkServiceFactory,
-                        configManager,
-                        eventRecorder,
-                        statusRecorder,
-                        metricGroup);
-        var observerFactory =
-                new FlinkDeploymentObserverFactory(
-                        flinkServiceFactory, configManager, statusRecorder, eventRecorder);
+                new ReconcilerFactory(client, configManager, eventRecorder, statusRecorder);
+        var observerFactory = new FlinkDeploymentObserverFactory(configManager, eventRecorder);
 
         var controller =
                 new FlinkDeploymentController(
                         configManager,
                         validators,
+                        ctxFactory,
                         reconcilerFactory,
                         observerFactory,
                         statusRecorder,
@@ -170,20 +163,13 @@ public class FlinkOperator {
         var metricManager =
                 MetricManager.createFlinkSessionJobMetricManager(configManager, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
-        var reconciler =
-                new SessionJobReconciler(
-                        client,
-                        flinkServiceFactory,
-                        configManager,
-                        eventRecorder,
-                        statusRecorder,
-                        metricGroup);
-        var observer =
-                new FlinkSessionJobObserver(flinkServiceFactory, configManager, eventRecorder);
+        var reconciler = new SessionJobReconciler(client, eventRecorder, statusRecorder);
+        var observer = new FlinkSessionJobObserver(configManager, eventRecorder);
         var controller =
                 new FlinkSessionJobController(
                         configManager,
                         validators,
+                        ctxFactory,
                         reconciler,
                         observer,
                         statusRecorder,

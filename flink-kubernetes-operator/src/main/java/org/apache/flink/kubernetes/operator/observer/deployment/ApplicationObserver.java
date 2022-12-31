@@ -22,16 +22,14 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.UnknownJobException;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthObserver;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
-
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,55 +40,39 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
 
     private final SavepointObserver<FlinkDeployment, FlinkDeploymentStatus> savepointObserver;
-    private final JobStatusObserver<FlinkDeployment, FlinkDeploymentObserverContext>
-            jobStatusObserver;
+    private final JobStatusObserver<FlinkDeployment> jobStatusObserver;
 
     private final ClusterHealthObserver clusterHealthObserver;
 
-    public ApplicationObserver(
-            FlinkService flinkService,
-            FlinkConfigManager configManager,
-            EventRecorder eventRecorder) {
-        super(flinkService, configManager, eventRecorder);
-        this.savepointObserver =
-                new SavepointObserver<>(flinkService, configManager, eventRecorder);
-        this.jobStatusObserver =
-                new ApplicationJobObserver(flinkService, configManager, eventRecorder);
-        this.clusterHealthObserver = new ClusterHealthObserver(flinkService);
+    public ApplicationObserver(FlinkConfigManager configManager, EventRecorder eventRecorder) {
+        super(configManager, eventRecorder);
+        this.savepointObserver = new SavepointObserver<>(configManager, eventRecorder);
+        this.jobStatusObserver = new ApplicationJobObserver(configManager, eventRecorder);
+        this.clusterHealthObserver = new ClusterHealthObserver();
     }
 
     @Override
-    protected void observeFlinkCluster(
-            FlinkDeployment flinkApp,
-            Context<?> context,
-            FlinkDeploymentObserverContext observerContext) {
-
+    protected void observeFlinkCluster(FlinkResourceContext<FlinkDeployment> ctx) {
         logger.debug("Observing application cluster");
-        boolean jobFound = jobStatusObserver.observe(flinkApp, context, observerContext);
+        boolean jobFound = jobStatusObserver.observe(ctx);
         if (jobFound) {
-            var deployedConfig = observerContext.getDeployedConfig();
-            savepointObserver.observeSavepointStatus(flinkApp, deployedConfig);
-            if (deployedConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)) {
-                clusterHealthObserver.observe(flinkApp, deployedConfig);
+            var observeConfig = ctx.getObserveConfig();
+            savepointObserver.observeSavepointStatus(ctx);
+            if (observeConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)) {
+                clusterHealthObserver.observe(ctx);
             }
         }
     }
 
-    private class ApplicationJobObserver
-            extends JobStatusObserver<FlinkDeployment, FlinkDeploymentObserverContext> {
+    private class ApplicationJobObserver extends JobStatusObserver<FlinkDeployment> {
         public ApplicationJobObserver(
-                FlinkService flinkService,
-                FlinkConfigManager configManager,
-                EventRecorder eventRecorder) {
-            super(flinkService, configManager, eventRecorder);
+                FlinkConfigManager configManager, EventRecorder eventRecorder) {
+            super(configManager, eventRecorder);
         }
 
         @Override
-        public void onTimeout(
-                FlinkDeployment flinkDep,
-                Context<?> context,
-                FlinkDeploymentObserverContext observerContext) {
-            observeJmDeployment(flinkDep, context, observerContext.getDeployedConfig());
+        public void onTimeout(FlinkResourceContext<FlinkDeployment> ctx) {
+            observeJmDeployment(ctx);
         }
 
         @Override

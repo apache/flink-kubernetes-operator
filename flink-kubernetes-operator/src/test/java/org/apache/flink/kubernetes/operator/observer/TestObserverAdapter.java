@@ -17,10 +17,23 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.OperatorTestBase;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 
-/** Context for the currently observed resource. */
-public interface ObserverContext {
+import io.javaoperatorsdk.operator.api.reconciler.Context;
 
-    Configuration getDeployedConfig();
+/** Test adapter for old observer interface. */
+public class TestObserverAdapter<CR extends AbstractFlinkResource<?, ?>> {
+
+    private final OperatorTestBase operatorTestBase;
+    private final Observer<CR> observer;
+
+    public TestObserverAdapter(OperatorTestBase operatorTestBase, Observer<CR> observer) {
+        this.operatorTestBase = operatorTestBase;
+        this.observer = observer;
+    }
+
+    public void observe(CR cr, Context<?> context) {
+        observer.observe(operatorTestBase.getResourceContext(cr, context));
+    }
 }

@@ -21,6 +21,8 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.plugin.PluginManager;
 import org.apache.flink.core.plugin.PluginUtils;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.metrics.Counter;
@@ -73,6 +75,19 @@ public class OperatorMetricUtils {
             MetricUtils.instantiateStatusMetrics(statusGroup);
         }
         return operatorMetricGroup;
+    }
+
+    public static KubernetesResourceMetricGroup createResourceMetricGroup(
+            KubernetesOperatorMetricGroup operatorMetricGroup,
+            FlinkConfigManager configManager,
+            AbstractFlinkResource<?, ?> resource) {
+        return operatorMetricGroup
+                .createResourceNamespaceGroup(
+                        configManager.getDefaultConfig(),
+                        resource.getClass(),
+                        resource.getMetadata().getNamespace())
+                .createResourceGroup(
+                        configManager.getDefaultConfig(), resource.getMetadata().getName());
     }
 
     @VisibleForTesting

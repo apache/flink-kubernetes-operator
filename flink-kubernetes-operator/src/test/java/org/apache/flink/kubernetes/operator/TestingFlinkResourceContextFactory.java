@@ -18,24 +18,28 @@
 package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
+import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
+
+import io.fabric8.kubernetes.client.KubernetesClient;
 
 /** Flink service factory mock for tests. */
-public class TestingFlinkServiceFactory extends FlinkServiceFactory {
+public class TestingFlinkResourceContextFactory extends FlinkResourceContextFactory {
     private final FlinkService flinkService;
 
-    public TestingFlinkServiceFactory(FlinkService flinkService) {
-        super(null, null);
+    public TestingFlinkResourceContextFactory(
+            KubernetesClient kubernetesClient,
+            FlinkConfigManager configManager,
+            KubernetesOperatorMetricGroup operatorMetricGroup,
+            FlinkService flinkService) {
+        super(kubernetesClient, configManager, operatorMetricGroup);
         this.flinkService = flinkService;
     }
 
-    public FlinkService getOrCreate(KubernetesDeploymentMode deploymentMode) {
-        return flinkService;
-    }
-
-    public FlinkService getOrCreate(FlinkDeployment deployment) {
+    @Override
+    protected FlinkService getOrCreateFlinkService(FlinkDeployment deployment) {
         return flinkService;
     }
 }

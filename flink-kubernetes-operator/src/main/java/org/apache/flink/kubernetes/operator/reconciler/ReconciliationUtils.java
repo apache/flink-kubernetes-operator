@@ -303,6 +303,7 @@ public class ReconciliationUtils {
      *
      * @param deployment The current deployment to be reconciled
      * @param validationError Validation error encountered for the current spec
+     * @param conf Operator config
      * @param <SPEC> Spec type.
      * @return True if the spec was reset and reconciliation can continue. False if nothing to
      *     reconcile.
@@ -345,7 +346,7 @@ public class ReconciliationUtils {
      * @param retryInfo Current RetryInformation
      * @param e Exception that caused the retry
      * @param statusRecorder statusRecorder object for patching status
-     * @param operatorConfiguration
+     * @param operatorConfiguration Operator config
      * @return This always returns Empty optional currently, due to the status update logic
      */
     public static <STATUS extends CommonStatus<?>, R extends AbstractFlinkResource<?, STATUS>>

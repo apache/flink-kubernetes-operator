@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -63,6 +64,7 @@ public class FlinkDeploymentController
     private final FlinkConfigManager configManager;
 
     private final Set<FlinkResourceValidator> validators;
+    private final FlinkResourceContextFactory ctxFactory;
     private final ReconcilerFactory reconcilerFactory;
     private final FlinkDeploymentObserverFactory observerFactory;
     private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
@@ -71,12 +73,14 @@ public class FlinkDeploymentController
     public FlinkDeploymentController(
             FlinkConfigManager configManager,
             Set<FlinkResourceValidator> validators,
+            FlinkResourceContextFactory ctxFactory,
             ReconcilerFactory reconcilerFactory,
             FlinkDeploymentObserverFactory observerFactory,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
             EventRecorder eventRecorder) {
         this.configManager = configManager;
         this.validators = validators;
+        this.ctxFactory = ctxFactory;
         this.reconcilerFactory = reconcilerFactory;
         this.observerFactory = observerFactory;
         this.statusRecorder = statusRecorder;
@@ -84,7 +88,7 @@ public class FlinkDeploymentController
     }
 
     @Override
-    public DeleteControl cleanup(FlinkDeployment flinkApp, Context context) {
+    public DeleteControl cleanup(FlinkDeployment flinkApp, Context josdkContext) {
         String msg = "Cleaning up " + FlinkDeployment.class.getSimpleName();
         LOG.info(msg);
         eventRecorder.triggerEvent(
@@ -94,24 +98,26 @@ public class FlinkDeploymentController
                 EventRecorder.Component.Operator,
                 msg);
         statusRecorder.updateStatusFromCache(flinkApp);
+        var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
         try {
-            observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);
+            observerFactory.getOrCreate(flinkApp).observe(ctx);
         } catch (DeploymentFailedException dfe) {
             // ignore during cleanup
         }
         statusRecorder.removeCachedStatus(flinkApp);
-        return reconcilerFactory.getOrCreate(flinkApp).cleanup(flinkApp, context);
+        return reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
     }
 
     @Override
-    public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context context)
+    public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context josdkContext)
             throws Exception {
 
         LOG.info("Starting reconciliation");
         statusRecorder.updateStatusFromCache(flinkApp);
         FlinkDeployment previousDeployment = ReconciliationUtils.clone(flinkApp);
+        var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
         try {
-            observerFactory.getOrCreate(flinkApp).observe(flinkApp, context);
+            observerFactory.getOrCreate(flinkApp).observe(ctx);
             if (!validateDeployment(flinkApp)) {
                 statusRecorder.patchAndCacheStatus(flinkApp);
                 return ReconciliationUtils.toUpdateControl(
@@ -121,7 +127,7 @@ public class FlinkDeploymentController
                         false);
             }
             statusRecorder.patchAndCacheStatus(flinkApp);
-            reconcilerFactory.getOrCreate(flinkApp).reconcile(flinkApp, context);
+            reconcilerFactory.getOrCreate(flinkApp).reconcile(ctx);
         } catch (RecoveryFailureException rfe) {
             handleRecoveryFailed(flinkApp, rfe);
         } catch (DeploymentFailedException dfe) {

@@ -21,11 +21,10 @@ import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.TestingApplicationReconciler;
-import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -35,17 +34,15 @@ import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
+import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -64,29 +61,18 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 /** @link JobStatusObserver unit tests */
 @EnableKubernetesMockClient(crud = true)
-public class ApplicationReconcilerUpgradeModeTest {
+public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
 
-    private KubernetesClient kubernetesClient;
-    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
-    private TestingFlinkService flinkService;
-    private ApplicationReconciler reconciler;
-    private Context<FlinkDeployment> context;
+    @Getter private KubernetesClient kubernetesClient;
+    private TestReconcilerAdapter<FlinkDeployment, FlinkDeploymentSpec, FlinkDeploymentStatus>
+            reconciler;
 
-    @BeforeEach
-    public void before() {
-        kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
-        var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        var statusRecoder = new TestingStatusRecorder<FlinkDeployment, FlinkDeploymentStatus>();
-        flinkService = new TestingFlinkService(kubernetesClient);
-        context = flinkService.getContext();
+    @Override
+    public void setup() {
         reconciler =
-                new TestingApplicationReconciler(
-                        kubernetesClient,
-                        flinkService,
-                        configManager,
-                        eventRecorder,
-                        statusRecoder,
-                        TestUtils.createTestMetricGroup(new Configuration()));
+                new TestReconcilerAdapter<>(
+                        this,
+                        new ApplicationReconciler(kubernetesClient, eventRecorder, statusRecorder));
     }
 
     @ParameterizedTest

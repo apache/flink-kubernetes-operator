@@ -114,7 +114,7 @@ public class KubernetesOperatorMetricGroupTest {
         var namespaceGroup =
                 operatorMetricGroup.createResourceNamespaceGroup(
                         configuration, FlinkSessionJob.class, "rns");
-        var resourceGroup = namespaceGroup.createResourceNamespaceGroup(configuration, "rn");
+        var resourceGroup = namespaceGroup.createResourceGroup(configuration, "rn");
 
         assertEquals(
                 Map.of(

@@ -18,17 +18,14 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,11 +44,9 @@ public class JobAutoScaler implements Cleanup {
     private static final Logger LOG = LoggerFactory.getLogger(JobAutoScaler.class);
 
     private final KubernetesClient kubernetesClient;
-    private final FlinkConfigManager configManager;
     private final ScalingMetricCollector metricsCollector;
     private final ScalingMetricEvaluator evaluator;
     private final ScalingExecutor scalingExecutor;
-    private final KubernetesOperatorMetricGroup metricGroup;
 
     private final Map<ResourceID, Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
             lastEvaluatedMetrics = new ConcurrentHashMap<>();
@@ -59,18 +54,15 @@ public class JobAutoScaler implements Cleanup {
 
     public JobAutoScaler(
             KubernetesClient kubernetesClient,
-            FlinkConfigManager configManager,
             ScalingMetricCollector metricsCollector,
             ScalingMetricEvaluator evaluator,
-            ScalingExecutor scalingExecutor,
-            KubernetesOperatorMetricGroup metricGroup) {
+            ScalingExecutor scalingExecutor) {
+
         this.kubernetesClient = kubernetesClient;
 
-        this.configManager = configManager;
         this.metricsCollector = metricsCollector;
         this.evaluator = evaluator;
         this.scalingExecutor = scalingExecutor;
-        this.metricGroup = metricGroup;
     }
 
     @Override
@@ -83,11 +75,10 @@ public class JobAutoScaler implements Cleanup {
         registeredMetrics.remove(resourceId);
     }
 
-    public boolean scale(
-            AbstractFlinkResource<?, ?> resource,
-            FlinkService flinkService,
-            Configuration conf,
-            Context<?> context) {
+    public boolean scale(FlinkResourceContext<?> ctx) {
+
+        var conf = ctx.getObserveConfig();
+        var resource = ctx.getResource();
 
         if (resource.getSpec().getJob() == null || !conf.getBoolean(AUTOSCALER_ENABLED)) {
             LOG.info("Job autoscaler is disabled");
@@ -104,7 +95,8 @@ public class JobAutoScaler implements Cleanup {
 
             LOG.info("Collecting metrics for scaling");
             var collectedMetrics =
-                    metricsCollector.updateMetrics(resource, autoScalerInfo, flinkService, conf);
+                    metricsCollector.updateMetrics(
+                            resource, autoScalerInfo, ctx.getFlinkService(), conf);
 
             if (collectedMetrics == null || collectedMetrics.getMetricHistory().isEmpty()) {
                 LOG.info("No metrics were collected. Skipping scaling step");
@@ -115,7 +107,7 @@ public class JobAutoScaler implements Cleanup {
             var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
             LOG.info("Scaling metrics evaluated: {}", evaluatedMetrics);
             lastEvaluatedMetrics.put(ResourceID.fromResource(resource), evaluatedMetrics);
-            registerResourceScalingMetrics(resource);
+            registerResourceScalingMetrics(resource, ctx.getResourceMetricGroup());
 
             var specAdjusted =
                     scalingExecutor.scaleResource(resource, autoScalerInfo, conf, evaluatedMetrics);
@@ -127,17 +119,11 @@ public class JobAutoScaler implements Cleanup {
         }
     }
 
-    private void registerResourceScalingMetrics(AbstractFlinkResource<?, ?> resource) {
+    private void registerResourceScalingMetrics(
+            AbstractFlinkResource<?, ?> resource,
+            KubernetesResourceMetricGroup resourceMetricGroup) {
         var resourceId = ResourceID.fromResource(resource);
-        var scalerGroup =
-                metricGroup
-                        .createResourceNamespaceGroup(
-                                configManager.getDefaultConfig(),
-                                resource.getClass(),
-                                resource.getMetadata().getNamespace())
-                        .createResourceNamespaceGroup(
-                                configManager.getDefaultConfig(), resource.getMetadata().getName())
-                        .addGroup("AutoScaler");
+        var scalerGroup = resourceMetricGroup.addGroup("AutoScaler");
 
         lastEvaluatedMetrics
                 .get(resourceId)
@@ -188,16 +174,11 @@ public class JobAutoScaler implements Cleanup {
                         });
     }
 
-    public static JobAutoScaler create(
-            KubernetesClient kubernetesClient,
-            FlinkConfigManager configManager,
-            KubernetesOperatorMetricGroup metricGroup) {
+    public static JobAutoScaler create(KubernetesClient kubernetesClient) {
         return new JobAutoScaler(
                 kubernetesClient,
-                configManager,
                 new RestApiMetricsCollector(),
                 new ScalingMetricEvaluator(),
-                new ScalingExecutor(kubernetesClient),
-                metricGroup);
+                new ScalingExecutor(kubernetesClient));
     }
 }

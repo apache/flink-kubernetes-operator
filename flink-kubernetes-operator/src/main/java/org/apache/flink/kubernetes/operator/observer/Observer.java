@@ -17,16 +17,16 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
-import io.javaoperatorsdk.operator.api.reconciler.Context;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 
 /** The Observer of custom resource. */
-public interface Observer<CR> {
+public interface Observer<CR extends AbstractFlinkResource<?, ?>> {
 
     /**
      * Observe the flinkApp status, It will reflect the changed status on the flinkApp resource.
      *
-     * @param cr the target custom resource
-     * @param context the context with which the operation is executed
+     * @param ctx the context with which the operation is executed
      */
-    void observe(CR cr, Context<?> context);
+    void observe(FlinkResourceContext<CR> ctx);
 }

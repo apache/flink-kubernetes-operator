@@ -17,10 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,26 +33,30 @@ public class ClusterHealthObserver {
     private static final Logger LOG = LoggerFactory.getLogger(ClusterHealthObserver.class);
     private static final String FULL_RESTARTS_METRIC_NAME = "fullRestarts";
     private static final String NUM_RESTARTS_METRIC_NAME = "numRestarts";
-    private final FlinkService flinkService;
     private final ClusterHealthEvaluator clusterHealthEvaluator;
 
-    public ClusterHealthObserver(FlinkService flinkService) {
-        this.flinkService = flinkService;
+    public ClusterHealthObserver() {
         this.clusterHealthEvaluator = new ClusterHealthEvaluator(Clock.systemDefaultZone());
     }
 
-    /** Observe the health of the flink cluster. */
-    public void observe(FlinkDeployment flinkApp, Configuration deployedConfig) {
+    /**
+     * Observe the health of the flink cluster.
+     *
+     * @param ctx Resource context.
+     */
+    public void observe(FlinkResourceContext<FlinkDeployment> ctx) {
+        var flinkApp = ctx.getResource();
         try {
             LOG.info("Observing cluster health");
             var deploymentStatus = flinkApp.getStatus();
             var jobStatus = deploymentStatus.getJobStatus();
             var jobId = jobStatus.getJobId();
             var metrics =
-                    flinkService.getMetrics(
-                            deployedConfig,
-                            jobId,
-                            List.of(FULL_RESTARTS_METRIC_NAME, NUM_RESTARTS_METRIC_NAME));
+                    ctx.getFlinkService()
+                            .getMetrics(
+                                    ctx.getObserveConfig(),
+                                    jobId,
+                                    List.of(FULL_RESTARTS_METRIC_NAME, NUM_RESTARTS_METRIC_NAME));
             ClusterHealthInfo observedClusterHealthInfo;
             if (metrics.containsKey(NUM_RESTARTS_METRIC_NAME)) {
                 LOG.debug(NUM_RESTARTS_METRIC_NAME + " metric is used");
@@ -80,7 +83,9 @@ public class ClusterHealthObserver {
             LOG.debug("Observed cluster health: {}", observedClusterHealthInfo);
 
             clusterHealthEvaluator.evaluate(
-                    deployedConfig, deploymentStatus.getClusterInfo(), observedClusterHealthInfo);
+                    ctx.getObserveConfig(),
+                    deploymentStatus.getClusterInfo(),
+                    observedClusterHealthInfo);
         } catch (Exception e) {
             LOG.warn("Exception while observing cluster health: {}", e.getMessage());
             // Intentionally not throwing exception since we handle fetch metrics failure as
