@@ -18,7 +18,9 @@
 
 package org.apache.flink.kubernetes.operator.reconciler;
 
-import io.javaoperatorsdk.operator.api.reconciler.Context;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 
 /**
@@ -26,24 +28,22 @@ import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
  *
  * @param <CR> The custom resource to be reconciled.
  */
-public interface Reconciler<CR> {
+public interface Reconciler<CR extends AbstractFlinkResource<?, ?>> {
 
     /**
      * This is called when receiving the create or update event of the custom resource.
      *
-     * @param cr the custom resource that has been created or updated
      * @param context the context with which the operation is executed
      * @throws Exception Error during reconciliation.
      */
-    void reconcile(CR cr, Context<?> context) throws Exception;
+    void reconcile(FlinkResourceContext<CR> context) throws Exception;
 
     /**
      * This is called when receiving the delete event of custom resource. This method is meant to
      * cleanup the associated components like the Flink job components.
      *
-     * @param cr the custom resource that has been deleted
      * @param context the context with which the operation is executed
      * @return DeleteControl to manage the deletion behavior
      */
-    DeleteControl cleanup(CR cr, Context<?> context);
+    DeleteControl cleanup(FlinkResourceContext<CR> context);
 }

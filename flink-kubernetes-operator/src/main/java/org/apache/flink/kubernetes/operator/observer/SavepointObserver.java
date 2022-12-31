@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -47,54 +48,51 @@ public class SavepointObserver<
 
     private static final Logger LOG = LoggerFactory.getLogger(SavepointObserver.class);
 
-    private final FlinkService flinkService;
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
 
-    public SavepointObserver(
-            FlinkService flinkService,
-            FlinkConfigManager configManager,
-            EventRecorder eventRecorder) {
-        this.flinkService = flinkService;
+    public SavepointObserver(FlinkConfigManager configManager, EventRecorder eventRecorder) {
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
     }
 
-    public void observeSavepointStatus(CR resource, Configuration deployedConfig) {
+    public void observeSavepointStatus(FlinkResourceContext<CR> ctx) {
 
+        var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
         var savepointInfo = jobStatus.getSavepointInfo();
         var jobId = jobStatus.getJobId();
 
         // If any manual or periodic savepoint is in progress, observe it
         if (SavepointUtils.savepointInProgress(jobStatus)) {
-            observeTriggeredSavepoint(resource, jobId, deployedConfig);
+            observeTriggeredSavepoint(ctx, jobId);
         }
 
         // If job is in globally terminal state, observe last savepoint
         if (ReconciliationUtils.isJobInTerminalState(resource.getStatus())) {
-            observeLatestSavepoint(savepointInfo, jobId, deployedConfig);
+            observeLatestSavepoint(
+                    ctx.getFlinkService(), savepointInfo, jobId, ctx.getObserveConfig());
         }
 
-        cleanupSavepointHistory(savepointInfo, deployedConfig);
+        cleanupSavepointHistory(ctx.getFlinkService(), savepointInfo, ctx.getObserveConfig());
     }
 
     /**
      * Observe the status of manually triggered savepoints.
      *
-     * @param resource the resource being observed
+     * @param ctx Resource context.
      * @param jobID the jobID of the observed job.
-     * @param deployedConfig Deployed job config.
      */
-    private void observeTriggeredSavepoint(
-            AbstractFlinkResource<?, ?> resource, String jobID, Configuration deployedConfig) {
+    private void observeTriggeredSavepoint(FlinkResourceContext<CR> ctx, String jobID) {
+        var resource = (AbstractFlinkResource<?, ?>) ctx.getResource();
 
         var savepointInfo = resource.getStatus().getJobStatus().getSavepointInfo();
 
         LOG.info("Observing savepoint status.");
         var savepointFetchResult =
-                flinkService.fetchSavepointInfo(
-                        savepointInfo.getTriggerId(), jobID, deployedConfig);
+                ctx.getFlinkService()
+                        .fetchSavepointInfo(
+                                savepointInfo.getTriggerId(), jobID, ctx.getObserveConfig());
 
         if (savepointFetchResult.isPending()) {
             LOG.info("Savepoint operation not finished yet...");
@@ -103,12 +101,12 @@ public class SavepointObserver<
 
         if (savepointFetchResult.getError() != null) {
             var err = savepointFetchResult.getError();
-            if (SavepointUtils.gracePeriodEnded(deployedConfig, savepointInfo)) {
+            if (SavepointUtils.gracePeriodEnded(ctx.getObserveConfig(), savepointInfo)) {
                 LOG.error(
                         "Savepoint attempt failed after grace period. Won't be retried again: "
                                 + err);
                 ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
-                        savepointInfo, resource);
+                        savepointInfo, (AbstractFlinkResource) resource);
             } else {
                 LOG.warn("Savepoint failed within grace period, retrying: " + err);
             }
@@ -139,7 +137,10 @@ public class SavepointObserver<
 
     /** Clean up and dispose savepoints according to the configured max size/age. */
     @VisibleForTesting
-    void cleanupSavepointHistory(SavepointInfo currentSavepointInfo, Configuration deployedConfig) {
+    void cleanupSavepointHistory(
+            FlinkService flinkService,
+            SavepointInfo currentSavepointInfo,
+            Configuration observeConfig) {
 
         // maintain history
         List<Savepoint> savepointHistory = currentSavepointInfo.getSavepointHistory();
@@ -152,7 +153,7 @@ public class SavepointObserver<
                 Math.max(
                         1,
                         ConfigOptionUtils.getValueWithThreshold(
-                                deployedConfig,
+                                observeConfig,
                                 KubernetesOperatorConfigOptions
                                         .OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
                                 configManager
@@ -160,12 +161,12 @@ public class SavepointObserver<
                                         .getSavepointHistoryCountThreshold()));
         while (savepointHistory.size() > maxCount) {
             // remove oldest entries
-            disposeSavepointQuietly(savepointHistory.remove(0), deployedConfig);
+            disposeSavepointQuietly(flinkService, savepointHistory.remove(0), observeConfig);
         }
 
         Duration maxAge =
                 ConfigOptionUtils.getValueWithThreshold(
-                        deployedConfig,
+                        observeConfig,
                         KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
                         configManager.getOperatorConfiguration().getSavepointHistoryAgeThreshold());
         long maxTms = System.currentTimeMillis() - maxAge.toMillis();
@@ -174,12 +175,13 @@ public class SavepointObserver<
             Savepoint sp = it.next();
             if (sp.getTimeStamp() < maxTms && sp != lastSavepoint) {
                 it.remove();
-                disposeSavepointQuietly(sp, deployedConfig);
+                disposeSavepointQuietly(flinkService, sp, observeConfig);
             }
         }
     }
 
-    private void disposeSavepointQuietly(Savepoint sp, Configuration conf) {
+    private void disposeSavepointQuietly(
+            FlinkService flinkService, Savepoint sp, Configuration conf) {
         try {
             LOG.info("Disposing savepoint {}", sp);
             flinkService.disposeSavepoint(sp.getLocation(), conf);
@@ -190,10 +192,13 @@ public class SavepointObserver<
     }
 
     private void observeLatestSavepoint(
-            SavepointInfo savepointInfo, String jobID, Configuration deployedConfig) {
+            FlinkService flinkService,
+            SavepointInfo savepointInfo,
+            String jobID,
+            Configuration observeConfig) {
         try {
             flinkService
-                    .getLastCheckpoint(JobID.fromHexString(jobID), deployedConfig)
+                    .getLastCheckpoint(JobID.fromHexString(jobID), observeConfig)
                     .ifPresent(savepointInfo::updateLastSavepoint);
         } catch (Exception e) {
             LOG.error("Could not observe latest savepoint information.", e);

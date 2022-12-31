@@ -18,24 +18,23 @@
 package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.utils.SavepointStatus;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -48,17 +47,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link SavepointObserver}. */
 @EnableKubernetesMockClient(crud = true)
-public class SavepointObserverTest {
+public class SavepointObserverTest extends OperatorTestBase {
 
-    private KubernetesClient kubernetesClient;
-    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
-    private final TestingFlinkService flinkService = new TestingFlinkService();
+    @Getter private KubernetesClient kubernetesClient;
     private SavepointObserver<FlinkDeployment, FlinkDeploymentStatus> observer;
 
-    @BeforeEach
-    public void before() {
-        var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        observer = new SavepointObserver<>(flinkService, configManager, eventRecorder);
+    @Override
+    public void setup() {
+        observer = new SavepointObserver<>(configManager, eventRecorder);
     }
 
     @Test
@@ -70,7 +66,7 @@ public class SavepointObserverTest {
                 new Savepoint(
                         1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp);
-        observer.cleanupSavepointHistory(spInfo, configManager.getDefaultConfig());
+        observer.cleanupSavepointHistory(flinkService, spInfo, configManager.getDefaultConfig());
 
         Assertions.assertNotNull(spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -90,7 +86,7 @@ public class SavepointObserverTest {
                 new Savepoint(
                         1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(spInfo, conf);
+        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp1), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -100,7 +96,7 @@ public class SavepointObserverTest {
                 new Savepoint(
                         2, "sp2", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(spInfo, conf);
+        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp2), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -123,7 +119,7 @@ public class SavepointObserverTest {
                 new Savepoint(
                         1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(spInfo, conf);
+        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp1), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -133,7 +129,7 @@ public class SavepointObserverTest {
                 new Savepoint(
                         2, "sp2", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(spInfo, conf);
+        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp2), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -163,10 +159,11 @@ public class SavepointObserverTest {
         assertEquals(SavepointStatus.PENDING, SavepointUtils.getLastSavepointStatus(deployment));
         assertTrue(triggerTs > 0);
 
+        new FlinkDeploymentContext(deployment, null, null, flinkService, configManager);
         // Pending
-        observer.observeSavepointStatus(deployment, conf);
+        observer.observeSavepointStatus(getResourceContext(deployment));
         // Completed
-        observer.observeSavepointStatus(deployment, conf);
+        observer.observeSavepointStatus(getResourceContext(deployment));
         assertEquals(triggerTs, savepointInfo.getLastPeriodicSavepointTimestamp());
         assertFalse(SavepointUtils.savepointInProgress(jobStatus));
         assertEquals(SavepointUtils.getLastSavepointStatus(deployment), SavepointStatus.SUCCEEDED);

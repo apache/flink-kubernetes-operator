@@ -438,8 +438,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateDeploymentName(sessionJob.getSpec().getDeploymentName()),
                 validateJobNotEmpty(sessionJob),
                 validateNotLastStateUpgradeMode(sessionJob),
-                validateSpecChange(sessionJob),
-                validateFlinkSessionJobConfig(sessionJob.getSpec().getFlinkConfiguration()));
+                validateSpecChange(sessionJob));
     }
 
     private Optional<String> validateSessionJobWithCluster(
@@ -522,16 +521,6 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of(
                     "spec.serviceAccount must be defined. If you use helm, its value should be the same with the name of jobServiceAccount.");
         }
-        return Optional.empty();
-    }
-
-    private Optional<String> validateFlinkSessionJobConfig(
-            Map<String, String> flinkSessionJobConfig) {
-        if (flinkSessionJobConfig == null) {
-            return Optional.empty();
-        }
-
-        // Exclude specific keys if they cause issues
         return Optional.empty();
     }
 }

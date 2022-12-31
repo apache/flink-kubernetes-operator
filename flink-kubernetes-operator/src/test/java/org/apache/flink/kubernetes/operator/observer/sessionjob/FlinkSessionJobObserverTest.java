@@ -22,30 +22,27 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.TestingFlinkServiceFactory;
-import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
+import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
-import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
-import org.apache.flink.kubernetes.operator.utils.EventCollector;
-import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -55,32 +52,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link FlinkSessionJobObserver}. */
 @EnableKubernetesMockClient(crud = true)
-public class FlinkSessionJobObserverTest {
+public class FlinkSessionJobObserverTest extends OperatorTestBase {
 
-    private KubernetesClient kubernetesClient;
-    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
-    private TestingFlinkService flinkService;
-    private FlinkSessionJobObserver observer;
-    private SessionJobReconciler reconciler;
+    @Getter private KubernetesClient kubernetesClient;
 
-    private EventCollector eventCollector = new EventCollector();
+    private TestObserverAdapter<FlinkSessionJob> observer;
+    private TestReconcilerAdapter<FlinkSessionJob, FlinkSessionJobSpec, FlinkSessionJobStatus>
+            reconciler;
 
-    @BeforeEach
-    public void before() {
-        kubernetesClient.resource(TestUtils.buildSessionJob()).createOrReplace();
-        var eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
-        var statusRecorder = new TestingStatusRecorder<FlinkSessionJob, FlinkSessionJobStatus>();
-        flinkService = new TestingFlinkService();
-        FlinkServiceFactory flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
-        observer = new FlinkSessionJobObserver(flinkServiceFactory, configManager, eventRecorder);
+    @Override
+    public void setup() {
+        observer =
+                new TestObserverAdapter<>(
+                        this, new FlinkSessionJobObserver(configManager, eventRecorder));
         reconciler =
-                new SessionJobReconciler(
-                        kubernetesClient,
-                        flinkServiceFactory,
-                        configManager,
-                        eventRecorder,
-                        statusRecorder,
-                        TestUtils.createTestMetricGroup(new Configuration()));
+                new TestReconcilerAdapter<>(
+                        this,
+                        new SessionJobReconciler(kubernetesClient, eventRecorder, statusRecorder));
     }
 
     @Test

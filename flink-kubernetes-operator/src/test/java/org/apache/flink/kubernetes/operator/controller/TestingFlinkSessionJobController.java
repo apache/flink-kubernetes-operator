@@ -19,8 +19,8 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.TestingFlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.TestingFlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.sessionjob.FlinkSessionJobObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
-import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -68,7 +67,12 @@ public class TestingFlinkSessionJobController
             FlinkConfigManager configManager,
             KubernetesClient kubernetesClient,
             TestingFlinkService flinkService) {
-        FlinkServiceFactory flinkServiceFactory = new TestingFlinkServiceFactory(flinkService);
+        var ctxFactory =
+                new TestingFlinkResourceContextFactory(
+                        kubernetesClient,
+                        configManager,
+                        TestUtils.createTestMetricGroup(new Configuration()),
+                        flinkService);
 
         eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
 
@@ -79,15 +83,9 @@ public class TestingFlinkSessionJobController
                 new FlinkSessionJobController(
                         configManager,
                         ValidatorUtils.discoverValidators(configManager),
-                        new SessionJobReconciler(
-                                kubernetesClient,
-                                flinkServiceFactory,
-                                configManager,
-                                eventRecorder,
-                                statusRecorder,
-                                TestUtils.createTestMetricGroup(new Configuration())),
-                        new FlinkSessionJobObserver(
-                                flinkServiceFactory, configManager, eventRecorder),
+                        ctxFactory,
+                        new SessionJobReconciler(kubernetesClient, eventRecorder, statusRecorder),
+                        new FlinkSessionJobObserver(configManager, eventRecorder),
                         statusRecorder,
                         eventRecorder);
     }

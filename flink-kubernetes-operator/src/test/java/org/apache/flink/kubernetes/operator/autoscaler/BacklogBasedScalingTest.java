@@ -20,8 +20,8 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
@@ -35,6 +35,7 @@ import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import lombok.Getter;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,26 +53,23 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /** Test for scaling metrics collection logic. */
 @EnableKubernetesMockClient(crud = true)
-public class BacklogBasedScalingTest {
+public class BacklogBasedScalingTest extends OperatorTestBase {
+
+    @Getter private KubernetesClient kubernetesClient;
 
     private ScalingMetricEvaluator evaluator;
-    private TestingFlinkService service;
     private TestingMetricsCollector metricsCollector;
     private ScalingExecutor scalingExecutor;
 
     private FlinkDeployment app;
     private JobVertexID source1, sink;
 
-    private FlinkConfigManager confManager;
     private JobAutoScaler autoscaler;
-
-    private KubernetesClient kubernetesClient;
 
     @BeforeEach
     public void setup() {
         evaluator = new ScalingMetricEvaluator();
         scalingExecutor = new ScalingExecutor(kubernetesClient);
-        service = new TestingFlinkService();
 
         app = TestUtils.buildApplicationCluster();
         app.getMetadata().setGeneration(1L);
@@ -98,19 +96,13 @@ public class BacklogBasedScalingTest {
         defaultConf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.1);
         defaultConf.set(AutoScalerOptions.SCALE_UP_GRACE_PERIOD, Duration.ZERO);
 
-        confManager = new FlinkConfigManager(defaultConf);
+        configManager = new FlinkConfigManager(defaultConf);
         ReconciliationUtils.updateStatusForDeployedSpec(
-                app, confManager.getDeployConfig(app.getMetadata(), app.getSpec()));
+                app, configManager.getDeployConfig(app.getMetadata(), app.getSpec()));
         app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
 
         autoscaler =
-                new JobAutoScaler(
-                        kubernetesClient,
-                        confManager,
-                        metricsCollector,
-                        evaluator,
-                        scalingExecutor,
-                        TestUtils.createTestMetricGroup(new Configuration()));
+                new JobAutoScaler(kubernetesClient, metricsCollector, evaluator, scalingExecutor);
     }
 
     @Test
@@ -140,12 +132,12 @@ public class BacklogBasedScalingTest {
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));
 
-        autoscaler.scale(app, service, confManager.getObserveConfig(app), ctx);
+        autoscaler.scale(getResourceContext(app, ctx));
         assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
 
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
-        autoscaler.scale(app, service, confManager.getObserveConfig(app), ctx);
+        autoscaler.scale(getResourceContext(app, ctx));
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(4, scaledParallelism.get(source1));
@@ -179,8 +171,7 @@ public class BacklogBasedScalingTest {
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         redeployJob(now);
-        autoscaler.scale(
-                app, service, confManager.getObserveConfig(app), createAutoscalerTestContext());
+        autoscaler.scale(getResourceContext(app, ctx));
         assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(4, scaledParallelism.get(source1));
@@ -209,8 +200,7 @@ public class BacklogBasedScalingTest {
 
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
-        autoscaler.scale(
-                app, service, confManager.getObserveConfig(app), createAutoscalerTestContext());
+        autoscaler.scale(getResourceContext(app, ctx));
         assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(4, scaledParallelism.get(source1));
@@ -238,8 +228,7 @@ public class BacklogBasedScalingTest {
                                         "", Double.NaN, Double.NaN, Double.NaN, 800.))));
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
-        autoscaler.scale(
-                app, service, confManager.getObserveConfig(app), createAutoscalerTestContext());
+        autoscaler.scale(getResourceContext(app, ctx));
 
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
@@ -271,8 +260,7 @@ public class BacklogBasedScalingTest {
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         app.getStatus().getJobStatus().setStartTime(String.valueOf(now.toEpochMilli()));
-        autoscaler.scale(
-                app, service, confManager.getObserveConfig(app), createAutoscalerTestContext());
+        autoscaler.scale(getResourceContext(app, ctx));
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
@@ -298,8 +286,7 @@ public class BacklogBasedScalingTest {
                                         "", Double.NaN, Double.NaN, Double.NaN, 900.))));
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
-        autoscaler.scale(
-                app, service, confManager.getObserveConfig(app), createAutoscalerTestContext());
+        autoscaler.scale(getResourceContext(app, ctx));
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
@@ -325,8 +312,7 @@ public class BacklogBasedScalingTest {
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
-        autoscaler.scale(
-                app, service, confManager.getObserveConfig(app), createAutoscalerTestContext());
+        autoscaler.scale(getResourceContext(app, ctx));
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));

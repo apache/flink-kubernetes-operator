@@ -23,9 +23,7 @@ import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
-import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
-import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
@@ -38,27 +36,21 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ReconcilerFactory {
 
     private final KubernetesClient kubernetesClient;
-    private final FlinkServiceFactory flinkServiceFactory;
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
     private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder;
-    private final KubernetesOperatorMetricGroup operatorMetricGroup;
     private final Map<Tuple2<Mode, KubernetesDeploymentMode>, Reconciler<FlinkDeployment>>
             reconcilerMap;
 
     public ReconcilerFactory(
             KubernetesClient kubernetesClient,
-            FlinkServiceFactory flinkServiceFactory,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder,
-            KubernetesOperatorMetricGroup operatorMetricGroup) {
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder) {
         this.kubernetesClient = kubernetesClient;
-        this.flinkServiceFactory = flinkServiceFactory;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
         this.deploymentStatusRecorder = deploymentStatusRecorder;
-        this.operatorMetricGroup = operatorMetricGroup;
         this.reconcilerMap = new ConcurrentHashMap<>();
     }
 
@@ -72,19 +64,12 @@ public class ReconcilerFactory {
                         case SESSION:
                             return new SessionReconciler(
                                     kubernetesClient,
-                                    flinkServiceFactory.getOrCreate(flinkApp),
-                                    configManager,
                                     eventRecorder,
                                     deploymentStatusRecorder,
-                                    operatorMetricGroup);
+                                    configManager);
                         case APPLICATION:
                             return new ApplicationReconciler(
-                                    kubernetesClient,
-                                    flinkServiceFactory.getOrCreate(flinkApp),
-                                    configManager,
-                                    eventRecorder,
-                                    deploymentStatusRecorder,
-                                    operatorMetricGroup);
+                                    kubernetesClient, eventRecorder, deploymentStatusRecorder);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", modes.f0));

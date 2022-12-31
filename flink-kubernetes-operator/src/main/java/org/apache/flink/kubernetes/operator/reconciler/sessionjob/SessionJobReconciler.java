@@ -24,17 +24,12 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
-import org.apache.flink.kubernetes.operator.service.FlinkServiceFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,104 +41,64 @@ public class SessionJobReconciler
         extends AbstractJobReconciler<FlinkSessionJob, FlinkSessionJobSpec, FlinkSessionJobStatus> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionJobReconciler.class);
-    private final FlinkServiceFactory flinkServiceFactory;
 
     public SessionJobReconciler(
             KubernetesClient kubernetesClient,
-            FlinkServiceFactory flinkServiceFactory,
-            FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder,
-            KubernetesOperatorMetricGroup operatorMetricGroup) {
-        super(kubernetesClient, configManager, eventRecorder, statusRecorder, operatorMetricGroup);
-        this.flinkServiceFactory = flinkServiceFactory;
+            StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder) {
+        super(kubernetesClient, eventRecorder, statusRecorder);
     }
 
     @Override
-    protected FlinkService getFlinkService(FlinkSessionJob resource, Context<?> context) {
-        Optional<FlinkDeployment> deploymentOpt =
-                context.getSecondaryResource(FlinkDeployment.class);
-
-        if (sessionClusterReady(deploymentOpt)) {
-            return flinkServiceFactory.getOrCreate(deploymentOpt.get());
-        }
-        return null;
+    public boolean readyToReconcile(FlinkResourceContext<FlinkSessionJob> ctx) {
+        return sessionClusterReady(
+                        ctx.getJosdkContext().getSecondaryResource(FlinkDeployment.class))
+                && super.readyToReconcile(ctx);
     }
 
     @Override
-    protected Configuration getObserveConfig(FlinkSessionJob sessionJob, Context<?> context) {
-        return getDeployConfig(sessionJob.getMetadata(), sessionJob.getSpec(), context);
-    }
-
-    @Override
-    protected Configuration getDeployConfig(
-            ObjectMeta deployMeta, FlinkSessionJobSpec currentDeploySpec, Context<?> context) {
-        Optional<FlinkDeployment> deploymentOpt =
-                context.getSecondaryResource(FlinkDeployment.class);
-
-        if (!sessionClusterReady(deploymentOpt)) {
-            return null;
-        }
-        return configManager.getSessionJobConfig(deploymentOpt.get(), currentDeploySpec);
-    }
-
-    @Override
-    public boolean readyToReconcile(
-            FlinkSessionJob flinkSessionJob, Context<?> context, Configuration deployConfig) {
-        return sessionClusterReady(context.getSecondaryResource(FlinkDeployment.class))
-                && super.readyToReconcile(flinkSessionJob, context, deployConfig);
-    }
-
-    @Override
-    protected void deploy(
-            FlinkSessionJob cr,
+    public void deploy(
+            FlinkResourceContext<FlinkSessionJob> ctx,
             FlinkSessionJobSpec sessionJobSpec,
-            FlinkSessionJobStatus status,
-            Context<?> ctx,
             Configuration deployConfig,
             Optional<String> savepoint,
             boolean requireHaMetadata)
             throws Exception {
-        FlinkService flinkService = getFlinkService(cr, ctx);
         var jobID =
-                flinkService.submitJobToSessionCluster(
-                        cr.getMetadata(), sessionJobSpec, deployConfig, savepoint.orElse(null));
+                ctx.getFlinkService()
+                        .submitJobToSessionCluster(
+                                ctx.getResource().getMetadata(),
+                                sessionJobSpec,
+                                deployConfig,
+                                savepoint.orElse(null));
+
+        var status = ctx.getResource().getStatus();
         status.getJobStatus().setJobId(jobID.toHexString());
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
     }
 
     @Override
-    protected void cancelJob(
-            FlinkSessionJob resource,
-            Context<?> ctx,
-            UpgradeMode upgradeMode,
-            Configuration observeConfig)
+    protected void cancelJob(FlinkResourceContext<FlinkSessionJob> ctx, UpgradeMode upgradeMode)
             throws Exception {
-        FlinkService flinkService = getFlinkService(resource, ctx);
-        flinkService.cancelSessionJob(resource, upgradeMode, observeConfig);
+        ctx.getFlinkService()
+                .cancelSessionJob(ctx.getResource(), upgradeMode, ctx.getObserveConfig());
     }
 
     @Override
-    protected void cleanupAfterFailedJob(
-            FlinkSessionJob resource, Context<?> ctx, Configuration observeConfig)
-            throws Exception {
+    protected void cleanupAfterFailedJob(FlinkResourceContext<FlinkSessionJob> ctx) {
         // The job has already stopped, nothing to clean up.
     }
 
     @Override
-    public DeleteControl cleanupInternal(FlinkSessionJob sessionJob, Context<?> context) {
+    public DeleteControl cleanupInternal(FlinkResourceContext<FlinkSessionJob> ctx) {
         Optional<FlinkDeployment> flinkDepOptional =
-                context.getSecondaryResource(FlinkDeployment.class);
+                ctx.getJosdkContext().getSecondaryResource(FlinkDeployment.class);
 
         if (flinkDepOptional.isPresent()) {
-            String jobID = sessionJob.getStatus().getJobStatus().getJobId();
+            String jobID = ctx.getResource().getStatus().getJobStatus().getJobId();
             if (jobID != null) {
                 try {
-                    cancelJob(
-                            sessionJob,
-                            context,
-                            UpgradeMode.STATELESS,
-                            getObserveConfig(sessionJob, context));
+                    cancelJob(ctx, UpgradeMode.STATELESS);
                 } catch (Exception e) {
                     LOG.error("Failed to cancel job {}.", jobID, e);
                 }

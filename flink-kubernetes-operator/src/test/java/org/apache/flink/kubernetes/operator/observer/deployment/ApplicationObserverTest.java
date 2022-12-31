@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -32,8 +33,8 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
+import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -41,8 +42,8 @@ import org.apache.flink.runtime.client.JobStatusMessage;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -60,19 +61,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** {@link ApplicationObserver} unit tests. */
 @EnableKubernetesMockClient(crud = true)
-public class ApplicationObserverTest {
-    private KubernetesClient kubernetesClient;
+public class ApplicationObserverTest extends OperatorTestBase {
+    @Getter private KubernetesClient kubernetesClient;
+
     private final Context<FlinkDeployment> readyContext =
             TestUtils.createContextWithReadyJobManagerDeployment();
-    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
-    private final TestingFlinkService flinkService = new TestingFlinkService();
-    private ApplicationObserver observer;
+    private TestObserverAdapter<FlinkDeployment> observer;
 
-    @BeforeEach
-    public void before() {
-        var eventRecorder = new EventRecorder(kubernetesClient, (r, e) -> {});
-        observer = new ApplicationObserver(flinkService, configManager, eventRecorder);
-        flinkService.clear();
+    @Override
+    public void setup() {
+        observer =
+                new TestObserverAdapter<>(
+                        this, new ApplicationObserver(configManager, eventRecorder));
     }
 
     @Test

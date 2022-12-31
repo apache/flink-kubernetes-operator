@@ -21,12 +21,11 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,23 +37,16 @@ import java.util.concurrent.TimeoutException;
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
 
 /** An observer to observe the job status. */
-public abstract class JobStatusObserver<
-        R extends AbstractFlinkResource<?, ?>, CTX extends ObserverContext> {
+public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
 
-    private static final int MAX_ERROR_STRING_LENGTH = 512;
     public static final String MISSING_SESSION_JOB_ERR = "Missing Session Job";
 
-    protected final FlinkService flinkService;
     protected final EventRecorder eventRecorder;
     protected final FlinkConfigManager configManager;
 
-    public JobStatusObserver(
-            FlinkService flinkService,
-            FlinkConfigManager configManager,
-            EventRecorder eventRecorder) {
-        this.flinkService = flinkService;
+    public JobStatusObserver(FlinkConfigManager configManager, EventRecorder eventRecorder) {
         this.eventRecorder = eventRecorder;
         this.configManager = configManager;
     }
@@ -62,11 +54,11 @@ public abstract class JobStatusObserver<
     /**
      * Observe the status of the flink job.
      *
-     * @param resource The custom resource to be observed.
-     * @param ctx Observe context.
+     * @param ctx Resource context.
      * @return If job found return true, otherwise return false.
      */
-    public boolean observe(R resource, Context resourceContext, CTX ctx) {
+    public boolean observe(FlinkResourceContext<R> ctx) {
+        var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
         LOG.info("Observing job status");
         var previousJobStatus = jobStatus.getState();
@@ -74,13 +66,14 @@ public abstract class JobStatusObserver<
         List<JobStatusMessage> clusterJobStatuses;
         try {
             // Query job list from the cluster
-            clusterJobStatuses = new ArrayList<>(flinkService.listJobs(ctx.getDeployedConfig()));
+            clusterJobStatuses =
+                    new ArrayList<>(ctx.getFlinkService().listJobs(ctx.getObserveConfig()));
         } catch (Exception e) {
             // Error while accessing the rest api, will try again later...
             LOG.warn("Exception while listing jobs", e);
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
             if (e instanceof TimeoutException) {
-                onTimeout(resource, resourceContext, ctx);
+                onTimeout(ctx);
             }
             return false;
         }
@@ -93,10 +86,10 @@ public abstract class JobStatusObserver<
             if (targetJobStatusMessage.isEmpty()) {
                 LOG.warn("No matching jobs found on the cluster");
                 ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-                onTargetJobNotFound(resource, ctx.getDeployedConfig());
+                onTargetJobNotFound(resource, ctx.getObserveConfig());
                 return false;
             } else {
-                updateJobStatus(resource, targetJobStatusMessage.get(), ctx.getDeployedConfig());
+                updateJobStatus(ctx, targetJobStatusMessage.get());
             }
             ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
             return true;
@@ -104,7 +97,7 @@ public abstract class JobStatusObserver<
             LOG.debug("No jobs found on the cluster");
             // No jobs found on the cluster, it is possible that the jobmanager is still starting up
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-            onNoJobsFound(resource, ctx.getDeployedConfig());
+            onNoJobsFound(resource, ctx.getObserveConfig());
             return false;
         }
     }
@@ -141,11 +134,9 @@ public abstract class JobStatusObserver<
     /**
      * Callback when list jobs timeout.
      *
-     * @param resource The Flink resource.
-     * @param resourceContext Resource context.
-     * @param observerContext Observe context.
+     * @param ctx Resource context.
      */
-    protected abstract void onTimeout(R resource, Context<?> resourceContext, CTX observerContext);
+    protected abstract void onTimeout(FlinkResourceContext<R> ctx);
 
     /**
      * Filter the target job status message by the job list from the cluster.
@@ -161,12 +152,11 @@ public abstract class JobStatusObserver<
     /**
      * Update the status in CR according to the cluster job status.
      *
-     * @param resource the target custom resource.
+     * @param ctx Resource context.
      * @param clusterJobStatus the status fetch from the cluster.
-     * @param deployedConfig Deployed job config.
      */
-    private void updateJobStatus(
-            R resource, JobStatusMessage clusterJobStatus, Configuration deployedConfig) {
+    private void updateJobStatus(FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
+        var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
         var previousJobStatus = jobStatus.getState();
 
@@ -187,7 +177,7 @@ public abstract class JobStatusObserver<
                                     previousJobStatus, jobStatus.getState());
             LOG.info(message);
 
-            setErrorIfPresent(resource, clusterJobStatus, deployedConfig);
+            setErrorIfPresent(ctx, clusterJobStatus);
             eventRecorder.triggerEvent(
                     resource,
                     EventRecorder.Type.Normal,
@@ -197,17 +187,20 @@ public abstract class JobStatusObserver<
         }
     }
 
-    private void setErrorIfPresent(
-            R resource, JobStatusMessage clusterJobStatus, Configuration deployedConfig) {
+    private void setErrorIfPresent(FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
         if (clusterJobStatus.getJobState() == org.apache.flink.api.common.JobStatus.FAILED) {
             try {
                 var result =
-                        flinkService.requestJobResult(deployedConfig, clusterJobStatus.getJobId());
+                        ctx.getFlinkService()
+                                .requestJobResult(
+                                        ctx.getObserveConfig(), clusterJobStatus.getJobId());
                 result.getSerializedThrowable()
                         .ifPresent(
                                 t -> {
                                     updateFlinkResourceException(
-                                            t, resource, configManager.getOperatorConfiguration());
+                                            t,
+                                            ctx.getResource(),
+                                            configManager.getOperatorConfiguration());
                                     LOG.error(
                                             "Job {} failed with error: {}",
                                             clusterJobStatus.getJobId(),

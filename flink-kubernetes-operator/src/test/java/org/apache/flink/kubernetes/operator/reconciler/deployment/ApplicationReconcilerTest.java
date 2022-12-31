@@ -26,10 +26,8 @@ import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.configuration.SchedulerExecutionMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.TestingApplicationReconciler;
-import org.apache.flink.kubernetes.operator.TestingFlinkService;
-import org.apache.flink.kubernetes.operator.TestingStatusRecorder;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -42,26 +40,22 @@ import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.utils.EventCollector;
-import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 import org.apache.flink.kubernetes.operator.utils.SavepointStatus;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
-import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
+import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -89,33 +83,19 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 /** @link JobStatusObserver unit tests */
 @EnableKubernetesMockClient(crud = true)
-public class ApplicationReconcilerTest {
+public class ApplicationReconcilerTest extends OperatorTestBase {
 
-    private KubernetesClient kubernetesClient;
-    private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
-    private TestingFlinkService flinkService;
-    private ApplicationReconciler reconciler;
+    private TestReconcilerAdapter<FlinkDeployment, FlinkDeploymentSpec, FlinkDeploymentStatus>
+            reconciler;
 
-    private Context<FlinkDeployment> context;
-    private StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
+    @Getter private KubernetesClient kubernetesClient;
 
-    private EventCollector eventCollector = new EventCollector();
-
-    @BeforeEach
-    public void before() {
-        kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
-        var eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
-        statusRecorder = new TestingStatusRecorder<FlinkDeployment, FlinkDeploymentStatus>();
-        flinkService = new TestingFlinkService(kubernetesClient);
-        context = flinkService.getContext();
+    @Override
+    public void setup() {
         reconciler =
-                new TestingApplicationReconciler(
-                        kubernetesClient,
-                        flinkService,
-                        configManager,
-                        eventRecorder,
-                        statusRecorder,
-                        TestUtils.createTestMetricGroup(new Configuration()));
+                new TestReconcilerAdapter<>(
+                        this,
+                        new ApplicationReconciler(kubernetesClient, eventRecorder, statusRecorder));
     }
 
     @ParameterizedTest
@@ -488,14 +468,18 @@ public class ApplicationReconcilerTest {
 
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-        reconciler.deploy(flinkApp, spec, status, context, deployConfig, Optional.empty(), false);
+        reconciler
+                .getReconciler()
+                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
 
         String path1 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path1.startsWith(haStoragePath));
 
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-        reconciler.deploy(flinkApp, spec, status, context, deployConfig, Optional.empty(), false);
+        reconciler
+                .getReconciler()
+                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
         String path2 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path2.startsWith(haStoragePath));
         assertNotEquals(path1, path2);
@@ -630,7 +614,9 @@ public class ApplicationReconcilerTest {
 
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
-        reconciler.deploy(flinkApp, spec, status, context, deployConfig, Optional.empty(), false);
+        reconciler
+                .getReconciler()
+                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
 
         final List<Map<String, String>> expectedOwnerReferences =
                 List.of(TestUtils.generateTestOwnerReferenceMap(flinkApp));
@@ -664,11 +650,15 @@ public class ApplicationReconcilerTest {
         var now = Instant.now();
         status.getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
 
-        reconciler.setClock(Clock.fixed(now.plus(Duration.ofMinutes(3)), ZoneId.systemDefault()));
+        reconciler
+                .getReconciler()
+                .setClock(Clock.fixed(now.plus(Duration.ofMinutes(3)), ZoneId.systemDefault()));
         reconciler.reconcile(deployment, context);
         assertEquals(JobManagerDeploymentStatus.READY, status.getJobManagerDeploymentStatus());
 
-        reconciler.setClock(Clock.fixed(now.plus(Duration.ofMinutes(6)), ZoneId.systemDefault()));
+        reconciler
+                .getReconciler()
+                .setClock(Clock.fixed(now.plus(Duration.ofMinutes(6)), ZoneId.systemDefault()));
         reconciler.reconcile(deployment, context);
         assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
     }

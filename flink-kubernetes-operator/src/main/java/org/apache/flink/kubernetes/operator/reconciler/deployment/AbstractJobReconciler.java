@@ -19,23 +19,20 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,18 +54,18 @@ public abstract class AbstractJobReconciler<
 
     public AbstractJobReconciler(
             KubernetesClient kubernetesClient,
-            FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<CR, STATUS> statusRecorder,
-            KubernetesOperatorMetricGroup operatorMetricGroup) {
-        super(kubernetesClient, configManager, eventRecorder, statusRecorder, operatorMetricGroup);
+            StatusRecorder<CR, STATUS> statusRecorder) {
+        super(kubernetesClient, eventRecorder, statusRecorder);
     }
 
     @Override
-    public boolean readyToReconcile(CR resource, Context<?> context, Configuration deployConfig) {
-        if (shouldWaitForPendingSavepoint(
-                resource.getStatus().getJobStatus(),
-                getDeployConfig(resource.getMetadata(), resource.getSpec(), context))) {
+    public boolean readyToReconcile(FlinkResourceContext<CR> ctx) {
+        var status = ctx.getResource().getStatus();
+        if (status.getReconciliationStatus().isBeforeFirstDeployment()) {
+            return true;
+        }
+        if (shouldWaitForPendingSavepoint(status.getJobStatus(), ctx.getObserveConfig())) {
             LOG.info("Delaying job reconciliation until pending savepoint is completed.");
             return false;
         }
@@ -82,14 +79,10 @@ public abstract class AbstractJobReconciler<
     }
 
     @Override
-    protected boolean reconcileSpecChange(
-            CR resource,
-            Context<?> ctx,
-            Configuration observeConfig,
-            Configuration deployConfig,
-            DiffType diffType)
+    protected boolean reconcileSpecChange(FlinkResourceContext<CR> ctx, Configuration deployConfig)
             throws Exception {
 
+        var resource = ctx.getResource();
         STATUS status = resource.getStatus();
         var reconciliationStatus = status.getReconciliationStatus();
         SPEC lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
@@ -101,8 +94,7 @@ public abstract class AbstractJobReconciler<
             if (desiredJobState == JobState.RUNNING) {
                 LOG.info("Upgrading/Restarting running job, suspending first...");
             }
-            Optional<UpgradeMode> availableUpgradeMode =
-                    getAvailableUpgradeMode(resource, ctx, deployConfig, observeConfig);
+            Optional<UpgradeMode> availableUpgradeMode = getAvailableUpgradeMode(ctx, deployConfig);
             if (availableUpgradeMode.isEmpty()) {
                 return false;
             }
@@ -115,7 +107,7 @@ public abstract class AbstractJobReconciler<
                     MSG_SUSPENDED);
             // We must record the upgrade mode used to the status later
             currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.get());
-            cancelJob(resource, ctx, availableUpgradeMode.get(), observeConfig);
+            cancelJob(ctx, availableUpgradeMode.get());
             if (desiredJobState == JobState.RUNNING) {
                 ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig);
             } else {
@@ -135,10 +127,8 @@ public abstract class AbstractJobReconciler<
             statusRecorder.patchAndCacheStatus(resource);
 
             restoreJob(
-                    resource,
-                    currentDeploySpec,
-                    status,
                     ctx,
+                    currentDeploySpec,
                     deployConfig,
                     // We decide to enforce HA based on how job was previously suspended
                     lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
@@ -149,7 +139,8 @@ public abstract class AbstractJobReconciler<
     }
 
     protected Optional<UpgradeMode> getAvailableUpgradeMode(
-            CR resource, Context<?> ctx, Configuration deployConfig, Configuration observeConfig) {
+            FlinkResourceContext<CR> ctx, Configuration deployConfig) {
+        var resource = ctx.getResource();
         var status = resource.getStatus();
         var upgradeMode = resource.getSpec().getJob().getUpgradeMode();
 
@@ -158,9 +149,9 @@ public abstract class AbstractJobReconciler<
             return Optional.of(UpgradeMode.STATELESS);
         }
 
-        var flinkService = getFlinkService(resource, ctx);
+        var flinkService = ctx.getFlinkService();
         if (ReconciliationUtils.isJobInTerminalState(status)
-                && !flinkService.isHaMetadataAvailable(observeConfig)) {
+                && !flinkService.isHaMetadataAvailable(ctx.getObserveConfig())) {
             LOG.info(
                     "Job is in terminal state, ready for upgrade from observed latest checkpoint/savepoint");
             return Optional.of(UpgradeMode.SAVEPOINT);
@@ -170,7 +161,7 @@ public abstract class AbstractJobReconciler<
             LOG.info("Job is in running state, ready for upgrade with {}", upgradeMode);
             var changedToLastStateWithoutHa =
                     ReconciliationUtils.isUpgradeModeChangedToLastStateAndHADisabledPreviously(
-                            resource, observeConfig);
+                            resource, ctx.getObserveConfig());
             if (changedToLastStateWithoutHa) {
                 LOG.info(
                         "Using savepoint upgrade mode when switching to last-state without HA previously enabled");
@@ -190,10 +181,8 @@ public abstract class AbstractJobReconciler<
     }
 
     protected void restoreJob(
-            CR resource,
+            FlinkResourceContext<CR> ctx,
             SPEC spec,
-            STATUS status,
-            Context<?> ctx,
             Configuration deployConfig,
             boolean requireHaMetadata)
             throws Exception {
@@ -201,16 +190,21 @@ public abstract class AbstractJobReconciler<
 
         if (spec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
             savepointOpt =
-                    Optional.ofNullable(status.getJobStatus().getSavepointInfo().getLastSavepoint())
+                    Optional.ofNullable(
+                                    ctx.getResource()
+                                            .getStatus()
+                                            .getJobStatus()
+                                            .getSavepointInfo()
+                                            .getLastSavepoint())
                             .flatMap(s -> Optional.ofNullable(s.getLocation()));
         }
 
-        deploy(resource, spec, status, ctx, deployConfig, savepointOpt, requireHaMetadata);
+        deploy(ctx, spec, deployConfig, savepointOpt, requireHaMetadata);
     }
 
     @Override
-    protected void rollback(CR resource, Context<?> ctx, Configuration observeConfig)
-            throws Exception {
+    protected void rollback(FlinkResourceContext<CR> ctx) throws Exception {
+        var resource = ctx.getResource();
         var reconciliationStatus = resource.getStatus().getReconciliationStatus();
         var rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
         rollbackSpec.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
@@ -218,77 +212,61 @@ public abstract class AbstractJobReconciler<
         UpgradeMode upgradeMode = resource.getSpec().getJob().getUpgradeMode();
 
         cancelJob(
-                resource,
                 ctx,
                 upgradeMode == UpgradeMode.STATELESS
                         ? UpgradeMode.STATELESS
-                        : UpgradeMode.LAST_STATE,
-                observeConfig);
+                        : UpgradeMode.LAST_STATE);
 
         restoreJob(
-                resource,
-                rollbackSpec,
-                resource.getStatus(),
                 ctx,
-                getDeployConfig(resource.getMetadata(), rollbackSpec, ctx),
+                rollbackSpec,
+                ctx.getDeployConfig(rollbackSpec),
                 upgradeMode != UpgradeMode.STATELESS);
 
         reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
     }
 
     @Override
-    public boolean reconcileOtherChanges(
-            CR resource, Context<?> context, Configuration observeConfig) throws Exception {
+    public boolean reconcileOtherChanges(FlinkResourceContext<CR> ctx) throws Exception {
+        var status = ctx.getResource().getStatus();
         var jobStatus =
-                org.apache.flink.api.common.JobStatus.valueOf(
-                        resource.getStatus().getJobStatus().getState());
+                org.apache.flink.api.common.JobStatus.valueOf(status.getJobStatus().getState());
         if (jobStatus == org.apache.flink.api.common.JobStatus.FAILED
-                && observeConfig.getBoolean(OPERATOR_JOB_RESTART_FAILED)) {
+                && ctx.getObserveConfig().getBoolean(OPERATOR_JOB_RESTART_FAILED)) {
             LOG.info("Stopping failed Flink job...");
-            cleanupAfterFailedJob(resource, context, observeConfig);
-            resource.getStatus().setError(null);
-            resubmitJob(resource, context, observeConfig, false);
+            cleanupAfterFailedJob(ctx);
+            status.setError(null);
+            resubmitJob(ctx, false);
             return true;
         } else {
             return SavepointUtils.triggerSavepointIfNeeded(
-                    getFlinkService(resource, context), resource, observeConfig);
+                    ctx.getFlinkService(), ctx.getResource(), ctx.getObserveConfig());
         }
     }
 
-    protected void resubmitJob(
-            CR deployment, Context<?> ctx, Configuration observeConfig, boolean requireHaMetadata)
+    protected void resubmitJob(FlinkResourceContext<CR> ctx, boolean requireHaMetadata)
             throws Exception {
         LOG.info("Resubmitting Flink job...");
-        SPEC specToRecover = ReconciliationUtils.getDeployedSpec(deployment);
+        SPEC specToRecover = ReconciliationUtils.getDeployedSpec(ctx.getResource());
         specToRecover.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-        restoreJob(
-                deployment,
-                specToRecover,
-                deployment.getStatus(),
-                ctx,
-                observeConfig,
-                requireHaMetadata);
+        restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata);
     }
 
     /**
      * Cancel the job for the given resource using the specified upgrade mode.
      *
-     * @param resource Related Flink resource.
+     * @param ctx Reconciler context.
      * @param upgradeMode Upgrade mode used during cancel.
-     * @param observeConfig Observe configuration.
      * @throws Exception Error during cancellation.
      */
-    protected abstract void cancelJob(
-            CR resource, Context<?> ctx, UpgradeMode upgradeMode, Configuration observeConfig)
+    protected abstract void cancelJob(FlinkResourceContext<CR> ctx, UpgradeMode upgradeMode)
             throws Exception;
 
     /**
      * Removes a failed job.
      *
-     * @param resource The failed job.
-     * @param observeConfig Observe configuration.
+     * @param ctx Reconciler context.
      * @throws Exception Error during cancellation.
      */
-    protected abstract void cleanupAfterFailedJob(
-            CR resource, Context<?> ctx, Configuration observeConfig) throws Exception;
+    protected abstract void cleanupAfterFailedJob(FlinkResourceContext<CR> ctx) throws Exception;
 }
