@@ -78,7 +78,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
 
     private Clock clock = Clock.systemDefaultZone();
 
-    public CollectedMetrics getMetricsHistory(
+    public CollectedMetrics updateMetrics(
             AbstractFlinkResource<?, ?> cr,
             AutoScalerInfo scalingInformation,
             FlinkService flinkService,
