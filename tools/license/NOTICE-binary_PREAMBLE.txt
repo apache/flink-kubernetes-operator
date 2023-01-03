@@ -4,5 +4,5 @@
 // ------------------------------------------------------------------
 
 Apache Flink Kubernetes Operator (flink-kubernetes-operator)
-Copyright 2014-2022 The Apache Software Foundation
+Copyright 2014-2023 The Apache Software Foundation
 
