@@ -110,7 +110,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
                 Duration.ofMillis(
                         Math.min(
                                 now.toEpochMilli() - stableTime.toEpochMilli(),
-                                conf.get(AutoScalerOptions.METRICS_WINDOW_MAX_SIZE).toMillis()));
+                                conf.get(AutoScalerOptions.METRICS_WINDOW).toMillis()));
 
         // Extract metrics history for metric window size
         var scalingMetricHistory =
@@ -138,7 +138,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
         scalingMetricHistory.put(clock.instant(), scalingMetrics);
         scalingInformation.updateMetricHistory(currentJobUpdateTs, scalingMetricHistory);
 
-        if (now.isBefore(stableTime.plus(conf.get(AutoScalerOptions.METRICS_WINDOW_MIN_SIZE)))) {
+        if (now.isBefore(stableTime.plus(conf.get(AutoScalerOptions.METRICS_WINDOW)))) {
             // As long as we haven't had time to collect a full window,
             // collect metrics but do not return any metrics
             return new CollectedMetrics(topology, Collections.emptySortedMap());

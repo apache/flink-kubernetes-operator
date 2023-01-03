@@ -106,8 +106,7 @@ public class MetricsCollectionAndEvaluationTest {
         var confManager = new FlinkConfigManager(new Configuration());
         conf = confManager.getDeployConfig(app.getMetadata(), app.getSpec());
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofSeconds(10));
-        conf.set(AutoScalerOptions.METRICS_WINDOW_MIN_SIZE, Duration.ofSeconds(100));
-        conf.set(AutoScalerOptions.METRICS_WINDOW_MAX_SIZE, Duration.ofSeconds(150));
+        conf.set(AutoScalerOptions.METRICS_WINDOW, Duration.ofSeconds(100));
         conf.set(AutoScalerOptions.RESTART_TIME, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
@@ -151,7 +150,7 @@ public class MetricsCollectionAndEvaluationTest {
                 Clock.fixed(
                         startTime
                                 .plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL))
-                                .plus(conf.get(AutoScalerOptions.METRICS_WINDOW_MIN_SIZE)),
+                                .plus(conf.get(AutoScalerOptions.METRICS_WINDOW)),
                         ZoneId.systemDefault());
         metricsCollector.setClock(clock);
         collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
@@ -306,41 +305,30 @@ public class MetricsCollectionAndEvaluationTest {
         clock = Clock.offset(clock, conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
         metricsCollector.setClock(clock);
 
-        // This call will lead to metric collection but we haven't reached the min window size yet
+        // This call will lead to metric collection but we haven't reached the window size yet
         // which will hold back metrics
         metricsHistory = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
         assertEquals(0, metricsHistory.getMetricHistory().size());
 
-        // Min window size reached
-        metricsCollector.setClock(
-                Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW_MIN_SIZE)));
+        // Collect more values in window
+        metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(1)));
         metricsHistory = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
-        assertEquals(2, metricsHistory.getMetricHistory().size());
+        assertEquals(0, metricsHistory.getMetricHistory().size());
 
-        // Collect in between min and max window
-        metricsCollector.setClock(
-                Clock.offset(
-                        clock, conf.get(AutoScalerOptions.METRICS_WINDOW_MIN_SIZE).plusSeconds(1)));
+        // Window size reached
+        metricsCollector.setClock(Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW)));
         metricsHistory = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
         assertEquals(3, metricsHistory.getMetricHistory().size());
 
-        // Max window size reached
+        // Window size + 1 will invalidate the first metric
         metricsCollector.setClock(
-                Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW_MAX_SIZE)));
+                Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW).plusSeconds(1)));
         metricsHistory = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
-        assertEquals(4, metricsHistory.getMetricHistory().size());
-
-        // Max window size + 1 will invalidate the first metric
-        metricsCollector.setClock(
-                Clock.offset(
-                        clock, conf.get(AutoScalerOptions.METRICS_WINDOW_MAX_SIZE).plusSeconds(1)));
-        metricsHistory = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
-        assertEquals(4, metricsHistory.getMetricHistory().size());
+        assertEquals(3, metricsHistory.getMetricHistory().size());
 
         // Completely new metric window with just the currently connected metric
         metricsCollector.setClock(
-                Clock.offset(
-                        clock, conf.get(AutoScalerOptions.METRICS_WINDOW_MAX_SIZE).plusDays(1)));
+                Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW).plusDays(1)));
         metricsHistory = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
         assertEquals(1, metricsHistory.getMetricHistory().size());
 

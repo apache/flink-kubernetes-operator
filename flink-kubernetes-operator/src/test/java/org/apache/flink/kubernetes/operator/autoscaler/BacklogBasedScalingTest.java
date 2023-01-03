@@ -338,7 +338,7 @@ public class BacklogBasedScalingTest {
                 .getJobStatus()
                 .setUpdateTime(
                         String.valueOf(
-                                now.minus(AutoScalerOptions.METRICS_WINDOW_MIN_SIZE.defaultValue())
+                                now.minus(AutoScalerOptions.METRICS_WINDOW.defaultValue())
                                         .toEpochMilli()));
     }
 
