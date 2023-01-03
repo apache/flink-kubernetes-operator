@@ -54,10 +54,13 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for scaling metrics collection logic. */
 @EnableKubernetesMockClient(crud = true)
 public class MetricsCollectionAndEvaluationTest {
+
+    private final AutoScalerInfo scalingInfo = new AutoScalerInfo(new HashMap<>());
 
     private ScalingMetricEvaluator evaluator;
     private TestingFlinkService service;
@@ -70,6 +73,10 @@ public class MetricsCollectionAndEvaluationTest {
     private JobTopology topology;
 
     private KubernetesClient kubernetesClient;
+
+    private Clock clock;
+
+    private Instant startTime;
 
     @BeforeEach
     public void setup() {
@@ -98,13 +105,17 @@ public class MetricsCollectionAndEvaluationTest {
 
         var confManager = new FlinkConfigManager(new Configuration());
         conf = confManager.getDeployConfig(app.getMetadata(), app.getSpec());
-        conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
+        conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofSeconds(10));
+        conf.set(AutoScalerOptions.METRICS_WINDOW, Duration.ofSeconds(100));
         conf.set(AutoScalerOptions.RESTART_TIME, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
         ReconciliationUtils.updateStatusForDeployedSpec(app, conf);
-        app.getStatus().getJobStatus().setStartTime(String.valueOf(System.currentTimeMillis()));
-        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(System.currentTimeMillis()));
+        clock = Clock.fixed(Instant.ofEpochSecond(0), ZoneId.systemDefault());
+        metricsCollector.setClock(clock);
+        startTime = clock.instant();
+        app.getStatus().getJobStatus().setStartTime(String.valueOf(startTime.toEpochMilli()));
+        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(startTime.toEpochMilli()));
         app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
     }
 
@@ -113,25 +124,52 @@ public class MetricsCollectionAndEvaluationTest {
         conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
         conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
 
-        var scalingInfo = new AutoScalerInfo(new HashMap<>());
+        setDefaultMetrics(metricsCollector);
 
-        setDefaultMetrics();
-        metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
+        // We haven't left the stabilization period
+        // => no metrics reporting and collection should take place
+        var collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+
+        // We haven't collected a full window yet, no metrics should be reported but metrics should
+        // still get collected.
+        clock = Clock.offset(clock, conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
+        metricsCollector.setClock(clock);
+        collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+
+        // We haven't collected a full window yet
+        // => no metrics should be reported but metrics should still get collected.
+        clock = Clock.offset(clock, Duration.ofSeconds(1));
+        metricsCollector.setClock(clock);
+        collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+
+        // Advance time to stabilization period + full window => metrics should be present
+        clock =
+                Clock.fixed(
+                        startTime
+                                .plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL))
+                                .plus(conf.get(AutoScalerOptions.METRICS_WINDOW)),
+                        ZoneId.systemDefault());
+        metricsCollector.setClock(clock);
+        collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(3, collectedMetrics.getMetricHistory().size());
 
         // Test resetting the collector and make sure we can deserialize the scalingInfo correctly
         metricsCollector = new TestingMetricsCollector(topology);
-        setDefaultMetrics();
-
-        var clock = Clock.fixed(Instant.now().plus(Duration.ofSeconds(3)), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
+        setDefaultMetrics(metricsCollector);
+        collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(3, collectedMetrics.getMetricHistory().size());
+
         evaluator.setClock(clock);
-
-        var collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
-
         var evaluation = evaluator.evaluate(conf, collectedMetrics);
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
+        assertEquals(4, scaledParallelism.size());
+
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(source2));
         assertEquals(6, scaledParallelism.get(map));
@@ -161,7 +199,7 @@ public class MetricsCollectionAndEvaluationTest {
         assertNull(metricsCollector.getTopologies().get(resourceID));
     }
 
-    private void setDefaultMetrics() {
+    private void setDefaultMetrics(TestingMetricsCollector metricsCollector) {
         metricsCollector.setCurrentMetrics(
                 Map.of(
                         source1,
@@ -206,14 +244,14 @@ public class MetricsCollectionAndEvaluationTest {
     public void testKafkaPartitionMaxParallelism() throws Exception {
         var scalingInfo = new AutoScalerInfo(new HashMap<>());
 
-        setDefaultMetrics();
-        metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
+        setDefaultMetrics(metricsCollector);
+        metricsCollector.updateMetrics(app, scalingInfo, service, conf);
 
         var clock = Clock.fixed(Instant.now().plus(Duration.ofSeconds(3)), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
         evaluator.setClock(clock);
 
-        var collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
+        var collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
 
         assertEquals(720, collectedMetrics.getJobTopology().getMaxParallelisms().get(source1));
         assertEquals(720, collectedMetrics.getJobTopology().getMaxParallelisms().get(source2));
@@ -235,7 +273,7 @@ public class MetricsCollectionAndEvaluationTest {
                                 new AggregatedMetric(
                                         "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.3.currentOffset"))));
 
-        collectedMetrics = metricsCollector.getMetricsHistory(app, scalingInfo, service, conf);
+        collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
         assertEquals(4, collectedMetrics.getJobTopology().getMaxParallelisms().get(source1));
         assertEquals(720, collectedMetrics.getJobTopology().getMaxParallelisms().get(source2));
     }
@@ -250,5 +288,52 @@ public class MetricsCollectionAndEvaluationTest {
         var flinkObjectMapper = new ObjectMapper();
         flinkObjectMapper.readValue(flink15Response, JobDetailsInfo.class);
         flinkObjectMapper.readValue(flink16Response, JobDetailsInfo.class);
+    }
+
+    @Test
+    public void testMetricCollectorWindow() throws Exception {
+        setDefaultMetrics(metricsCollector);
+        var metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(0, metricsHistory.getMetricHistory().size());
+
+        // Not stable, nothing should be collected
+        metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(1)));
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(0, metricsHistory.getMetricHistory().size());
+
+        // Update clock to stable time
+        clock = Clock.offset(clock, conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
+        metricsCollector.setClock(clock);
+
+        // This call will lead to metric collection but we haven't reached the window size yet
+        // which will hold back metrics
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(0, metricsHistory.getMetricHistory().size());
+
+        // Collect more values in window
+        metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(1)));
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(0, metricsHistory.getMetricHistory().size());
+
+        // Window size reached
+        metricsCollector.setClock(Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW)));
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(3, metricsHistory.getMetricHistory().size());
+
+        // Window size + 1 will invalidate the first metric
+        metricsCollector.setClock(
+                Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW).plusSeconds(1)));
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(3, metricsHistory.getMetricHistory().size());
+
+        // Completely new metric window with just the currently connected metric
+        metricsCollector.setClock(
+                Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW).plusDays(1)));
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(1, metricsHistory.getMetricHistory().size());
+
+        // Everything should reset on job updates
+        app.getStatus().getJobStatus().setUpdateTime("0");
+        assertEquals(1, metricsHistory.getMetricHistory().size());
     }
 }

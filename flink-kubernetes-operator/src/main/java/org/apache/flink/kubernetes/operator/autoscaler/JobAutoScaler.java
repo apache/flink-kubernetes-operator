@@ -104,8 +104,7 @@ public class JobAutoScaler implements Cleanup {
 
             LOG.info("Collecting metrics for scaling");
             var collectedMetrics =
-                    metricsCollector.getMetricsHistory(
-                            resource, autoScalerInfo, flinkService, conf);
+                    metricsCollector.updateMetrics(resource, autoScalerInfo, flinkService, conf);
 
             if (collectedMetrics == null || collectedMetrics.getMetricHistory().isEmpty()) {
                 LOG.info("No metrics were collected. Skipping scaling step");

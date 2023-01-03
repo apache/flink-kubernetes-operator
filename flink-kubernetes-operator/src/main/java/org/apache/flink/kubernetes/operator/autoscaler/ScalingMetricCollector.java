@@ -51,6 +51,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -77,7 +78,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
 
     private Clock clock = Clock.systemDefaultZone();
 
-    public CollectedMetrics getMetricsHistory(
+    public CollectedMetrics updateMetrics(
             AbstractFlinkResource<?, ?> cr,
             AutoScalerInfo scalingInformation,
             FlinkService flinkService,
@@ -85,16 +86,33 @@ public abstract class ScalingMetricCollector implements Cleanup {
             throws Exception {
 
         var resourceID = ResourceID.fromResource(cr);
-        var currentJobStartTs =
-                Instant.ofEpochMilli(Long.parseLong(cr.getStatus().getJobStatus().getStartTime()));
+        var jobStatus = cr.getStatus().getJobStatus();
+        var currentJobUpdateTs = Instant.ofEpochMilli(Long.parseLong(jobStatus.getUpdateTime()));
+        var now = clock.instant();
 
-        if (!currentJobStartTs.equals(
-                scalingInformation.getJobStartTs().orElse(currentJobStartTs))) {
+        if (!currentJobUpdateTs.equals(
+                scalingInformation.getJobUpdateTs().orElse(currentJobUpdateTs))) {
             scalingInformation.clearMetricHistory();
             cleanup(cr);
         }
 
-        // Initialize metric history
+        var topology = getJobTopology(flinkService, cr, conf);
+
+        var stabilizationDuration = conf.get(AutoScalerOptions.STABILIZATION_INTERVAL);
+        var stableTime = currentJobUpdateTs.plus(stabilizationDuration);
+        if (now.isBefore(stableTime)) {
+            // As long as we are stabilizing, collect no metrics at all
+            return new CollectedMetrics(topology, Collections.emptySortedMap());
+        }
+
+        // Adjust the window size until it reaches the max size
+        var metricsWindowSize =
+                Duration.ofMillis(
+                        Math.min(
+                                now.toEpochMilli() - stableTime.toEpochMilli(),
+                                conf.get(AutoScalerOptions.METRICS_WINDOW).toMillis()));
+
+        // Extract metrics history for metric window size
         var scalingMetricHistory =
                 histories.compute(
                         resourceID,
@@ -102,12 +120,8 @@ public abstract class ScalingMetricCollector implements Cleanup {
                             if (h == null) {
                                 h = scalingInformation.getMetricHistory();
                             }
-                            return h.tailMap(
-                                    clock.instant()
-                                            .minus(conf.get(AutoScalerOptions.METRICS_WINDOW)));
+                            return h.tailMap(now.minus(metricsWindowSize));
                         });
-
-        var topology = getJobTopology(flinkService, cr, conf);
 
         // The filtered list of metrics we want to query for each vertex
         var filteredVertexMetricNames = queryFilteredMetricNames(flinkService, cr, conf, topology);
@@ -122,7 +136,13 @@ public abstract class ScalingMetricCollector implements Cleanup {
 
         // Add scaling metrics to history if they were computed successfully
         scalingMetricHistory.put(clock.instant(), scalingMetrics);
-        scalingInformation.updateMetricHistory(currentJobStartTs, scalingMetricHistory);
+        scalingInformation.updateMetricHistory(currentJobUpdateTs, scalingMetricHistory);
+
+        if (now.isBefore(stableTime.plus(conf.get(AutoScalerOptions.METRICS_WINDOW)))) {
+            // As long as we haven't had time to collect a full window,
+            // collect metrics but do not return any metrics
+            return new CollectedMetrics(topology, Collections.emptySortedMap());
+        }
 
         return new CollectedMetrics(topology, scalingMetricHistory);
     }
