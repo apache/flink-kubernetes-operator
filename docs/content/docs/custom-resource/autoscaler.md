@@ -36,7 +36,7 @@ Key benefits to the user:
  - Detailed utilization metrics for performance debugging
 
 Job requirements:
- - The autoscaler currently only works with the latest [Flink 1.17 snapshot images](ghcr.io/apache/flink-docker:1.17-SNAPSHOT-scala_2.12-java11-debian) or after backporting the following fixes to your 1.15/1.16 Flink image
+ - The autoscaler currently only works with the latest [Flink 1.17 snapshot images](https://ghcr.io/apache/flink-docker) or after backporting the following fixes to your 1.15/1.16 Flink image
    - [Job vertex parallelism overrides](https://github.com/apache/flink/commit/23ce2281a0bb4047c64def9af7ddd5f19d88e2a9) (must have)
    - [Support timespan for busyTime metrics](https://github.com/apache/flink/commit/a7fdab8b23cddf568fa32ee7eb804d7c3eb23a35) (good to have)
  - All sources must use the new [Source API](https://cwiki.apache.org/confluence/display/FLINK/FLIP-27%3A+Refactor+Source+Interface) (most common connectors already do)
@@ -81,15 +81,8 @@ The autoscaler always looks at average metrics in the collection time window def
 The size of this window determines how small fluctuations will affect the autoscaler. The larger the window, the more smoothing and stability we get, but we may be slower to react to sudden load changes.
 We suggest you experiment with setting this anywhere between 3-60 minutes for best experience.
 
-To allow jobs to stabilize after recovery users can configure a stabilization window by setting `kubernetes.operator.job.autoscaler.stabilization.interval`. 
-During this time period no scaling actions will be taken.
-
-{{< hint warning >}}
-Currently the autoscaler treats the collection window as the **maximum** window. Metric evaluation will start right after the stabilization period.
-We also include metrics collected during the stabilization period at the moment which might cause some instability with very low stabilization periods.
-
-We are working on improving this.
-{{< /hint >}}
+To allow jobs to stabilize after recovery users can configure a stabilization window by setting `kubernetes.operator.job.autoscaler.stabilization.interval`.
+During this time period no metrics will be collected and no scaling actions will be taken.
 
 ### Target utilization and flexible boundaries
 
@@ -107,7 +100,7 @@ When taking scaling decisions the operator need to account for the extra capacit
 The amount of extra capacity is determined automatically by the following 2 configs:
 
  - `kubernetes.operator.job.autoscaler.restart.time` : Time it usually takes to restart the application
- - `kubernetes.operator.job.autoscaler.catch-up.duration` : Time to job is expected to catch up after scaling 
+ - `kubernetes.operator.job.autoscaler.catch-up.duration` : Time to job is expected to catch up after scaling
 
 In the future the autoscaler may be able to automatically determine the restart time, but the target catch-up duration depends on the users SLO.
 
@@ -120,8 +113,8 @@ We suggest setting this based on your actual objective, such us 1, 5, 10 minutes
 flinkVersion: v1_17
 flinkConfiguration:
     kubernetes.operator.job.autoscaler.enabled: "true"
-    kubernetes.operator.job.autoscaler.stabilization.interval: "5m"
-    kubernetes.operator.job.autoscaler.metrics.window: "5m"
+    kubernetes.operator.job.autoscaler.stabilization.interval: 1m
+    kubernetes.operator.job.autoscaler.metrics.window: 5m
     kubernetes.operator.job.autoscaler.target.utilization: "0.6"
     kubernetes.operator.job.autoscaler.target.utilization.boundary: "0.2"
     kubernetes.operator.job.autoscaler.restart.time: 2m
