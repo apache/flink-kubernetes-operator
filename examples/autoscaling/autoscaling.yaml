@@ -22,15 +22,15 @@ metadata:
   name: autoscaling-example
 spec:
   image: autoscaling-example
-  flinkVersion: v1_16
+  flinkVersion: v1_17
   flinkConfiguration:
     kubernetes.operator.job.autoscaler.enabled: "true"
-    kubernetes.operator.job.autoscaler.scaling.enabled: "true"
     kubernetes.operator.job.autoscaler.scaling.sources.enabled: "false"
     kubernetes.operator.job.autoscaler.stabilization.interval: "1m"
+    kubernetes.operator.job.autoscaler.metrics.window: "3m"
+    pipeline.max-parallelism: "8"
 
     taskmanager.numberOfTaskSlots: "2"
-    pipeline.max-parallelism: "720"
     state.savepoints.dir: file:///flink-data/savepoints
     state.checkpoints.dir: file:///flink-data/checkpoints
     high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
