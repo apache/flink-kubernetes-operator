@@ -254,16 +254,16 @@ public class DefaultValidatorTest {
                 "JobManager resource memory parse error");
         testError(
                 dep -> dep.getSpec().getTaskManager().getResource().setMemory(null),
-                "TaskManager memory configuration failed");
+                "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
         testError(
                 dep -> dep.getSpec().getJobManager().getResource().setMemory(null),
-                "JobManager memory configuration failed");
+                "JobManager resource memory must be defined using `spec.jobManager.resource.memory`");
         testError(
                 dep -> {
                     dep.getSpec().getTaskManager().getResource().setMemory(null);
                     dep.getSpec().setFlinkConfiguration(Map.of(TASK_HEAP_MEMORY.key(), "1024m"));
                 },
-                "TaskManager memory configuration failed");
+                "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
 
         testSuccess(
                 dep -> {

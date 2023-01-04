@@ -267,7 +267,8 @@ public class DefaultValidator implements FlinkResourceValidator {
             JobManagerProcessUtils.processSpecFromConfigWithNewOptionToInterpretLegacyHeap(
                     conf, JobManagerOptions.JVM_HEAP_MEMORY);
         } catch (Exception e) {
-            return Optional.of(e.getMessage());
+            return Optional.of(
+                    "JobManager resource memory must be defined using `spec.jobManager.resource.memory`");
         }
 
         return Optional.empty();
@@ -308,7 +309,8 @@ public class DefaultValidator implements FlinkResourceValidator {
         try {
             TaskExecutorProcessUtils.processSpecFromConfig(conf);
         } catch (Exception e) {
-            return Optional.of(e.getMessage());
+            return Optional.of(
+                    "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
         }
         return Optional.empty();
     }
