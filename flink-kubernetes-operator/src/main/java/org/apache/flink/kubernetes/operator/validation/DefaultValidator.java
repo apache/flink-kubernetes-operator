@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -41,6 +42,8 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
+import org.apache.flink.runtime.clusterframework.TaskExecutorProcessUtils;
+import org.apache.flink.runtime.jobmanager.JobManagerProcessUtils;
 import org.apache.flink.util.StringUtils;
 
 import javax.annotation.Nullable;
@@ -87,7 +90,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateLogConfig(spec.getLogConfiguration()),
                 validateJobSpec(spec.getJob(), spec.getTaskManager(), effectiveConfig),
                 validateJmSpec(spec.getJobManager(), effectiveConfig),
-                validateTmSpec(spec.getTaskManager()),
+                validateTmSpec(spec.getTaskManager(), effectiveConfig),
                 validateSpecChange(deployment, effectiveConfig),
                 validateServiceAccount(spec.getServiceAccount()));
     }
@@ -258,13 +261,34 @@ public class DefaultValidator implements FlinkResourceValidator {
     }
 
     private Optional<String> validateJmSpec(JobManagerSpec jmSpec, Map<String, String> confMap) {
+        Configuration conf = Configuration.fromMap(confMap);
+        var jmMemoryDefined =
+                jmSpec != null
+                        && jmSpec.getResource() != null
+                        && !StringUtils.isNullOrWhitespaceOnly(jmSpec.getResource().getMemory());
+        Optional<String> jmMemoryValidation =
+                jmMemoryDefined ? Optional.empty() : validateJmMemoryConfig(conf);
+
         if (jmSpec == null) {
-            return Optional.empty();
+            return jmMemoryValidation;
         }
 
         return firstPresent(
+                jmMemoryValidation,
                 validateResources("JobManager", jmSpec.getResource()),
                 validateJmReplicas(jmSpec.getReplicas(), confMap));
+    }
+
+    private Optional<String> validateJmMemoryConfig(Configuration conf) {
+        try {
+            JobManagerProcessUtils.processSpecFromConfigWithNewOptionToInterpretLegacyHeap(
+                    conf, JobManagerOptions.JVM_HEAP_MEMORY);
+        } catch (Exception e) {
+            return Optional.of(
+                    "JobManager resource memory must be defined using `spec.jobManager.resource.memory`");
+        }
+
+        return Optional.empty();
     }
 
     private Optional<String> validateJmReplicas(int replicas, Map<String, String> confMap) {
@@ -278,16 +302,41 @@ public class DefaultValidator implements FlinkResourceValidator {
         return Optional.empty();
     }
 
-    private Optional<String> validateTmSpec(TaskManagerSpec tmSpec) {
+    private Optional<String> validateTmSpec(TaskManagerSpec tmSpec, Map<String, String> confMap) {
+        Configuration conf = Configuration.fromMap(confMap);
+
+        var tmMemoryDefined =
+                tmSpec != null
+                        && tmSpec.getResource() != null
+                        && !StringUtils.isNullOrWhitespaceOnly(tmSpec.getResource().getMemory());
+        Optional<String> tmMemoryConfigValidation =
+                tmMemoryDefined ? Optional.empty() : validateTmMemoryConfig(conf);
+
         if (tmSpec == null) {
-            return Optional.empty();
+            return tmMemoryConfigValidation;
         }
 
+        return firstPresent(
+                tmMemoryConfigValidation,
+                validateResources("TaskManager", tmSpec.getResource()),
+                validateTmReplicas(tmSpec));
+    }
+
+    private Optional<String> validateTmMemoryConfig(Configuration conf) {
+        try {
+            TaskExecutorProcessUtils.processSpecFromConfig(conf);
+        } catch (Exception e) {
+            return Optional.of(
+                    "TaskManager resource memory must be defined using `spec.taskManager.resource.memory`");
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> validateTmReplicas(TaskManagerSpec tmSpec) {
         if (tmSpec.getReplicas() != null && tmSpec.getReplicas() < 1) {
             return Optional.of("TaskManager replicas should not be configured less than one.");
         }
-
-        return validateResources("TaskManager", tmSpec.getResource());
+        return Optional.empty();
     }
 
     private Optional<String> validateResources(String component, Resource resource) {
@@ -297,7 +346,7 @@ public class DefaultValidator implements FlinkResourceValidator {
 
         String memory = resource.getMemory();
         if (memory == null) {
-            return Optional.of(component + " resource memory must be defined.");
+            return Optional.empty();
         }
 
         try {
