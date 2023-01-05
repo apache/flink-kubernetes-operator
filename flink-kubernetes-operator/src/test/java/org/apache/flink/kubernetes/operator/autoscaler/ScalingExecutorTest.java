@@ -29,7 +29,6 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
-import org.junit.Assert;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,7 +36,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -47,7 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Test for scaling metrics collection logic. */
+/** Test for scaling execution logic. */
 @EnableKubernetesMockClient(crud = true)
 public class ScalingExecutorTest {
 
@@ -170,124 +168,6 @@ public class ScalingExecutorTest {
         evaluated = Map.of(op1, evaluated(1, 70, 100, 15));
         scalingSummary = Map.of(op1, new ScalingSummary(1, 2, evaluated.get(op1)));
         assertFalse(ScalingExecutor.allVerticesWithinUtilizationTarget(evaluated, scalingSummary));
-    }
-
-    @Test
-    public void testParallelismScaling() {
-        var op = new JobVertexID();
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
-        assertEquals(
-                5,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf, op, evaluated(10, 50, 100), Collections.emptySortedMap()));
-
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
-        assertEquals(
-                8,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf, op, evaluated(10, 50, 100), Collections.emptySortedMap()));
-
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
-        assertEquals(
-                10,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf, op, evaluated(10, 80, 100), Collections.emptySortedMap()));
-
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
-        assertEquals(
-                8,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf, op, evaluated(10, 60, 100), Collections.emptySortedMap()));
-
-        assertEquals(
-                8,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf, op, evaluated(10, 59, 100), Collections.emptySortedMap()));
-
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.5);
-        assertEquals(
-                10,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf, op, evaluated(2, 100, 40), Collections.emptySortedMap()));
-
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.6);
-        assertEquals(
-                4,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf, op, evaluated(2, 100, 100), Collections.emptySortedMap()));
-
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
-        conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 0.5);
-        assertEquals(
-                5,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf, op, evaluated(10, 10, 100), Collections.emptySortedMap()));
-
-        conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 0.6);
-        assertEquals(
-                4,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf, op, evaluated(10, 10, 100), Collections.emptySortedMap()));
-    }
-
-    @Test
-    public void testParallelismComputation() {
-        final int minParallelism = 1;
-        final int maxParallelism = Integer.MAX_VALUE;
-        assertEquals(1, ScalingExecutor.scale(1, 720, 0.0001, minParallelism, maxParallelism));
-        assertEquals(1, ScalingExecutor.scale(2, 720, 0.1, minParallelism, maxParallelism));
-        assertEquals(5, ScalingExecutor.scale(6, 720, 0.8, minParallelism, maxParallelism));
-        assertEquals(32, ScalingExecutor.scale(16, 128, 1.5, minParallelism, maxParallelism));
-        assertEquals(400, ScalingExecutor.scale(200, 720, 2, minParallelism, maxParallelism));
-        assertEquals(
-                720,
-                ScalingExecutor.scale(200, 720, Integer.MAX_VALUE, minParallelism, maxParallelism));
-    }
-
-    @Test
-    public void testParallelismComputationWithLimit() {
-        assertEquals(5, ScalingExecutor.scale(6, 720, 0.8, 1, 700));
-        assertEquals(8, ScalingExecutor.scale(8, 720, 0.8, 8, 700));
-
-        assertEquals(32, ScalingExecutor.scale(16, 128, 1.5, 1, Integer.MAX_VALUE));
-        assertEquals(64, ScalingExecutor.scale(16, 128, 1.5, 60, Integer.MAX_VALUE));
-
-        assertEquals(300, ScalingExecutor.scale(200, 720, 2, 1, 300));
-        assertEquals(600, ScalingExecutor.scale(200, 720, Integer.MAX_VALUE, 1, 600));
-    }
-
-    @Test
-    public void ensureMinParallelismDoesNotExceedMax() {
-        Assert.assertThrows(
-                IllegalArgumentException.class,
-                () ->
-                        assertEquals(
-                                600, ScalingExecutor.scale(200, 720, Integer.MAX_VALUE, 500, 499)));
-    }
-
-    @Test
-    public void testMinParallelismLimitIsUsed() {
-        conf.setInteger(AutoScalerOptions.VERTEX_MIN_PARALLELISM, 5);
-        assertEquals(
-                5,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf,
-                        new JobVertexID(),
-                        evaluated(10, 100, 500),
-                        Collections.emptySortedMap()));
-    }
-
-    @Test
-    public void testMaxParallelismLimitIsUsed() {
-        conf.setInteger(AutoScalerOptions.VERTEX_MAX_PARALLELISM, 10);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
-        assertEquals(
-                10,
-                scalingDecisionExecutor.computeScaleTargetParallelism(
-                        conf,
-                        new JobVertexID(),
-                        evaluated(10, 500, 100),
-                        Collections.emptySortedMap()));
     }
 
     @Test
