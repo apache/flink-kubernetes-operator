@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -47,5 +48,10 @@ public class ScalingSummary {
         this.currentParallelism = currentParallelism;
         this.newParallelism = newParallelism;
         this.metrics = metrics;
+    }
+
+    @JsonIgnore
+    public boolean isScaledUp() {
+        return newParallelism > currentParallelism;
     }
 }

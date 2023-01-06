@@ -86,7 +86,7 @@ public class JobAutoScaler implements Cleanup {
         }
 
         if (!resource.getStatus().getJobStatus().getState().equals(JobStatus.RUNNING.name())) {
-            LOG.info("Job autoscaler is waiting for RUNNING job     state");
+            LOG.info("Job autoscaler is waiting for RUNNING job state");
             return false;
         }
 
@@ -98,8 +98,7 @@ public class JobAutoScaler implements Cleanup {
                     metricsCollector.updateMetrics(
                             resource, autoScalerInfo, ctx.getFlinkService(), conf);
 
-            if (collectedMetrics == null || collectedMetrics.getMetricHistory().isEmpty()) {
-                LOG.info("No metrics were collected. Skipping scaling step");
+            if (collectedMetrics.getMetricHistory().isEmpty()) {
                 return false;
             }
 

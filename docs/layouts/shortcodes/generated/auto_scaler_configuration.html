@@ -45,6 +45,18 @@
             <td>Period in which no scale down is allowed after a scale up</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.job.autoscaler.scaling.effectiveness.detection.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Whether to enable detection of ineffective scaling operations and allowing the autoscaler to block further scale ups.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.job.autoscaler.scaling.effectiveness.threshold</h5></td>
+            <td style="word-wrap: break-word;">0.1</td>
+            <td>Double</td>
+            <td>Processing rate increase threshold for detecting ineffective scaling threshold. 0.1 means if we do not accomplish at least 10% of the desired capacity increase with scaling, the action is marked ineffective.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.job.autoscaler.scaling.enabled</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>

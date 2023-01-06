@@ -27,12 +27,17 @@ import org.junit.Assert;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for vertex parallelism scaler logic. */
 public class JobVertexScalerTest {
@@ -166,21 +171,98 @@ public class JobVertexScalerTest {
                         Collections.emptySortedMap()));
     }
 
-    private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
-            int parallelism, double target, double procRate, double catchupRate) {
-        var metrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
-        metrics.put(ScalingMetric.PARALLELISM, EvaluatedScalingMetric.of(parallelism));
-        metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(720));
-        metrics.put(ScalingMetric.TARGET_DATA_RATE, new EvaluatedScalingMetric(target, target));
-        metrics.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchupRate));
-        metrics.put(
-                ScalingMetric.TRUE_PROCESSING_RATE, new EvaluatedScalingMetric(procRate, procRate));
-        ScalingMetricEvaluator.computeProcessingRateThresholds(metrics, conf);
-        return metrics;
+    @Test
+    public void testScaleDownAfterScaleUpDetection() {
+        var op = new JobVertexID();
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(AutoScalerOptions.SCALE_UP_GRACE_PERIOD, Duration.ofMinutes(1));
+        var clock = Clock.systemDefaultZone();
+        vertexScaler.setClock(clock);
+
+        var evaluated = evaluated(5, 100, 50);
+        var history = new TreeMap<Instant, ScalingSummary>();
+        assertEquals(10, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+
+        history.put(clock.instant(), new ScalingSummary(5, 10, evaluated));
+
+        // Should not allow scale back down immediately
+        evaluated = evaluated(10, 50, 100);
+        assertEquals(10, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+
+        // Pass some time...
+        clock = Clock.offset(Clock.systemDefaultZone(), Duration.ofSeconds(61));
+        vertexScaler.setClock(clock);
+
+        assertEquals(5, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+        history.put(clock.instant(), new ScalingSummary(10, 5, evaluated));
+
+        // Allow immediate scale up
+        evaluated = evaluated(5, 100, 50);
+        assertEquals(10, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+        history.put(clock.instant(), new ScalingSummary(5, 10, evaluated));
+    }
+
+    @Test
+    public void testIneffectiveScalingDetection() {
+        var op = new JobVertexID();
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(AutoScalerOptions.SCALE_UP_GRACE_PERIOD, Duration.ZERO);
+
+        var evaluated = evaluated(5, 100, 50);
+        var history = new TreeMap<Instant, ScalingSummary>();
+        assertEquals(10, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+        assertEquals(100, evaluated.get(ScalingMetric.EXPECTED_PROCESSING_RATE).getCurrent());
+        history.put(Instant.now(), new ScalingSummary(5, 10, evaluated));
+
+        // Allow to scale higher if scaling was effective (80%)
+        evaluated = evaluated(10, 180, 90);
+        assertEquals(20, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+        assertEquals(180, evaluated.get(ScalingMetric.EXPECTED_PROCESSING_RATE).getCurrent());
+        history.put(Instant.now(), new ScalingSummary(10, 20, evaluated));
+
+        // Detect ineffective scaling, less than 5% of target increase (instead of 90 -> 180, only
+        // 90 -> 94. Do not try to scale above 20
+        evaluated = evaluated(20, 180, 94);
+        assertEquals(20, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+        assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
+
+        // Still considered ineffective (less than <10%)
+        evaluated = evaluated(20, 180, 98);
+        assertEquals(20, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+        assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
+
+        // Allow scale up if current parallelism doesnt match last (user rescaled manually)
+        evaluated = evaluated(10, 180, 90);
+        assertEquals(20, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+
+        // Over 10%, effective
+        evaluated = evaluated(20, 180, 100);
+        assertEquals(36, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+        assertTrue(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
+
+        // Ineffective but detection is turned off
+        conf.set(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED, false);
+        evaluated = evaluated(20, 180, 90);
+        assertEquals(40, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+        assertTrue(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
+        conf.set(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED, true);
+
+        // Allow scale down even if ineffective
+        evaluated = evaluated(20, 45, 90);
+        assertEquals(10, vertexScaler.computeScaleTargetParallelism(conf, op, evaluated, history));
+        assertTrue(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
             int parallelism, double target, double procRate) {
-        return evaluated(parallelism, target, procRate, 0.);
+        var metrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
+        metrics.put(ScalingMetric.PARALLELISM, EvaluatedScalingMetric.of(parallelism));
+        metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(720));
+        metrics.put(ScalingMetric.TARGET_DATA_RATE, new EvaluatedScalingMetric(target, target));
+        metrics.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(0.));
+        metrics.put(
+                ScalingMetric.TRUE_PROCESSING_RATE, new EvaluatedScalingMetric(procRate, procRate));
+        ScalingMetricEvaluator.computeProcessingRateThresholds(metrics, conf);
+        return metrics;
     }
 }
