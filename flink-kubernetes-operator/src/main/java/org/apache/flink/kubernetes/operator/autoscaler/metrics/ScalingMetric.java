@@ -60,7 +60,10 @@ public enum ScalingMetric {
     SCALE_UP_RATE_THRESHOLD(false),
 
     /** Lower boundary of the target data rate range. */
-    SCALE_DOWN_RATE_THRESHOLD(false);
+    SCALE_DOWN_RATE_THRESHOLD(false),
+
+    /** Expected true processing rate after scale up. */
+    EXPECTED_PROCESSING_RATE(false);
 
     private final boolean calculateAverage;
 

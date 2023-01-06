@@ -40,7 +40,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.PARALLELISM_OVERRIDES;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -74,6 +73,7 @@ public class ScalingExecutorTest {
     @Test
     public void testStabilizationPeriod() throws Exception {
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofMinutes(1));
+        conf.set(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED, false);
 
         var metrics = Map.of(new JobVertexID(), evaluated(1, 110, 100));
 
@@ -168,35 +168,6 @@ public class ScalingExecutorTest {
         evaluated = Map.of(op1, evaluated(1, 70, 100, 15));
         scalingSummary = Map.of(op1, new ScalingSummary(1, 2, evaluated.get(op1)));
         assertFalse(ScalingExecutor.allVerticesWithinUtilizationTarget(evaluated, scalingSummary));
-    }
-
-    @Test
-    public void testScaleDownAfterScaleUpDetection() throws Exception {
-        var op = new JobVertexID();
-        var scalingInfo = new AutoScalerInfo(new HashMap<>());
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
-        conf.set(AutoScalerOptions.SCALE_UP_GRACE_PERIOD, Duration.ofMinutes(1));
-
-        scalingDecisionExecutor.scaleResource(
-                flinkDep, scalingInfo, conf, Map.of(op, evaluated(5, 100, 50)));
-        assertEquals(Map.of(op, 10), getScaledParallelism(flinkDep));
-
-        // Should now allow scale back down immediately
-        scalingDecisionExecutor.scaleResource(
-                flinkDep, scalingInfo, conf, Map.of(op, evaluated(10, 50, 100)));
-        assertEquals(Map.of(op, 10), getScaledParallelism(flinkDep));
-
-        // Pass some time...
-        var clock = Clock.offset(Clock.systemDefaultZone(), Duration.ofSeconds(61));
-        scalingDecisionExecutor.setClock(clock);
-        scalingDecisionExecutor.scaleResource(
-                flinkDep, scalingInfo, conf, Map.of(op, evaluated(10, 50, 100)));
-        assertEquals(Map.of(op, 5), getScaledParallelism(flinkDep));
-
-        // Allow immediate scale up
-        scalingDecisionExecutor.scaleResource(
-                flinkDep, scalingInfo, conf, Map.of(op, evaluated(5, 100, 50)));
-        assertEquals(Map.of(op, 10), getScaledParallelism(flinkDep));
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(

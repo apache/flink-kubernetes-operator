@@ -59,6 +59,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -102,6 +103,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
         var stableTime = currentJobUpdateTs.plus(stabilizationDuration);
         if (now.isBefore(stableTime)) {
             // As long as we are stabilizing, collect no metrics at all
+            LOG.info("Skipping metric collection during stabilization period until {}", stableTime);
             return new CollectedMetrics(topology, Collections.emptySortedMap());
         }
 
@@ -120,7 +122,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
                             if (h == null) {
                                 h = scalingInformation.getMetricHistory();
                             }
-                            return h.tailMap(now.minus(metricsWindowSize));
+                            return new TreeMap<>(h.tailMap(now.minus(metricsWindowSize)));
                         });
 
         // The filtered list of metrics we want to query for each vertex
@@ -141,6 +143,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
         if (now.isBefore(stableTime.plus(conf.get(AutoScalerOptions.METRICS_WINDOW)))) {
             // As long as we haven't had time to collect a full window,
             // collect metrics but do not return any metrics
+            LOG.info("Waiting until initial metric window is full before starting scaling");
             return new CollectedMetrics(topology, Collections.emptySortedMap());
         }
 

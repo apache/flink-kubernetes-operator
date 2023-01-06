@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.utils.AutoScalerUtils;
@@ -29,7 +30,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Map;
@@ -40,6 +40,7 @@ import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerO
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.VERTEX_MAX_PARALLELISM;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.VERTEX_MIN_PARALLELISM;
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
@@ -59,7 +60,6 @@ public class JobVertexScaler {
 
         var currentParallelism = (int) evaluatedMetrics.get(PARALLELISM).getCurrent();
         double averageTrueProcessingRate = evaluatedMetrics.get(TRUE_PROCESSING_RATE).getAverage();
-
         if (Double.isNaN(averageTrueProcessingRate)) {
             LOG.info(
                     "True processing rate is not available for {}, cannot compute new parallelism",
@@ -97,42 +97,98 @@ public class JobVertexScaler {
                         conf.getInteger(VERTEX_MIN_PARALLELISM),
                         conf.getInteger(VERTEX_MAX_PARALLELISM));
 
-        if (!history.isEmpty()) {
-            if (detectImmediateScaleDownAfterScaleUp(
-                    conf, history, currentParallelism, newParallelism)) {
-                LOG.info(
-                        "Skipping immediate scale down after scale up for {} resetting target parallelism to {}",
+        if (newParallelism == currentParallelism
+                || blockScalingBasedOnPastActions(
                         vertex,
-                        currentParallelism);
-                newParallelism = currentParallelism;
-            }
-
-            // currentParallelism = 2 , newParallelism = 1, minimumProcRate = 1000 r/s
-            // history
-            // currentParallelism 1 => 3 -> empiricalProcRate = 800
-            // empiricalProcRate + upperBoundary < minimumProcRate => don't scale
+                        conf,
+                        evaluatedMetrics,
+                        history,
+                        currentParallelism,
+                        newParallelism)) {
+            return currentParallelism;
         }
 
+        // We record our expectations for this scaling operation
+        evaluatedMetrics.put(
+                ScalingMetric.EXPECTED_PROCESSING_RATE, EvaluatedScalingMetric.of(targetCapacity));
         return newParallelism;
     }
 
-    private boolean detectImmediateScaleDownAfterScaleUp(
+    private boolean blockScalingBasedOnPastActions(
+            JobVertexID vertex,
             Configuration conf,
+            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             SortedMap<Instant, ScalingSummary> history,
             int currentParallelism,
             int newParallelism) {
+
+        // If we don't have past scaling actions for this vertex, there is nothing to do
+        if (history.isEmpty()) {
+            return false;
+        }
+
+        boolean scaledUp = currentParallelism < newParallelism;
         var lastScalingTs = history.lastKey();
         var lastSummary = history.get(lastScalingTs);
 
-        boolean isScaleDown = newParallelism < currentParallelism;
-        boolean lastScaleUp = lastSummary.getNewParallelism() > lastSummary.getCurrentParallelism();
+        if (currentParallelism == lastSummary.getNewParallelism() && lastSummary.isScaledUp()) {
+            if (scaledUp) {
+                return detectIneffectiveScaleUp(vertex, conf, evaluatedMetrics, lastSummary);
+            } else {
+                return detectImmediateScaleDownAfterScaleUp(vertex, conf, lastScalingTs);
+            }
+        }
+        return false;
+    }
+
+    private boolean detectImmediateScaleDownAfterScaleUp(
+            JobVertexID vertex, Configuration conf, Instant lastScalingTs) {
 
         var gracePeriod = conf.get(SCALE_UP_GRACE_PERIOD);
+        if (lastScalingTs.plus(gracePeriod).isAfter(clock.instant())) {
+            LOG.info(
+                    "Skipping immediate scale down after scale up within grace period for {}",
+                    vertex);
+            return true;
+        } else {
+            return false;
+        }
+    }
 
-        boolean withinConfiguredTime =
-                Duration.between(lastScalingTs, clock.instant()).minus(gracePeriod).isNegative();
+    private boolean detectIneffectiveScaleUp(
+            JobVertexID vertex,
+            Configuration conf,
+            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
+            ScalingSummary lastSummary) {
 
-        return isScaleDown && lastScaleUp && withinConfiguredTime;
+        double lastProcRate = lastSummary.getMetrics().get(TRUE_PROCESSING_RATE).getAverage();
+        double lastExpectedProcRate =
+                lastSummary.getMetrics().get(EXPECTED_PROCESSING_RATE).getCurrent();
+        var currentProcRate = evaluatedMetrics.get(TRUE_PROCESSING_RATE).getAverage();
+
+        // To judge the effectiveness of the scale up operation we compute how much of the expected
+        // increase actually happened. For example if we expect a 100 increase in proc rate and only
+        // got an increase of 10 we only accomplished 10% of the desired increase. If this number is
+        // below the threshold, we mark the scaling ineffective.
+        double expectedIncrease = lastExpectedProcRate - lastProcRate;
+        double actualIncrease = currentProcRate - lastProcRate;
+
+        boolean withinEffectiveThreshold =
+                (actualIncrease / expectedIncrease)
+                        >= conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_THRESHOLD);
+        if (withinEffectiveThreshold) {
+            return false;
+        }
+
+        // TODO: Trigger kube event
+
+        if (conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED)) {
+            LOG.info(
+                    "Skipping further scale up after ineffective previous scale up for {}", vertex);
+            return true;
+        } else {
+            return false;
+        }
     }
 
     @VisibleForTesting
