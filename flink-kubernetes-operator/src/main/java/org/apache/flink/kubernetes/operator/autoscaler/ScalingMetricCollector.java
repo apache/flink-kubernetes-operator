@@ -49,12 +49,10 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -97,7 +95,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
             cleanup(cr);
         }
 
-        var topology = getJobTopology(flinkService, cr, conf);
+        var topology = getJobTopology(flinkService, cr, conf, scalingInformation);
 
         var stabilizationDuration = conf.get(AutoScalerOptions.STABILIZATION_INTERVAL);
         var stableTime = currentJobUpdateTs.plus(stabilizationDuration);
@@ -151,14 +149,22 @@ public abstract class ScalingMetricCollector implements Cleanup {
     }
 
     protected JobTopology getJobTopology(
-            FlinkService flinkService, AbstractFlinkResource<?, ?> cr, Configuration conf)
+            FlinkService flinkService,
+            AbstractFlinkResource<?, ?> cr,
+            Configuration conf,
+            AutoScalerInfo scalerInfo)
             throws Exception {
 
         try (var restClient = (RestClusterClient<String>) flinkService.getClusterClient(conf)) {
             var jobId = JobID.fromHexString(cr.getStatus().getJobStatus().getJobId());
             var topology =
                     topologies.computeIfAbsent(
-                            ResourceID.fromResource(cr), r -> queryJobTopology(restClient, jobId));
+                            ResourceID.fromResource(cr),
+                            r -> {
+                                var t = queryJobTopology(restClient, jobId);
+                                scalerInfo.updateVertexList(t.getVerticesInTopologicalOrder());
+                                return t;
+                            });
             updateKafkaSourceMaxParallelisms(restClient, jobId, topology);
             return topology;
         }
@@ -210,13 +216,6 @@ public abstract class ScalingMetricCollector implements Cleanup {
                                 });
             }
         }
-    }
-
-    private List<JobVertexID> getVertexList(
-            FlinkService flinkService, AbstractFlinkResource<?, ?> cr, Configuration conf)
-            throws Exception {
-        JobTopology topology = getJobTopology(flinkService, cr, conf);
-        return new ArrayList<>(topology.getParallelisms().keySet());
     }
 
     /**
@@ -301,7 +300,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
             JobTopology topology) {
 
         var jobId = JobID.fromHexString(cr.getStatus().getJobStatus().getJobId());
-        var vertices = getVertexList(flinkService, cr, conf);
+        var vertices = topology.getVerticesInTopologicalOrder();
 
         long deployedGeneration = getDeployedGeneration(cr);
 
@@ -390,19 +389,18 @@ public abstract class ScalingMetricCollector implements Cleanup {
         }
 
         requiredMetrics.forEach(
-                flinkMetric -> {
-                    filteredMetrics.put(
-                            flinkMetric
-                                    .findAny(allMetricNames)
-                                    .orElseThrow(
-                                            () ->
-                                                    new RuntimeException(
-                                                            "Could not find required metric "
-                                                                    + flinkMetric.name()
-                                                                    + " for "
-                                                                    + jobVertexID)),
-                            flinkMetric);
-                });
+                flinkMetric ->
+                        filteredMetrics.put(
+                                flinkMetric
+                                        .findAny(allMetricNames)
+                                        .orElseThrow(
+                                                () ->
+                                                        new RuntimeException(
+                                                                "Could not find required metric "
+                                                                        + flinkMetric.name()
+                                                                        + " for "
+                                                                        + jobVertexID)),
+                                flinkMetric));
 
         return filteredMetrics;
     }

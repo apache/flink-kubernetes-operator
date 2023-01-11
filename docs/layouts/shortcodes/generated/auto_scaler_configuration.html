@@ -21,6 +21,18 @@
             <td>Enable job autoscaler module.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.job.autoscaler.history.max.age</h5></td>
+            <td style="word-wrap: break-word;">86400000 ms</td>
+            <td>Duration</td>
+            <td>Maximum age for past scaling decisions to retain.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.job.autoscaler.history.max.count</h5></td>
+            <td style="word-wrap: break-word;">1</td>
+            <td>Integer</td>
+            <td>Maximum number of past scaling decisions to retain per vertex.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.job.autoscaler.metrics.window</h5></td>
             <td style="word-wrap: break-word;">5 min</td>
             <td>Duration</td>

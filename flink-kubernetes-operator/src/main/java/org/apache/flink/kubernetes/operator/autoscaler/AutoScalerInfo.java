@@ -18,7 +18,9 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.utils.JobVertexSerDeModule;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -36,9 +38,9 @@ import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
@@ -48,9 +50,6 @@ import java.util.TreeMap;
 public class AutoScalerInfo {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobAutoScaler.class);
-
-    private static final int SCALING_HISTORY_MAX_COUNT = 5;
-    private static final Duration SCALING_HISTORY_MAX_DURATION = Duration.ofHours(24);
 
     private static final String LABEL_COMPONENT_AUTOSCALER = "autoscaler";
 
@@ -94,6 +93,18 @@ public class AutoScalerInfo {
         configMap.getData().put(JOB_UPDATE_TS_KEY, jobUpdateTs.toString());
     }
 
+    @SneakyThrows
+    public void updateVertexList(List<JobVertexID> vertexList) {
+        // Make sure to init history
+        getScalingHistory();
+
+        if (scalingHistory.keySet().removeIf(v -> !vertexList.contains(v))) {
+            configMap
+                    .getData()
+                    .put(SCALING_HISTORY_KEY, YAML_MAPPER.writeValueAsString(scalingHistory));
+        }
+    }
+
     public void clearMetricHistory() {
         configMap.getData().remove(COLLECTED_METRICS_KEY);
         configMap.getData().remove(JOB_UPDATE_TS_KEY);
@@ -117,7 +128,8 @@ public class AutoScalerInfo {
     }
 
     @SneakyThrows
-    public void addToScalingHistory(Instant now, Map<JobVertexID, ScalingSummary> summaries) {
+    public void addToScalingHistory(
+            Instant now, Map<JobVertexID, ScalingSummary> summaries, Configuration conf) {
         // Make sure to init history
         getScalingHistory();
 
@@ -129,10 +141,17 @@ public class AutoScalerInfo {
         while (entryIt.hasNext()) {
             var entry = entryIt.next();
             // Limit how long past scaling decisions are remembered
-            entry.setValue(entry.getValue().tailMap(now.minus(SCALING_HISTORY_MAX_DURATION)));
+            entry.setValue(
+                    entry.getValue()
+                            .tailMap(
+                                    now.minus(
+                                            conf.get(
+                                                    AutoScalerOptions
+                                                            .VERTEX_SCALING_HISTORY_AGE))));
             var vertexHistory = entry.getValue();
-            while (vertexHistory.size() > SCALING_HISTORY_MAX_COUNT) {
-                vertexHistory.remove(vertexHistory.lastKey());
+            while (vertexHistory.size()
+                    > conf.get(AutoScalerOptions.VERTEX_SCALING_HISTORY_COUNT)) {
+                vertexHistory.remove(vertexHistory.firstKey());
             }
             if (vertexHistory.isEmpty()) {
                 entryIt.remove();

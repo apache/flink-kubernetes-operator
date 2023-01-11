@@ -132,4 +132,17 @@ public class AutoScalerOptions {
                     .defaultValue(0.1)
                     .withDescription(
                             "Processing rate increase threshold for detecting ineffective scaling threshold. 0.1 means if we do not accomplish at least 10% of the desired capacity increase with scaling, the action is marked ineffective.");
+
+    public static final ConfigOption<Integer> VERTEX_SCALING_HISTORY_COUNT =
+            autoScalerConfig("history.max.count")
+                    .intType()
+                    .defaultValue(1)
+                    .withDescription(
+                            "Maximum number of past scaling decisions to retain per vertex.");
+
+    public static final ConfigOption<Duration> VERTEX_SCALING_HISTORY_AGE =
+            autoScalerConfig("history.max.age")
+                    .durationType()
+                    .defaultValue(Duration.ofHours(24))
+                    .withDescription("Maximum age for past scaling decisions to retain.");
 }
