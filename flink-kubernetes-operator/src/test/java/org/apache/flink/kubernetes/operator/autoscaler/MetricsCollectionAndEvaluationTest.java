@@ -336,4 +336,17 @@ public class MetricsCollectionAndEvaluationTest {
         app.getStatus().getJobStatus().setUpdateTime("0");
         assertEquals(1, metricsHistory.getMetricHistory().size());
     }
+
+    @Test
+    public void testClearHistoryOnTopoChange() throws Exception {
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
+
+        setDefaultMetrics(metricsCollector);
+
+        // We haven't left the stabilization period
+        // => no metrics reporting and collection should take place
+        var collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+    }
 }

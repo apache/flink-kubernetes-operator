@@ -111,7 +111,7 @@ public class ScalingExecutor implements Cleanup {
         setVertexParallelismOverrides(resource, evaluatedMetrics, scalingSummaries);
 
         KubernetesClientUtils.replaceSpecAfterScaling(kubernetesClient, resource);
-        scalingInformation.addToScalingHistory(clock.instant(), scalingSummaries);
+        scalingInformation.addToScalingHistory(clock.instant(), scalingSummaries, conf);
 
         return true;
     }
