@@ -33,6 +33,12 @@
             <td>Maximum number of past scaling decisions to retain per vertex.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.job.autoscaler.metrics.busy-time.aggregator</h5></td>
+            <td style="word-wrap: break-word;">MAX</td>
+            <td><p>Enum</p></td>
+            <td>Metric aggregator to use for busyTime metrics. This affects how true processing/output rate will be computed. Using max allows us to handle jobs with data skew more robustly, while avg may provide better stability when we know that the load distribution is even.<br /><br />Possible values:<ul><li>"AVG"</li><li>"MAX"</li><li>"MIN"</li></ul></td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.job.autoscaler.metrics.window</h5></td>
             <td style="word-wrap: break-word;">5 min</td>
             <td>Duration</td>

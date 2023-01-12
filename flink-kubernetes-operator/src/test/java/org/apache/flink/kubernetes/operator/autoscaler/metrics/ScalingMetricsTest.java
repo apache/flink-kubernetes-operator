@@ -54,7 +54,7 @@ public class ScalingMetricsTest {
                 source,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, 100., Double.NaN),
+                        new AggregatedMetric("", Double.NaN, 100., Double.NaN, Double.NaN),
                         FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1000.),
                         FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
@@ -82,7 +82,7 @@ public class ScalingMetricsTest {
                 source,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, 100., Double.NaN),
+                        new AggregatedMetric("", Double.NaN, 100., Double.NaN, Double.NaN),
                         FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1000.),
                         FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
@@ -109,7 +109,7 @@ public class ScalingMetricsTest {
                 op,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, 100., Double.NaN),
+                        new AggregatedMetric("", Double.NaN, 100., Double.NaN, Double.NaN),
                         FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1000.),
                         FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
@@ -118,6 +118,34 @@ public class ScalingMetricsTest {
                 topology,
                 Optional.empty(),
                 new Configuration());
+
+        assertEquals(
+                Map.of(
+                        ScalingMetric.TRUE_PROCESSING_RATE,
+                        10000.,
+                        ScalingMetric.TRUE_OUTPUT_RATE,
+                        20000.,
+                        ScalingMetric.OUTPUT_RATIO,
+                        2.),
+                scalingMetrics);
+
+        // Test using avg busyTime aggregator
+        scalingMetrics.clear();
+        var conf = new Configuration();
+        conf.set(AutoScalerOptions.BUSY_TIME_AGGREGATOR, MetricAggregator.AVG);
+        ScalingMetrics.computeDataRateMetrics(
+                op,
+                Map.of(
+                        FlinkMetric.BUSY_TIME_PER_SEC,
+                        new AggregatedMetric("", Double.NaN, Double.NaN, 100., Double.NaN),
+                        FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1000.),
+                        FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
+                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 2000.)),
+                scalingMetrics,
+                topology,
+                Optional.empty(),
+                conf);
 
         assertEquals(
                 Map.of(
@@ -145,7 +173,7 @@ public class ScalingMetricsTest {
                 source,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, 500., Double.NaN),
+                        new AggregatedMetric("", Double.NaN, 500., Double.NaN, Double.NaN),
                         FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 2000.),
                         FlinkMetric.NUM_RECORDS_OUT_PER_SEC,

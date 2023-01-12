@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler.metrics;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
@@ -64,9 +65,10 @@ public class ScalingMetrics {
         var source = topology.getInputs().get(jobVertexID).isEmpty();
         var sink = topology.getOutputs().get(jobVertexID).isEmpty();
 
-        var busyTime = flinkMetrics.get(FlinkMetric.BUSY_TIME_PER_SEC);
+        var busyTimeAggregator = conf.get(AutoScalerOptions.BUSY_TIME_AGGREGATOR);
+        var busyTimeOpt = busyTimeAggregator.get(flinkMetrics.get(FlinkMetric.BUSY_TIME_PER_SEC));
 
-        if (busyTime == null || busyTime.getAvg().isNaN()) {
+        if (busyTimeOpt.isEmpty()) {
             LOG.error("Cannot compute true processing/output rate without busyTimeMsPerSecond");
             return;
         }
@@ -79,7 +81,7 @@ public class ScalingMetrics {
 
         var outputPerSecond = flinkMetrics.get(FlinkMetric.NUM_RECORDS_OUT_PER_SEC);
 
-        double busyTimeMultiplier = 1000 / busyTime.getAvg();
+        double busyTimeMultiplier = 1000 / busyTimeOpt.get();
 
         if (source && !conf.getBoolean(SOURCE_SCALING_ENABLED)) {
             double sourceInputRate =
