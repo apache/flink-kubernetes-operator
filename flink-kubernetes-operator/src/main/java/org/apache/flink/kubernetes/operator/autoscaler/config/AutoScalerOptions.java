@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.autoscaler.config;
 
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.MetricAggregator;
 
 import java.time.Duration;
 
@@ -145,4 +146,11 @@ public class AutoScalerOptions {
                     .durationType()
                     .defaultValue(Duration.ofHours(24))
                     .withDescription("Maximum age for past scaling decisions to retain.");
+
+    public static final ConfigOption<MetricAggregator> BUSY_TIME_AGGREGATOR =
+            autoScalerConfig("metrics.busy-time.aggregator")
+                    .enumType(MetricAggregator.class)
+                    .defaultValue(MetricAggregator.MAX)
+                    .withDescription(
+                            "Metric aggregator to use for busyTime metrics. This affects how true processing/output rate will be computed. Using max allows us to handle jobs with data skew more robustly, while avg may provide better stability when we know that the load distribution is even.");
 }

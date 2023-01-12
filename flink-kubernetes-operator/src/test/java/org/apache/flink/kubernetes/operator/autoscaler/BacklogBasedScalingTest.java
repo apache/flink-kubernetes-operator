@@ -116,7 +116,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         source1,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 850., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
@@ -127,7 +127,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         sink,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 850., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));
@@ -152,7 +152,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         source1,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 1000., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1800.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
@@ -163,7 +163,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         sink,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 1000., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 1800.))));
@@ -182,7 +182,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         source1,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 1000., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1800.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
@@ -193,7 +193,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         sink,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 1000., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 1800.))));
@@ -212,7 +212,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         source1,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 600., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 600., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 800.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
@@ -222,7 +222,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         sink,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 600., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 600., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 800.))));
@@ -243,7 +243,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         source1,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 1000., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 900.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
@@ -253,7 +253,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         sink,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 1000., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 900.))));
@@ -270,7 +270,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         source1,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 1000., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 900.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
@@ -280,7 +280,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         sink,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 1000., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 900.))));
@@ -296,7 +296,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         source1,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 500., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 500., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
@@ -306,7 +306,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                         sink,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 500., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 500., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));

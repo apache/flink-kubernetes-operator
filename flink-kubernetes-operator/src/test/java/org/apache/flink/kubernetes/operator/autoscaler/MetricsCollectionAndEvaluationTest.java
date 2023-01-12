@@ -205,7 +205,7 @@ public class MetricsCollectionAndEvaluationTest {
                         source1,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 1000., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
@@ -215,7 +215,7 @@ public class MetricsCollectionAndEvaluationTest {
                         source2,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 1000., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
@@ -225,7 +225,7 @@ public class MetricsCollectionAndEvaluationTest {
                         map,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 500., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 500., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 2000.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
@@ -234,7 +234,7 @@ public class MetricsCollectionAndEvaluationTest {
                         sink,
                         Map.of(
                                 FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, 500., Double.NaN),
+                                new AggregatedMetric("", Double.NaN, 500., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 2000.))));
