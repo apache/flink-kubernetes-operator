@@ -87,7 +87,7 @@ The `upgradeMode` setting controls both the stop and restore mechanisms as detai
 |                        | Stateless               | Last State                                 | Savepoint                              |
 |------------------------|-------------------------|--------------------------------------------|----------------------------------------|
 | Config Requirement     | None                    | Checkpointing & Kubernetes HA Enabled      | Checkpoint/Savepoint directory defined |
-| Job Status Requirement | None                    | HA metadata available                      | Job Running*                           |
+| Job Status Requirement | None                    | HA metadata available                      | Job Running                            |
 | Suspend Mechanism      | Cancel / Delete         | Delete Flink deployment (keep HA metadata) | Cancel with savepoint                  |
 | Restore Mechanism      | Deploy from empty state | Recover last state using HA metadata       | Restore From savepoint                 |
 | Production Use         | Not recommended         | Recommended                                | Recommended                            |
