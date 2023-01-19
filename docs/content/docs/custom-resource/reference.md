@@ -130,8 +130,8 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Value | Docs |
 | ----- | ---- |
-| RUNNING | Job is expected to be processing data. |
-| SUSPENDED | Processing is suspended with the intention of continuing later. |
+| running | Job is expected to be processing data. |
+| suspended | Processing is suspended with the intention of continuing later. |
 
 ### KubernetesDeploymentMode
 **Class**: org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode
@@ -140,8 +140,8 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Value | Docs |
 | ----- | ---- |
-| NATIVE | Deploys Flink using Flinks native Kubernetes support. Only supported for newer versions of Flink |
-| STANDALONE | Deploys Flink on-top of kubernetes in standalone mode. |
+| native | Deploys Flink using Flinks native Kubernetes support. Only supported for newer versions of Flink |
+| standalone | Deploys Flink on-top of kubernetes in standalone mode. |
 
 ### Resource
 **Class**: org.apache.flink.kubernetes.operator.api.spec.Resource
@@ -171,9 +171,9 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Value | Docs |
 | ----- | ---- |
-| SAVEPOINT | Job is upgraded by first taking a savepoint of the running job, shutting it down and restoring from the savepoint. |
-| LAST_STATE | Job is upgraded using any latest checkpoint or savepoint available. |
-| STATELESS | Job is upgraded with empty state. |
+| savepoint | Job is upgraded by first taking a savepoint of the running job, shutting it down and restoring from the savepoint. |
+| last-state | Job is upgraded using any latest checkpoint or savepoint available. |
+| stateless | Job is upgraded with empty state. |
 
 ## Status
 
