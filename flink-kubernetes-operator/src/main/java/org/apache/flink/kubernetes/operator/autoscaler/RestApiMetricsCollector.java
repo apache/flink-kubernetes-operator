@@ -67,7 +67,7 @@ public class RestApiMetricsCollector extends ScalingMetricCollector {
             JobVertexID jobVertexID,
             Map<String, FlinkMetric> metrics) {
 
-        LOG.info("Querying metrics {} for {}", metrics, jobVertexID);
+        LOG.debug("Querying metrics {} for {}", metrics, jobVertexID);
 
         var jobId = JobID.fromHexString(cr.getStatus().getJobStatus().getJobId());
 

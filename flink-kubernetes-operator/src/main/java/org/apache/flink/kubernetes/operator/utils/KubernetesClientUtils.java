@@ -32,6 +32,8 @@ import okhttp3.OkHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.function.Consumer;
+
 /** Kubernetes client utils. */
 public class KubernetesClientUtils {
 
@@ -69,17 +71,19 @@ public class KubernetesClientUtils {
         return clientBuilder.build();
     }
 
-    public static void replaceSpecAfterScaling(
-            KubernetesClient kubernetesClient, AbstractFlinkResource<?, ?> cr) {
-        var inKube = kubernetesClient.resource(cr).get();
-
-        if (cr.getMetadata().getGeneration() == inKube.getMetadata().getGeneration()) {
-            kubernetesClient
-                    .resource(cr)
-                    .lockResourceVersion(inKube.getMetadata().getResourceVersion())
-                    .replace();
+    public static <T extends AbstractFlinkResource<?, ?>> void applyToStoredCr(
+            KubernetesClient kubernetesClient, T cr, Consumer<T> function) {
+        var inKube = kubernetesClient.resource(cr).fromServer().get();
+        Long localGeneration = cr.getMetadata().getGeneration();
+        Long serverGeneration = inKube.getMetadata().getGeneration();
+        if (serverGeneration.equals(localGeneration)) {
+            function.accept(inKube);
+            kubernetesClient.resource(inKube).lockResourceVersion().replace();
         } else {
-            LOG.info("Spec already upgrading in kube, skipping scale operation.");
+            LOG.info(
+                    "Spec already upgrading in kube (generation - local: {} server: {}), skipping scale operation.",
+                    localGeneration,
+                    serverGeneration);
         }
     }
 }

@@ -177,7 +177,7 @@ public class ScalingMetricEvaluator {
             double lag = latestVertexMetrics.getOrDefault(LAG, 0.);
             double catchUpInputRate = catchUpTargetSec == 0 ? 0 : lag / catchUpTargetSec;
             if (catchUpInputRate > 0) {
-                LOG.info(
+                LOG.debug(
                         "Extra backlog processing input rate for {} is {}",
                         vertex,
                         catchUpInputRate);

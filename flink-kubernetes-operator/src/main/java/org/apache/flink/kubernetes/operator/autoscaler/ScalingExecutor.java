@@ -43,8 +43,10 @@ import java.util.SortedMap;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.STABILIZATION_INTERVAL;
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /** Class responsible for executing scaling decisions. */
@@ -80,10 +82,6 @@ public class ScalingExecutor implements Cleanup {
             Configuration conf,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
 
-        if (!conf.get(SCALING_ENABLED)) {
-            return false;
-        }
-
         if (!stabilizationPeriodPassed(resource, conf)) {
             return false;
         }
@@ -99,18 +97,30 @@ public class ScalingExecutor implements Cleanup {
             return false;
         }
 
+        if (!conf.get(SCALING_ENABLED)) {
+            return false;
+        }
+
         LOG.info("Scaling vertices:");
         scalingSummaries.forEach(
                 (v, s) ->
                         LOG.info(
-                                "{} | Parallelism {} -> {}",
+                                "{} | Parallelism {} -> {} | Processing capacity {} -> {} | Target data rate {}",
                                 v,
                                 s.getCurrentParallelism(),
-                                s.getNewParallelism()));
+                                s.getNewParallelism(),
+                                s.getMetrics().get(TRUE_PROCESSING_RATE).getAverage(),
+                                s.getMetrics().get(EXPECTED_PROCESSING_RATE).getCurrent(),
+                                s.getMetrics().get(TARGET_DATA_RATE).getAverage()));
 
         setVertexParallelismOverrides(resource, evaluatedMetrics, scalingSummaries);
+        KubernetesClientUtils.applyToStoredCr(
+                kubernetesClient,
+                resource,
+                stored ->
+                        stored.getSpec()
+                                .setFlinkConfiguration(resource.getSpec().getFlinkConfiguration()));
 
-        KubernetesClientUtils.replaceSpecAfterScaling(kubernetesClient, resource);
         scalingInformation.addToScalingHistory(clock.instant(), scalingSummaries, conf);
 
         return true;
@@ -154,21 +164,17 @@ public class ScalingExecutor implements Cleanup {
             double scaleDownRateThreshold = metrics.get(SCALE_DOWN_RATE_THRESHOLD).getCurrent();
 
             if (processingRate < scaleUpRateThreshold || processingRate > scaleDownRateThreshold) {
-                LOG.info(
-                        "Vertex {}(pCurr={}, pNew={}) processing rate {} is outside ({}, {})",
+                LOG.debug(
+                        "Vertex {} processing rate {} is outside ({}, {})",
                         vertex,
-                        scalingSummary.getCurrentParallelism(),
-                        scalingSummary.getNewParallelism(),
                         processingRate,
                         scaleUpRateThreshold,
                         scaleDownRateThreshold);
                 return false;
             } else {
                 LOG.debug(
-                        "Vertex {}(pCurr={}, pNew={}) processing rate {} is within target ({}, {})",
+                        "Vertex {} processing rate {} is within target ({}, {})",
                         vertex,
-                        scalingSummary.getCurrentParallelism(),
-                        scalingSummary.getNewParallelism(),
                         processingRate,
                         scaleUpRateThreshold,
                         scaleDownRateThreshold);

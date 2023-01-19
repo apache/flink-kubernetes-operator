@@ -138,10 +138,13 @@ public abstract class ScalingMetricCollector implements Cleanup {
         scalingMetricHistory.put(clock.instant(), scalingMetrics);
         scalingInformation.updateMetricHistory(currentJobUpdateTs, scalingMetricHistory);
 
-        if (now.isBefore(stableTime.plus(conf.get(AutoScalerOptions.METRICS_WINDOW)))) {
+        var windowFullTime = stableTime.plus(conf.get(AutoScalerOptions.METRICS_WINDOW));
+        if (now.isBefore(windowFullTime)) {
             // As long as we haven't had time to collect a full window,
             // collect metrics but do not return any metrics
-            LOG.info("Waiting until initial metric window is full before starting scaling");
+            LOG.info(
+                    "Waiting until {} so the initial metric window is full before starting scaling",
+                    windowFullTime);
             return new CollectedMetrics(topology, Collections.emptySortedMap());
         }
 
@@ -208,7 +211,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
                         .max()
                         .ifPresent(
                                 p -> {
-                                    LOG.info(
+                                    LOG.debug(
                                             "Updating source {} max parallelism based on available partitions to {}",
                                             sourceVertex,
                                             p + 1);
@@ -234,7 +237,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
         var out = new HashMap<JobVertexID, Map<ScalingMetric, Double>>();
         collectedMetrics.forEach(
                 (jobVertexID, vertexFlinkMetrics) -> {
-                    LOG.info(
+                    LOG.debug(
                             "Calculating vertex scaling metrics for {} from {}",
                             jobVertexID,
                             vertexFlinkMetrics);
@@ -258,7 +261,7 @@ public abstract class ScalingMetricCollector implements Cleanup {
                             lagGrowthRate,
                             conf);
 
-                    LOG.info(
+                    LOG.debug(
                             "Vertex scaling metrics for {}: {}", jobVertexID, vertexScalingMetrics);
                 });
 
@@ -433,7 +436,6 @@ public abstract class ScalingMetricCollector implements Cleanup {
 
     @Override
     public void cleanup(AbstractFlinkResource<?, ?> cr) {
-        LOG.info("Scaling metric cleanup");
         var resourceId = ResourceID.fromResource(cr);
         histories.remove(resourceId);
         availableVertexMetricNames.remove(resourceId);
