@@ -55,7 +55,7 @@ public class CrdReferenceDoclet implements Doclet {
     private String outputFile;
     private Map<Element, Element> child2ParentElements;
 
-    private String getJsonPropValueOfEnum(Element e) {
+    private String getNameOrJsonPropValue(Element e) {
         return e.getAnnotationMirrors().stream()
                 .filter(
                         am ->
@@ -213,7 +213,7 @@ public class CrdReferenceDoclet implements Doclet {
                 case FIELD:
                     out.println(
                             "| "
-                                    + e
+                                    + getNameOrJsonPropValue(e)
                                     + " | "
                                     + e.asType().toString()
                                     + " | "
@@ -233,7 +233,7 @@ public class CrdReferenceDoclet implements Doclet {
                 case ENUM_CONSTANT:
                     out.println(
                             "| "
-                                    + getJsonPropValueOfEnum(e)
+                                    + getNameOrJsonPropValue(e)
                                     + " | "
                                     + (dcTree != null ? cleanDoc(dcTree.toString()) : "")
                                     + " |");
