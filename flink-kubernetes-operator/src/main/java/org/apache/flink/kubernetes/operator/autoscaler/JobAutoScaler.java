@@ -93,7 +93,6 @@ public class JobAutoScaler implements Cleanup {
         try {
             var autoScalerInfo = AutoScalerInfo.forResource(resource, kubernetesClient);
 
-            LOG.info("Collecting metrics for scaling");
             var collectedMetrics =
                     metricsCollector.updateMetrics(
                             resource, autoScalerInfo, ctx.getFlinkService(), conf);
@@ -104,7 +103,7 @@ public class JobAutoScaler implements Cleanup {
 
             LOG.debug("Evaluating scaling metrics for {}", collectedMetrics);
             var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
-            LOG.info("Scaling metrics evaluated: {}", evaluatedMetrics);
+            LOG.debug("Scaling metrics evaluated: {}", evaluatedMetrics);
             lastEvaluatedMetrics.put(ResourceID.fromResource(resource), evaluatedMetrics);
             registerResourceScalingMetrics(resource, ctx.getResourceMetricGroup());
 

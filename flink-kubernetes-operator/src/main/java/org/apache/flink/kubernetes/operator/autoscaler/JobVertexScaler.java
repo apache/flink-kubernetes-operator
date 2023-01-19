@@ -61,7 +61,7 @@ public class JobVertexScaler {
         var currentParallelism = (int) evaluatedMetrics.get(PARALLELISM).getCurrent();
         double averageTrueProcessingRate = evaluatedMetrics.get(TRUE_PROCESSING_RATE).getAverage();
         if (Double.isNaN(averageTrueProcessingRate)) {
-            LOG.info(
+            LOG.warn(
                     "True processing rate is not available for {}, cannot compute new parallelism",
                     vertex);
             return currentParallelism;
@@ -71,17 +71,17 @@ public class JobVertexScaler {
                 AutoScalerUtils.getTargetProcessingCapacity(
                         evaluatedMetrics, conf, conf.get(TARGET_UTILIZATION), true);
         if (Double.isNaN(targetCapacity)) {
-            LOG.info(
+            LOG.warn(
                     "Target data rate is not available for {}, cannot compute new parallelism",
                     vertex);
             return currentParallelism;
         }
 
-        LOG.info("Target processing capacity for {} is {}", vertex, targetCapacity);
+        LOG.debug("Target processing capacity for {} is {}", vertex, targetCapacity);
         double scaleFactor = targetCapacity / averageTrueProcessingRate;
         double minScaleFactor = 1 - conf.get(MAX_SCALE_DOWN_FACTOR);
         if (scaleFactor < minScaleFactor) {
-            LOG.info(
+            LOG.debug(
                     "Computed scale factor of {} for {} is capped by maximum scale down factor to {}",
                     scaleFactor,
                     vertex,
@@ -208,7 +208,7 @@ public class JobVertexScaler {
                     numKeyGroups);
         }
         if (numKeyGroups < maxParallelism && maxParallelism != Integer.MAX_VALUE) {
-            LOG.warn(
+            LOG.debug(
                     "Specified autoscaler maximum parallelism {} is greater than the operator max parallelism {}. This means the operator max parallelism can never be reached.",
                     maxParallelism,
                     numKeyGroups);
