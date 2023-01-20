@@ -72,7 +72,7 @@ under the License.
         <maven-javadoc-plugin.version>3.3.2</maven-javadoc-plugin.version>
         <git-commit-id-maven-plugin.version>5.0.0</git-commit-id-maven-plugin.version>
 
-        <operator.sdk.version>4.1.1</operator.sdk.version>
+        <operator.sdk.version>4.2.6</operator.sdk.version>
         <operator.sdk.admission-controller.version>0.2.0</operator.sdk.admission-controller.version>
 
         <fabric8.version>6.2.0</fabric8.version>
