@@ -18,23 +18,38 @@
 
 package autoscaling;
 
+import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.sink.SinkFunction;
 
 /** Autoscaling Example. */
 public class AutoscalingExample {
     public static void main(String[] args) throws Exception {
         var env = StreamExecutionEnvironment.getExecutionEnvironment();
-        DataStream<Long> stream = env.fromSequence(Long.MIN_VALUE, Long.MAX_VALUE);
+        long numIterations = Long.parseLong(args[0]);
+        DataStream<Long> stream =
+                env.fromSequence(Long.MIN_VALUE, Long.MAX_VALUE).filter(i -> System.nanoTime() > 1);
         stream =
                 stream.shuffle()
                         .map(
-                                i -> {
-                                    // Add sleep to artificially slow down processing
-                                    // Thread.sleep(sleep);
-                                    return i;
+                                new RichMapFunction<Long, Long>() {
+                                    @Override
+                                    public Long map(Long i) throws Exception {
+                                        long end = 0;
+                                        for (int j = 0; j < numIterations; j++) {
+                                            end = System.nanoTime();
+                                        }
+                                        return end;
+                                    }
                                 });
-        stream.print();
+        stream.addSink(
+                new SinkFunction<Long>() {
+                    @Override
+                    public void invoke(Long value, Context context) throws Exception {
+                        // Do nothing
+                    }
+                });
         env.execute("Autoscaling Example");
     }
 }
