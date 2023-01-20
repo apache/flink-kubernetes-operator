@@ -28,9 +28,8 @@ spec:
     kubernetes.operator.job.autoscaler.scaling.sources.enabled: "false"
     kubernetes.operator.job.autoscaler.stabilization.interval: "1m"
     kubernetes.operator.job.autoscaler.metrics.window: "3m"
-    pipeline.max-parallelism: "8"
-
-    taskmanager.numberOfTaskSlots: "2"
+    pipeline.max-parallelism: "24"
+    taskmanager.numberOfTaskSlots: "4"
     state.savepoints.dir: file:///flink-data/savepoints
     state.checkpoints.dir: file:///flink-data/checkpoints
     high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
@@ -61,3 +60,4 @@ spec:
     jarURI: local:///opt/flink/usrlib/autoscaling.jar
     parallelism: 1
     upgradeMode: last-state
+    args: ["10"]
