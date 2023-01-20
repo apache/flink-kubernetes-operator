@@ -101,6 +101,8 @@ spec:
           volumeMounts:
             - name: flink-operator-config-volume
               mountPath: /opt/flink/conf
+            - name: flink-artifacts-volume
+              mountPath: /opt/flink/artifacts
             {{- if .Values.operatorVolumeMounts.create }}
                 {{- toYaml .Values.operatorVolumeMounts.data | nindent 12 }}
             {{- end }}
@@ -193,6 +195,8 @@ spec:
             - key: keystore.p12
               path: keystore.p12
         {{- end }}
+        - name: flink-artifacts-volume
+          emptyDir: {}
 ---
 {{- if .Values.defaultConfiguration.create }}
 apiVersion: v1
