@@ -109,9 +109,10 @@ public abstract class AbstractJobReconciler<
             currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.get());
             cancelJob(ctx, availableUpgradeMode.get());
             if (desiredJobState == JobState.RUNNING) {
-                ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig);
+                ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
+                        resource, deployConfig, clock);
             } else {
-                ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig);
+                ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
             }
         }
 
@@ -123,7 +124,7 @@ public abstract class AbstractJobReconciler<
                         .setUpgradeMode(lastReconciledSpec.getJob().getUpgradeMode());
             }
             // We record the target spec into an upgrading state before deploying
-            ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig);
+            ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig, clock);
             statusRecorder.patchAndCacheStatus(resource);
 
             restoreJob(
@@ -133,7 +134,7 @@ public abstract class AbstractJobReconciler<
                     // We decide to enforce HA based on how job was previously suspended
                     lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
 
-            ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig);
+            ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
         }
         return true;
     }

@@ -17,12 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
@@ -31,18 +29,20 @@ import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler;
 import org.apache.flink.util.function.ThrowingRunnable;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
-import java.util.ArrayList;
+import java.time.Clock;
+import java.time.Duration;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -62,7 +62,7 @@ public class RollbackTest {
 
     private KubernetesClient kubernetesClient;
 
-    private static final int ROLLBACK_DELAY = 600;
+    private Clock testClock = Clock.systemDefaultZone();
 
     @BeforeEach
     public void setup() {
@@ -78,57 +78,12 @@ public class RollbackTest {
 
     @ParameterizedTest
     @EnumSource(
-            value = FlinkVersion.class,
-            names = {"v1_14", "v1_15"})
-    public void testRollbackWithSavepoint(FlinkVersion flinkVersion) throws Exception {
-        var dep = TestUtils.buildApplicationCluster(flinkVersion);
-        dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
-        var flinkConfiguration = dep.getSpec().getFlinkConfiguration();
-        flinkConfiguration.put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), "sd");
-
-        List<String> savepoints = new ArrayList<>();
-        testRollback(
-                dep,
-                () -> {
-                    dep.getSpec().getJob().setParallelism(9999);
-                    testController.reconcile(dep, context);
-                    savepoints.add(
-                            dep.getStatus()
-                                    .getJobStatus()
-                                    .getSavepointInfo()
-                                    .getLastSavepoint()
-                                    .getLocation());
-                    assertEquals(
-                            JobState.SUSPENDED,
-                            dep.getStatus()
-                                    .getReconciliationStatus()
-                                    .deserializeLastReconciledSpec()
-                                    .getJob()
-                                    .getState());
-                    testController.reconcile(dep, context);
-
-                    // Trigger rollback by delaying the recovery
-                    Thread.sleep(ROLLBACK_DELAY);
-                    testController.reconcile(dep, context);
-                },
-                () -> {
-                    assertEquals("RUNNING", dep.getStatus().getJobStatus().getState());
-                    assertEquals(1, flinkService.listJobs().size());
-                    // Make sure we rolled back using the savepoint taken during upgrade
-                    assertEquals(savepoints.get(0), flinkService.listJobs().get(0).f0);
-                    dep.getSpec().setRestartNonce(10L);
-                    testController.reconcile(dep, context);
-                },
-                false);
-    }
-
-    @ParameterizedTest
-    @EnumSource(
-            value = FlinkVersion.class,
-            names = {"v1_14", "v1_15"})
-    public void testRollbackWithLastState(FlinkVersion flinkVersion) throws Exception {
-        var dep = TestUtils.buildApplicationCluster(flinkVersion);
-        dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+            value = UpgradeMode.class,
+            names = {"SAVEPOINT", "LAST_STATE"})
+    public void testStatefulRollback(UpgradeMode upgradeMode) throws Exception {
+        var dep = TestUtils.buildApplicationCluster();
+        dep.getSpec().getJob().setUpgradeMode(upgradeMode);
+        offsetReconcilerClock(dep, Duration.ZERO);
 
         testRollback(
                 dep,
@@ -145,7 +100,7 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
 
                     // Trigger rollback by delaying the recovery
-                    Thread.sleep(ROLLBACK_DELAY);
+                    offsetReconcilerClock(dep, Duration.ofSeconds(15));
                     testController.reconcile(dep, context);
                 },
                 () -> {
@@ -157,14 +112,12 @@ public class RollbackTest {
                 true);
     }
 
-    @ParameterizedTest
-    @EnumSource(
-            value = FlinkVersion.class,
-            names = {"v1_14", "v1_15"})
-    public void testRollbackFailureWithLastState(FlinkVersion flinkVersion) throws Exception {
-        var dep = TestUtils.buildApplicationCluster(flinkVersion);
+    @Test
+    public void testRollbackFailureWithLastState() throws Exception {
+        var dep = TestUtils.buildApplicationCluster();
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         dep.getSpec().getFlinkConfiguration().put("t", "1");
+        offsetReconcilerClock(dep, Duration.ZERO);
 
         testRollback(
                 dep,
@@ -182,7 +135,7 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
 
                     // Trigger rollback by delaying the recovery
-                    Thread.sleep(ROLLBACK_DELAY);
+                    offsetReconcilerClock(dep, Duration.ofSeconds(15));
                     testController.reconcile(dep, context);
                 },
                 () -> {
@@ -211,13 +164,11 @@ public class RollbackTest {
                 false);
     }
 
-    @ParameterizedTest
-    @EnumSource(
-            value = FlinkVersion.class,
-            names = {"v1_14", "v1_15"})
-    public void testRollbackStateless(FlinkVersion flinkVersion) throws Exception {
-        var dep = TestUtils.buildApplicationCluster(flinkVersion);
+    @Test
+    public void testRollbackStateless() throws Exception {
+        var dep = TestUtils.buildApplicationCluster();
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
+        offsetReconcilerClock(dep, Duration.ZERO);
 
         testRollback(
                 dep,
@@ -247,7 +198,7 @@ public class RollbackTest {
                                     "true");
 
                     // Trigger rollback by delaying the recovery
-                    Thread.sleep(ROLLBACK_DELAY);
+                    offsetReconcilerClock(dep, Duration.ofSeconds(15));
                     dep.getStatus()
                             .getJobStatus()
                             .getSavepointInfo()
@@ -266,19 +217,17 @@ public class RollbackTest {
                 true);
     }
 
-    @ParameterizedTest
-    @EnumSource(
-            value = FlinkVersion.class,
-            names = {"v1_14", "v1_15"})
-    public void testRollbackSession(FlinkVersion flinkVersion) throws Exception {
-        var dep = TestUtils.buildSessionCluster(flinkVersion);
+    @Test
+    public void testRollbackSession() throws Exception {
+        var dep = TestUtils.buildSessionCluster();
+        offsetReconcilerClock(dep, Duration.ZERO);
         testRollback(
                 dep,
                 () -> {
                     dep.getSpec().getFlinkConfiguration().put("random", "config");
                     testController.reconcile(dep, context);
                     // Trigger rollback by delaying the recovery
-                    Thread.sleep(ROLLBACK_DELAY);
+                    offsetReconcilerClock(dep, Duration.ofSeconds(15));
                     testController.reconcile(dep, context);
                 },
                 () -> {
@@ -301,7 +250,7 @@ public class RollbackTest {
         flinkConfiguration.put(
                 KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(), "true");
         flinkConfiguration.put(
-                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "400");
+                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "10s");
 
         testController.reconcile(deployment, context);
 
@@ -390,7 +339,7 @@ public class RollbackTest {
             deployment.getSpec().getJob().setState(JobState.RUNNING);
             testController.reconcile(deployment, context);
             // Make sure we do not roll back to suspended state
-            Thread.sleep(ROLLBACK_DELAY);
+            offsetReconcilerClock(deployment, Duration.ofSeconds(15));
             testController.reconcile(deployment, context);
             testController.reconcile(deployment, context);
             assertTrue(
@@ -418,5 +367,12 @@ public class RollbackTest {
                     deployment.getStatus().getReconciliationStatus().getState());
             assertNull(deployment.getStatus().getError());
         }
+    }
+
+    private void offsetReconcilerClock(FlinkDeployment dep, Duration offset) {
+        testClock = Clock.offset(testClock, offset);
+        ((AbstractFlinkResourceReconciler<?, ?, ?>)
+                        testController.getReconcilerFactory().getOrCreate(dep))
+                .setClock(testClock);
     }
 }

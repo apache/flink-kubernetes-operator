@@ -58,6 +58,7 @@ public class TestingFlinkDeploymentController
                 EventSourceInitializer<FlinkDeployment>,
                 Cleaner<FlinkDeployment> {
 
+    private ReconcilerFactory reconcilerFactory;
     private FlinkDeploymentController flinkDeploymentController;
     private StatusUpdateCounter statusUpdateCounter = new StatusUpdateCounter();
     private EventCollector eventCollector = new EventCollector();
@@ -79,13 +80,15 @@ public class TestingFlinkDeploymentController
         eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
         statusRecorder =
                 new StatusRecorder<>(kubernetesClient, new MetricManager<>(), statusUpdateCounter);
+        reconcilerFactory =
+                new ReconcilerFactory(
+                        kubernetesClient, configManager, eventRecorder, statusRecorder);
         flinkDeploymentController =
                 new FlinkDeploymentController(
                         configManager,
                         ValidatorUtils.discoverValidators(configManager),
                         ctxFactory,
-                        new ReconcilerFactory(
-                                kubernetesClient, configManager, eventRecorder, statusRecorder),
+                        reconcilerFactory,
                         new FlinkDeploymentObserverFactory(configManager, eventRecorder),
                         statusRecorder,
                         eventRecorder);
@@ -153,5 +156,9 @@ public class TestingFlinkDeploymentController
 
     public int getInternalStatusUpdateCount() {
         return statusUpdateCounter.getCount();
+    }
+
+    public ReconcilerFactory getReconcilerFactory() {
+        return reconcilerFactory;
     }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -46,6 +47,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -68,12 +70,20 @@ public class ReconciliationUtils {
      *
      * @param target Target Flink resource.
      * @param conf Deployment configuration.
+     * @param clock Clock for getting time.
      * @param <SPEC> Spec type.
      */
     public static <SPEC extends AbstractFlinkSpec> void updateStatusForDeployedSpec(
-            AbstractFlinkResource<SPEC, ?> target, Configuration conf) {
+            AbstractFlinkResource<SPEC, ?> target, Configuration conf, Clock clock) {
         var job = target.getSpec().getJob();
-        updateStatusForSpecReconciliation(target, job != null ? job.getState() : null, conf, false);
+        updateStatusForSpecReconciliation(
+                target, job != null ? job.getState() : null, conf, false, clock);
+    }
+
+    @VisibleForTesting
+    public static <SPEC extends AbstractFlinkSpec> void updateStatusForDeployedSpec(
+            AbstractFlinkResource<SPEC, ?> target, Configuration conf) {
+        updateStatusForDeployedSpec(target, conf, Clock.systemDefaultZone());
     }
 
     /**
@@ -85,18 +95,26 @@ public class ReconciliationUtils {
      *
      * @param target Target Flink resource.
      * @param conf Deployment configuration.
+     * @param clock Clock for getting the current time.
      * @param <SPEC> Spec type.
      */
     public static <SPEC extends AbstractFlinkSpec> void updateStatusBeforeDeploymentAttempt(
+            AbstractFlinkResource<SPEC, ?> target, Configuration conf, Clock clock) {
+        updateStatusForSpecReconciliation(target, JobState.SUSPENDED, conf, true, clock);
+    }
+
+    @VisibleForTesting
+    public static <SPEC extends AbstractFlinkSpec> void updateStatusBeforeDeploymentAttempt(
             AbstractFlinkResource<SPEC, ?> target, Configuration conf) {
-        updateStatusForSpecReconciliation(target, JobState.SUSPENDED, conf, true);
+        updateStatusBeforeDeploymentAttempt(target, conf, Clock.systemDefaultZone());
     }
 
     private static <SPEC extends AbstractFlinkSpec> void updateStatusForSpecReconciliation(
             AbstractFlinkResource<SPEC, ?> target,
             JobState stateAfterReconcile,
             Configuration conf,
-            boolean upgrading) {
+            boolean upgrading,
+            Clock clock) {
 
         var status = target.getStatus();
         var spec = target.getSpec();
@@ -104,7 +122,7 @@ public class ReconciliationUtils {
 
         // Clear errors
         status.setError(null);
-        reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
+        reconciliationStatus.setReconciliationTimestamp(clock.instant().toEpochMilli());
         reconciliationStatus.setState(
                 upgrading ? ReconciliationState.UPGRADING : ReconciliationState.DEPLOYED);
 
