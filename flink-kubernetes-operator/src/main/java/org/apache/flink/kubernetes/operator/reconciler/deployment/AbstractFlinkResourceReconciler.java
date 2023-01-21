@@ -119,7 +119,7 @@ public abstract class AbstractFlinkResourceReconciler<
                     Optional.ofNullable(spec.getJob()).map(JobSpec::getInitialSavepointPath),
                     false);
 
-            ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig);
+            ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig, clock);
             return;
         }
 
@@ -203,7 +203,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
             spec.getJob().setUpgradeMode(initialUpgradeMode);
         }
-        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(cr, deployConfig);
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(cr, deployConfig, clock);
         // Before we try to submit the job we record the current spec in the status so we can
         // handle subsequent deployment and status update errors
         statusRecorder.patchAndCacheStatus(cr);
@@ -298,7 +298,7 @@ public abstract class AbstractFlinkResourceReconciler<
         if (resource.getSpec().equals(deployedSpec)) {
             LOG.info(
                     "The new spec matches the currently deployed last stable spec. No upgrade needed.");
-            ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConf);
+            ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConf, clock);
             return true;
         }
         return false;
@@ -324,7 +324,7 @@ public abstract class AbstractFlinkResourceReconciler<
         boolean scaled = flinkService.scale(cr.getMetadata(), cr.getSpec().getJob(), deployConfig);
         if (scaled) {
             LOG.info("Scaling succeeded");
-            ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig);
+            ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig, clock);
             return true;
         }
         return false;
@@ -467,7 +467,7 @@ public abstract class AbstractFlinkResourceReconciler<
     }
 
     @VisibleForTesting
-    protected void setClock(Clock clock) {
+    public void setClock(Clock clock) {
         this.clock = clock;
     }
 }

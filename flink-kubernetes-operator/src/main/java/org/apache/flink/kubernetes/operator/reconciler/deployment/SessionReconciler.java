@@ -74,11 +74,11 @@ public class SessionReconciler
         deleteSessionCluster(ctx);
 
         // We record the target spec into an upgrading state before deploying
-        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(deployment, deployConfig);
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(deployment, deployConfig, clock);
         statusRecorder.patchAndCacheStatus(deployment);
 
         deploy(ctx, deployment.getSpec(), deployConfig, Optional.empty(), false);
-        ReconciliationUtils.updateStatusForDeployedSpec(deployment, deployConfig);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, deployConfig, clock);
         return true;
     }
 
