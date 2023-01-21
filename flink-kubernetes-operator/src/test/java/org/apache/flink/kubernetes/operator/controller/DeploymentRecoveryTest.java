@@ -32,17 +32,10 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /** @link Missing deployment recovery tests */
 @EnableKubernetesMockClient(crud = true)
@@ -66,7 +59,7 @@ public class DeploymentRecoveryTest {
     }
 
     @ParameterizedTest
-    @MethodSource("applicationTestParams")
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersionsAndUpgradeModes")
     public void verifyApplicationJmRecovery(FlinkVersion flinkVersion, UpgradeMode upgradeMode)
             throws Exception {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
@@ -144,7 +137,7 @@ public class DeploymentRecoveryTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifySessionJmRecovery(FlinkVersion flinkVersion) throws Exception {
         FlinkDeployment appCluster = TestUtils.buildSessionCluster(flinkVersion);
         testController.reconcile(appCluster, context);
@@ -169,15 +162,5 @@ public class DeploymentRecoveryTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
-    }
-
-    private static Stream<Arguments> applicationTestParams() {
-        List<Arguments> args = new ArrayList<>();
-        for (FlinkVersion version : FlinkVersion.values()) {
-            for (UpgradeMode upgradeMode : UpgradeMode.values()) {
-                args.add(arguments(version, upgradeMode));
-            }
-        }
-        return args.stream();
     }
 }

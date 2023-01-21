@@ -31,16 +31,10 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /** @link Unhealthy deployment restart tests */
 @EnableKubernetesMockClient(crud = true)
@@ -69,7 +63,7 @@ public class UnhealthyDeploymentRestartTest {
     }
 
     @ParameterizedTest
-    @MethodSource("applicationTestParams")
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersionsAndUpgradeModes")
     public void verifyApplicationUnhealthyJmRecovery(
             FlinkVersion flinkVersion, UpgradeMode upgradeMode) throws Exception {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
@@ -100,15 +94,5 @@ public class UnhealthyDeploymentRestartTest {
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
-    }
-
-    private static Stream<Arguments> applicationTestParams() {
-        List<Arguments> args = new ArrayList<>();
-        for (FlinkVersion version : FlinkVersion.values()) {
-            for (UpgradeMode upgradeMode : UpgradeMode.values()) {
-                args.add(arguments(version, upgradeMode));
-            }
-        }
-        return args.stream();
     }
 }

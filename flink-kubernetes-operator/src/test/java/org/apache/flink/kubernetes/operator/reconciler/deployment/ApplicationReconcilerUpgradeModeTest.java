@@ -46,7 +46,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
@@ -76,19 +75,19 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgradeFromStatelessToStateless(FlinkVersion flinkVersion) throws Exception {
         testUpgradeToStateless(flinkVersion, UpgradeMode.STATELESS);
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgradeFromSavepointToStateless(FlinkVersion flinkVersion) throws Exception {
         testUpgradeToStateless(flinkVersion, UpgradeMode.SAVEPOINT);
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgradeFromLastStateToStateless(FlinkVersion flinkVersion) throws Exception {
         testUpgradeToStateless(flinkVersion, UpgradeMode.LAST_STATE);
     }
@@ -114,19 +113,19 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgradeFromStatelessToSavepoint(FlinkVersion flinkVersion) throws Exception {
         testUpgradeToSavepoint(flinkVersion, UpgradeMode.STATELESS);
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgradeFromSavepointToSavepoint(FlinkVersion flinkVersion) throws Exception {
         testUpgradeToSavepoint(flinkVersion, UpgradeMode.SAVEPOINT);
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgradeFromLastStateToSavepoint(FlinkVersion flinkVersion) throws Exception {
         testUpgradeToSavepoint(flinkVersion, UpgradeMode.LAST_STATE);
     }
@@ -164,19 +163,19 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgradeFromStatelessToLastState(FlinkVersion flinkVersion) throws Exception {
         testUpgradeToLastState(flinkVersion, UpgradeMode.STATELESS);
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgradeFromSavepointToLastState(FlinkVersion flinkVersion) throws Exception {
         testUpgradeToLastState(flinkVersion, UpgradeMode.SAVEPOINT);
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgradeFromLastStateToLastState(FlinkVersion flinkVersion) throws Exception {
         testUpgradeToLastState(flinkVersion, UpgradeMode.LAST_STATE);
     }

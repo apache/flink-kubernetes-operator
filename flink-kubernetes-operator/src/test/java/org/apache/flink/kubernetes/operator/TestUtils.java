@@ -19,6 +19,8 @@ package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
@@ -47,6 +49,7 @@ import io.javaoperatorsdk.operator.processing.event.EventSourceRetriever;
 import okhttp3.Headers;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.params.provider.Arguments;
 
 import javax.annotation.Nullable;
 
@@ -58,6 +61,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -66,8 +70,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /** Testing utilities. */
 public class TestUtils extends BaseTestUtils {
@@ -269,6 +275,20 @@ public class TestUtils extends BaseTestUtils {
                 .setDelimiter(".".charAt(0))
                 .setRegisterConsumer((metric, name, group) -> {})
                 .build();
+    }
+
+    public static Stream<Arguments> flinkVersionsAndUpgradeModes() {
+        List<Arguments> args = new ArrayList<>();
+        for (FlinkVersion version : Set.of(FlinkVersion.v1_14, FlinkVersion.v1_15)) {
+            for (UpgradeMode upgradeMode : UpgradeMode.values()) {
+                args.add(arguments(version, upgradeMode));
+            }
+        }
+        return args.stream();
+    }
+
+    public static Stream<Arguments> flinkVersions() {
+        return List.of(arguments(FlinkVersion.v1_14), arguments(FlinkVersion.v1_15)).stream();
     }
 
     /** Testing ResponseProvider. */

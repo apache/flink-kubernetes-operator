@@ -77,7 +77,9 @@ public class RollbackTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @EnumSource(
+            value = FlinkVersion.class,
+            names = {"v1_14", "v1_15"})
     public void testRollbackWithSavepoint(FlinkVersion flinkVersion) throws Exception {
         var dep = TestUtils.buildApplicationCluster(flinkVersion);
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
@@ -121,7 +123,9 @@ public class RollbackTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @EnumSource(
+            value = FlinkVersion.class,
+            names = {"v1_14", "v1_15"})
     public void testRollbackWithLastState(FlinkVersion flinkVersion) throws Exception {
         var dep = TestUtils.buildApplicationCluster(flinkVersion);
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
@@ -154,7 +158,9 @@ public class RollbackTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @EnumSource(
+            value = FlinkVersion.class,
+            names = {"v1_14", "v1_15"})
     public void testRollbackFailureWithLastState(FlinkVersion flinkVersion) throws Exception {
         var dep = TestUtils.buildApplicationCluster(flinkVersion);
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
@@ -206,7 +212,9 @@ public class RollbackTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @EnumSource(
+            value = FlinkVersion.class,
+            names = {"v1_14", "v1_15"})
     public void testRollbackStateless(FlinkVersion flinkVersion) throws Exception {
         var dep = TestUtils.buildApplicationCluster(flinkVersion);
         dep.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
@@ -259,7 +267,9 @@ public class RollbackTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @EnumSource(
+            value = FlinkVersion.class,
+            names = {"v1_14", "v1_15"})
     public void testRollbackSession(FlinkVersion flinkVersion) throws Exception {
         var dep = TestUtils.buildSessionCluster(flinkVersion);
         testRollback(

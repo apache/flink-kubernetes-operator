@@ -53,17 +53,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
@@ -74,7 +70,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
-import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /** {@link FlinkDeploymentController} tests. */
 @EnableKubernetesMockClient(crud = true)
@@ -99,7 +94,7 @@ public class FlinkDeploymentControllerTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyBasicReconcileLoop(FlinkVersion flinkVersion) throws Exception {
 
         UpdateControl<FlinkDeployment> updateControl;
@@ -380,7 +375,7 @@ public class FlinkDeploymentControllerTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyUpgradeFromSavepoint(FlinkVersion flinkVersion) throws Exception {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
@@ -473,7 +468,7 @@ public class FlinkDeploymentControllerTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyStatelessUpgrade(FlinkVersion flinkVersion) throws Exception {
         testController.events().clear();
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
@@ -625,13 +620,13 @@ public class FlinkDeploymentControllerTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgradeNotReadyClusterSession(FlinkVersion flinkVersion) throws Exception {
         testUpgradeNotReadyCluster(TestUtils.buildSessionCluster(flinkVersion));
     }
 
     @ParameterizedTest
-    @MethodSource("applicationTestParams")
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersionsAndUpgradeModes")
     public void testUpgradeNotReadyClusterApplication(
             FlinkVersion flinkVersion, UpgradeMode upgradeMode) throws Exception {
         var appCluster = TestUtils.buildApplicationCluster(flinkVersion);
@@ -1052,16 +1047,6 @@ public class FlinkDeploymentControllerTest {
                                 appWithIngress.getMetadata().getName(),
                                 appWithIngress.getMetadata().getNamespace())
                         .getHost());
-    }
-
-    private static Stream<Arguments> applicationTestParams() {
-        List<Arguments> args = new ArrayList<>();
-        for (FlinkVersion version : FlinkVersion.values()) {
-            for (UpgradeMode upgradeMode : UpgradeMode.values()) {
-                args.add(arguments(version, upgradeMode));
-            }
-        }
-        return args.stream();
     }
 
     @Test

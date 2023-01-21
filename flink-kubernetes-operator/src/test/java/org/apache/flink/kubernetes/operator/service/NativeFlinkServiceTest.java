@@ -57,7 +57,7 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -117,7 +117,7 @@ public class NativeFlinkServiceTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testCancelJobWithSavepointUpgradeMode(FlinkVersion flinkVersion) throws Exception {
         final TestingClusterClient<String> testingClusterClient =
                 new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
