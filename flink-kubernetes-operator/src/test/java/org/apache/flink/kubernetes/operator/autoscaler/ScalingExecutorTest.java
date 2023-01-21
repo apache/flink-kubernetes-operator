@@ -25,12 +25,16 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.utils.EventCollector;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -40,6 +44,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.PARALLELISM_OVERRIDES;
+import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_ENTRY;
+import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_DISABLED;
+import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_ENABLED;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -49,13 +57,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class ScalingExecutorTest {
 
     private ScalingExecutor scalingDecisionExecutor;
+
+    private EventCollector eventCollector;
     private Configuration conf;
     private KubernetesClient kubernetesClient;
     private FlinkDeployment flinkDep;
 
     @BeforeEach
     public void setup() {
-        scalingDecisionExecutor = new ScalingExecutor(kubernetesClient);
+        eventCollector = new EventCollector();
+        scalingDecisionExecutor =
+                new ScalingExecutor(
+                        kubernetesClient, new EventRecorder(kubernetesClient, eventCollector));
         conf = new Configuration();
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
@@ -168,6 +181,38 @@ public class ScalingExecutorTest {
         evaluated = Map.of(op1, evaluated(1, 70, 100, 15));
         scalingSummary = Map.of(op1, new ScalingSummary(1, 2, evaluated.get(op1)));
         assertFalse(ScalingExecutor.allVerticesWithinUtilizationTarget(evaluated, scalingSummary));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testScalingEvents(boolean scalingEnabled) {
+        var jobVertexID = new JobVertexID();
+        conf.set(AutoScalerOptions.SCALING_ENABLED, scalingEnabled);
+        var metrics = Map.of(jobVertexID, evaluated(1, 110, 100));
+        var scalingInfo = new AutoScalerInfo(new HashMap<>());
+        assertEquals(
+                scalingEnabled,
+                scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertEquals(1, eventCollector.events.size());
+        var event = eventCollector.events.poll();
+        assertTrue(
+                event.getMessage()
+                        .contains(
+                                String.format(
+                                        SCALING_SUMMARY_ENTRY,
+                                        jobVertexID,
+                                        1,
+                                        2,
+                                        100.0,
+                                        157.0,
+                                        110.0)));
+        assertTrue(
+                event.getMessage()
+                        .contains(
+                                scalingEnabled
+                                        ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
+                                        : SCALING_SUMMARY_HEADER_SCALING_DISABLED));
+        assertEquals(EventRecorder.Reason.ScalingReport.name(), event.getReason());
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(

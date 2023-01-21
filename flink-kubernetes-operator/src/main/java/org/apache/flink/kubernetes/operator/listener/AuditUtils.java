@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.listener;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
@@ -52,7 +53,8 @@ public class AuditUtils {
                         : status.getError());
     }
 
-    private static String format(@NonNull Event event) {
+    @VisibleForTesting
+    public static String format(@NonNull Event event) {
         return String.format(
                 ">>> Event  | %-7s | %-15s | %s",
                 event.getType().equals("Normal") ? "Info" : event.getType(),

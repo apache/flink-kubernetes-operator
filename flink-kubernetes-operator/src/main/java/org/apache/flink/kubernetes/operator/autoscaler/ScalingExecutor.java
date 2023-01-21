@@ -25,6 +25,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
@@ -60,20 +61,29 @@ public class ScalingExecutor implements Cleanup {
                             "A parallelism override map (jobVertexId -> parallelism) which will be used to update"
                                     + " the parallelism of the corresponding job vertices of submitted JobGraphs.");
 
+    public static final String SCALING_SUMMARY_ENTRY =
+            " Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f";
+    public static final String SCALING_SUMMARY_HEADER_SCALING_DISABLED =
+            "Recommended parallelism change:";
+    public static final String SCALING_SUMMARY_HEADER_SCALING_ENABLED = "Scaling vertices:";
     private static final Logger LOG = LoggerFactory.getLogger(ScalingExecutor.class);
 
     private final KubernetesClient kubernetesClient;
     private final JobVertexScaler jobVertexScaler;
-
+    private final EventRecorder eventRecorder;
     private Clock clock = Clock.system(ZoneId.systemDefault());
 
-    public ScalingExecutor(KubernetesClient kubernetesClient) {
-        this(kubernetesClient, new JobVertexScaler());
+    public ScalingExecutor(KubernetesClient kubernetesClient, EventRecorder eventRecorder) {
+        this(kubernetesClient, new JobVertexScaler(eventRecorder), eventRecorder);
     }
 
-    public ScalingExecutor(KubernetesClient kubernetesClient, JobVertexScaler jobVertexScaler) {
+    public ScalingExecutor(
+            KubernetesClient kubernetesClient,
+            JobVertexScaler jobVertexScaler,
+            EventRecorder eventRecorder) {
         this.kubernetesClient = kubernetesClient;
         this.jobVertexScaler = jobVertexScaler;
+        this.eventRecorder = eventRecorder;
     }
 
     public boolean scaleResource(
@@ -87,7 +97,9 @@ public class ScalingExecutor implements Cleanup {
         }
 
         var scalingHistory = scalingInformation.getScalingHistory();
-        var scalingSummaries = computeScalingSummary(conf, evaluatedMetrics, scalingHistory);
+        var scalingSummaries =
+                computeScalingSummary(resource, conf, evaluatedMetrics, scalingHistory);
+
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
             return false;
@@ -97,21 +109,19 @@ public class ScalingExecutor implements Cleanup {
             return false;
         }
 
-        if (!conf.get(SCALING_ENABLED)) {
+        var scalingEnabled = conf.get(SCALING_ENABLED);
+
+        var scalingReport = scalingReport(scalingSummaries, scalingEnabled);
+        eventRecorder.triggerEvent(
+                resource,
+                EventRecorder.Type.Normal,
+                EventRecorder.Reason.ScalingReport,
+                EventRecorder.Component.Operator,
+                scalingReport);
+
+        if (!scalingEnabled) {
             return false;
         }
-
-        LOG.info("Scaling vertices:");
-        scalingSummaries.forEach(
-                (v, s) ->
-                        LOG.info(
-                                "{} | Parallelism {} -> {} | Processing capacity {} -> {} | Target data rate {}",
-                                v,
-                                s.getCurrentParallelism(),
-                                s.getNewParallelism(),
-                                s.getMetrics().get(TRUE_PROCESSING_RATE).getAverage(),
-                                s.getMetrics().get(EXPECTED_PROCESSING_RATE).getCurrent(),
-                                s.getMetrics().get(TARGET_DATA_RATE).getAverage()));
 
         setVertexParallelismOverrides(resource, evaluatedMetrics, scalingSummaries);
         KubernetesClientUtils.applyToStoredCr(
@@ -124,6 +134,27 @@ public class ScalingExecutor implements Cleanup {
         scalingInformation.addToScalingHistory(clock.instant(), scalingSummaries, conf);
 
         return true;
+    }
+
+    private static String scalingReport(
+            Map<JobVertexID, ScalingSummary> scalingSummaries, boolean scalingEnabled) {
+        StringBuilder sb =
+                new StringBuilder(
+                        scalingEnabled
+                                ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
+                                : SCALING_SUMMARY_HEADER_SCALING_DISABLED);
+        scalingSummaries.forEach(
+                (v, s) ->
+                        sb.append(
+                                String.format(
+                                        SCALING_SUMMARY_ENTRY,
+                                        v,
+                                        s.getCurrentParallelism(),
+                                        s.getNewParallelism(),
+                                        s.getMetrics().get(TRUE_PROCESSING_RATE).getAverage(),
+                                        s.getMetrics().get(EXPECTED_PROCESSING_RATE).getCurrent(),
+                                        s.getMetrics().get(TARGET_DATA_RATE).getAverage())));
+        return sb.toString();
     }
 
     private boolean stabilizationPeriodPassed(
@@ -185,6 +216,7 @@ public class ScalingExecutor implements Cleanup {
     }
 
     private Map<JobVertexID, ScalingSummary> computeScalingSummary(
+            AbstractFlinkResource<?, ?> resource,
             Configuration conf,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
@@ -196,6 +228,7 @@ public class ScalingExecutor implements Cleanup {
                             (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
                     var newParallelism =
                             jobVertexScaler.computeScaleTargetParallelism(
+                                    resource,
                                     conf,
                                     v,
                                     metrics,

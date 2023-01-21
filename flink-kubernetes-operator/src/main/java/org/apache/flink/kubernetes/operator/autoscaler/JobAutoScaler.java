@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingM
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -172,11 +173,12 @@ public class JobAutoScaler implements Cleanup {
                         });
     }
 
-    public static JobAutoScaler create(KubernetesClient kubernetesClient) {
+    public static JobAutoScaler create(
+            KubernetesClient kubernetesClient, EventRecorder eventRecorder) {
         return new JobAutoScaler(
                 kubernetesClient,
                 new RestApiMetricsCollector(),
                 new ScalingMetricEvaluator(),
-                new ScalingExecutor(kubernetesClient));
+                new ScalingExecutor(kubernetesClient, eventRecorder));
     }
 }

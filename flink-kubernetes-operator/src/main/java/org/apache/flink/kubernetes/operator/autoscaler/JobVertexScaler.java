@@ -19,10 +19,12 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.utils.AutoScalerUtils;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
@@ -50,9 +52,20 @@ public class JobVertexScaler {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobVertexScaler.class);
 
+    @VisibleForTesting
+    public static final String INNEFFECTIVE_MESSAGE_FORMAT =
+            "Skipping further scale up after ineffective previous scale up for %s";
+
     private Clock clock = Clock.system(ZoneId.systemDefault());
 
+    private EventRecorder eventRecorder;
+
+    public JobVertexScaler(EventRecorder eventRecorder) {
+        this.eventRecorder = eventRecorder;
+    }
+
     public int computeScaleTargetParallelism(
+            AbstractFlinkResource<?, ?> resource,
             Configuration conf,
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
@@ -99,6 +112,7 @@ public class JobVertexScaler {
 
         if (newParallelism == currentParallelism
                 || blockScalingBasedOnPastActions(
+                        resource,
                         vertex,
                         conf,
                         evaluatedMetrics,
@@ -115,6 +129,7 @@ public class JobVertexScaler {
     }
 
     private boolean blockScalingBasedOnPastActions(
+            AbstractFlinkResource<?, ?> resource,
             JobVertexID vertex,
             Configuration conf,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
@@ -133,7 +148,8 @@ public class JobVertexScaler {
 
         if (currentParallelism == lastSummary.getNewParallelism() && lastSummary.isScaledUp()) {
             if (scaledUp) {
-                return detectIneffectiveScaleUp(vertex, conf, evaluatedMetrics, lastSummary);
+                return detectIneffectiveScaleUp(
+                        resource, vertex, conf, evaluatedMetrics, lastSummary);
             } else {
                 return detectImmediateScaleDownAfterScaleUp(vertex, conf, lastScalingTs);
             }
@@ -156,6 +172,7 @@ public class JobVertexScaler {
     }
 
     private boolean detectIneffectiveScaleUp(
+            AbstractFlinkResource<?, ?> resource,
             JobVertexID vertex,
             Configuration conf,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
@@ -180,11 +197,17 @@ public class JobVertexScaler {
             return false;
         }
 
-        // TODO: Trigger kube event
+        var message = String.format(INNEFFECTIVE_MESSAGE_FORMAT, vertex);
+
+        eventRecorder.triggerEvent(
+                resource,
+                EventRecorder.Type.Normal,
+                EventRecorder.Reason.IneffectiveScaling,
+                EventRecorder.Component.Operator,
+                message);
 
         if (conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED)) {
-            LOG.info(
-                    "Skipping further scale up after ineffective previous scale up for {}", vertex);
+            LOG.info(message);
             return true;
         } else {
             return false;
