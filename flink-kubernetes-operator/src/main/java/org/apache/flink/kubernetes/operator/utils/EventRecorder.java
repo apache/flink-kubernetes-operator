@@ -128,6 +128,8 @@ public class EventRecorder {
         Missing,
         ValidationError,
         RecoverDeployment,
-        RestartUnhealthyJob
+        RestartUnhealthyJob,
+        ScalingReport,
+        IneffectiveScaling
     }
 }

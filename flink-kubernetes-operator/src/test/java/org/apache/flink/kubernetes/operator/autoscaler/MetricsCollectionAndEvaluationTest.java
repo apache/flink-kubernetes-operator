@@ -29,6 +29,8 @@ import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.VertexInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EventCollector;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
@@ -81,7 +83,10 @@ public class MetricsCollectionAndEvaluationTest {
     @BeforeEach
     public void setup() {
         evaluator = new ScalingMetricEvaluator();
-        scalingExecutor = new ScalingExecutor(kubernetesClient);
+        scalingExecutor =
+                new ScalingExecutor(
+                        kubernetesClient,
+                        new EventRecorder(kubernetesClient, new EventCollector()));
         service = new TestingFlinkService();
 
         app = TestUtils.buildApplicationCluster();

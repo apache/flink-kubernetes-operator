@@ -19,8 +19,11 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 
 import io.fabric8.kubernetes.api.model.Event;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.LinkedList;
 import java.util.Queue;
@@ -28,11 +31,12 @@ import java.util.function.BiConsumer;
 
 /** Simple consumer that collects triggered events for tests. */
 public class EventCollector implements BiConsumer<AbstractFlinkResource<?, ?>, Event> {
-
+    private static final Logger LOG = LoggerFactory.getLogger(EventCollector.class);
     public final Queue<Event> events = new LinkedList<>();
 
     @Override
     public void accept(AbstractFlinkResource<?, ?> abstractFlinkResource, Event event) {
+        LOG.info(AuditUtils.format(event));
         events.add(event);
     }
 }

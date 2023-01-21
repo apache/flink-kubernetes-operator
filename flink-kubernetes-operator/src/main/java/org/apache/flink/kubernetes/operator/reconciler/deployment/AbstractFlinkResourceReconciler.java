@@ -90,7 +90,7 @@ public abstract class AbstractFlinkResourceReconciler<
         this.kubernetesClient = kubernetesClient;
         this.eventRecorder = eventRecorder;
         this.statusRecorder = statusRecorder;
-        this.resourceScaler = JobAutoScaler.create(kubernetesClient);
+        this.resourceScaler = JobAutoScaler.create(kubernetesClient, eventRecorder);
     }
 
     @Override
