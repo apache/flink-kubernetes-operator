@@ -53,7 +53,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.io.IOException;
@@ -168,7 +168,7 @@ public class FlinkConfigBuilderTest {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testApplyFlinkConfigurationShouldSetShutdownOnFinishBasedOnFlinkVersion(
             FlinkVersion flinkVersion) {
         flinkDeployment.getSpec().setFlinkVersion(flinkVersion);

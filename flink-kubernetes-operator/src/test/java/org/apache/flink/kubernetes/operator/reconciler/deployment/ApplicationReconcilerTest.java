@@ -58,7 +58,7 @@ import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.platform.commons.util.StringUtils;
 
 import java.time.Clock;
@@ -99,7 +99,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void testUpgrade(FlinkVersion flinkVersion) throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster(flinkVersion);
 
@@ -587,7 +587,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     }
 
     @ParameterizedTest
-    @EnumSource(FlinkVersion.class)
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyJobIdNotResetDuringLastStateRecovery(FlinkVersion flinkVersion) {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster(flinkVersion);
 
