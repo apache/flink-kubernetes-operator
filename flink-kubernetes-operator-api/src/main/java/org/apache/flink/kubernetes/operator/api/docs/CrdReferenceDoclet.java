@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.api.docs;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.sun.source.doctree.DocCommentTree;
 import com.sun.source.util.DocTrees;
 import jdk.javadoc.doclet.Doclet;
@@ -25,6 +26,7 @@ import jdk.javadoc.doclet.Reporter;
 import org.apache.commons.io.FileUtils;
 
 import javax.lang.model.SourceVersion;
+import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
@@ -52,6 +54,27 @@ public class CrdReferenceDoclet implements Doclet {
     private String templateFile;
     private String outputFile;
     private Map<Element, Element> child2ParentElements;
+
+    private String getNameOrJsonPropValue(Element e) {
+        return e.getAnnotationMirrors().stream()
+                .filter(
+                        am ->
+                                am.getAnnotationType()
+                                        .toString()
+                                        .equals(JsonProperty.class.getName()))
+                .flatMap(am -> am.getElementValues().entrySet().stream())
+                .filter(entry -> entry.getKey().getSimpleName().toString().equals("value"))
+                .map(
+                        entry -> {
+                            AnnotationValue value = entry.getValue();
+                            if (value.getValue() instanceof String) {
+                                return (String) value.getValue();
+                            }
+                            return e.getSimpleName().toString();
+                        })
+                .findFirst()
+                .orElse(e.getSimpleName().toString());
+    }
 
     @Override
     public void init(Locale locale, Reporter reporter) {}
@@ -190,7 +213,7 @@ public class CrdReferenceDoclet implements Doclet {
                 case FIELD:
                     out.println(
                             "| "
-                                    + e
+                                    + getNameOrJsonPropValue(e)
                                     + " | "
                                     + e.asType().toString()
                                     + " | "
@@ -210,7 +233,7 @@ public class CrdReferenceDoclet implements Doclet {
                 case ENUM_CONSTANT:
                     out.println(
                             "| "
-                                    + e
+                                    + getNameOrJsonPropValue(e)
                                     + " | "
                                     + (dcTree != null ? cleanDoc(dcTree.toString()) : "")
                                     + " |");
