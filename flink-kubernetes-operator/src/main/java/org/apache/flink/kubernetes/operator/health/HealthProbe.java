@@ -17,19 +17,42 @@
 
 package org.apache.flink.kubernetes.operator.health;
 
+import io.javaoperatorsdk.operator.RuntimeInfo;
+import lombok.Getter;
+import lombok.Setter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Flink operator health probe. */
 public enum HealthProbe {
     INSTANCE;
 
+    private static final Logger LOG = LoggerFactory.getLogger(HealthProbe.class);
+
     private final AtomicBoolean isHealthy = new AtomicBoolean(true);
+
+    @Setter @Getter private RuntimeInfo runtimeInfo;
 
     public void markUnhealthy() {
         isHealthy.set(false);
     }
 
     public boolean isHealthy() {
-        return isHealthy.get();
+        if (!isHealthy.get()) {
+            return false;
+        }
+
+        if (runtimeInfo != null) {
+            LOG.debug("Checking operator health");
+            if (runtimeInfo.allEventSourcesAreHealthy()) {
+                return runtimeInfo.isStarted();
+            } else {
+                LOG.error("Unhealthy event sources: {}", runtimeInfo.unhealthyEventSources());
+                return false;
+            }
+        }
+        return true;
     }
 }

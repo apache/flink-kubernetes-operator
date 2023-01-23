@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
+import org.apache.flink.kubernetes.operator.health.HealthProbe;
 import org.apache.flink.kubernetes.operator.health.OperatorHealthService;
 import org.apache.flink.kubernetes.operator.listener.ListenerUtils;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
@@ -87,13 +88,18 @@ public class FlinkOperator {
         this.client =
                 KubernetesClientUtils.getKubernetesClient(
                         configManager.getOperatorConfiguration(), this.metricGroup);
-        this.operator = new Operator(client, this::overrideOperatorConfigs);
+        this.operator = createOperator();
         this.ctxFactory = new FlinkResourceContextFactory(client, configManager, metricGroup);
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.listeners = ListenerUtils.discoverListeners(configManager);
         PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(defaultConfig);
         FileSystem.initialize(defaultConfig, pluginManager);
         this.operatorHealthService = OperatorHealthService.fromConfig(configManager);
+    }
+
+    @VisibleForTesting
+    Operator createOperator() {
+        return new Operator(client, this::overrideOperatorConfigs);
     }
 
     private void handleNamespaceChanges(Set<String> namespaces) {
@@ -120,6 +126,13 @@ public class FlinkOperator {
         if (operatorConf.isJosdkMetricsEnabled()) {
             overrider.withMetrics(new OperatorJosdkMetrics(metricGroup, configManager));
         }
+
+        overrider.withTerminationTimeoutSeconds(
+                (int)
+                        configManager
+                                .getDefaultConfig()
+                                .get(KubernetesOperatorConfigOptions.OPERATOR_TERMINATION_TIMEOUT)
+                                .toSeconds());
 
         overrider.withStopOnInformerErrorDuringStartup(
                 configManager
@@ -198,9 +211,14 @@ public class FlinkOperator {
         operator.installShutdownHook();
         operator.start();
         if (operatorHealthService != null) {
+            HealthProbe.INSTANCE.setRuntimeInfo(operator.getRuntimeInfo());
             Runtime.getRuntime().addShutdownHook(new Thread(operatorHealthService::stop));
             operatorHealthService.start();
         }
+    }
+
+    public void stop() {
+        operator.stop();
     }
 
     public static void main(String... args) {
