@@ -80,5 +80,11 @@
             <td>Boolean</td>
             <td>Whether informer errors should stop operator startup. If false, the startup will ignore recoverable errors, caused for example by RBAC issues and will retry periodically.</td>
         </tr>
+        <tr>
+            <td><h5>kubernetes.operator.termination.timeout</h5></td>
+            <td style="word-wrap: break-word;">10 s</td>
+            <td>Duration</td>
+            <td>Operator shutdown timeout before reconciliation threads are killed.</td>
+        </tr>
     </tbody>
 </table>

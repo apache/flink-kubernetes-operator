@@ -355,6 +355,16 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Whether informer errors should stop operator startup. If false, the startup will ignore recoverable errors, caused for example by RBAC issues and will retry periodically.");
 
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Duration> OPERATOR_TERMINATION_TIMEOUT =
+            operatorConfig("termination.timeout")
+                    .durationType()
+                    .defaultValue(
+                            Duration.ofSeconds(
+                                    ConfigurationService.DEFAULT_TERMINATION_TIMEOUT_SECONDS))
+                    .withDescription(
+                            "Operator shutdown timeout before reconciliation threads are killed.");
+
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED =
             operatorConfig("cluster.health-check.enabled")
