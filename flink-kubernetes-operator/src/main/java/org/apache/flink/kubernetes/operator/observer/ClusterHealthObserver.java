@@ -33,6 +33,8 @@ public class ClusterHealthObserver {
     private static final Logger LOG = LoggerFactory.getLogger(ClusterHealthObserver.class);
     private static final String FULL_RESTARTS_METRIC_NAME = "fullRestarts";
     private static final String NUM_RESTARTS_METRIC_NAME = "numRestarts";
+    private static final String NUMBER_OF_COMPLETED_CHECKPOINTS_METRIC_NAME =
+            "numberOfCompletedCheckpoints";
     private final ClusterHealthEvaluator clusterHealthEvaluator;
 
     public ClusterHealthObserver() {
@@ -56,22 +58,23 @@ public class ClusterHealthObserver {
                             .getMetrics(
                                     ctx.getObserveConfig(),
                                     jobId,
-                                    List.of(FULL_RESTARTS_METRIC_NAME, NUM_RESTARTS_METRIC_NAME));
-            ClusterHealthInfo observedClusterHealthInfo;
+                                    List.of(
+                                            FULL_RESTARTS_METRIC_NAME,
+                                            NUM_RESTARTS_METRIC_NAME,
+                                            NUMBER_OF_COMPLETED_CHECKPOINTS_METRIC_NAME));
+            ClusterHealthInfo observedClusterHealthInfo = new ClusterHealthInfo();
             if (metrics.containsKey(NUM_RESTARTS_METRIC_NAME)) {
                 LOG.debug(NUM_RESTARTS_METRIC_NAME + " metric is used");
-                observedClusterHealthInfo =
-                        ClusterHealthInfo.of(
-                                Integer.parseInt(metrics.get(NUM_RESTARTS_METRIC_NAME)));
+                observedClusterHealthInfo.setNumRestarts(
+                        Integer.parseInt(metrics.get(NUM_RESTARTS_METRIC_NAME)));
             } else if (metrics.containsKey(FULL_RESTARTS_METRIC_NAME)) {
                 LOG.debug(
                         FULL_RESTARTS_METRIC_NAME
                                 + " metric is used because "
                                 + NUM_RESTARTS_METRIC_NAME
                                 + " is missing");
-                observedClusterHealthInfo =
-                        ClusterHealthInfo.of(
-                                Integer.parseInt(metrics.get(FULL_RESTARTS_METRIC_NAME)));
+                observedClusterHealthInfo.setNumRestarts(
+                        Integer.parseInt(metrics.get(FULL_RESTARTS_METRIC_NAME)));
             } else {
                 throw new IllegalStateException(
                         "No job restart metric found. Either "
@@ -80,6 +83,8 @@ public class ClusterHealthObserver {
                                 + NUM_RESTARTS_METRIC_NAME
                                 + "(new) must exist.");
             }
+            observedClusterHealthInfo.setNumCompletedCheckpoints(
+                    Integer.parseInt(metrics.get(NUMBER_OF_COMPLETED_CHECKPOINTS_METRIC_NAME)));
             LOG.debug("Observed cluster health: {}", observedClusterHealthInfo);
 
             clusterHealthEvaluator.evaluate(

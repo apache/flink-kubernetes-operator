@@ -23,7 +23,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.time.Clock;
 
@@ -31,7 +30,6 @@ import java.time.Clock;
 @Experimental
 @Data
 @AllArgsConstructor
-@NoArgsConstructor
 public class ClusterHealthInfo {
     /** Millisecond timestamp of the last observed health information. */
     private long timeStamp;
@@ -39,15 +37,25 @@ public class ClusterHealthInfo {
     /** Number of restarts. */
     private int numRestarts;
 
+    /** Millisecond timestamp lastly evaluated the number of restarts. */
+    private long numRestartsEvaluationTimeStamp;
+
+    /** Number of successfully completed checkpoints. */
+    private int numCompletedCheckpoints;
+
+    /** Millisecond timestamp lastly increased the number of completed checkpoints. */
+    private long numCompletedCheckpointsIncreasedTimeStamp;
+
     /** Calculated field whether the cluster is healthy or not. */
     private boolean healthy;
 
-    public static ClusterHealthInfo of(int numRestarts) {
-        return of(Clock.systemDefaultZone(), numRestarts);
+    public ClusterHealthInfo() {
+        this(Clock.systemDefaultZone());
     }
 
-    public static ClusterHealthInfo of(Clock clock, int numRestarts) {
-        return new ClusterHealthInfo(clock.millis(), numRestarts, true);
+    public ClusterHealthInfo(Clock clock) {
+        timeStamp = clock.millis();
+        healthy = true;
     }
 
     public static boolean isValid(ClusterHealthInfo clusterHealthInfo) {
