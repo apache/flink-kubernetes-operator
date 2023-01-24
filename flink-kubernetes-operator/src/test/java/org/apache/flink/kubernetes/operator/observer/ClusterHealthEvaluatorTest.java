@@ -33,6 +33,8 @@ import java.util.Map;
 
 import static java.time.Instant.ofEpochMilli;
 import static java.time.Instant.ofEpochSecond;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,7 +49,8 @@ class ClusterHealthEvaluatorTest {
     private Map<String, String> clusterInfo;
     private ClusterHealthEvaluator clusterHealthEvaluator;
     private final Instant invalidInstant = ofEpochMilli(0);
-    private final Instant validInstant = ofEpochMilli(1);
+    private final Instant validInstant1 = ofEpochSecond(120);
+    private final Instant validInstant2 = validInstant1.plus(2, ChronoUnit.MINUTES);
     private ClusterHealthInfo invalidClusterHealthInfo;
 
     @BeforeEach
@@ -56,11 +59,11 @@ class ClusterHealthEvaluatorTest {
 
         clusterInfo = new HashMap<>();
 
-        var now = Clock.fixed(ofEpochSecond(120), ZoneId.systemDefault());
-        clusterHealthEvaluator = new ClusterHealthEvaluator(now);
-
         var clock = Clock.fixed(invalidInstant, ZoneId.systemDefault());
-        invalidClusterHealthInfo = ClusterHealthInfo.of(clock, 0);
+        invalidClusterHealthInfo = new ClusterHealthInfo(clock);
+
+        var now = Clock.fixed(validInstant2, ZoneId.systemDefault());
+        clusterHealthEvaluator = new ClusterHealthEvaluator(now);
     }
 
     @Test
@@ -71,18 +74,14 @@ class ClusterHealthEvaluatorTest {
 
     @Test
     public void evaluateShouldSetLastStateWhenValidObserved() {
-        var observedClusterHealthInfo = createClusterHealthInfo(validInstant, 0);
-
-        clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo);
-        assertEquals(
-                observedClusterHealthInfo,
-                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo));
+        var observedClusterHealthInfo = createClusterHealthInfo(validInstant1, 0, 1);
+        setLastValidClusterHealthInfo(observedClusterHealthInfo);
     }
 
     @Test
     public void evaluateShouldThrowExceptionWhenObservedTimestampIsOld() {
-        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant, 0);
-        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant.plusMillis(100), 0);
+        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 1);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 0, 1);
 
         ClusterHealthEvaluator.setLastValidClusterHealthInfo(
                 clusterInfo, observedClusterHealthInfo2);
@@ -94,103 +93,206 @@ class ClusterHealthEvaluatorTest {
     }
 
     @Test
-    public void evaluateShouldOverwriteLastStateWhenRestartCountIsLess() {
-        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant, 1);
-        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant, 0);
+    public void evaluateShouldOverwriteRestartCountWhenLess() {
+        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 1, 1);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 0, 1);
 
-        clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo1);
-        assertEquals(
-                observedClusterHealthInfo1,
-                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo));
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
         clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
+        var lastValidClusterHealthInfo =
+                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
+        assertNotNull(lastValidClusterHealthInfo);
         assertEquals(
-                observedClusterHealthInfo2,
-                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo));
+                observedClusterHealthInfo2.getNumRestarts(),
+                lastValidClusterHealthInfo.getNumRestarts());
+        assertEquals(
+                observedClusterHealthInfo2.getTimeStamp(),
+                lastValidClusterHealthInfo.getNumRestartsEvaluationTimeStamp());
     }
 
     @Test
-    public void evaluateShouldNotOverwriteLastStateWhenTimestampIsInWindow() {
+    public void evaluateShouldNotOverwriteRestartCountWhenTimestampIsInWindow() {
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW, Duration.ofMinutes(2));
-        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant, 0);
-        var observedClusterHealthInfo2 =
-                createClusterHealthInfo(validInstant.plus(1, ChronoUnit.MINUTES), 0);
+        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 1);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 1, 1);
 
-        ClusterHealthEvaluator.setLastValidClusterHealthInfo(
-                clusterInfo, observedClusterHealthInfo1);
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
         clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
+        var lastValidClusterHealthInfo =
+                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
+        assertNotNull(lastValidClusterHealthInfo);
         assertEquals(
-                observedClusterHealthInfo1,
-                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo));
+                observedClusterHealthInfo1.getNumRestarts(),
+                lastValidClusterHealthInfo.getNumRestarts());
+        assertEquals(
+                observedClusterHealthInfo1.getTimeStamp(),
+                lastValidClusterHealthInfo.getNumRestartsEvaluationTimeStamp());
     }
 
     @Test
-    public void evaluateShouldOverwriteLastStateWhenTimestampIsOutOfWindow() {
+    public void evaluateShouldOverwriteRestartCountWhenTimestampIsOutOfWindow() {
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW, Duration.ofMinutes(1));
-        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant, 0);
-        var observedClusterHealthInfo2 =
-                createClusterHealthInfo(validInstant.plus(1, ChronoUnit.MINUTES), 0);
+        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 1);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 1, 1);
 
-        ClusterHealthEvaluator.setLastValidClusterHealthInfo(
-                clusterInfo, observedClusterHealthInfo1);
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
         clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
+        var lastValidClusterHealthInfo =
+                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
+        assertNotNull(lastValidClusterHealthInfo);
         assertEquals(
-                observedClusterHealthInfo2,
-                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo));
+                observedClusterHealthInfo2.getNumRestarts(),
+                lastValidClusterHealthInfo.getNumRestarts());
+        assertEquals(
+                observedClusterHealthInfo2.getTimeStamp(),
+                lastValidClusterHealthInfo.getNumRestartsEvaluationTimeStamp());
+    }
+
+    @Test
+    public void evaluateShouldOverwriteCompletedCheckpointCountWhenLess() {
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED, true);
+        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 1);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 0, 0);
+
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
+        clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
+        var lastValidClusterHealthInfo =
+                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
+        assertNotNull(lastValidClusterHealthInfo);
+        assertEquals(
+                observedClusterHealthInfo2.getNumCompletedCheckpoints(),
+                lastValidClusterHealthInfo.getNumCompletedCheckpoints());
+        assertEquals(
+                observedClusterHealthInfo2.getTimeStamp(),
+                lastValidClusterHealthInfo.getNumCompletedCheckpointsIncreasedTimeStamp());
+    }
+
+    @Test
+    public void evaluateShouldOverwriteCompletedCheckpointWhenIncreased() {
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED, true);
+        configuration.set(
+                OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW, Duration.ofMinutes(2));
+        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 1);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 0, 2);
+
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
+        clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
+        var lastValidClusterHealthInfo =
+                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
+        assertNotNull(lastValidClusterHealthInfo);
+        assertEquals(
+                observedClusterHealthInfo2.getNumCompletedCheckpoints(),
+                lastValidClusterHealthInfo.getNumCompletedCheckpoints());
+        assertEquals(
+                observedClusterHealthInfo2.getTimeStamp(),
+                lastValidClusterHealthInfo.getNumCompletedCheckpointsIncreasedTimeStamp());
+    }
+
+    @Test
+    public void evaluateShouldNotOverwriteCompletedCheckpointWhenNotIncreased() {
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED, true);
+        configuration.set(
+                OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW, Duration.ofMinutes(2));
+        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 1);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 0, 1);
+
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
+        clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
+        var lastValidClusterHealthInfo =
+                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo);
+        assertNotNull(lastValidClusterHealthInfo);
+        assertEquals(
+                observedClusterHealthInfo1.getNumCompletedCheckpoints(),
+                lastValidClusterHealthInfo.getNumCompletedCheckpoints());
+        assertEquals(
+                observedClusterHealthInfo1.getTimeStamp(),
+                lastValidClusterHealthInfo.getNumCompletedCheckpointsIncreasedTimeStamp());
     }
 
     @Test
     public void evaluateShouldMarkClusterHealthyWhenNoPreviousState() {
-        var observedClusterHealthInfo = createClusterHealthInfo(validInstant, 1);
+        var observedClusterHealthInfo = createClusterHealthInfo(validInstant1, 1, 1);
 
         clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo);
         assertClusterHealthIs(true);
     }
 
     @Test
-    public void evaluateShouldMarkClusterHealthyWhenThresholdNotHit() {
+    public void evaluateShouldMarkClusterHealthyWhenRestartThresholdNotHit() {
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW, Duration.ofMinutes(5));
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD, 100);
-        ClusterHealthInfo observedClusterHealthInfo1 = createClusterHealthInfo(validInstant, 0);
-        var observedClusterHealthInfo2 =
-                createClusterHealthInfo(validInstant.plus(1, ChronoUnit.MINUTES), 100);
+        ClusterHealthInfo observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 1);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 100, 1);
 
-        ClusterHealthEvaluator.setLastValidClusterHealthInfo(
-                clusterInfo, observedClusterHealthInfo1);
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
         clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
         assertClusterHealthIs(true);
     }
 
     @Test
-    public void evaluateShouldMarkClusterUnhealthyWhenThresholdHitImmediately() {
+    public void evaluateShouldMarkClusterUnhealthyWhenRestartThresholdHitImmediately() {
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW, Duration.ofMinutes(5));
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD, 100);
-        ClusterHealthInfo observedClusterHealthInfo1 = createClusterHealthInfo(validInstant, 0);
-        var observedClusterHealthInfo2 =
-                createClusterHealthInfo(validInstant.plus(1, ChronoUnit.MINUTES), 101);
+        ClusterHealthInfo observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 1);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 101, 1);
 
-        ClusterHealthEvaluator.setLastValidClusterHealthInfo(
-                clusterInfo, observedClusterHealthInfo1);
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
         clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
         assertClusterHealthIs(false);
     }
 
     @Test
-    public void evaluateShouldMarkClusterUnhealthyWhenThresholdHitInAverage() {
-        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW, Duration.ofMinutes(5));
+    public void evaluateShouldMarkClusterUnhealthyWhenRestartThresholdHitInAverage() {
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW, Duration.ofMinutes(1));
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD, 100);
-        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant, 0);
-        var observedClusterHealthInfo2 =
-                createClusterHealthInfo(validInstant.plus(6, ChronoUnit.MINUTES), 122);
+        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 1);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 500, 1);
 
-        ClusterHealthEvaluator.setLastValidClusterHealthInfo(
-                clusterInfo, observedClusterHealthInfo1);
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
         clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
         assertClusterHealthIs(false);
     }
 
-    private ClusterHealthInfo createClusterHealthInfo(Instant instant, int numRestarts) {
+    @Test
+    public void evaluateShouldMarkClusterHealthyWhenNoCompletedCheckpointsInsideWindow() {
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED, true);
+        configuration.set(
+                OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW, Duration.ofMinutes(3));
+        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 0);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 0, 0);
+
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
+        clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
+        assertClusterHealthIs(true);
+    }
+
+    @Test
+    public void evaluateShouldMarkClusterUnhealthyWhenNoCompletedCheckpointsOutsideWindow() {
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED, true);
+        configuration.set(
+                OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW, Duration.ofMinutes(1));
+        var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 0);
+        var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 0, 0);
+
+        setLastValidClusterHealthInfo(observedClusterHealthInfo1);
+        clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
+        assertClusterHealthIs(false);
+    }
+
+    private ClusterHealthInfo createClusterHealthInfo(
+            Instant instant, int numRestarts, int numCompletedCheckpoints) {
         var clock = Clock.fixed(instant, ZoneId.systemDefault());
-        return ClusterHealthInfo.of(clock, numRestarts);
+        var clusterHealthInfo = new ClusterHealthInfo(clock);
+        clusterHealthInfo.setNumRestarts(numRestarts);
+        clusterHealthInfo.setNumCompletedCheckpoints(numCompletedCheckpoints);
+        return clusterHealthInfo;
+    }
+
+    private void setLastValidClusterHealthInfo(ClusterHealthInfo clusterHealthInfo) {
+        clusterHealthEvaluator.evaluate(configuration, clusterInfo, clusterHealthInfo);
+        assertEquals(
+                clusterHealthInfo,
+                ClusterHealthEvaluator.getLastValidClusterHealthInfo(clusterInfo));
     }
 
     private void assertClusterHealthIs(boolean healthy) {

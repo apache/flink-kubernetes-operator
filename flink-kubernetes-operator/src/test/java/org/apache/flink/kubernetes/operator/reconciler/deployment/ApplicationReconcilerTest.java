@@ -691,7 +691,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         Assertions.assertEquals(MSG_SUBMIT, eventCollector.events.remove().getMessage());
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
-        var clusterHealthInfo = new ClusterHealthInfo(System.currentTimeMillis(), 2, false);
+        var clusterHealthInfo = new ClusterHealthInfo();
+        clusterHealthInfo.setTimeStamp(System.currentTimeMillis());
+        clusterHealthInfo.setNumRestarts(2);
+        clusterHealthInfo.setHealthy(false);
         ClusterHealthEvaluator.setLastValidClusterHealthInfo(
                 deployment.getStatus().getClusterInfo(), clusterHealthInfo);
         reconciler.reconcile(deployment, context);

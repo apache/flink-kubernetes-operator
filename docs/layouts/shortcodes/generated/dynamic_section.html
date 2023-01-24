@@ -9,6 +9,18 @@
     </thead>
     <tbody>
         <tr>
+            <td><h5>kubernetes.operator.cluster.health-check.checkpoint-progress.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Whether to enable checkpoint progress health check for clusters.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.cluster.health-check.checkpoint-progress.window</h5></td>
+            <td style="word-wrap: break-word;">5 min</td>
+            <td>Duration</td>
+            <td>If no checkpoints are completed within the defined time window, the job is considered unhealthy. This must be bigger than checkpointing interval.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.cluster.health-check.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>

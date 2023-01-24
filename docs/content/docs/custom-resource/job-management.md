@@ -238,8 +238,11 @@ When Kubernetes HA is enabled, the operator can restart the Flink cluster deploy
 unhealthy. Unhealthy deployment restart can be turned on in the configuration by setting `kubernetes.operator.cluster.health-check.enabled` to `true` (default: `false`).  
 In order this feature to work one must enable [recovery of missing job deployments](#recovery-of-missing-job-deployments).
 
-At the moment deployment is considered unhealthy when Flink's restarts count reaches `kubernetes.operator.cluster.health-check.restarts.threshold` (default: `64`)
+At the moment deployment is considered unhealthy when:
+* Flink's restarts count reaches `kubernetes.operator.cluster.health-check.restarts.threshold` (default: `64`)
 within time window of `kubernetes.operator.cluster.health-check.restarts.window` (default: 2 minutes).
+* `cluster.health-check.checkpoint-progress.enabled` is turned on and Flink's successful checkpoints count is not
+changing within time window of within time window of `kubernetes.operator.cluster.health-check.checkpoint-progress.window` (default: 5 minutes).
 
 ## Restart failed job deployments
 

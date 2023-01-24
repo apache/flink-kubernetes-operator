@@ -27,6 +27,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Map;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW;
 
@@ -75,6 +77,10 @@ public class ClusterHealthEvaluator {
             var lastValidClusterHealthInfo = getLastValidClusterHealthInfo(clusterInfo);
             if (lastValidClusterHealthInfo == null) {
                 LOG.debug("No last valid health info, skipping health check");
+                observedClusterHealthInfo.setNumRestartsEvaluationTimeStamp(
+                        observedClusterHealthInfo.getTimeStamp());
+                observedClusterHealthInfo.setNumCompletedCheckpointsIncreasedTimeStamp(
+                        observedClusterHealthInfo.getTimeStamp());
                 setLastValidClusterHealthInfo(clusterInfo, observedClusterHealthInfo);
             } else if (observedClusterHealthInfo.getTimeStamp()
                     < lastValidClusterHealthInfo.getTimeStamp()) {
@@ -82,65 +88,127 @@ public class ClusterHealthEvaluator {
                         "Observed health info timestamp is less than the last valid health info timestamp, this indicates a bug...";
                 LOG.error(msg);
                 throw new IllegalStateException(msg);
-            } else if (observedClusterHealthInfo.getNumRestarts()
-                    < lastValidClusterHealthInfo.getNumRestarts()) {
-                LOG.debug(
-                        "Observed health info number of restarts is less than the last valid health info number of restarts, skipping health check");
-                setLastValidClusterHealthInfo(clusterInfo, observedClusterHealthInfo);
             } else {
-                boolean isHealthy = true;
-
                 LOG.debug("Valid health info exist, checking cluster health");
                 LOG.debug("Last valid health info: {}", lastValidClusterHealthInfo);
                 LOG.debug("Observed health info: {}", observedClusterHealthInfo);
 
-                var timestampDiffMs =
-                        observedClusterHealthInfo.getTimeStamp()
-                                - lastValidClusterHealthInfo.getTimeStamp();
-                LOG.debug(
-                        "Time difference between health infos: {}",
-                        Duration.ofMillis(timestampDiffMs));
+                boolean isHealthy =
+                        evaluateRestarts(
+                                        configuration,
+                                        clusterInfo,
+                                        lastValidClusterHealthInfo,
+                                        observedClusterHealthInfo)
+                                && evaluateCheckpoints(
+                                        configuration,
+                                        lastValidClusterHealthInfo,
+                                        observedClusterHealthInfo);
 
-                var restartCheckWindow =
-                        configuration.get(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW);
-                var restartCheckWindowMs = restartCheckWindow.toMillis();
-                double countMultiplier = (double) restartCheckWindowMs / (double) timestampDiffMs;
-                // If the 2 health info timestamp difference is within the window then no
-                // scaling needed
-                if (countMultiplier > 1) {
-                    countMultiplier = 1;
-                }
-                long numRestarts =
-                        (long)
-                                ((double)
-                                                (observedClusterHealthInfo.getNumRestarts()
-                                                        - lastValidClusterHealthInfo
-                                                                .getNumRestarts())
-                                        * countMultiplier);
-                LOG.debug(
-                        "Calculated restart count for {} window: {}",
-                        restartCheckWindow,
-                        numRestarts);
-
-                if (lastValidClusterHealthInfo.getTimeStamp()
-                        < clock.millis() - restartCheckWindowMs) {
-                    LOG.debug("Last valid health info timestamp is outside of the window");
-                    setLastValidClusterHealthInfo(clusterInfo, observedClusterHealthInfo);
-                }
-
-                var restartThreshold =
-                        configuration.get(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD);
-                if (numRestarts > restartThreshold) {
-                    LOG.info("Restart count hit threshold: {}", restartThreshold);
-                    setLastValidClusterHealthInfo(clusterInfo, observedClusterHealthInfo);
-                    isHealthy = false;
-                }
-
-                // Update the health flag
-                lastValidClusterHealthInfo = getLastValidClusterHealthInfo(clusterInfo);
+                lastValidClusterHealthInfo.setTimeStamp(observedClusterHealthInfo.getTimeStamp());
                 lastValidClusterHealthInfo.setHealthy(isHealthy);
                 setLastValidClusterHealthInfo(clusterInfo, lastValidClusterHealthInfo);
             }
         }
+    }
+
+    private boolean evaluateRestarts(
+            Configuration configuration,
+            Map<String, String> clusterInfo,
+            ClusterHealthInfo lastValidClusterHealthInfo,
+            ClusterHealthInfo observedClusterHealthInfo) {
+
+        if (observedClusterHealthInfo.getNumRestarts()
+                < lastValidClusterHealthInfo.getNumRestarts()) {
+            LOG.debug(
+                    "Observed health info number of restarts is less than in the last valid health info, skipping health check");
+            lastValidClusterHealthInfo.setNumRestarts(observedClusterHealthInfo.getNumRestarts());
+            lastValidClusterHealthInfo.setNumRestartsEvaluationTimeStamp(
+                    observedClusterHealthInfo.getTimeStamp());
+            return true;
+        }
+
+        var timestampDiffMs =
+                observedClusterHealthInfo.getTimeStamp()
+                        - lastValidClusterHealthInfo.getNumRestartsEvaluationTimeStamp();
+        LOG.debug("Time difference between health infos: {}", Duration.ofMillis(timestampDiffMs));
+
+        var restartCheckWindow = configuration.get(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW);
+        var restartCheckWindowMs = restartCheckWindow.toMillis();
+        double countMultiplier = (double) restartCheckWindowMs / (double) timestampDiffMs;
+        // If the 2 health info timestamp difference is within the window then no
+        // scaling needed
+        if (countMultiplier > 1) {
+            countMultiplier = 1;
+        }
+        long numRestarts =
+                (long)
+                        ((double)
+                                        (observedClusterHealthInfo.getNumRestarts()
+                                                - lastValidClusterHealthInfo.getNumRestarts())
+                                * countMultiplier);
+        LOG.debug("Calculated restart count for {} window: {}", restartCheckWindow, numRestarts);
+
+        var restartThreshold = configuration.get(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD);
+        boolean isHealthy = numRestarts <= restartThreshold;
+        if (!isHealthy) {
+            LOG.info("Restart count hit threshold: {}", restartThreshold);
+        }
+
+        if (lastValidClusterHealthInfo.getNumRestartsEvaluationTimeStamp()
+                < clock.millis() - restartCheckWindowMs) {
+            LOG.debug(
+                    "Last valid number of restarts evaluation timestamp is outside of the window");
+            lastValidClusterHealthInfo.setNumRestarts(observedClusterHealthInfo.getNumRestarts());
+            lastValidClusterHealthInfo.setNumRestartsEvaluationTimeStamp(
+                    observedClusterHealthInfo.getTimeStamp());
+        }
+
+        return isHealthy;
+    }
+
+    private boolean evaluateCheckpoints(
+            Configuration configuration,
+            ClusterHealthInfo lastValidClusterHealthInfo,
+            ClusterHealthInfo observedClusterHealthInfo) {
+        if (!configuration.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED)) {
+            return true;
+        }
+
+        if (observedClusterHealthInfo.getNumCompletedCheckpoints()
+                < lastValidClusterHealthInfo.getNumCompletedCheckpoints()) {
+            LOG.debug(
+                    "Observed health info number of completed checkpoints is less than in the last valid health info, skipping health check");
+            lastValidClusterHealthInfo.setNumCompletedCheckpoints(
+                    observedClusterHealthInfo.getNumCompletedCheckpoints());
+            lastValidClusterHealthInfo.setNumCompletedCheckpointsIncreasedTimeStamp(
+                    observedClusterHealthInfo.getTimeStamp());
+            return true;
+        }
+
+        var timestampDiffMs =
+                observedClusterHealthInfo.getTimeStamp()
+                        - lastValidClusterHealthInfo.getNumCompletedCheckpointsIncreasedTimeStamp();
+        LOG.debug("Time difference between health infos: {}", Duration.ofMillis(timestampDiffMs));
+
+        boolean isHealthy = true;
+        var completedCheckpointsCheckWindow =
+                configuration.get(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW);
+        var completedCheckpointsCheckWindowMs = completedCheckpointsCheckWindow.toMillis();
+
+        if (observedClusterHealthInfo.getNumCompletedCheckpoints()
+                > lastValidClusterHealthInfo.getNumCompletedCheckpoints()) {
+            LOG.debug("Last valid number of completed checkpoints increased marking timestamp");
+            lastValidClusterHealthInfo.setNumCompletedCheckpoints(
+                    observedClusterHealthInfo.getNumCompletedCheckpoints());
+            lastValidClusterHealthInfo.setNumCompletedCheckpointsIncreasedTimeStamp(
+                    observedClusterHealthInfo.getTimeStamp());
+        } else if (lastValidClusterHealthInfo.getNumCompletedCheckpointsIncreasedTimeStamp()
+                        + completedCheckpointsCheckWindowMs
+                < clock.millis()) {
+            LOG.info("Cluster is not able to complete checkpoints");
+            isHealthy = false;
+        }
+
+        return isHealthy;
     }
 }

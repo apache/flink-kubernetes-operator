@@ -33,7 +33,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.time.Duration;
+
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** @link Unhealthy deployment restart tests */
@@ -41,6 +46,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class UnhealthyDeploymentRestartTest {
 
     private static final String NUM_RESTARTS_METRIC_NAME = "numRestarts";
+
+    private static final String NUMBER_OF_COMPLETED_CHECKPOINTS_METRIC_NAME =
+            "numberOfCompletedCheckpoints";
 
     private FlinkConfigManager configManager;
 
@@ -54,12 +62,18 @@ public class UnhealthyDeploymentRestartTest {
     public void setup() {
         var configuration = new Configuration();
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED, true);
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD, 64);
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED, true);
+        configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW, Duration.ZERO);
         configManager = new FlinkConfigManager(configuration);
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         testController =
                 new TestingFlinkDeploymentController(configManager, kubernetesClient, flinkService);
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
+
+        flinkService.setMetricValue(NUM_RESTARTS_METRIC_NAME, "0");
+        flinkService.setMetricValue(NUMBER_OF_COMPLETED_CHECKPOINTS_METRIC_NAME, "1");
     }
 
     @ParameterizedTest
@@ -88,6 +102,40 @@ public class UnhealthyDeploymentRestartTest {
 
         // After restart the deployment is healthy again
         flinkService.setMetricValue(NUM_RESTARTS_METRIC_NAME, "0");
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersionsAndUpgradeModes")
+    public void verifyApplicationNoCompletedCheckpointsJmRecovery(
+            FlinkVersion flinkVersion, UpgradeMode upgradeMode) throws Exception {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
+        appCluster.getSpec().getJob().setUpgradeMode(upgradeMode);
+
+        // Start a healthy deployment
+        flinkService.setMetricValue(NUMBER_OF_COMPLETED_CHECKPOINTS_METRIC_NAME, "1");
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+
+        // Make deployment unhealthy
+        flinkService.setMetricValue(NUMBER_OF_COMPLETED_CHECKPOINTS_METRIC_NAME, "1");
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        // After restart the deployment is healthy again
+        flinkService.setMetricValue(NUMBER_OF_COMPLETED_CHECKPOINTS_METRIC_NAME, "2");
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
         assertEquals(

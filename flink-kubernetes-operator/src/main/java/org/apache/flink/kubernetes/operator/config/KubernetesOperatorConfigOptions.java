@@ -380,6 +380,24 @@ public class KubernetesOperatorConfigOptions {
                                     + "If the restart count is reaching the threshold then full cluster restart is initiated.");
 
     @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean>
+            OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED =
+                    operatorConfig("cluster.health-check.checkpoint-progress.enabled")
+                            .booleanType()
+                            .defaultValue(false)
+                            .withDescription(
+                                    "Whether to enable checkpoint progress health check for clusters.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Duration>
+            OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW =
+                    operatorConfig("cluster.health-check.checkpoint-progress.window")
+                            .durationType()
+                            .defaultValue(Duration.ofMinutes(5))
+                            .withDescription(
+                                    "If no checkpoints are completed within the defined time window, the job is considered unhealthy. This must be bigger than checkpointing interval.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> OPERATOR_JOB_RESTART_FAILED =
             operatorConfig("job.restart.failed")
                     .booleanType()

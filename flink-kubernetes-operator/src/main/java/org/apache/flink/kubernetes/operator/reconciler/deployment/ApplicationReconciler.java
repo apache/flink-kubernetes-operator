@@ -145,6 +145,10 @@ public class ApplicationReconciler
         var relatedResource = ctx.getResource();
         var status = relatedResource.getStatus();
         var flinkService = ctx.getFlinkService();
+
+        ClusterHealthEvaluator.removeLastValidClusterHealthInfo(
+                relatedResource.getStatus().getClusterInfo());
+
         if (savepoint.isPresent()) {
             deployConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, savepoint.get());
         } else {
@@ -271,7 +275,10 @@ public class ApplicationReconciler
                         MSG_RESTART_UNHEALTHY);
                 cleanupAfterFailedJob(ctx);
             }
-            resubmitJob(ctx, true);
+            boolean requireHaMetadata =
+                    ReconciliationUtils.getDeployedSpec(ctx.getResource()).getJob().getUpgradeMode()
+                            != UpgradeMode.STATELESS;
+            resubmitJob(ctx, requireHaMetadata);
             return true;
         }
 
