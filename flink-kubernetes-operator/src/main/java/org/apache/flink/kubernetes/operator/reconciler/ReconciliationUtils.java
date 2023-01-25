@@ -37,6 +37,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.exception.ValidationException;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.client.CustomResource;
@@ -276,7 +277,7 @@ public class ReconciliationUtils {
 
         return previousUpgradeMode != UpgradeMode.LAST_STATE
                 && currentUpgradeMode == UpgradeMode.LAST_STATE
-                && !FlinkUtils.isKubernetesHAActivated(observeConfig);
+                && !HighAvailabilityMode.isHighAvailabilityModeActivated(observeConfig);
     }
 
     public static <SPEC extends AbstractFlinkSpec> SPEC getDeployedSpec(

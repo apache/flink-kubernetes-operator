@@ -38,8 +38,6 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.flink.kubernetes.utils.Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY;
-
 /**
  * Implementation of {@link FlinkService} submitting and interacting with Native Kubernetes Flink
  * clusters and jobs.
@@ -109,14 +107,15 @@ public class NativeFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    protected void deleteClusterInternal(ObjectMeta meta, boolean deleteHaConfigmaps) {
+    protected void deleteClusterInternal(
+            ObjectMeta meta, Configuration conf, boolean deleteHaData) {
 
         String namespace = meta.getNamespace();
         String clusterId = meta.getName();
 
         LOG.info(
                 "Deleting JobManager deployment {}.",
-                deleteHaConfigmaps ? "and HA metadata" : "while preserving HA metadata");
+                deleteHaData ? "and HA metadata" : "while preserving HA metadata");
         kubernetesClient
                 .apps()
                 .deployments()
@@ -124,22 +123,8 @@ public class NativeFlinkService extends AbstractFlinkService {
                 .withName(KubernetesUtils.getDeploymentName(clusterId))
                 .delete();
 
-        if (deleteHaConfigmaps) {
-            // We need to wait for cluster shutdown otherwise HA configmaps might be recreated
-            waitForClusterShutdown(
-                    namespace,
-                    clusterId,
-                    configManager
-                            .getOperatorConfiguration()
-                            .getFlinkShutdownClusterTimeout()
-                            .toSeconds());
-            kubernetesClient
-                    .configMaps()
-                    .inNamespace(namespace)
-                    .withLabels(
-                            KubernetesUtils.getConfigMapLabels(
-                                    clusterId, LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
-                    .delete();
+        if (deleteHaData) {
+            deleteHAData(namespace, clusterId, conf);
         }
     }
 }

@@ -41,6 +41,7 @@ import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
@@ -85,8 +86,8 @@ public class ApplicationReconciler
         if (deployConfig.getBoolean(
                         KubernetesOperatorConfigOptions
                                 .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED)
-                && FlinkUtils.isKubernetesHAActivated(deployConfig)
-                && FlinkUtils.isKubernetesHAActivated(ctx.getObserveConfig())
+                && HighAvailabilityMode.isHighAvailabilityModeActivated(deployConfig)
+                && HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig())
                 && !flinkVersionChanged(
                         ReconciliationUtils.getDeployedSpec(deployment), deployment.getSpec())) {
 
@@ -128,7 +129,7 @@ public class ApplicationReconciler
             FlinkService flinkService, FlinkDeployment deployment, Configuration deployConfig) {
         deployment.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
         flinkService.deleteClusterDeployment(
-                deployment.getMetadata(), deployment.getStatus(), false);
+                deployment.getMetadata(), deployment.getStatus(), deployConfig, false);
         flinkService.waitForClusterShutdown(deployConfig);
         LOG.info("Deleted jobmanager deployment that never started.");
     }
@@ -164,7 +165,8 @@ public class ApplicationReconciler
                 throw new RuntimeException("This indicates a bug...");
             }
             LOG.info("Deleting deployment with terminated application before new deployment");
-            flinkService.deleteClusterDeployment(relatedResource.getMetadata(), status, true);
+            flinkService.deleteClusterDeployment(
+                    relatedResource.getMetadata(), status, deployConfig, true);
             flinkService.waitForClusterShutdown(deployConfig);
         }
 
@@ -223,7 +225,10 @@ public class ApplicationReconciler
         // The job has already stopped. Delete the deployment and we are ready.
         ctx.getFlinkService()
                 .deleteClusterDeployment(
-                        ctx.getResource().getMetadata(), ctx.getResource().getStatus(), false);
+                        ctx.getResource().getMetadata(),
+                        ctx.getResource().getStatus(),
+                        ctx.getDeployConfig(ctx.getResource().getSpec()),
+                        false);
     }
 
     // Workaround for https://issues.apache.org/jira/browse/FLINK-27569
@@ -299,7 +304,8 @@ public class ApplicationReconciler
                     if (deployment.getSpec().getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
                         LOG.debug("Stateless job, recovering unhealthy jobmanager deployment");
                         restartNeeded = true;
-                    } else if (FlinkUtils.isKubernetesHAActivated(observeConfig)) {
+                    } else if (HighAvailabilityMode.isHighAvailabilityModeActivated(
+                            observeConfig)) {
                         LOG.debug("HA is enabled, recovering unhealthy jobmanager deployment");
                         restartNeeded = true;
                     } else {
@@ -337,7 +343,8 @@ public class ApplicationReconciler
                                             .plus(ttl));
             if (ttlPassed) {
                 LOG.info("Removing JobManager deployment for terminal application.");
-                flinkService.deleteClusterDeployment(deployment.getMetadata(), status, false);
+                flinkService.deleteClusterDeployment(
+                        deployment.getMetadata(), status, observeConfig, false);
                 return true;
             }
         }
@@ -349,8 +356,10 @@ public class ApplicationReconciler
     protected DeleteControl cleanupInternal(FlinkResourceContext<FlinkDeployment> ctx) {
         var deployment = ctx.getResource();
         var status = deployment.getStatus();
+        var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
         if (status.getReconciliationStatus().isBeforeFirstDeployment()) {
-            ctx.getFlinkService().deleteClusterDeployment(deployment.getMetadata(), status, true);
+            ctx.getFlinkService()
+                    .deleteClusterDeployment(deployment.getMetadata(), status, conf, true);
         } else {
             ctx.getFlinkService()
                     .cancelJob(deployment, UpgradeMode.STATELESS, ctx.getObserveConfig());

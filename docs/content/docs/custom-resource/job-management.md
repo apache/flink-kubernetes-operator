@@ -86,14 +86,14 @@ The `upgradeMode` setting controls both the stop and restore mechanisms as detai
 
 |                        | Stateless               | Last State                                 | Savepoint                              |
 |------------------------|-------------------------|--------------------------------------------|----------------------------------------|
-| Config Requirement     | None                    | Checkpointing & Kubernetes HA Enabled      | Checkpoint/Savepoint directory defined |
+| Config Requirement     | None                    | Checkpointing & HA Enabled                 | Checkpoint/Savepoint directory defined |
 | Job Status Requirement | None                    | HA metadata available                      | Job Running*                           |
 | Suspend Mechanism      | Cancel / Delete         | Delete Flink deployment (keep HA metadata) | Cancel with savepoint                  |
 | Restore Mechanism      | Deploy from empty state | Recover last state using HA metadata       | Restore From savepoint                 |
 | Production Use         | Not recommended         | Recommended                                | Recommended                            |
 
 
-*\* When Kubernetes HA is enabled the `savepoint` upgrade mode may fall back to the `last-state` behaviour in cases where the job is in an unhealthy state.*
+*\* When HA is enabled the `savepoint` upgrade mode may fall back to the `last-state` behaviour in cases where the job is in an unhealthy state.*
 
 The three upgrade modes are intended to support different scenarios:
 
@@ -216,7 +216,7 @@ It is therefore very likely that savepoints live beyond the max age configuratio
 
 ## Recovery of missing job deployments
 
-When Kubernetes HA is enabled, the operator can recover the Flink cluster deployments in cases when it was accidentally deleted
+When HA is enabled, the operator can recover the Flink cluster deployments in cases when it was accidentally deleted
 by the user or some external process. Deployment recovery can be turned off in the configuration by setting `kubernetes.operator.jm-deployment-recovery.enabled` to `false`, however it is recommended to keep this setting on the default `true` value.
 
 This is not something that would usually happen during normal operation and can also indicate a deeper problem,
@@ -234,7 +234,7 @@ Please check the [manual Recovery section](#manual-recovery) to understand how t
 
 ## Restart of unhealthy job deployments
 
-When Kubernetes HA is enabled, the operator can restart the Flink cluster deployments in cases when it was considered
+When HA is enabled, the operator can restart the Flink cluster deployments in cases when it was considered
 unhealthy. Unhealthy deployment restart can be turned on in the configuration by setting `kubernetes.operator.cluster.health-check.enabled` to `true` (default: `false`).  
 In order this feature to work one must enable [recovery of missing job deployments](#recovery-of-missing-job-deployments).
 
@@ -266,7 +266,7 @@ To enable rollbacks you need to set:
 kubernetes.operator.deployment.rollback.enabled: true
 ```
 
-Kubernetes HA is currently required for the rollback functionality.
+HA is currently required for the rollback functionality.
 
 Applications are never rolled back to a previous running state if they were suspended before the upgrade.
 In these cases no rollback will be performed.

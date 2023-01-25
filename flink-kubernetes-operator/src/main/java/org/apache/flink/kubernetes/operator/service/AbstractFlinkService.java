@@ -166,13 +166,17 @@ public abstract class AbstractFlinkService implements FlinkService {
         LOG.info(
                 "Deploying application cluster{}",
                 requireHaMetadata ? " requiring last-state from HA metadata" : "");
+
+        // If Kubernetes or Zookeeper HA are activated, delete the job graph in HA storage so that
+        // the newly changed job config (e.g. parallelism) could take effect
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
             final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
             final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
-            // Delete the job graph in the HA ConfigMaps so that the newly changed job config(e.g.
-            // parallelism) could take effect
             FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
+        } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
+            FlinkUtils.deleteJobGraphInZookeeperHA(conf);
         }
+
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
@@ -182,7 +186,13 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public boolean isHaMetadataAvailable(Configuration conf) {
-        return FlinkUtils.isHaMetadataAvailable(conf, kubernetesClient);
+        if (FlinkUtils.isKubernetesHAActivated(conf)) {
+            return FlinkUtils.isKubernetesHaMetadataAvailable(conf, kubernetesClient);
+        } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
+            return FlinkUtils.isZookeeperHaMetadataAvailable(conf);
+        }
+
+        return false;
     }
 
     @Override
@@ -283,7 +293,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                             LOG.error("Could not shut down cluster gracefully, deleting...", e);
                         }
                     }
-                    deleteClusterDeployment(deployment.getMetadata(), deploymentStatus, true);
+                    deleteClusterDeployment(deployment.getMetadata(), deploymentStatus, conf, true);
                     break;
                 case SAVEPOINT:
                     final String savepointDirectory =
@@ -329,11 +339,14 @@ public abstract class AbstractFlinkService implements FlinkService {
                     }
                     if (deleteClusterAfterSavepoint) {
                         LOG.info("Cleaning up deployment after stop-with-savepoint");
-                        deleteClusterDeployment(deployment.getMetadata(), deploymentStatus, true);
+
+                        deleteClusterDeployment(
+                                deployment.getMetadata(), deploymentStatus, conf, true);
                     }
                     break;
                 case LAST_STATE:
-                    deleteClusterDeployment(deployment.getMetadata(), deploymentStatus, false);
+                    deleteClusterDeployment(
+                            deployment.getMetadata(), deploymentStatus, conf, false);
                     break;
                 default:
                     throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
@@ -907,8 +920,11 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public final void deleteClusterDeployment(
-            ObjectMeta meta, FlinkDeploymentStatus status, boolean deleteHaData) {
-        deleteClusterInternal(meta, deleteHaData);
+            ObjectMeta meta,
+            FlinkDeploymentStatus status,
+            Configuration conf,
+            boolean deleteHaData) {
+        deleteClusterInternal(meta, conf, deleteHaData);
         updateStatusAfterClusterDeletion(status);
     }
 
@@ -917,9 +933,33 @@ public abstract class AbstractFlinkService implements FlinkService {
      * allows deleting the native kubernetes HA resources as well.
      *
      * @param meta ObjectMeta of the deployment
-     * @param deleteHaConfigmaps Flag to indicate whether k8s HA metadata should be removed as well
+     * @param conf Configuration of the Flink application
+     * @param deleteHaData Flag to indicate whether k8s or Zookeeper HA metadata should be removed
+     *     as well
      */
-    protected abstract void deleteClusterInternal(ObjectMeta meta, boolean deleteHaConfigmaps);
+    protected abstract void deleteClusterInternal(
+            ObjectMeta meta, Configuration conf, boolean deleteHaData);
+
+    protected void deleteHAData(String namespace, String clusterId, Configuration conf) {
+        // We need to wait for cluster shutdown otherwise HA data might be recreated
+        waitForClusterShutdown(
+                namespace,
+                clusterId,
+                configManager
+                        .getOperatorConfiguration()
+                        .getFlinkShutdownClusterTimeout()
+                        .toSeconds());
+
+        if (FlinkUtils.isKubernetesHAActivated(conf)) {
+            LOG.info("Deleting Kubernetes HA metadata");
+            FlinkUtils.deleteKubernetesHAMetadata(clusterId, namespace, kubernetesClient);
+        } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
+            LOG.info("Deleting Zookeeper HA metadata");
+            FlinkUtils.deleteZookeeperHAMetadata(conf);
+        } else {
+            LOG.warn("Can't delete HA metadata since HA is not enabled");
+        }
+    }
 
     protected void updateStatusAfterClusterDeletion(FlinkDeploymentStatus status) {
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);

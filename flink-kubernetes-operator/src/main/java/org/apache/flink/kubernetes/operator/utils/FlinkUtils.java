@@ -28,6 +28,8 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.runtime.util.ZooKeeperUtils;
 import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -50,6 +52,8 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
+
+import static org.apache.flink.kubernetes.utils.Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY;
 
 /** Flink Utility methods used by the operator. */
 public class FlinkUtils {
@@ -102,6 +106,40 @@ public class FlinkUtils {
         }
     }
 
+    public static void deleteZookeeperHAMetadata(Configuration conf) {
+        try (var curator = ZooKeeperUtils.startCuratorFramework(conf, exception -> {})) {
+            try {
+                curator.asCuratorFramework().delete().deletingChildrenIfNeeded().forPath("/");
+            } catch (Exception e) {
+                LOG.error(
+                        "Could not delete HA Metadata at path {} in Zookeeper",
+                        ZooKeeperUtils.generateZookeeperPath(
+                                conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_ROOT),
+                                conf.get(HighAvailabilityOptions.HA_CLUSTER_ID)),
+                        e);
+            }
+        }
+    }
+
+    public static void deleteKubernetesHAMetadata(
+            String clusterId, String namespace, KubernetesClient kubernetesClient) {
+        kubernetesClient
+                .configMaps()
+                .inNamespace(namespace)
+                .withLabels(
+                        KubernetesUtils.getConfigMapLabels(
+                                clusterId, LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
+                .delete();
+    }
+
+    public static void deleteJobGraphInZookeeperHA(Configuration conf) throws Exception {
+        try (var curator = ZooKeeperUtils.startCuratorFramework(conf, exception -> {})) {
+            ZooKeeperUtils.deleteZNode(
+                    curator.asCuratorFramework(),
+                    conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_JOBGRAPHS_PATH));
+        }
+    }
+
     public static void deleteJobGraphInKubernetesHA(
             String clusterId, String namespace, KubernetesClient kubernetesClient) {
         // The HA ConfigMap names have been changed from 1.15, so we use the labels to filter out
@@ -133,7 +171,25 @@ public class FlinkUtils {
         }
     }
 
-    public static boolean isHaMetadataAvailable(
+    public static boolean isZookeeperHaMetadataAvailable(Configuration conf) {
+        try (var curator = ZooKeeperUtils.startCuratorFramework(conf, exception -> {})) {
+            if (curator.asCuratorFramework().checkExists().forPath("/") != null) {
+                return curator.asCuratorFramework().getChildren().forPath("/").size() != 0;
+            }
+            return false;
+        } catch (Exception e) {
+            LOG.error(
+                    "Could not check whether the HA metadata exists at path {} in Zookeeper",
+                    ZooKeeperUtils.generateZookeeperPath(
+                            conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_ROOT),
+                            conf.get(HighAvailabilityOptions.HA_CLUSTER_ID)),
+                    e);
+        }
+
+        return false;
+    }
+
+    public static boolean isKubernetesHaMetadataAvailable(
             Configuration conf, KubernetesClient kubernetesClient) {
 
         String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
@@ -169,6 +225,11 @@ public class FlinkUtils {
 
     private static boolean isJobGraphKey(Map.Entry<String, String> entry) {
         return entry.getKey().startsWith(Constants.JOB_GRAPH_STORE_KEY_PREFIX);
+    }
+
+    public static boolean isZookeeperHAActivated(Configuration configuration) {
+        return HighAvailabilityMode.fromConfig(configuration)
+                .equals(HighAvailabilityMode.ZOOKEEPER);
     }
 
     public static boolean isKubernetesHAActivated(Configuration configuration) {

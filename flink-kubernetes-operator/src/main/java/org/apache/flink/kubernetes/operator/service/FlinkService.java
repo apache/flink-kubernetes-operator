@@ -73,7 +73,10 @@ public interface FlinkService {
             throws Exception;
 
     void deleteClusterDeployment(
-            ObjectMeta meta, FlinkDeploymentStatus status, boolean deleteHaData);
+            ObjectMeta meta,
+            FlinkDeploymentStatus status,
+            Configuration conf,
+            boolean deleteHaData);
 
     void cancelSessionJob(FlinkSessionJob sessionJob, UpgradeMode upgradeMode, Configuration conf)
             throws Exception;
