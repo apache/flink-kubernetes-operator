@@ -407,7 +407,14 @@ public class FlinkConfigBuilder {
                             ? KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE
                             : KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE;
             effectiveConfig.setString(
-                    podConfigOption, createTempFile(mergePodTemplates(basicPod, appendPod)));
+                    podConfigOption,
+                    createTempFile(
+                            mergePodTemplates(
+                                    basicPod,
+                                    appendPod,
+                                    effectiveConfig.get(
+                                            KubernetesOperatorConfigOptions
+                                                    .POD_TEMPLATE_MERGE_BY_NAME))));
         }
     }
 

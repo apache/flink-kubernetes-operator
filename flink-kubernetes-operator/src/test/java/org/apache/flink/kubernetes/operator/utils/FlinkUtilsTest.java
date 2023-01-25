@@ -30,8 +30,11 @@ import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.Container;
+import io.fabric8.kubernetes.api.model.EmptyDirVolumeSource;
+import io.fabric8.kubernetes.api.model.EphemeralVolumeSource;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
@@ -72,7 +75,7 @@ public class FlinkUtilsTest {
                 TestUtils.getTestPod(
                         "pod2 hostname", "pod2 api version", List.of(container1, container2));
 
-        Pod mergedPod = FlinkUtils.mergePodTemplates(pod1, pod2);
+        Pod mergedPod = FlinkUtils.mergePodTemplates(pod1, pod2, false);
 
         assertEquals(pod2.getApiVersion(), mergedPod.getApiVersion());
         assertEquals(pod2.getSpec().getContainers(), mergedPod.getSpec().getContainers());
@@ -222,6 +225,52 @@ public class FlinkUtilsTest {
         conf.set(CoreOptions.DEFAULT_PARALLELISM, 7);
         conf.set(TaskManagerOptions.NUM_TASK_SLOTS, 2);
         assertEquals(4, FlinkUtils.getNumTaskManagers(conf));
+    }
+
+    @Test
+    public void testMergePodUsingArrayName() {
+        Container container1 = new Container();
+        container1.setName("container1");
+        Container container2 = new Container();
+        container2.setName("container2");
+        Container container3 = new Container();
+        container3.setName("container3");
+
+        Volume volume1 = new Volume();
+        volume1.setName("v1");
+        volume1.setEphemeral(new EphemeralVolumeSource());
+
+        Volume volume12 = new Volume();
+        volume12.setName("v1");
+        volume12.setEmptyDir(new EmptyDirVolumeSource());
+
+        Volume volume2 = new Volume();
+        volume2.setName("v2");
+
+        Volume volume3 = new Volume();
+        volume3.setName("v3");
+
+        Pod pod1 =
+                TestUtils.getTestPod(
+                        "pod1 hostname", "pod1 api version", List.of(container1, container2));
+        pod1.getSpec().setVolumes(List.of(volume1));
+
+        Pod pod2 =
+                TestUtils.getTestPod(
+                        "pod2 hostname", "pod2 api version", List.of(container1, container3));
+        pod2.getSpec().setVolumes(List.of(volume12, volume2, volume3));
+
+        Pod mergedPod = FlinkUtils.mergePodTemplates(pod1, pod2, true);
+
+        Volume v1merged = new Volume();
+        v1merged.setName("v1");
+        v1merged.setEphemeral(new EphemeralVolumeSource());
+        v1merged.setEmptyDir(new EmptyDirVolumeSource());
+
+        assertEquals(pod2.getApiVersion(), mergedPod.getApiVersion());
+        assertEquals(
+                List.of(container1, container2, container3), mergedPod.getSpec().getContainers());
+        assertEquals(List.of(v1merged, volume2, volume3), mergedPod.getSpec().getVolumes());
     }
 
     private void createHAConfigMapWithData(
