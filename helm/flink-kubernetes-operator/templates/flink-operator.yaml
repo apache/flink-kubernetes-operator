@@ -96,6 +96,8 @@ spec:
             - name: {{ $v.name | quote }}
               value: {{ $v.value | quote }}
             {{- end }}
+          resources:
+            {{- toYaml .Values.operatorPod.resources | nindent 12 }}
           securityContext:
             {{- toYaml .Values.operatorSecurityContext | nindent 12 }}
           volumeMounts:

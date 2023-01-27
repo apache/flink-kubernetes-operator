@@ -72,7 +72,14 @@ operatorPod:
   # Node tolerations for operator pod assignment
   # https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
   tolerations: []
-
+  resources: {}
+  # resources:
+  #   limits:
+  #     cpu: "250m"
+  #     memory: "512Mi"
+  #   requests:
+  #     cpu: "250m"
+  #     memory: "512Mi"
 
 operatorServiceAccount:
   create: true
