@@ -6,6 +6,11 @@ that you always have docs corresponding to your checked-out version.
 
 # Requirements
 
+### Generate the java doc (only if anything changed)
+```sh
+mvn clean install -DskipTests -Pgenerate-docs
+```
+
 ### Build the site locally
 
 #### Using Hugo Docker image:
