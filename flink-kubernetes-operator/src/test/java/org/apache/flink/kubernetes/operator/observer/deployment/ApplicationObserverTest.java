@@ -263,13 +263,10 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertFalse(SavepointUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
         assertEquals(
                 1,
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(deployment.getMetadata().getNamespace())
-                        .list()
-                        .getItems()
-                        .size());
+                kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
+                        .list().getItems().stream()
+                        .filter(e -> e.getReason().contains("SavepointError"))
+                        .count());
 
         deployment.getStatus().getJobStatus().getSavepointInfo().setTriggerId("unknown");
         deployment
