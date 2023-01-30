@@ -157,6 +157,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+          resources:
+            {{- toYaml .Values.operatorPod.webhook.resources | nindent 12 }}
           securityContext:
             {{- toYaml .Values.webhookSecurityContext | nindent 12 }}
           volumeMounts:

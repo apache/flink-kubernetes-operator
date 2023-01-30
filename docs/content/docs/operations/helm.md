@@ -74,7 +74,8 @@ The configurable parameters of the Helm chart and which default values as detail
 | operatorPod.dnsPolicy | DNS policy to be used by the operator pod. | |
 | operatorPod.dnsConfig | DNS configuration to be used by the operator pod. | |
 | operatorPod.nodeSelector | Custom nodeSelector to be added to the operator pod. | |
-| operatorPod.resources | Custom resources block to be added to the operator pod. | |
+| operatorPod.resources | Custom resources block to be added to the operator pod on main container. | |
+| operatorPod.webhook.resources | Custom resources block to be added to the operator pod on flink-webhook container. | |
 | operatorPod.tolerations | Custom tolerations to be added to the operator pod. | |
 | operatorServiceAccount.create | Whether to enable operator service account to create for flink-kubernetes-operator. | true |
 | operatorServiceAccount.annotations | The annotations of operator service account. | |
