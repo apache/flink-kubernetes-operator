@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.kubeclient.decorators;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.kubeclient.decorators.AbstractKubernetesStepDecorator;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesJobManagerParameters;
+import org.apache.flink.kubernetes.utils.Constants;
 
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ContainerBuilder;
@@ -36,6 +37,8 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
 
     public static final String JOBMANAGER_ENTRYPOINT_ARG = "jobmanager";
     public static final String APPLICATION_MODE_ARG = "standalone-job";
+    public static final String POD_IP_ARG =
+            String.format("$(%s)", Constants.ENV_FLINK_POD_IP_ADDRESS);
 
     private final StandaloneKubernetesJobManagerParameters kubernetesJobManagerParameters;
 
@@ -56,10 +59,16 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
     }
 
     private Container decorateSessionContainer(Container mainContainer) {
-        return new ContainerBuilder(mainContainer)
-                .withCommand(kubernetesJobManagerParameters.getContainerEntrypoint())
-                .withArgs(JOBMANAGER_ENTRYPOINT_ARG)
-                .build();
+        ContainerBuilder containerBuilder =
+                new ContainerBuilder(mainContainer)
+                        .withCommand(kubernetesJobManagerParameters.getContainerEntrypoint())
+                        .addToArgs(JOBMANAGER_ENTRYPOINT_ARG);
+
+        if (kubernetesJobManagerParameters.isKubernetesHA()) {
+            containerBuilder.addToArgs(POD_IP_ARG);
+        }
+
+        return containerBuilder.build();
     }
 
     private Container decorateApplicationContainer(Container mainContainer) {
@@ -93,6 +102,11 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
         List<String> jobSpecArgs = kubernetesJobManagerParameters.getJobSpecArgs();
         if (jobSpecArgs != null) {
             args.addAll(kubernetesJobManagerParameters.getJobSpecArgs());
+        }
+
+        if (kubernetesJobManagerParameters.isKubernetesHA()) {
+            args.add("--host");
+            args.add(POD_IP_ARG);
         }
 
         return args;

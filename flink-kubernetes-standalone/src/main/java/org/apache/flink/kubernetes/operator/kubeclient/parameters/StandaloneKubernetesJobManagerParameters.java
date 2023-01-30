@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.kubeclient.parameters;
 import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
@@ -37,6 +38,10 @@ import java.util.Map;
  * for constructing the JobManager deployment used for standalone cluster deployments.
  */
 public class StandaloneKubernetesJobManagerParameters extends KubernetesJobManagerParameters {
+
+    private static final String KUBERNETES_HA_FQN_FACTORY_CLASS =
+            "org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory";
+    private static final String KUBERNETES_HA_MODE = "KUBERNETES";
 
     public StandaloneKubernetesJobManagerParameters(
             Configuration flinkConfig, ClusterSpecification clusterSpecification) {
@@ -106,5 +111,11 @@ public class StandaloneKubernetesJobManagerParameters extends KubernetesJobManag
             return flinkConfig.get(ApplicationConfiguration.APPLICATION_ARGS);
         }
         return null;
+    }
+
+    public boolean isKubernetesHA() {
+        String haMode = flinkConfig.getValue(HighAvailabilityOptions.HA_MODE);
+        return haMode.equals(KUBERNETES_HA_FQN_FACTORY_CLASS)
+                || haMode.equalsIgnoreCase(KUBERNETES_HA_MODE);
     }
 }
