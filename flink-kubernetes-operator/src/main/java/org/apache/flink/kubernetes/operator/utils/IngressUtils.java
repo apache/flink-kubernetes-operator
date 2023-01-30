@@ -234,7 +234,7 @@ public class IngressUtils {
         return url;
     }
 
-    private static boolean ingressInNetworkingV1(KubernetesClient client) {
+    public static boolean ingressInNetworkingV1(KubernetesClient client) {
         // networking.k8s.io/v1/Ingress is available in K8s 1.19
         // See:
         // https://kubernetes.io/docs/reference/using-api/deprecation-guide/

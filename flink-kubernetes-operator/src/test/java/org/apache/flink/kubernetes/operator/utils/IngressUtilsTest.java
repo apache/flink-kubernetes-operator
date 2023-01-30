@@ -57,13 +57,23 @@ public class IngressUtilsTest {
         // no ingress when ingressDomain is empty
         IngressUtils.updateIngressRules(
                 appCluster.getMetadata(), appCluster.getSpec(), config, client);
-        assertNull(
-                client.network()
-                        .v1()
-                        .ingresses()
-                        .inNamespace(appCluster.getMetadata().getNamespace())
-                        .withName(appCluster.getMetadata().getName())
-                        .get());
+        if (IngressUtils.ingressInNetworkingV1(client)) {
+            assertNull(
+                    client.network()
+                            .v1()
+                            .ingresses()
+                            .inNamespace(appCluster.getMetadata().getNamespace())
+                            .withName(appCluster.getMetadata().getName())
+                            .get());
+        } else {
+            assertNull(
+                    client.network()
+                            .v1beta1()
+                            .ingresses()
+                            .inNamespace(appCluster.getMetadata().getNamespace())
+                            .withName(appCluster.getMetadata().getName())
+                            .get());
+        }
 
         // host based routing
         IngressSpec.IngressSpecBuilder builder = IngressSpec.builder();
@@ -71,23 +81,47 @@ public class IngressUtilsTest {
         appCluster.getSpec().setIngress(builder.build());
         IngressUtils.updateIngressRules(
                 appCluster.getMetadata(), appCluster.getSpec(), config, client);
-        Ingress ingress =
-                client.network()
-                        .v1()
-                        .ingresses()
-                        .inNamespace(appCluster.getMetadata().getNamespace())
-                        .withName(appCluster.getMetadata().getName())
-                        .get();
+        Ingress ingress = null;
+        io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress ingressV1beta1 = null;
+        if (IngressUtils.ingressInNetworkingV1(client)) {
+            ingress =
+                    client.network()
+                            .v1()
+                            .ingresses()
+                            .inNamespace(appCluster.getMetadata().getNamespace())
+                            .withName(appCluster.getMetadata().getName())
+                            .get();
+        } else {
+            ingressV1beta1 =
+                    client.network()
+                            .v1beta1()
+                            .ingresses()
+                            .inNamespace(appCluster.getMetadata().getNamespace())
+                            .withName(appCluster.getMetadata().getName())
+                            .get();
+        }
 
-        List<IngressRule> rules = ingress.getSpec().getRules();
-        assertEquals(1, rules.size());
+        List<IngressRule> rules = null;
+        List<io.fabric8.kubernetes.api.model.networking.v1beta1.IngressRule> rulesV1beta1 = null;
+        if (IngressUtils.ingressInNetworkingV1(client)) {
+            rules = ingress.getSpec().getRules();
+        } else {
+            rulesV1beta1 = ingressV1beta1.getSpec().getRules();
+        }
+        assertEquals(
+                1, IngressUtils.ingressInNetworkingV1(client) ? rules.size() : rulesV1beta1.size());
         assertEquals(
                 appCluster.getMetadata().getName()
                         + "."
                         + appCluster.getMetadata().getNamespace()
                         + ".example.com",
-                rules.get(0).getHost());
-        assertNull(rules.get(0).getHttp().getPaths().get(0).getPath());
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? rules.get(0).getHost()
+                        : rulesV1beta1.get(0).getHost());
+        assertNull(
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? rules.get(0).getHttp().getPaths().get(0).getPath()
+                        : rulesV1beta1.get(0).getHttp().getPaths().get(0).getPath());
 
         // path based routing
         builder.template("/{{namespace}}/{{name}}(/|$)(.*)");
@@ -96,28 +130,56 @@ public class IngressUtilsTest {
         appCluster.getSpec().setIngress(builder.build());
         IngressUtils.updateIngressRules(
                 appCluster.getMetadata(), appCluster.getSpec(), config, client);
-        ingress =
-                client.network()
-                        .v1()
-                        .ingresses()
-                        .inNamespace(appCluster.getMetadata().getNamespace())
-                        .withName(appCluster.getMetadata().getName())
-                        .get();
-        rules = ingress.getSpec().getRules();
-        assertEquals(1, rules.size());
-        assertNull(rules.get(0).getHost());
-        assertEquals(1, rules.get(0).getHttp().getPaths().size());
+        if (IngressUtils.ingressInNetworkingV1(client)) {
+            ingress =
+                    client.network()
+                            .v1()
+                            .ingresses()
+                            .inNamespace(appCluster.getMetadata().getNamespace())
+                            .withName(appCluster.getMetadata().getName())
+                            .get();
+            rules = ingress.getSpec().getRules();
+        } else {
+            ingressV1beta1 =
+                    client.network()
+                            .v1beta1()
+                            .ingresses()
+                            .inNamespace(appCluster.getMetadata().getNamespace())
+                            .withName(appCluster.getMetadata().getName())
+                            .get();
+            rulesV1beta1 = ingressV1beta1.getSpec().getRules();
+        }
+
+        assertEquals(
+                1, IngressUtils.ingressInNetworkingV1(client) ? rules.size() : rulesV1beta1.size());
+        assertNull(
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? rules.get(0).getHost()
+                        : rulesV1beta1.get(0).getHost());
+        assertEquals(
+                1,
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? rules.get(0).getHttp().getPaths().size()
+                        : rulesV1beta1.get(0).getHttp().getPaths().size());
         assertEquals(
                 "/"
                         + appCluster.getMetadata().getNamespace()
                         + "/"
                         + appCluster.getMetadata().getName()
                         + "(/|$)(.*)",
-                rules.get(0).getHttp().getPaths().get(0).getPath());
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? rules.get(0).getHttp().getPaths().get(0).getPath()
+                        : rulesV1beta1.get(0).getHttp().getPaths().get(0).getPath());
         assertEquals(
                 Map.of("nginx.ingress.kubernetes.io/rewrite-target", "/$2"),
-                ingress.getMetadata().getAnnotations());
-        assertEquals("nginx", ingress.getSpec().getIngressClassName());
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? ingress.getMetadata().getAnnotations()
+                        : ingressV1beta1.getMetadata().getAnnotations());
+        assertEquals(
+                "nginx",
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? ingress.getSpec().getIngressClassName()
+                        : ingressV1beta1.getSpec().getIngressClassName());
 
         // host + path based routing
         builder.template("example.com/{{namespace}}/{{name}}(/|$)(.*)");
@@ -125,27 +187,51 @@ public class IngressUtilsTest {
         appCluster.getSpec().setIngress(builder.build());
         IngressUtils.updateIngressRules(
                 appCluster.getMetadata(), appCluster.getSpec(), config, client);
-        ingress =
-                client.network()
-                        .v1()
-                        .ingresses()
-                        .inNamespace(appCluster.getMetadata().getNamespace())
-                        .withName(appCluster.getMetadata().getName())
-                        .get();
-        rules = ingress.getSpec().getRules();
-        assertEquals(1, rules.size());
-        assertEquals(1, rules.get(0).getHttp().getPaths().size());
+        if (IngressUtils.ingressInNetworkingV1(client)) {
+            ingress =
+                    client.network()
+                            .v1()
+                            .ingresses()
+                            .inNamespace(appCluster.getMetadata().getNamespace())
+                            .withName(appCluster.getMetadata().getName())
+                            .get();
+            rules = ingress.getSpec().getRules();
+        } else {
+            ingressV1beta1 =
+                    client.network()
+                            .v1beta1()
+                            .ingresses()
+                            .inNamespace(appCluster.getMetadata().getNamespace())
+                            .withName(appCluster.getMetadata().getName())
+                            .get();
+            rulesV1beta1 = ingressV1beta1.getSpec().getRules();
+        }
+        assertEquals(
+                1, IngressUtils.ingressInNetworkingV1(client) ? rules.size() : rulesV1beta1.size());
+        assertEquals(
+                1,
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? rules.get(0).getHttp().getPaths().size()
+                        : rulesV1beta1.get(0).getHttp().getPaths().size());
         assertEquals(
                 "/"
                         + appCluster.getMetadata().getNamespace()
                         + "/"
                         + appCluster.getMetadata().getName()
                         + "(/|$)(.*)",
-                rules.get(0).getHttp().getPaths().get(0).getPath());
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? rules.get(0).getHttp().getPaths().get(0).getPath()
+                        : rulesV1beta1.get(0).getHttp().getPaths().get(0).getPath());
         assertEquals(
                 Map.of("nginx.ingress.kubernetes.io/rewrite-target", "/$2"),
-                ingress.getMetadata().getAnnotations());
-        assertEquals("nginx", ingress.getSpec().getIngressClassName());
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? ingress.getMetadata().getAnnotations()
+                        : ingressV1beta1.getMetadata().getAnnotations());
+        assertEquals(
+                "nginx",
+                IngressUtils.ingressInNetworkingV1(client)
+                        ? ingress.getSpec().getIngressClassName()
+                        : ingressV1beta1.getSpec().getIngressClassName());
     }
 
     @Test
