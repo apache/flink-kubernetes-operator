@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -79,6 +80,8 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
         protected Optional<JobStatusMessage> filterTargetJob(
                 JobStatus status, List<JobStatusMessage> clusterJobStatuses) {
             if (!clusterJobStatuses.isEmpty()) {
+                clusterJobStatuses.sort(
+                        Comparator.comparingLong(JobStatusMessage::getStartTime).reversed());
                 return Optional.of(clusterJobStatuses.get(0));
             }
             return Optional.empty();
