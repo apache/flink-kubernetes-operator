@@ -16,7 +16,7 @@
 # limitations under the License.
 ################################################################################
 # Check https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/resource-providers/standalone/docker/#using-flink-python-on-docker for more details
-FROM flink:1.15
+FROM flink:1.16
 
 # install python3: it has updated Python to 3.9 in Debian 11 and so install Python 3.7 from source, \
 # it currently only supports Python 3.6, 3.7 and 3.8 in PyFlink officially.
@@ -36,7 +36,7 @@ apt-get clean && \
 rm -rf /var/lib/apt/lists/*
 
 # install PyFlink
-RUN pip3 install "apache-flink>=1.15.0,<1.16.0"
+RUN pip3 install "apache-flink>=1.16.0,<1.17.0"
 
 # add python script
 USER flink
