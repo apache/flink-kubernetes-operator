@@ -21,13 +21,13 @@ package org.apache.flink.kubernetes.operator.service;
 import org.apache.flink.runtime.rest.HttpMethodWrapper;
 import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
-import org.apache.flink.runtime.rest.messages.MessageHeaders;
+import org.apache.flink.runtime.rest.messages.RuntimeMessageHeaders;
 
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
 /** Message headers for the {@link CustomDashboardConfiguration}. */
 public final class CustomDashboardConfigurationHeaders
-        implements MessageHeaders<
+        implements RuntimeMessageHeaders<
                 EmptyRequestBody, CustomDashboardConfiguration, EmptyMessageParameters> {
 
     public static final CustomDashboardConfigurationHeaders INSTANCE =

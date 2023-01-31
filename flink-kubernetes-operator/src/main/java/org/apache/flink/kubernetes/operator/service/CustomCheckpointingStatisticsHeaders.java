@@ -21,13 +21,13 @@ package org.apache.flink.kubernetes.operator.service;
 import org.apache.flink.runtime.rest.HttpMethodWrapper;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.JobMessageParameters;
-import org.apache.flink.runtime.rest.messages.MessageHeaders;
+import org.apache.flink.runtime.rest.messages.RuntimeMessageHeaders;
 
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
 /** Custom Headers for handling checkpoint history in a multi-version compatible way. */
 public class CustomCheckpointingStatisticsHeaders
-        implements MessageHeaders<
+        implements RuntimeMessageHeaders<
                 EmptyRequestBody, CheckpointHistoryWrapper, JobMessageParameters> {
 
     private static final CustomCheckpointingStatisticsHeaders INSTANCE =
