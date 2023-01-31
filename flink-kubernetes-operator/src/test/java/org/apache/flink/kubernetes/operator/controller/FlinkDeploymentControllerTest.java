@@ -1005,18 +1005,42 @@ public class FlinkDeploymentControllerTest {
         appWithIngress.getSpec().setIngress(ingressSpec);
         testController.reconcile(appWithIngress, context);
         testController.reconcile(appWithIngress, context);
-        Ingress ingress =
-                kubernetesClient
-                        .network()
-                        .v1()
-                        .ingresses()
-                        .inNamespace(appWithIngress.getMetadata().getNamespace())
-                        .withName(appWithIngress.getMetadata().getName())
-                        .get();
-        Assertions.assertNotNull(ingress);
-        IngressRule ingressRule = ingress.getSpec().getRules().stream().findFirst().get();
+
+        Ingress ingress = null;
+        io.fabric8.kubernetes.api.model.networking.v1beta1.Ingress ingressV1beta1 = null;
+        if (IngressUtils.ingressInNetworkingV1(kubernetesClient)) {
+            ingress =
+                    kubernetesClient
+                            .network()
+                            .v1()
+                            .ingresses()
+                            .inNamespace(appWithIngress.getMetadata().getNamespace())
+                            .withName(appWithIngress.getMetadata().getName())
+                            .get();
+            Assertions.assertNotNull(ingress);
+        } else {
+            ingressV1beta1 =
+                    kubernetesClient
+                            .network()
+                            .v1beta1()
+                            .ingresses()
+                            .inNamespace(appWithIngress.getMetadata().getNamespace())
+                            .withName(appWithIngress.getMetadata().getName())
+                            .get();
+            Assertions.assertNotNull(ingressV1beta1);
+        }
+
+        IngressRule ingressRule = null;
+        io.fabric8.kubernetes.api.model.networking.v1beta1.IngressRule ingressRuleV1beta1 = null;
+        if (IngressUtils.ingressInNetworkingV1(kubernetesClient)) {
+            ingressRule = ingress.getSpec().getRules().stream().findFirst().get();
+        } else {
+            ingressRuleV1beta1 = ingressV1beta1.getSpec().getRules().stream().findFirst().get();
+        }
         Assertions.assertEquals(
-                ingressRule.getHost(),
+                IngressUtils.ingressInNetworkingV1(kubernetesClient)
+                        ? ingressRule.getHost()
+                        : ingressRuleV1beta1.getHost(),
                 IngressUtils.getIngressUrl(
                                 "{{name}}.{{namespace}}.example.com",
                                 appWithIngress.getMetadata().getName(),
@@ -1029,19 +1053,35 @@ public class FlinkDeploymentControllerTest {
         appWithIngress.getSpec().setIngress(ingressSpec);
         testController.reconcile(appWithIngress, context);
         testController.reconcile(appWithIngress, context);
-        ingress =
-                kubernetesClient
-                        .network()
-                        .v1()
-                        .ingresses()
-                        .inNamespace(appWithIngress.getMetadata().getNamespace())
-                        .withName(appWithIngress.getMetadata().getName())
-                        .get();
-        Assertions.assertNotNull(ingress);
-        ingressRule = ingress.getSpec().getRules().stream().findFirst().get();
-        Assertions.assertNotNull(ingressRule);
+        if (IngressUtils.ingressInNetworkingV1(kubernetesClient)) {
+            ingress =
+                    kubernetesClient
+                            .network()
+                            .v1()
+                            .ingresses()
+                            .inNamespace(appWithIngress.getMetadata().getNamespace())
+                            .withName(appWithIngress.getMetadata().getName())
+                            .get();
+            Assertions.assertNotNull(ingress);
+            ingressRule = ingress.getSpec().getRules().stream().findFirst().get();
+            Assertions.assertNotNull(ingressRule);
+        } else {
+            ingressV1beta1 =
+                    kubernetesClient
+                            .network()
+                            .v1beta1()
+                            .ingresses()
+                            .inNamespace(appWithIngress.getMetadata().getNamespace())
+                            .withName(appWithIngress.getMetadata().getName())
+                            .get();
+            Assertions.assertNotNull(ingressV1beta1);
+            ingressRuleV1beta1 = ingressV1beta1.getSpec().getRules().stream().findFirst().get();
+            Assertions.assertNotNull(ingressRuleV1beta1);
+        }
         Assertions.assertEquals(
-                ingressRule.getHost(),
+                IngressUtils.ingressInNetworkingV1(kubernetesClient)
+                        ? ingressRule.getHost()
+                        : ingressRuleV1beta1.getHost(),
                 IngressUtils.getIngressUrl(
                                 "{{name}}.{{namespace}}.foo.bar",
                                 appWithIngress.getMetadata().getName(),
