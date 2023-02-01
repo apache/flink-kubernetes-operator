@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.reconciler.ReconciliationMetadata;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -481,5 +482,20 @@ public class ReconciliationUtils {
         reconciliationStatus.setLastReconciledSpec(
                 SpecUtils.writeSpecWithMeta(
                         lastSpecWithMeta.getSpec(), lastSpecWithMeta.getMeta()));
+    }
+
+    public static <SPEC extends AbstractFlinkSpec> void updateReconciliationMetadata(
+            AbstractFlinkResource<SPEC, ?> resource) {
+        var reconciliationStatus = resource.getStatus().getReconciliationStatus();
+        var lastSpecWithMeta = reconciliationStatus.deserializeLastReconciledSpecWithMeta();
+        var newMeta = ReconciliationMetadata.from(resource);
+
+        if (newMeta.equals(lastSpecWithMeta.getMeta())) {
+            // Nothing to update
+            return;
+        }
+
+        reconciliationStatus.setLastReconciledSpec(
+                SpecUtils.writeSpecWithMeta(lastSpecWithMeta.getSpec(), newMeta));
     }
 }
