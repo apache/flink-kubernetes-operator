@@ -113,6 +113,29 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     }
 
     @Test
+    public void testSubmitAndCleanUpRescheduled() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // session ready
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+        // clean up
+        flinkService.setPortReady(false);
+        var deleteControl =
+                reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(10_000, deleteControl.getScheduleDelay().get());
+        assertEquals(RUNNING, flinkService.listJobs().get(0).f1.getJobState());
+
+        flinkService.setPortReady(true);
+        deleteControl =
+                reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(true, deleteControl.isRemoveFinalizer());
+        assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
+    }
+
+    @Test
     public void testRestart() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
 

@@ -32,16 +32,20 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
 
 /** The reconciler for the {@link FlinkSessionJob}. */
 public class SessionJobReconciler
         extends AbstractJobReconciler<FlinkSessionJob, FlinkSessionJobSpec, FlinkSessionJobStatus> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionJobReconciler.class);
+
+    private UpdateControl updateControl;
 
     public SessionJobReconciler(
             KubernetesClient kubernetesClient,
@@ -100,6 +104,14 @@ public class SessionJobReconciler
             if (jobID != null) {
                 try {
                     cancelJob(ctx, UpgradeMode.STATELESS);
+                } catch (ExecutionException e) {
+                    final var delay = 10_000L;
+                    LOG.error(
+                            "Failed to cancel job {}, will reschedule after {} milliseconds.",
+                            jobID,
+                            delay,
+                            e);
+                    return DeleteControl.noFinalizerRemoval().rescheduleAfter(delay);
                 } catch (Exception e) {
                     LOG.error("Failed to cancel job {}.", jobID, e);
                 }

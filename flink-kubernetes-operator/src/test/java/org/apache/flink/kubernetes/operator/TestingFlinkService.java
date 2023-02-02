@@ -380,6 +380,10 @@ public class TestingFlinkService extends AbstractFlinkService {
             throws Exception {
         cancelJobCallCount++;
 
+        if (!isPortReady) {
+            throw new TimeoutException("JM port is unavailable");
+        }
+
         var jobOpt = jobs.stream().filter(js -> js.f1.getJobId().equals(jobID)).findAny();
 
         if (jobOpt.isEmpty()) {
