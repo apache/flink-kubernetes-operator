@@ -57,7 +57,6 @@ import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionU
 
 /** Reconciliation utilities. */
 public class ReconciliationUtils {
-
     private static final Logger LOG = LoggerFactory.getLogger(ReconciliationUtils.class);
 
     private static final ObjectMapper objectMapper = new ObjectMapper();

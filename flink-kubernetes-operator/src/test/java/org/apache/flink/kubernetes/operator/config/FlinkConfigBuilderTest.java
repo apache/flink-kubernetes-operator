@@ -50,7 +50,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.Pod;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -63,12 +63,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.client.deployment.application.ApplicationConfiguration.APPLICATION_ARGS;
 import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
+import static org.apache.flink.kubernetes.configuration.KubernetesConfigOptions.KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.IMAGE;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.IMAGE_POLICY;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SAMPLE_JAR;
 import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.SERVICE_ACCOUNT;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.DEFAULT_CHECKPOINTING_INTERVAL;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.ARGUMENT_VARIABLES_ENABLED;
 import static org.apache.flink.kubernetes.utils.Constants.CONFIG_FILE_LOG4J_NAME;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -79,8 +82,8 @@ public class FlinkConfigBuilderTest {
     private static FlinkDeployment flinkDeployment;
     private static final String CUSTOM_LOG_CONFIG = "rootLogger.level = INFO";
 
-    @BeforeAll
-    public static void prepareFlinkDeployment() {
+    @BeforeEach
+    public void prepareFlinkDeployment() {
         flinkDeployment = TestUtils.buildApplicationCluster();
         final Container container0 = new Container();
         container0.setName("container0");
@@ -484,5 +487,98 @@ public class FlinkConfigBuilderTest {
         // and clusterId here.
         Assertions.assertEquals(namespace, configuration.get(KubernetesConfigOptions.NAMESPACE));
         Assertions.assertEquals(clusterId, configuration.get(KubernetesConfigOptions.CLUSTER_ID));
+    }
+
+    @Test
+    public void testInternalArgsAsDynamicProperty() {
+        Configuration config = new Configuration();
+        config.set(APPLICATION_ARGS, List.of("--hostname ${HOSTNAME}"));
+        var dynamicProperty = FlinkConfigBuilder.getInternalArgsAsDynamicProperty(config);
+        Assertions.assertEquals(
+                "-D\\$internal.application.program-args=--hostname ${HOSTNAME}", dynamicProperty);
+    }
+
+    @Test
+    public void testJobmanagerEntryPointArgsOnly() throws IOException, URISyntaxException {
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS.key(), "-Dfoo=${BAR}");
+        final Configuration configuration =
+                FlinkConfigBuilder.buildFrom(
+                        flinkDeployment.getMetadata().getNamespace(),
+                        flinkDeployment.getMetadata().getName(),
+                        flinkDeployment.getSpec(),
+                        new Configuration());
+        Assertions.assertEquals(
+                "-Dfoo=${BAR}", configuration.get(KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS));
+        Assertions.assertNull(configuration.get(APPLICATION_ARGS));
+    }
+
+    @Test
+    public void testDynamicArgsDisabled() throws IOException, URISyntaxException {
+        flinkDeployment
+                .getSpec()
+                .getJob()
+                .setArgs(new String[] {"--arg1", "${ENV1}", "--arg2", "${ENV2}"});
+        final Configuration configuration =
+                FlinkConfigBuilder.buildFrom(
+                        flinkDeployment.getMetadata().getNamespace(),
+                        flinkDeployment.getMetadata().getName(),
+                        flinkDeployment.getSpec(),
+                        new Configuration());
+        Assertions.assertEquals(4., configuration.get(APPLICATION_ARGS).size());
+        Assertions.assertEquals(
+                KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS.defaultValue(),
+                configuration.get(KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS));
+    }
+
+    @Test
+    public void testDynamicArgsEnabled() throws IOException, URISyntaxException {
+        flinkDeployment
+                .getSpec()
+                .getJob()
+                .setArgs(new String[] {"--arg1", "${ENV1}", "--arg2", "${ENV2}"});
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(ARGUMENT_VARIABLES_ENABLED.key(), "true");
+        final Configuration configuration =
+                FlinkConfigBuilder.buildFrom(
+                        flinkDeployment.getMetadata().getNamespace(),
+                        flinkDeployment.getMetadata().getName(),
+                        flinkDeployment.getSpec(),
+                        new Configuration());
+        Assertions.assertEquals(4., configuration.get(APPLICATION_ARGS).size());
+        Assertions.assertEquals(
+                "-D\\$internal.application.program-args=--arg1\\;${ENV1}\\;--arg2\\;${ENV2}",
+                configuration.get(KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS));
+    }
+
+    @Test
+    public void testJobmanagerEntryPointArgsAndInternalArgs()
+            throws IOException, URISyntaxException {
+        flinkDeployment
+                .getSpec()
+                .getJob()
+                .setArgs(new String[] {"--arg1", "${ENV1}", "--arg2", "${ENV2}"});
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS.key(), "-Dfoo=${BAR}");
+        flinkDeployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(ARGUMENT_VARIABLES_ENABLED.key(), "true");
+        final Configuration configuration =
+                FlinkConfigBuilder.buildFrom(
+                        flinkDeployment.getMetadata().getNamespace(),
+                        flinkDeployment.getMetadata().getName(),
+                        flinkDeployment.getSpec(),
+                        new Configuration());
+        Assertions.assertNotNull(configuration.get(APPLICATION_ARGS));
+        Assertions.assertEquals(
+                "-Dfoo=${BAR} -D\\$internal.application.program-args=--arg1\\;${ENV1}\\;--arg2\\;${ENV2}",
+                configuration.get(KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS));
     }
 }

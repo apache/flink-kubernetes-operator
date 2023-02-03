@@ -442,6 +442,14 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription("Leader election retry period.");
 
     @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> ARGUMENT_VARIABLES_ENABLED =
+            operatorConfig("argument.variables.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether to resolve job args containing environment variables, e.g. '--args ${ENV}'");
+
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Duration> OPERATOR_JM_SHUTDOWN_TTL =
             operatorConfig("jm-deployment.shutdown-ttl")
                     .durationType()

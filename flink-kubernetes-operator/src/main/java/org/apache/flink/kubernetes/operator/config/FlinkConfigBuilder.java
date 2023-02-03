@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.config;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.ConfigUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
@@ -57,14 +58,17 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Collections;
+import java.util.Objects;
 
+import static org.apache.flink.client.deployment.application.ApplicationConfiguration.APPLICATION_ARGS;
 import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
 import static org.apache.flink.configuration.DeploymentOptions.SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR;
 import static org.apache.flink.configuration.DeploymentOptionsInternal.CONF_DIR;
 import static org.apache.flink.configuration.WebOptions.CANCEL_ENABLE;
+import static org.apache.flink.kubernetes.configuration.KubernetesConfigOptions.KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS;
 import static org.apache.flink.kubernetes.configuration.KubernetesConfigOptions.REST_SERVICE_EXPOSED_TYPE;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.ARGUMENT_VARIABLES_ENABLED;
 import static org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION;
 import static org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal.ClusterMode.SESSION;
 import static org.apache.flink.kubernetes.operator.utils.FlinkUtils.mergePodTemplates;
@@ -279,10 +283,19 @@ public class FlinkConfigBuilder {
             }
 
             if (jobSpec.getArgs() != null) {
-                effectiveConfig.set(
-                        ApplicationConfiguration.APPLICATION_ARGS,
-                        Arrays.asList(jobSpec.getArgs()));
+                ConfigUtils.encodeArrayToConfig(
+                        effectiveConfig, APPLICATION_ARGS, jobSpec.getArgs(), Objects::toString);
+                if (effectiveConfig.get(ARGUMENT_VARIABLES_ENABLED)) {
+                    var appArgs = getInternalArgsAsDynamicProperty(effectiveConfig);
+                    var jmArgs = effectiveConfig.get(KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS);
+                    jmArgs =
+                            StringUtils.isNullOrWhitespaceOnly(jmArgs)
+                                    ? appArgs
+                                    : jmArgs + " " + appArgs;
+                    effectiveConfig.set(KUBERNETES_JOBMANAGER_ENTRYPOINT_ARGS, jmArgs);
+                }
             }
+
         } else {
             effectiveConfig.set(
                     DeploymentOptions.TARGET, KubernetesDeploymentTarget.SESSION.getName());
@@ -301,6 +314,13 @@ public class FlinkConfigBuilder {
             }
         }
         return this;
+    }
+
+    public static final String getInternalArgsAsDynamicProperty(Configuration config) {
+        return String.format(
+                "-D%s=%s",
+                APPLICATION_ARGS.key().replace("$", "\\$"),
+                config.toMap().get(APPLICATION_ARGS.key()).replaceAll(";", "\\\\;"));
     }
 
     private String getStandaloneJarURI(JobSpec jobSpec) throws URISyntaxException {
