@@ -18,9 +18,8 @@ spec:
       jsonPath: .status.jobStatus.state
       name: Job Status
       type: string
-    - description: Deployment state of the last reconciled spec.
-      jsonPath: .status.reconciliationStatus.state
-      name: Reconciliation Status
+    - jsonPath: .status.lifecycleState
+      name: Resource Lifecycle State
       type: string
     name: v1beta1
     schema:
@@ -9242,6 +9241,19 @@ spec:
                     type: object
                 type: object
               error:
+                type: string
+              lifecycleState:
+                enum:
+                - CREATED
+                - SUSPENDED
+                - UPGRADING
+                - DEPLOYED
+                - STABLE
+                - ROLLING_BACK
+                - ROLLED_BACK
+                - FAILED
+                - terminal
+                - description
                 type: string
             type: object
         type: object

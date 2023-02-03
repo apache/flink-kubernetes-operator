@@ -22,7 +22,7 @@ import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import io.fabric8.kubernetes.model.annotation.PrinterColumn;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -43,6 +43,9 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     /** Error information about the FlinkDeployment/FlinkSessionJob. */
     private String error;
 
+    @PrinterColumn(name = "Resource Lifecycle State")
+    private ResourceLifecycleState lifecycleState;
+
     /**
      * Current reconciliation status of this resource.
      *
@@ -50,7 +53,6 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
      */
     public abstract ReconciliationStatus<SPEC> getReconciliationStatus();
 
-    @JsonIgnore
     public ResourceLifecycleState getLifecycleState() {
         var reconciliationStatus = getReconciliationStatus();
 
