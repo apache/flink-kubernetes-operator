@@ -38,6 +38,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.module.ModuleDescriptor;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collections;
@@ -239,10 +240,18 @@ public class IngressUtils {
         // See:
         // https://kubernetes.io/docs/reference/using-api/deprecation-guide/
         // https://kubernetes.io/blog/2021/07/14/upcoming-changes-in-kubernetes-1-22/
-        return (client.getKubernetesVersion().getMajor()
-                                + "."
-                                + client.getKubernetesVersion().getMinor())
-                        .compareTo("1.19")
-                >= 0;
+        String serverVersion =
+                client.getKubernetesVersion().getMajor()
+                        + "."
+                        + client.getKubernetesVersion().getMinor();
+        String targetVersion = "1.19";
+        try {
+            return ModuleDescriptor.Version.parse(serverVersion)
+                            .compareTo(ModuleDescriptor.Version.parse(targetVersion))
+                    >= 0;
+        } catch (IllegalArgumentException e) {
+            LOG.warn("Failed to parse Kubernetes server version: {}", serverVersion);
+            return serverVersion.compareTo(targetVersion) >= 0;
+        }
     }
 }
