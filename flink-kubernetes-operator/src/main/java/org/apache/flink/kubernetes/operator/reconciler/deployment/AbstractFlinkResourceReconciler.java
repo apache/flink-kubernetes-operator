@@ -157,6 +157,8 @@ public abstract class AbstractFlinkResourceReconciler<
                 // reconcile other changes
                 return;
             }
+        } else {
+            ReconciliationUtils.updateReconciliationMetadata(cr);
         }
 
         if (shouldRollBack(cr, observeConfig, ctx.getFlinkService())) {

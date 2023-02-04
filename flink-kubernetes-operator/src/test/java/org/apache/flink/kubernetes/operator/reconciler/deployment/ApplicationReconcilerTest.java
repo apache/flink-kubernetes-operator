@@ -746,4 +746,39 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         assertEquals(deployment.getSpec().getRestartNonce(), lastReconciledSpec.getRestartNonce());
         assertEquals(JobState.SUSPENDED, lastReconciledSpec.getJob().getState());
     }
+
+    @Test
+    public void testUpgradeReconciledGeneration() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getMetadata().setGeneration(1L);
+
+        // Initial deployment
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        assertEquals(
+                1L,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpecWithMeta()
+                        .getMeta()
+                        .getMetadata()
+                        .getGeneration());
+
+        // Submit no-op upgrade
+        deployment.getSpec().getFlinkConfiguration().put("kubernetes.operator.test", "value");
+        deployment.getMetadata().setGeneration(2L);
+
+        reconciler.reconcile(deployment, context);
+        assertEquals(
+                2L,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpecWithMeta()
+                        .getMeta()
+                        .getMetadata()
+                        .getGeneration());
+    }
 }
