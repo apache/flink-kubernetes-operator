@@ -66,35 +66,7 @@ public class IngressUtils {
             KubernetesClient client) {
 
         if (spec.getIngress() != null) {
-            HasMetadata ingress;
-            if (ingressInNetworkingV1(client)) {
-                ingress =
-                        new IngressBuilder()
-                                .withNewMetadata()
-                                .withAnnotations(spec.getIngress().getAnnotations())
-                                .withName(objectMeta.getName())
-                                .withNamespace(objectMeta.getNamespace())
-                                .endMetadata()
-                                .withNewSpec()
-                                .withIngressClassName(spec.getIngress().getClassName())
-                                .withRules(getIngressRule(objectMeta, spec, effectiveConfig))
-                                .endSpec()
-                                .build();
-            } else {
-                ingress =
-                        new io.fabric8.kubernetes.api.model.networking.v1beta1.IngressBuilder()
-                                .withNewMetadata()
-                                .withAnnotations(spec.getIngress().getAnnotations())
-                                .withName(objectMeta.getName())
-                                .withNamespace(objectMeta.getNamespace())
-                                .endMetadata()
-                                .withNewSpec()
-                                .withIngressClassName(spec.getIngress().getClassName())
-                                .withRules(
-                                        getIngressRuleForV1beta1(objectMeta, spec, effectiveConfig))
-                                .endSpec()
-                                .build();
-            }
+            HasMetadata ingress = getIngress(objectMeta, spec, effectiveConfig, client);
 
             Deployment deployment =
                     client.apps()
@@ -110,6 +82,38 @@ public class IngressUtils {
 
             LOG.info("Updating ingress rules {}", ingress);
             client.resourceList(ingress).inNamespace(objectMeta.getNamespace()).createOrReplace();
+        }
+    }
+
+    private static HasMetadata getIngress(
+            ObjectMeta objectMeta,
+            FlinkDeploymentSpec spec,
+            Configuration effectiveConfig,
+            KubernetesClient client) {
+        if (ingressInNetworkingV1(client)) {
+            return new IngressBuilder()
+                    .withNewMetadata()
+                    .withAnnotations(spec.getIngress().getAnnotations())
+                    .withName(objectMeta.getName())
+                    .withNamespace(objectMeta.getNamespace())
+                    .endMetadata()
+                    .withNewSpec()
+                    .withIngressClassName(spec.getIngress().getClassName())
+                    .withRules(getIngressRule(objectMeta, spec, effectiveConfig))
+                    .endSpec()
+                    .build();
+        } else {
+            return new io.fabric8.kubernetes.api.model.networking.v1beta1.IngressBuilder()
+                    .withNewMetadata()
+                    .withAnnotations(spec.getIngress().getAnnotations())
+                    .withName(objectMeta.getName())
+                    .withNamespace(objectMeta.getNamespace())
+                    .endMetadata()
+                    .withNewSpec()
+                    .withIngressClassName(spec.getIngress().getClassName())
+                    .withRules(getIngressRuleForV1beta1(objectMeta, spec, effectiveConfig))
+                    .endSpec()
+                    .build();
         }
     }
 
