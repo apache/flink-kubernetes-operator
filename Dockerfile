@@ -16,7 +16,7 @@
 # limitations under the License.
 ################################################################################
 # Build
-FROM maven:3.8.4-openjdk-11 AS build
+FROM maven:3.8.4-eclipse-temurin-11 AS build
 ARG SKIP_TESTS=true
 
 WORKDIR /app
@@ -33,7 +33,7 @@ RUN cd /app/tools/license; mkdir jars; cd jars; \
     cd ../ && ./collect_license_files.sh ./jars ./licenses-output
 
 # stage
-FROM openjdk:11-jre
+FROM eclipse-temurin:11-jre-jammy
 ENV FLINK_HOME=/opt/flink
 ENV OPERATOR_VERSION=1.4-SNAPSHOT
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
