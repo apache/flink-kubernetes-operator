@@ -54,7 +54,7 @@ public class HttpArtifactFetcher implements ArtifactFetcher {
 
         conn.setRequestMethod("GET");
 
-        String fileName = FilenameUtils.getName(url.getFile());
+        String fileName = FilenameUtils.getName(url.getPath());
         File targetFile = new File(targetDir, fileName);
         try (var inputStream = conn.getInputStream()) {
             FileUtils.copyToFile(inputStream, targetFile);

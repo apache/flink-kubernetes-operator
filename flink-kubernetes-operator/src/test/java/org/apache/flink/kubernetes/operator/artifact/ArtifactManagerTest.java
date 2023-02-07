@@ -94,12 +94,12 @@ public class ArtifactManagerTest {
         try {
             httpServer = startHttpServer();
             var sourceFile = mockTheJarFile();
-            httpServer.createContext("/download", new DownloadFileHttpHandler(sourceFile));
+            httpServer.createContext("/download/file.jar", new DownloadFileHttpHandler(sourceFile));
 
             var file =
                     artifactManager.fetch(
                             String.format(
-                                    "http://127.0.0.1:%d/download?file=1",
+                                    "http://127.0.0.1:%d/download/file.jar?some=params",
                                     httpServer.getAddress().getPort()),
                             new Configuration()
                                     .set(
@@ -109,7 +109,7 @@ public class ArtifactManagerTest {
                             tempDir.toString());
             Assertions.assertTrue(file.exists());
             Assertions.assertEquals(tempDir.toString(), file.getParent());
-            Assertions.assertEquals("download?file=1", file.getName());
+            Assertions.assertEquals("file.jar", file.getName());
         } finally {
             if (httpServer != null) {
                 httpServer.stop(0);
