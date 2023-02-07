@@ -98,11 +98,11 @@ public class FlinkUtilsTest {
     }
 
     @Test
-    public void haMetaDataCheckTest() {
+    public void kubernetesHaMetaDataCheckTest() {
         var cr = TestUtils.buildApplicationCluster();
         var confManager = new FlinkConfigManager(new Configuration());
         assertFalse(
-                FlinkUtils.isHaMetadataAvailable(
+                FlinkUtils.isKubernetesHaMetadataAvailable(
                         confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
                         kubernetesClient));
 
@@ -113,7 +113,7 @@ public class FlinkUtilsTest {
                 cr.getMetadata().getName(),
                 null);
         assertFalse(
-                FlinkUtils.isHaMetadataAvailable(
+                FlinkUtils.isKubernetesHaMetadataAvailable(
                         confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
                         kubernetesClient));
 
@@ -123,14 +123,14 @@ public class FlinkUtilsTest {
                 cr.getMetadata().getName(),
                 null);
         assertTrue(
-                FlinkUtils.isHaMetadataAvailable(
+                FlinkUtils.isKubernetesHaMetadataAvailable(
                         confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
                         kubernetesClient));
 
         // Flink 1.13-1.14
         kubernetesClient.configMaps().inAnyNamespace().delete();
         assertFalse(
-                FlinkUtils.isHaMetadataAvailable(
+                FlinkUtils.isKubernetesHaMetadataAvailable(
                         confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
                         kubernetesClient));
 
@@ -140,7 +140,7 @@ public class FlinkUtilsTest {
                 cr.getMetadata().getName(),
                 null);
         assertFalse(
-                FlinkUtils.isHaMetadataAvailable(
+                FlinkUtils.isKubernetesHaMetadataAvailable(
                         confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
                         kubernetesClient));
 
@@ -150,7 +150,7 @@ public class FlinkUtilsTest {
                 cr.getMetadata().getName(),
                 null);
         assertTrue(
-                FlinkUtils.isHaMetadataAvailable(
+                FlinkUtils.isKubernetesHaMetadataAvailable(
                         confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
                         kubernetesClient));
     }

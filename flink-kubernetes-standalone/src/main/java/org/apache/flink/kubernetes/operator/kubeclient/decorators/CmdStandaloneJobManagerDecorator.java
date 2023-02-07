@@ -64,7 +64,7 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
                         .withCommand(kubernetesJobManagerParameters.getContainerEntrypoint())
                         .addToArgs(JOBMANAGER_ENTRYPOINT_ARG);
 
-        if (kubernetesJobManagerParameters.isKubernetesHA()) {
+        if (kubernetesJobManagerParameters.isHAEnabled()) {
             containerBuilder.addToArgs(POD_IP_ARG);
         }
 
@@ -104,7 +104,7 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
             args.addAll(kubernetesJobManagerParameters.getJobSpecArgs());
         }
 
-        if (kubernetesJobManagerParameters.isKubernetesHA()) {
+        if (kubernetesJobManagerParameters.isHAEnabled()) {
             args.add("--host");
             args.add(POD_IP_ARG);
         }

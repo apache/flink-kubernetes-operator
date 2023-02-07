@@ -48,6 +48,7 @@ import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.webmonitor.JobDetails;
@@ -188,7 +189,7 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     public boolean isHaMetadataAvailable(Configuration conf) {
-        return FlinkUtils.isKubernetesHAActivated(conf) && haDataAvailable;
+        return HighAvailabilityMode.isHighAvailabilityModeActivated(conf) && haDataAvailable;
     }
 
     public void setHaDataAvailable(boolean haDataAvailable) {
@@ -404,7 +405,8 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    protected void deleteClusterInternal(ObjectMeta meta, boolean deleteHaMeta) {
+    protected void deleteClusterInternal(
+            ObjectMeta meta, Configuration conf, boolean deleteHaMeta) {
         jobs.clear();
         sessions.remove(meta.getName());
     }

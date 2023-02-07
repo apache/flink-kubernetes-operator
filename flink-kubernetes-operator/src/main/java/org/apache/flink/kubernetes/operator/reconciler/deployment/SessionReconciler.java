@@ -84,8 +84,10 @@ public class SessionReconciler
 
     private void deleteSessionCluster(FlinkResourceContext<FlinkDeployment> ctx) {
         var deployment = ctx.getResource();
+        var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
         ctx.getFlinkService()
-                .deleteClusterDeployment(deployment.getMetadata(), deployment.getStatus(), false);
+                .deleteClusterDeployment(
+                        deployment.getMetadata(), deployment.getStatus(), conf, false);
         ctx.getFlinkService().waitForClusterShutdown(ctx.getObserveConfig());
     }
 
@@ -163,9 +165,10 @@ public class SessionReconciler
                                     .toMillis());
         } else {
             LOG.info("Stopping session cluster");
+            var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
             ctx.getFlinkService()
                     .deleteClusterDeployment(
-                            deployment.getMetadata(), deployment.getStatus(), true);
+                            deployment.getMetadata(), deployment.getStatus(), conf, true);
             return DeleteControl.defaultDelete();
         }
     }

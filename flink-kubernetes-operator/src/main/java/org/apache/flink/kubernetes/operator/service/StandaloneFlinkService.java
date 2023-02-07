@@ -36,7 +36,6 @@ import org.apache.flink.kubernetes.operator.kubeclient.FlinkStandaloneKubeClient
 import org.apache.flink.kubernetes.operator.standalone.KubernetesStandaloneClusterDescriptor;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
-import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -47,8 +46,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import static org.apache.flink.kubernetes.utils.Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY;
 
 /**
  * Implementation of {@link FlinkService} submitting and interacting with Standalone Kubernetes
@@ -131,7 +128,8 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    protected void deleteClusterInternal(ObjectMeta meta, boolean deleteHaConfigmaps) {
+    protected void deleteClusterInternal(
+            ObjectMeta meta, Configuration conf, boolean deleteHaData) {
         final String clusterId = meta.getName();
         final String namespace = meta.getNamespace();
 
@@ -150,23 +148,8 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                 .inNamespace(namespace)
                 .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
                 .delete();
-
-        if (deleteHaConfigmaps) {
-            // We need to wait for cluster shutdown otherwise HA configmaps might be recreated
-            waitForClusterShutdown(
-                    namespace,
-                    clusterId,
-                    configManager
-                            .getOperatorConfiguration()
-                            .getFlinkShutdownClusterTimeout()
-                            .toSeconds());
-            kubernetesClient
-                    .configMaps()
-                    .inNamespace(namespace)
-                    .withLabels(
-                            KubernetesUtils.getConfigMapLabels(
-                                    clusterId, LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
-                    .delete();
+        if (deleteHaData) {
+            deleteHAData(namespace, clusterId, conf);
         }
     }
 

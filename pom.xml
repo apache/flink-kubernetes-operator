@@ -93,6 +93,7 @@ under the License.
 
         <okhttp.version>4.10.0</okhttp.version>
         <snakeyaml.version>1.33</snakeyaml.version>
+        <curator-test.version>5.2.0</curator-test.version>
     </properties>
 
     <dependencyManagement>

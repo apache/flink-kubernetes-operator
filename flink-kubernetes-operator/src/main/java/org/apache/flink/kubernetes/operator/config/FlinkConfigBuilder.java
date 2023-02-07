@@ -24,6 +24,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
@@ -340,6 +341,9 @@ public class FlinkConfigBuilder {
         // Set cluster config
         effectiveConfig.setString(KubernetesConfigOptions.NAMESPACE, namespace);
         effectiveConfig.setString(KubernetesConfigOptions.CLUSTER_ID, clusterId);
+        if (HighAvailabilityMode.isHighAvailabilityModeActivated(effectiveConfig)) {
+            effectiveConfig.setString(HighAvailabilityOptions.HA_CLUSTER_ID, clusterId);
+        }
         return effectiveConfig;
     }
 

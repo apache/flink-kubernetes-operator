@@ -109,7 +109,7 @@ public class DefaultValidatorTest {
                     dep.getSpec().setFlinkConfiguration(new HashMap<>());
                     dep.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
                 },
-                "Job could not be upgraded with last-state while Kubernetes HA disabled");
+                "Job could not be upgraded with last-state while HA disabled");
 
         testError(
                 dep -> {
@@ -190,6 +190,15 @@ public class DefaultValidatorTest {
                 dep ->
                         dep.getSpec()
                                 .setFlinkConfiguration(
+                                        Collections.singletonMap(
+                                                HighAvailabilityOptions.HA_CLUSTER_ID.key(),
+                                                "my-cluster-id")),
+                "Forbidden Flink config key");
+
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .setFlinkConfiguration(
                                         Map.of(
                                                 KubernetesOperatorConfigOptions
                                                                 .OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED
@@ -240,7 +249,19 @@ public class DefaultValidatorTest {
                     dep.getSpec().setFlinkConfiguration(new HashMap<>());
                     dep.getSpec().getJobManager().setReplicas(2);
                 },
-                "Kubernetes High availability should be enabled when starting standby JobManagers.");
+                "High availability should be enabled when starting standby JobManagers.");
+
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .setFlinkConfiguration(
+                                        Map.of(
+                                                KubernetesOperatorConfigOptions
+                                                        .DEPLOYMENT_ROLLBACK_ENABLED
+                                                        .key(),
+                                                "true")),
+                "HA must be enabled for rollback support.");
+
         testError(
                 dep -> dep.getSpec().getJobManager().setReplicas(0),
                 "JobManager replicas should not be configured less than one.");
