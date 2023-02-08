@@ -18,8 +18,10 @@ spec:
       jsonPath: .status.jobStatus.state
       name: Job Status
       type: string
-    - jsonPath: .status.lifecycleState
-      name: Resource Lifecycle State
+    - description: "Lifecycle state of the Flink resource (including being rolled\
+        \ back, failed etc.)."
+      jsonPath: .status.lifecycleState
+      name: Lifecycle State
       type: string
     name: v1beta1
     schema:
@@ -9252,8 +9254,6 @@ spec:
                 - ROLLING_BACK
                 - ROLLED_BACK
                 - FAILED
-                - terminal
-                - description
                 type: string
             type: object
         type: object

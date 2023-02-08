@@ -43,7 +43,10 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
     /** Error information about the FlinkDeployment/FlinkSessionJob. */
     private String error;
 
-    @PrinterColumn(name = "Resource Lifecycle State")
+    /** Lifecycle state of the Flink resource (including being rolled back, failed etc.). */
+    @PrinterColumn(name = "Lifecycle State")
+    // Calculated from the status, requires no setter. The purpose of this is to expose as a printer
+    // column.
     private ResourceLifecycleState lifecycleState;
 
     /**
