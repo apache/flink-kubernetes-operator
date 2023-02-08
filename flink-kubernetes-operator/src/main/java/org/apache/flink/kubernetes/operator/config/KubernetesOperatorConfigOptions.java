@@ -130,7 +130,7 @@ public class KubernetesOperatorConfigOptions {
     public static final ConfigOption<Duration> DEPLOYMENT_READINESS_TIMEOUT =
             operatorConfig("deployment.readiness.timeout")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(1))
+                    .defaultValue(Duration.ofMinutes(5))
                     .withDescription(
                             "The timeout for deployments to become ready/stable "
                                     + "before being rolled back if rollback is enabled.");
