@@ -30,7 +30,7 @@ parallelism.default: 1
 # kubernetes.operator.observer.savepoint.trigger.grace-period: 10 s
 # kubernetes.operator.flink.client.timeout: 10 s
 # kubernetes.operator.deployment.rollback.enabled: false
-# kubernetes.operator.deployment.readiness.timeout: 1min
+# kubernetes.operator.deployment.readiness.timeout: 5min
 # kubernetes.operator.user.artifacts.base.dir: /opt/flink/artifacts
 # kubernetes.operator.job.upgrade.ignore-pending-savepoint: false
 # kubernetes.operator.watched.namespaces: ns1,ns2
