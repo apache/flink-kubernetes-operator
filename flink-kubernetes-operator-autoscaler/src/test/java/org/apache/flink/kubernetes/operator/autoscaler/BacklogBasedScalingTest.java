@@ -66,7 +66,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
     private FlinkDeployment app;
     private JobVertexID source1, sink;
 
-    private JobAutoScaler autoscaler;
+    private JobAutoScalerImpl autoscaler;
 
     @BeforeEach
     public void setup() {
@@ -107,7 +107,8 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
 
         autoscaler =
-                new JobAutoScaler(kubernetesClient, metricsCollector, evaluator, scalingExecutor);
+                new JobAutoScalerImpl(
+                        kubernetesClient, metricsCollector, evaluator, scalingExecutor);
     }
 
     @Test

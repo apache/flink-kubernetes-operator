@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler;
+package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 

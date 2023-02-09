@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingM
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScaler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -40,9 +41,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
 
 /** Application and SessionJob autoscaler. */
-public class JobAutoScaler implements Cleanup {
+public class JobAutoScalerImpl implements JobAutoScaler {
 
-    private static final Logger LOG = LoggerFactory.getLogger(JobAutoScaler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(JobAutoScalerImpl.class);
 
     private final KubernetesClient kubernetesClient;
     private final ScalingMetricCollector metricsCollector;
@@ -53,7 +54,7 @@ public class JobAutoScaler implements Cleanup {
             lastEvaluatedMetrics = new ConcurrentHashMap<>();
     private final Map<ResourceID, Set<JobVertexID>> registeredMetrics = new ConcurrentHashMap<>();
 
-    public JobAutoScaler(
+    public JobAutoScalerImpl(
             KubernetesClient kubernetesClient,
             ScalingMetricCollector metricsCollector,
             ScalingMetricEvaluator evaluator,
@@ -76,7 +77,8 @@ public class JobAutoScaler implements Cleanup {
         registeredMetrics.remove(resourceId);
     }
 
-    public boolean scale(FlinkResourceContext<?> ctx) {
+    @Override
+    public boolean scale(FlinkResourceContext<? extends AbstractFlinkResource<?, ?>> ctx) {
 
         var conf = ctx.getObserveConfig();
         var resource = ctx.getResource();
@@ -173,9 +175,9 @@ public class JobAutoScaler implements Cleanup {
                         });
     }
 
-    public static JobAutoScaler create(
+    public static JobAutoScalerImpl create(
             KubernetesClient kubernetesClient, EventRecorder eventRecorder) {
-        return new JobAutoScaler(
+        return new JobAutoScalerImpl(
                 kubernetesClient,
                 new RestApiMetricsCollector(),
                 new ScalingMetricEvaluator(),

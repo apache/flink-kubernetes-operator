@@ -33,7 +33,6 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
-import org.apache.flink.kubernetes.operator.autoscaler.JobAutoScaler;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
@@ -56,6 +55,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.ServiceLoader;
 
 /**
  * Base class for all Flink resource reconcilers. It contains the general flow of reconciling Flink
@@ -90,7 +90,7 @@ public abstract class AbstractFlinkResourceReconciler<
         this.kubernetesClient = kubernetesClient;
         this.eventRecorder = eventRecorder;
         this.statusRecorder = statusRecorder;
-        this.resourceScaler = JobAutoScaler.create(kubernetesClient, eventRecorder);
+        this.resourceScaler = loadJobAutoscaler();
     }
 
     @Override
@@ -467,6 +467,16 @@ public abstract class AbstractFlinkResourceReconciler<
         deployConfig.set(
                 KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE, List.of(ownerReference));
     }
+
+    private JobAutoScaler loadJobAutoscaler() {
+        for (JobAutoScalerFactory factory : ServiceLoader.load(JobAutoScalerFactory.class)) {
+            LOG.info("Loading JobAutoScaler implementation: {}", factory.getClass().getName());
+            return factory.create(kubernetesClient, eventRecorder);
+        }
+        LOG.info("No JobAutoscaler implementation found. Autoscaling is disabled.");
+        return new NoopJobAutoscaler();
+    }
+
 
     @VisibleForTesting
     public void setClock(Clock clock) {
