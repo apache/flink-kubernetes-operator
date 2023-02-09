@@ -134,7 +134,7 @@ public class TestUtils extends BaseTestUtils {
                 "kind", owner.getKind(),
                 "name", owner.getMetadata().getName(),
                 "uid", owner.getMetadata().getUid(),
-                "blockOwnerDeletion", "false",
+                "blockOwnerDeletion", "true",
                 "controller", "false");
     }
 

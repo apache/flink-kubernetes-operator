@@ -32,10 +32,12 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -50,6 +52,8 @@ import org.apache.flink.runtime.rest.util.RestMapperUtils;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -455,6 +459,34 @@ public class NativeFlinkServiceTest {
         assertEquals(jobID, stopWithSavepointFuture.get().f0);
         assertEquals(SavepointFormatType.NATIVE, stopWithSavepointFuture.get().f1);
         assertEquals(savepointPath, stopWithSavepointFuture.get().f2);
+    }
+
+    @Test
+    public void testDeletionPropagation() {
+        var propagation = new ArrayList<DeletionPropagation>();
+        var flinkService =
+                new NativeFlinkService(client, configManager) {
+                    @Override
+                    protected void deleteClusterInternal(
+                            ObjectMeta meta,
+                            Configuration conf,
+                            boolean deleteHaData,
+                            DeletionPropagation deletionPropagation) {
+                        propagation.add(deletionPropagation);
+                    }
+                };
+
+        flinkService.deleteClusterDeployment(
+                new ObjectMeta(), new FlinkDeploymentStatus(), configuration, true);
+        assertEquals(DeletionPropagation.FOREGROUND, propagation.get(0));
+
+        configuration.set(
+                KubernetesOperatorConfigOptions.RESOURCE_DELETION_PROPAGATION,
+                DeletionPropagation.BACKGROUND);
+        configManager.updateDefaultConfig(configuration);
+        flinkService.deleteClusterDeployment(
+                new ObjectMeta(), new FlinkDeploymentStatus(), configuration, true);
+        assertEquals(DeletionPropagation.BACKGROUND, propagation.get(1));
     }
 
     class TestingNativeFlinkService extends NativeFlinkService {

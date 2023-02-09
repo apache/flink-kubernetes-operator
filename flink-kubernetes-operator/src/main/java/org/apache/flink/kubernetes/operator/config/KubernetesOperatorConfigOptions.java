@@ -23,6 +23,7 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
 import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Constants;
@@ -474,4 +475,11 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(false)
                     .withDescription(
                             "Configure the array merge behaviour during pod merging. Arrays can be either merged by position or name matching.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<DeletionPropagation> RESOURCE_DELETION_PROPAGATION =
+            operatorConfig("resource.deletion.propagation")
+                    .enumType(DeletionPropagation.class)
+                    .defaultValue(DeletionPropagation.FOREGROUND)
+                    .withDescription("JM/TM Deployment deletion propagation.");
 }
