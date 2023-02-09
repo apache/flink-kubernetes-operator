@@ -477,7 +477,6 @@ public abstract class AbstractFlinkResourceReconciler<
         return new NoopJobAutoscaler();
     }
 
-
     @VisibleForTesting
     public void setClock(Clock clock) {
         this.clock = clock;

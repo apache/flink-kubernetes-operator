@@ -71,7 +71,6 @@ public class JobAutoScalerImpl implements JobAutoScaler {
     public void cleanup(AbstractFlinkResource<?, ?> cr) {
         LOG.info("Cleaning up autoscaling meta data");
         metricsCollector.cleanup(cr);
-        scalingExecutor.cleanup(cr);
         var resourceId = ResourceID.fromResource(cr);
         lastEvaluatedMetrics.remove(resourceId);
         registeredMetrics.remove(resourceId);

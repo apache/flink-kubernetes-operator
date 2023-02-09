@@ -19,11 +19,13 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
-import org.apache.flink.kubernetes.operator.reconciler.Cleanup;
 
 /** Per-job Autoscaler instance. */
-public interface JobAutoScaler extends Cleanup {
+public interface JobAutoScaler {
 
     /** Called as part of the reconciliation loop. Returns true if this call led to scaling. */
     boolean scale(FlinkResourceContext<? extends AbstractFlinkResource<?, ?>> ctx);
+
+    /** Called when the custom resource is deleted. */
+    void cleanup(AbstractFlinkResource<?, ?> cr);
 }

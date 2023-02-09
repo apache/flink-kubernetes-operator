@@ -29,7 +29,6 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetrics;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
-import org.apache.flink.kubernetes.operator.reconciler.Cleanup;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
@@ -65,7 +64,7 @@ import java.util.stream.Collectors;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SOURCE_SCALING_ENABLED;
 
 /** Metric collector using flink rest api. */
-public abstract class ScalingMetricCollector implements Cleanup {
+public abstract class ScalingMetricCollector {
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricCollector.class);
 
     private final Map<ResourceID, Tuple2<Long, Map<JobVertexID, Map<String, FlinkMetric>>>>
@@ -435,7 +434,6 @@ public abstract class ScalingMetricCollector implements Cleanup {
                     Configuration conf,
                     Map<JobVertexID, Map<String, FlinkMetric>> filteredVertexMetricNames);
 
-    @Override
     public void cleanup(AbstractFlinkResource<?, ?> cr) {
         var resourceId = ResourceID.fromResource(cr);
         histories.remove(resourceId);
