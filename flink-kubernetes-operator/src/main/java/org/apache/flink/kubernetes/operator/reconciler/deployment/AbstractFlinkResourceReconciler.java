@@ -55,7 +55,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.ServiceLoader;
 
 /**
  * Base class for all Flink resource reconcilers. It contains the general flow of reconciling Flink
@@ -86,11 +85,12 @@ public abstract class AbstractFlinkResourceReconciler<
     public AbstractFlinkResourceReconciler(
             KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
-            StatusRecorder<CR, STATUS> statusRecorder) {
+            StatusRecorder<CR, STATUS> statusRecorder,
+            JobAutoScalerFactory autoscalerFactory) {
         this.kubernetesClient = kubernetesClient;
         this.eventRecorder = eventRecorder;
         this.statusRecorder = statusRecorder;
-        this.resourceScaler = loadJobAutoscaler();
+        this.resourceScaler = autoscalerFactory.create(kubernetesClient, eventRecorder);
     }
 
     @Override
@@ -466,15 +466,6 @@ public abstract class AbstractFlinkResourceReconciler<
                         "controller", "false");
         deployConfig.set(
                 KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE, List.of(ownerReference));
-    }
-
-    private JobAutoScaler loadJobAutoscaler() {
-        for (JobAutoScalerFactory factory : ServiceLoader.load(JobAutoScalerFactory.class)) {
-            LOG.info("Loading JobAutoScaler implementation: {}", factory.getClass().getName());
-            return factory.create(kubernetesClient, eventRecorder);
-        }
-        LOG.info("No JobAutoscaler implementation found. Autoscaling is disabled.");
-        return new NoopJobAutoscaler();
     }
 
     @VisibleForTesting

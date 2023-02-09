@@ -66,8 +66,9 @@ public class ApplicationReconciler
     public ApplicationReconciler(
             KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder) {
-        super(kubernetesClient, eventRecorder, statusRecorder);
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
+            JobAutoScalerFactory autoscalerFactory) {
+        super(kubernetesClient, eventRecorder, statusRecorder, autoscalerFactory);
     }
 
     @Override
