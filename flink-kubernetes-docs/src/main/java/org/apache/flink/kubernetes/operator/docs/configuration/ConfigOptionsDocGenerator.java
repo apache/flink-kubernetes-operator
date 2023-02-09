@@ -77,7 +77,7 @@ public class ConfigOptionsDocGenerator {
                         "flink-kubernetes-operator",
                         "org.apache.flink.kubernetes.operator.metrics"),
                 new OptionsClassLocation(
-                        "flink-kubernetes-operator",
+                        "flink-kubernetes-operator-autoscaler",
                         "org.apache.flink.kubernetes.operator.autoscaler.config")
             };
     static final String DEFAULT_PATH_PREFIX = "src/main/java";
