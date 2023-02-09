@@ -65,7 +65,7 @@ spec:
         initContainers:
           # Sample init container for fetching remote artifacts
           - name: busybox
-            image: busybox:1.33.1
+            image: busybox:1.36.0
             volumeMounts:
               - mountPath: /opt/flink/downloads
                 name: downloads
