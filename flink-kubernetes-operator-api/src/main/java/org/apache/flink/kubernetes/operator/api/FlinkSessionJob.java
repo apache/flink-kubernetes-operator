@@ -43,4 +43,9 @@ public class FlinkSessionJob
     protected FlinkSessionJobStatus initStatus() {
         return new FlinkSessionJobStatus();
     }
+
+    @Override
+    public FlinkSessionJobSpec initSpec() {
+        return new FlinkSessionJobSpec();
+    }
 }

@@ -45,4 +45,9 @@ public class FlinkDeployment
     public FlinkDeploymentStatus initStatus() {
         return new FlinkDeploymentStatus();
     }
+
+    @Override
+    public FlinkDeploymentSpec initSpec() {
+        return new FlinkDeploymentSpec();
+    }
 }

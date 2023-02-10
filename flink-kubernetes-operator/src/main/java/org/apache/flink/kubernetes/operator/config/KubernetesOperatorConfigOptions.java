@@ -458,4 +458,12 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(Duration.ofDays(1))
                     .withDescription(
                             "Time after which jobmanager pods of terminal application deployments are shut down.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Duration> CANARY_RESOURCE_TIMEOUT =
+            operatorConfig("health.canary.resource.timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(1))
+                    .withDescription(
+                            "Allowed max time between spec update and reconciliation for canary resources.");
 }

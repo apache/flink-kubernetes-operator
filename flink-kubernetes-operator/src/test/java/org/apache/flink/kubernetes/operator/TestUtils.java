@@ -19,10 +19,13 @@ package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
+import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
@@ -289,6 +292,30 @@ public class TestUtils extends BaseTestUtils {
 
     public static Stream<Arguments> flinkVersions() {
         return Stream.of(arguments(FlinkVersion.v1_14), arguments(FlinkVersion.v1_15));
+    }
+
+    public static FlinkDeployment createCanaryDeployment() {
+        var cr = new FlinkDeployment();
+        cr.setSpec(cr.initSpec());
+        var meta = new ObjectMeta();
+        meta.setGeneration(0L);
+        meta.setLabels(Map.of(CanaryResourceManager.CANARY_LABEL, "true"));
+        meta.setName("canary");
+        meta.setNamespace("default");
+        cr.setMetadata(meta);
+        return cr;
+    }
+
+    public static FlinkSessionJob createCanaryJob() {
+        var cr = new FlinkSessionJob();
+        cr.setSpec(cr.initSpec());
+        var meta = new ObjectMeta();
+        meta.setGeneration(0L);
+        meta.setLabels(Map.of(CanaryResourceManager.CANARY_LABEL, "true"));
+        meta.setName("canary");
+        meta.setNamespace("default");
+        cr.setMetadata(meta);
+        return cr;
     }
 
     /** Testing ResponseProvider. */
