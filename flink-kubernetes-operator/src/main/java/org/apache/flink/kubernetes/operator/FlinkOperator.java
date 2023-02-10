@@ -36,11 +36,10 @@ import org.apache.flink.kubernetes.operator.metrics.OperatorJosdkMetrics;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.observer.sessionjob.FlinkSessionJobObserver;
-import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScalerFactory;
-import org.apache.flink.kubernetes.operator.reconciler.deployment.NoopJobAutoscalerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
+import org.apache.flink.kubernetes.operator.utils.AutoscalerLoader;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
@@ -61,7 +60,6 @@ import javax.annotation.Nullable;
 
 import java.util.Collection;
 import java.util.HashSet;
-import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.Executors;
 
@@ -157,7 +155,8 @@ public class FlinkOperator {
                 MetricManager.createFlinkDeploymentMetricManager(configManager, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
         var eventRecorder = EventRecorder.create(client, listeners);
-        var autoscalerFactory = loadJobAutoscalerFactory();
+        var autoscalerFactory =
+                AutoscalerLoader.loadJobAutoscalerFactory(configManager.getDefaultConfig());
         var reconcilerFactory =
                 new ReconcilerFactory(
                         client, configManager, eventRecorder, statusRecorder, autoscalerFactory);
@@ -208,15 +207,6 @@ public class FlinkOperator {
                 "Configuring operator to select custom resources with the {} labels.",
                 labelSelector);
         overrider.withLabelSelector(labelSelector);
-    }
-
-    private JobAutoScalerFactory loadJobAutoscalerFactory() {
-        for (JobAutoScalerFactory factory : ServiceLoader.load(JobAutoScalerFactory.class)) {
-            LOG.info("Using JobAutoScaler factory: {}", factory.getClass().getName());
-            return factory;
-        }
-        LOG.info("No JobAutoscaler implementation found. Autoscaling is disabled.");
-        return new NoopJobAutoscalerFactory();
     }
 
     public void run() {

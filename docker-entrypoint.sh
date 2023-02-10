@@ -29,7 +29,7 @@ if [ "$1" = "help" ]; then
 elif [ "$1" = "operator" ]; then
     echo "Starting Operator"
 
-    exec java -cp ./$FLINK_KUBERNETES_SHADED_JAR:./$OPERATOR_JAR:./$AUTOSCALER_JAR $LOG_CONFIG $JVM_ARGS org.apache.flink.kubernetes.operator.FlinkOperator
+    exec java -cp ./$FLINK_KUBERNETES_SHADED_JAR:./$OPERATOR_JAR $LOG_CONFIG $JVM_ARGS org.apache.flink.kubernetes.operator.FlinkOperator
 elif [ "$1" = "webhook" ]; then
     echo "Starting Webhook"
 
