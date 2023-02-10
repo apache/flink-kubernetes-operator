@@ -640,12 +640,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     @Override
     public PodList getJmPodList(FlinkDeployment deployment, Configuration conf) {
         final String namespace = conf.getString(KubernetesConfigOptions.NAMESPACE);
-        final String clusterId;
-        try (ClusterClient<String> clusterClient = getClusterClient(conf)) {
-            clusterId = clusterClient.getClusterId();
-        } catch (Exception ex) {
-            throw new RuntimeException(ex);
-        }
+        final String clusterId = conf.getString(KubernetesConfigOptions.CLUSTER_ID);
         return getJmPodList(namespace, clusterId);
     }
 
