@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.api.lifecycle;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Getter;
 
 import java.util.Collections;
@@ -36,8 +37,8 @@ public enum ResourceLifecycleState {
     ROLLED_BACK(true, "The resource is deployed with the last stable spec"),
     FAILED(true, "The job terminally failed");
 
-    private final boolean terminal;
-    @Getter private final String description;
+    @JsonIgnore private final boolean terminal;
+    @JsonIgnore @Getter private final String description;
 
     ResourceLifecycleState(boolean terminal, String description) {
         this.terminal = terminal;

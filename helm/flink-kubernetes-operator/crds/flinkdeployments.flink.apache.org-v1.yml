@@ -18,9 +18,10 @@ spec:
       jsonPath: .status.jobStatus.state
       name: Job Status
       type: string
-    - description: Deployment state of the last reconciled spec.
-      jsonPath: .status.reconciliationStatus.state
-      name: Reconciliation Status
+    - description: "Lifecycle state of the Flink resource (including being rolled\
+        \ back, failed etc.)."
+      jsonPath: .status.lifecycleState
+      name: Lifecycle State
       type: string
     name: v1beta1
     schema:
@@ -9242,6 +9243,17 @@ spec:
                     type: object
                 type: object
               error:
+                type: string
+              lifecycleState:
+                enum:
+                - CREATED
+                - SUSPENDED
+                - UPGRADING
+                - DEPLOYED
+                - STABLE
+                - ROLLING_BACK
+                - ROLLED_BACK
+                - FAILED
                 type: string
             type: object
         type: object

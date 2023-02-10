@@ -198,6 +198,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus | Last observed status of the Flink job on Application/Session cluster. |
 | error | java.lang.String | Error information about the FlinkDeployment/FlinkSessionJob. |
+| lifecycleState | org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState | Lifecycle state of the Flink resource (including being rolled back, failed etc.). |
 | clusterInfo | java.util.Map<java.lang.String,java.lang.String> | Information from running clusters. |
 | jobManagerDeploymentStatus | org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus | Last observed status of the JobManager deployment. |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentReconciliationStatus | Status of the last reconcile operation. |
@@ -224,6 +225,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus | Last observed status of the Flink job on Application/Session cluster. |
 | error | java.lang.String | Error information about the FlinkDeployment/FlinkSessionJob. |
+| lifecycleState | org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState | Lifecycle state of the Flink resource (including being rolled back, failed etc.). |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobReconciliationStatus | Status of the last reconcile operation. |
 
 ### JobManagerDeploymentStatus
