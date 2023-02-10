@@ -44,7 +44,7 @@ spec:
     spec:
       initContainers:
         - name: artifacts-fetcher
-          image: busybox:1.36.0
+          image: busybox:1.35.0
           imagePullPolicy: IfNotPresent
           # Use wget or other tools to get user jars from remote storage
           command: [ 'wget', 'https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4.jar', '-O', '/flink-artifact/myjob.jar' ]
