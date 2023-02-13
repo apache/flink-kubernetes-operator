@@ -31,6 +31,10 @@ under the License.
     <name>Flink Kubernetes Operator Autoscaler</name>
     <packaging>jar</packaging>
 
+    <properties>
+        <auto-service.version>1.0.1</auto-service.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.apache.flink</groupId>
@@ -47,7 +51,8 @@ under the License.
         <dependency>
             <groupId>com.google.auto.service</groupId>
             <artifactId>auto-service</artifactId>
-            <version>1.0.1</version>
+            <version>${auto-service.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
