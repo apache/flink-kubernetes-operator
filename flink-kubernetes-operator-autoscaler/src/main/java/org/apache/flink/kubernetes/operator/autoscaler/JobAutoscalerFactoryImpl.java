@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.core.plugin.Plugin;
+import org.apache.flink.kubernetes.operator.FlinkOperator;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScaler;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScalerFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -43,7 +44,7 @@ public class JobAutoscalerFactoryImpl implements JobAutoScalerFactory, Plugin {
     @Override
     public ClassLoader getClassLoader() {
         // This is the built-in autoscaler, so we want to use the libraries included in the main
-        // operator jar.
-        return ClassLoader.getSystemClassLoader();
+        // operator fat jar.
+        return FlinkOperator.class.getClassLoader();
     }
 }
