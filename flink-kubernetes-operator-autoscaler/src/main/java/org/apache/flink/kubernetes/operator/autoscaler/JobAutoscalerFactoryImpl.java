@@ -39,4 +39,11 @@ public class JobAutoscalerFactoryImpl implements JobAutoScalerFactory, Plugin {
                 new ScalingMetricEvaluator(),
                 new ScalingExecutor(kubernetesClient, eventRecorder));
     }
+
+    @Override
+    public ClassLoader getClassLoader() {
+        // This is the built-in autoscaler, so we want to use the libraries included in the main
+        // operator jar.
+        return ClassLoader.getSystemClassLoader();
+    }
 }
