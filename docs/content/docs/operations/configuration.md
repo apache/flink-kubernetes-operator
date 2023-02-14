@@ -81,6 +81,19 @@ Lease name must be unique in the current lease namespace. For other more advance
 
 Once you enabled leader election you can increase the `replicas` for the operator Deployment using the Helm chart to enable high availability.
 
+If `replicas` value is greater than 1, you can define [topologySpreadConstraints](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/)
+via `operatorPod.topologySpreadConstraints`.
+
+
+## Environment variables
+The operator exposes several environment variables which can be used for custom plugins.
+
+| Name     | Description                           | FieldRef      |
+|----------|---------------------------------------|---------------|
+| HOST_IP  | The host which the pod is deployed on | status.hostIP |
+| POD_IP   | Pod IP                                | status.podIP  |
+| POD_NAME | Pod Name                              | metadata.name |
+
 ## Operator Configuration Reference
 
 ### System Configuration
