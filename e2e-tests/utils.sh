@@ -175,18 +175,35 @@ function debug_and_show_logs {
 
     echo "Flink logs:"
     kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | while read pod;do
-        containers=(`kubectl get pods $pod -o jsonpath='{.spec.containers[*].name}'`)
-        i=0
-        for container in "${containers[@]}"; do
-          echo "Current logs for $pod:$container: "
-          kubectl logs $pod $container;
-          restart_count=$(kubectl get pod $pod -o jsonpath='{.status.containerStatuses['$i'].restartCount}')
-          if [[ ${restart_count} -gt 0 ]];then
-            echo "Previous logs for $pod: "
-            kubectl logs $pod $container --previous
-          fi
-        done
+        echo "Printing init container logs"
+        print_pod_container_logs "$pod" "{.spec.initContainers[*].name}" "{.status.initContainerStatuses[*].restartCount}"
+        echo "Printing main container logs"
+        print_pod_container_logs "$pod" "{.spec.containers[*].name}" "{.status.containerStatuses[*].restartCount}"
     done
+}
+
+function print_pod_container_logs {
+  pod=$1
+  container_path=$2
+  restart_count_path=$3
+
+  containers=(`kubectl get pods $pod -o jsonpath=$container_path`)
+  restart_counts=(`kubectl get pod $pod -o jsonpath=$restart_count_path`)
+
+  if [[ -z "$containers" ]];then
+    return 0
+  fi
+
+  for idx in "${!containers[@]}"; do
+    echo "--------BEGIN CURRENT LOG for $pod:${containers[idx]}--------"
+    kubectl logs $pod ${containers[idx]};
+    echo "--------END CURRENT LOG--------"
+    if [[ ${restart_counts[idx]} -gt 0 ]];then
+      echo "--------BEGIN PREVIOUS LOGS for $pod:${containers[idx]}--------"
+      kubectl logs $pod ${containers[idx]} --previous
+      echo "--------END PREVIOUS LOGS--------"
+    fi
+  done
 }
 
 function start_minikube {

@@ -93,7 +93,7 @@ spec:
         initContainers:
           # Sample sidecar container
           - name: busybox
-            image: busybox:1.33.1
+            image: busybox:1.35.0
             command: [ 'sh','-c','echo hello from task manager' ]
   job:
     jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
