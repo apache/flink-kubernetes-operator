@@ -17,8 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
-import org.apache.flink.core.plugin.Plugin;
-import org.apache.flink.kubernetes.operator.FlinkOperator;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScaler;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScalerFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -31,7 +29,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
  * instantiated by the main operator module.
  */
 @AutoService(JobAutoScalerFactory.class)
-public class JobAutoscalerFactoryImpl implements JobAutoScalerFactory, Plugin {
+public class JobAutoscalerFactoryImpl implements JobAutoScalerFactory {
     @Override
     public JobAutoScaler create(KubernetesClient kubernetesClient, EventRecorder eventRecorder) {
         return new JobAutoScalerImpl(
@@ -39,12 +37,5 @@ public class JobAutoscalerFactoryImpl implements JobAutoScalerFactory, Plugin {
                 new RestApiMetricsCollector(),
                 new ScalingMetricEvaluator(),
                 new ScalingExecutor(kubernetesClient, eventRecorder));
-    }
-
-    @Override
-    public ClassLoader getClassLoader() {
-        // This is the built-in autoscaler, so we want to use the libraries included in the main
-        // operator fat jar.
-        return FlinkOperator.class.getClassLoader();
     }
 }

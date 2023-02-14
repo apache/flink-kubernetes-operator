@@ -48,17 +48,17 @@ RUN groupadd --system --gid=9999 flink && \
     useradd --system --home-dir $FLINK_HOME --uid=9999 --gid=flink flink
 
 COPY --from=build /app/flink-kubernetes-operator/target/$OPERATOR_JAR .
+COPY --from=build /app/flink-kubernetes-operator-autoscaler/target/$AUTOSCALER_JAR .
 COPY --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR .
 COPY --from=build /app/flink-kubernetes-standalone/target/$FLINK_KUBERNETES_SHADED_JAR .
 COPY --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
-RUN mkdir -p $FLINK_HOME/plugins/autoscaler
-COPY --from=build /app/flink-kubernetes-operator-autoscaler/target/$AUTOSCALER_JAR $FLINK_HOME/plugins/autoscaler
 COPY --from=build /app/tools/license/licenses-output/NOTICE .
 COPY --from=build /app/tools/license/licenses-output/licenses ./licenses
 COPY docker-entrypoint.sh /
 
 RUN chown -R flink:flink $FLINK_HOME && \
     chown flink:flink $OPERATOR_JAR && \
+    chown flink:flink $AUTOSCALER_JAR && \
     chown flink:flink $WEBHOOK_JAR && \
     chown flink:flink $FLINK_KUBERNETES_SHADED_JAR && \
     chown flink:flink /docker-entrypoint.sh

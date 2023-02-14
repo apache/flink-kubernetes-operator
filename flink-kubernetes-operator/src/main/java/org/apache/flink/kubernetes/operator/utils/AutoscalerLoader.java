@@ -17,49 +17,41 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.IllegalConfigurationException;
-import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScalerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.NoopJobAutoscalerFactory;
+import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ServiceLoader;
 
 /** Loads the active Autoscaler implementation from the classpath. */
 public class AutoscalerLoader {
 
     private static final Logger LOG = LoggerFactory.getLogger(AutoscalerLoader.class);
 
-    public static JobAutoScalerFactory loadJobAutoscalerFactory(Configuration configuration) {
+    public static JobAutoScalerFactory loadJobAutoscalerFactory() {
         JobAutoScalerFactory factory = null;
-        boolean multipleImplementations = false;
+        boolean singleImplementation = true;
 
-        var factories =
-                PluginUtils.createPluginManagerFromRootFolder(configuration)
-                        .load(JobAutoScalerFactory.class);
-        while (factories.hasNext()) {
-            var currentFactory = factories.next();
-            if (factory == null) {
-                LOG.info("Using JobAutoScaler factory: {}", currentFactory.getClass().getName());
-                factory = currentFactory;
-            } else {
-                LOG.error(
-                        "Found another implementation for {}: {}.",
-                        JobAutoScalerFactory.class.getSimpleName(),
-                        currentFactory.getClass());
-                multipleImplementations = true;
-            }
+        for (JobAutoScalerFactory discoveredFactory :
+                ServiceLoader.load(JobAutoScalerFactory.class)) {
+            LOG.info(
+                    "Discovered JobAutoScaler factory: {}", discoveredFactory.getClass().getName());
+            singleImplementation = factory == null;
+            factory = discoveredFactory;
         }
 
-        if (multipleImplementations) {
-            throw new IllegalConfigurationException(
-                    "Found multiple implementation for JobAutoScalerFactory. Please ensure only one implementation is present.");
-        }
         if (factory == null) {
             LOG.info("No JobAutoscaler implementation found. Autoscaling is disabled.");
             return new NoopJobAutoscalerFactory();
         }
+
+        Preconditions.checkState(
+                singleImplementation,
+                "Found multiple implementation for JobAutoScalerFactory. Please ensure only one implementation is present.");
+
         return factory;
     }
 }

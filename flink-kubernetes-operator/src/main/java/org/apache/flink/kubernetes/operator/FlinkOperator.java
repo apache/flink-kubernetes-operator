@@ -155,8 +155,7 @@ public class FlinkOperator {
                 MetricManager.createFlinkDeploymentMetricManager(configManager, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
         var eventRecorder = EventRecorder.create(client, listeners);
-        var autoscalerFactory =
-                AutoscalerLoader.loadJobAutoscalerFactory(configManager.getDefaultConfig());
+        var autoscalerFactory = AutoscalerLoader.loadJobAutoscalerFactory();
         var reconcilerFactory =
                 new ReconcilerFactory(
                         client, configManager, eventRecorder, statusRecorder, autoscalerFactory);

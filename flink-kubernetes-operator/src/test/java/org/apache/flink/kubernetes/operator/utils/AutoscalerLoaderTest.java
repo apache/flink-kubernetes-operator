@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.configuration.ConfigConstants;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.autoscaler.TestingAutoscalerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScalerFactory;
@@ -39,8 +38,7 @@ public class AutoscalerLoaderTest {
 
     @Test
     void testLoadFallbackNoopImplementation() {
-        JobAutoScalerFactory factory =
-                AutoscalerLoader.loadJobAutoscalerFactory(new Configuration());
+        JobAutoScalerFactory factory = AutoscalerLoader.loadJobAutoscalerFactory();
         Assertions.assertTrue(factory instanceof NoopJobAutoscalerFactory);
     }
 
@@ -54,8 +52,7 @@ public class AutoscalerLoaderTest {
                     TestUtils.getTestPluginsRootDir(temporaryFolder));
             TestUtils.setEnv(systemEnv);
 
-            JobAutoScalerFactory factory =
-                    AutoscalerLoader.loadJobAutoscalerFactory(new Configuration());
+            JobAutoScalerFactory factory = AutoscalerLoader.loadJobAutoscalerFactory();
             Assertions.assertTrue(factory instanceof TestingAutoscalerFactory);
         } finally {
             TestUtils.setEnv(originalEnv);
