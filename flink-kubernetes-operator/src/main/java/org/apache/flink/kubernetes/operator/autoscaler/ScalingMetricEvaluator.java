@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedMap;
@@ -66,12 +67,15 @@ public class ScalingMetricEvaluator {
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
         var topology = collectedMetrics.getJobTopology();
+        var excludeVertexIdList = Arrays.asList(conf.get(AutoScalerOptions.EXCLUDE_VERTEX_IDS).split(","));
 
         for (var vertex : topology.getVerticesInTopologicalOrder()) {
-            scalingOutput.put(
-                    vertex,
-                    computeVertexScalingSummary(
-                            conf, scalingOutput, metricsHistory, topology, vertex));
+            if (!excludeVertexIdList.contains(vertex.toHexString())) {
+                scalingOutput.put(
+                        vertex,
+                        computeVertexScalingSummary(
+                                conf, scalingOutput, metricsHistory, topology, vertex));
+            }
         }
 
         return scalingOutput;

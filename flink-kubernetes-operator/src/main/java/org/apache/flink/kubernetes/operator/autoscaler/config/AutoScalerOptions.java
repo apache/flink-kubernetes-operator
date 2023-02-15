@@ -153,4 +153,11 @@ public class AutoScalerOptions {
                     .defaultValue(MetricAggregator.MAX)
                     .withDescription(
                             "Metric aggregator to use for busyTime metrics. This affects how true processing/output rate will be computed. Using max allows us to handle jobs with data skew more robustly, while avg may provide better stability when we know that the load distribution is even.");
+
+    public static final ConfigOption<String> EXCLUDE_VERTEX_IDS =
+            autoScalerConfig("exclude.vertex.ids")
+                    .stringType()
+                    .defaultValue("")
+                    .withDescription("comma separated list of vertex ids in hexstring to disable for autoscaler to ignore for evaluating and scaling.");
+
 }
