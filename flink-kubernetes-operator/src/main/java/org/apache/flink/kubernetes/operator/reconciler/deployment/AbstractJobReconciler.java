@@ -55,8 +55,9 @@ public abstract class AbstractJobReconciler<
     public AbstractJobReconciler(
             KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
-            StatusRecorder<CR, STATUS> statusRecorder) {
-        super(kubernetesClient, eventRecorder, statusRecorder);
+            StatusRecorder<CR, STATUS> statusRecorder,
+            JobAutoScalerFactory autoscalerFactory) {
+        super(kubernetesClient, eventRecorder, statusRecorder, autoscalerFactory);
     }
 
     @Override

@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.NoopJobAutoscalerFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
@@ -46,7 +47,7 @@ public class SessionJobReconciler
             KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder) {
-        super(kubernetesClient, eventRecorder, statusRecorder);
+        super(kubernetesClient, eventRecorder, statusRecorder, new NoopJobAutoscalerFactory());
     }
 
     @Override

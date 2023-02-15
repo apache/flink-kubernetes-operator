@@ -64,7 +64,7 @@ import java.util.stream.Collectors;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SOURCE_SCALING_ENABLED;
 
 /** Metric collector using flink rest api. */
-public abstract class ScalingMetricCollector implements Cleanup {
+public abstract class ScalingMetricCollector {
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricCollector.class);
 
     private final Map<ResourceID, Tuple2<Long, Map<JobVertexID, Map<String, FlinkMetric>>>>
@@ -434,7 +434,6 @@ public abstract class ScalingMetricCollector implements Cleanup {
                     Configuration conf,
                     Map<JobVertexID, Map<String, FlinkMetric>> filteredVertexMetricNames);
 
-    @Override
     public void cleanup(AbstractFlinkResource<?, ?> cr) {
         var resourceId = ResourceID.fromResource(cr);
         histories.remove(resourceId);

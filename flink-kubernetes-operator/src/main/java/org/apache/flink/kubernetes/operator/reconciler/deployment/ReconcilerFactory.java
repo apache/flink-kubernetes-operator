@@ -39,6 +39,7 @@ public class ReconcilerFactory {
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
     private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder;
+    private final JobAutoScalerFactory autoscalerFactory;
     private final Map<Tuple2<Mode, KubernetesDeploymentMode>, Reconciler<FlinkDeployment>>
             reconcilerMap;
 
@@ -46,11 +47,13 @@ public class ReconcilerFactory {
             KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder) {
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder,
+            JobAutoScalerFactory autoscalerFactory) {
         this.kubernetesClient = kubernetesClient;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
         this.deploymentStatusRecorder = deploymentStatusRecorder;
+        this.autoscalerFactory = autoscalerFactory;
         this.reconcilerMap = new ConcurrentHashMap<>();
     }
 
@@ -69,7 +72,10 @@ public class ReconcilerFactory {
                                     configManager);
                         case APPLICATION:
                             return new ApplicationReconciler(
-                                    kubernetesClient, eventRecorder, deploymentStatusRecorder);
+                                    kubernetesClient,
+                                    eventRecorder,
+                                    deploymentStatusRecorder,
+                                    autoscalerFactory);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", modes.f0));

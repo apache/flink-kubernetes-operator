@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.NoopJobAutoscalerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -82,7 +83,11 @@ public class TestingFlinkDeploymentController
                 new StatusRecorder<>(kubernetesClient, new MetricManager<>(), statusUpdateCounter);
         reconcilerFactory =
                 new ReconcilerFactory(
-                        kubernetesClient, configManager, eventRecorder, statusRecorder);
+                        kubernetesClient,
+                        configManager,
+                        eventRecorder,
+                        statusRecorder,
+                        new NoopJobAutoscalerFactory());
         flinkDeploymentController =
                 new FlinkDeploymentController(
                         configManager,

@@ -324,6 +324,18 @@ under the License.
                 </executions>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <!-- Description: https://github.com/git-commit-id/git-commit-id-maven-plugin
                     Used to show the git ref when starting the Flink Kubernetes operator. -->
                 <groupId>io.github.git-commit-id</groupId>

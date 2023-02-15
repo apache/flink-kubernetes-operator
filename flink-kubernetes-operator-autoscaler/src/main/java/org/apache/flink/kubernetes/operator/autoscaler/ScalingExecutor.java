@@ -51,7 +51,7 @@ import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMet
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /** Class responsible for executing scaling decisions. */
-public class ScalingExecutor implements Cleanup {
+public class ScalingExecutor {
 
     public static final ConfigOption<Map<String, String>> PARALLELISM_OVERRIDES =
             ConfigOptions.key("pipeline.jobvertex-parallelism-overrides")
@@ -269,10 +269,5 @@ public class ScalingExecutor implements Cleanup {
     protected void setClock(Clock clock) {
         this.clock = Preconditions.checkNotNull(clock);
         jobVertexScaler.setClock(clock);
-    }
-
-    @Override
-    public void cleanup(AbstractFlinkResource<?, ?> cr) {
-        // No cleanup is currently necessary
     }
 }

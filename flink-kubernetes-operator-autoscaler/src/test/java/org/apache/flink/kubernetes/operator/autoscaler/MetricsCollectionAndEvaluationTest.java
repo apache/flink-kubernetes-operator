@@ -197,7 +197,6 @@ public class MetricsCollectionAndEvaluationTest {
         assertNotNull(metricsCollector.getTopologies().get(resourceID));
 
         metricsCollector.cleanup(app);
-        scalingExecutor.cleanup(app);
         assertNull(metricsCollector.getHistories().get(resourceID));
         assertNull(metricsCollector.getAvailableVertexMetricNames().get(resourceID));
         assertNull(metricsCollector.getTopologies().get(resourceID));

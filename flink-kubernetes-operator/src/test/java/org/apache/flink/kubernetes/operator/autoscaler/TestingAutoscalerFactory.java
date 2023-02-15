@@ -17,14 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
-import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.NoopJobAutoscalerFactory;
 
-/** Cleanup interface for autoscaling related metadata. */
-public interface Cleanup {
-    /**
-     * Method is called when a custom resource is deleted.
-     *
-     * @param cr custom resource
-     */
-    void cleanup(AbstractFlinkResource<?, ?> cr);
-}
+/** Dummy autoscaler to test the plugin loading for the autoscaler. */
+public class TestingAutoscalerFactory extends NoopJobAutoscalerFactory {}

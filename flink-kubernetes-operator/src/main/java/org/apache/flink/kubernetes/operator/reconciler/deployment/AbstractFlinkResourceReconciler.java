@@ -33,7 +33,6 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
-import org.apache.flink.kubernetes.operator.autoscaler.JobAutoScaler;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
@@ -86,11 +85,12 @@ public abstract class AbstractFlinkResourceReconciler<
     public AbstractFlinkResourceReconciler(
             KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
-            StatusRecorder<CR, STATUS> statusRecorder) {
+            StatusRecorder<CR, STATUS> statusRecorder,
+            JobAutoScalerFactory autoscalerFactory) {
         this.kubernetesClient = kubernetesClient;
         this.eventRecorder = eventRecorder;
         this.statusRecorder = statusRecorder;
-        this.resourceScaler = JobAutoScaler.create(kubernetesClient, eventRecorder);
+        this.resourceScaler = autoscalerFactory.create(kubernetesClient, eventRecorder);
     }
 
     @Override
