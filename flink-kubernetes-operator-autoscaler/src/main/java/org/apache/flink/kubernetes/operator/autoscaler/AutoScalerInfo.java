@@ -49,7 +49,7 @@ import java.util.TreeMap;
 /** Class for encapsulating information stored for each resource when using the autoscaler. */
 public class AutoScalerInfo {
 
-    private static final Logger LOG = LoggerFactory.getLogger(JobAutoScalerImpl.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AutoScalerInfo.class);
 
     private static final String LABEL_COMPONENT_AUTOSCALER = "autoscaler";
 

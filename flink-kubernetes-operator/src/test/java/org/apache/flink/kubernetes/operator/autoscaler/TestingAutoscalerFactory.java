@@ -17,8 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
-import org.apache.flink.core.plugin.Plugin;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.NoopJobAutoscalerFactory;
 
 /** Dummy autoscaler to test the plugin loading for the autoscaler. */
-public class TestingAutoscalerFactory extends NoopJobAutoscalerFactory implements Plugin {}
+public class TestingAutoscalerFactory extends NoopJobAutoscalerFactory {}
