@@ -22,6 +22,7 @@ import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.MetricAggregator;
 
 import java.time.Duration;
+import java.util.List;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.operatorConfig;
 
@@ -153,4 +154,12 @@ public class AutoScalerOptions {
                     .defaultValue(MetricAggregator.MAX)
                     .withDescription(
                             "Metric aggregator to use for busyTime metrics. This affects how true processing/output rate will be computed. Using max allows us to handle jobs with data skew more robustly, while avg may provide better stability when we know that the load distribution is even.");
+
+    public static final ConfigOption<List<String>> VERTEX_EXCLUDE_IDS =
+            autoScalerConfig("vertex.exclude.ids")
+                    .stringType()
+                    .asList()
+                    .defaultValues(new String[0])
+                    .withDescription(
+                            "A (semicolon-separated) list of vertex ids in hexstring to disable for autoscaler to ignore for scaling.");
 }

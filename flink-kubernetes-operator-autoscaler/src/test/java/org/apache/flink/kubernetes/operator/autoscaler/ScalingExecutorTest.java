@@ -41,6 +41,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.PARALLELISM_OVERRIDES;
@@ -181,6 +182,32 @@ public class ScalingExecutorTest {
         evaluated = Map.of(op1, evaluated(1, 70, 100, 15));
         scalingSummary = Map.of(op1, new ScalingSummary(1, 2, evaluated.get(op1)));
         assertFalse(ScalingExecutor.allVerticesWithinUtilizationTarget(evaluated, scalingSummary));
+    }
+
+    @Test
+    public void testVertexesExclusionForScaling() {
+        var sourceHexString = "0bfd135746ac8efb3cce668b12e16d3a";
+        var source = JobVertexID.fromHexString(sourceHexString);
+        var filterOperatorHexString = "869fb403873411306404e9f2e4438c0e";
+        var filterOperator = JobVertexID.fromHexString(filterOperatorHexString);
+        var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
+        var sink = JobVertexID.fromHexString(sinkHexString);
+
+        var scalingInfo = new AutoScalerInfo(new HashMap<>());
+        var metrics =
+                Map.of(
+                        source,
+                        evaluated(1, 70, 100),
+                        filterOperator,
+                        evaluated(1, 100, 80),
+                        sink,
+                        evaluated(1, 70, 80));
+        // filter operator should not scale
+        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of(filterOperatorHexString));
+        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        // filter operator should scale
+        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of());
+        assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
     }
 
     @ParameterizedTest
