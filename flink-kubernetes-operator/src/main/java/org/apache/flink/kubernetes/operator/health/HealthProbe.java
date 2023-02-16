@@ -19,13 +19,12 @@ package org.apache.flink.kubernetes.operator.health;
 
 import io.javaoperatorsdk.operator.RuntimeInfo;
 import lombok.Getter;
-import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Set;
 
 /** Flink operator health probe. */
 public enum HealthProbe {
@@ -33,9 +32,9 @@ public enum HealthProbe {
 
     private static final Logger LOG = LoggerFactory.getLogger(HealthProbe.class);
 
-    private final AtomicBoolean isHealthy = new AtomicBoolean(true);
+    @Getter private RuntimeInfo runtimeInfo;
 
-    @Setter @Getter private RuntimeInfo runtimeInfo;
+    private InformerHealthSummary previousInformerHealthSummary;
 
     private final List<CanaryResourceManager<?>> canaryResourceManagers = new ArrayList<>();
 
@@ -43,20 +42,29 @@ public enum HealthProbe {
         canaryResourceManagers.add(canaryResourceManager);
     }
 
-    public boolean isHealthy() {
-        if (!isHealthy.get()) {
-            return false;
-        }
+    public void setRuntimeInfo(RuntimeInfo runtimeInfo) {
+        this.runtimeInfo = runtimeInfo;
+        previousInformerHealthSummary = InformerHealthSummary.fromRuntimeInfo(runtimeInfo);
+        LOG.info(
+                "Initially unhealthy informers: {}",
+                previousInformerHealthSummary.getUnhealthyInformers());
+    }
 
+    public boolean isHealthy() {
         if (runtimeInfo != null) {
-            LOG.debug("Checking operator health");
-            if (!runtimeInfo.allEventSourcesAreHealthy()) {
-                LOG.error("Unhealthy event sources: {}", runtimeInfo.unhealthyEventSources());
+            LOG.debug("Checking event source health");
+            var healthSummary = InformerHealthSummary.fromRuntimeInfo(runtimeInfo);
+            if (!healthSummary.isAnyHealthy()) {
+                LOG.error("All informers are unhealthy");
                 return false;
+            } else if (anyInformerBecameUnhealthy(healthSummary.getUnhealthyInformers())) {
+                return false;
+            } else {
+                previousInformerHealthSummary = healthSummary;
             }
 
             if (!runtimeInfo.isStarted()) {
-                LOG.error("Operator not running");
+                LOG.error("Operator is not running");
                 return false;
             }
         }
@@ -67,6 +75,21 @@ public enum HealthProbe {
                 return false;
             }
         }
+
         return true;
+    }
+
+    private boolean anyInformerBecameUnhealthy(Set<InformerIdentifier> unhealthyInformers) {
+        boolean unhealthy = false;
+        for (InformerIdentifier unhealthyInformer : unhealthyInformers) {
+            if (!previousInformerHealthSummary
+                    .getUnhealthyInformers()
+                    .contains(unhealthyInformer)) {
+                LOG.error("Informer became unhealthy: {}", unhealthyInformer);
+                unhealthy = true;
+            }
+        }
+
+        return unhealthy;
     }
 }
