@@ -31,11 +31,18 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.RuntimeInfo;
 import io.javaoperatorsdk.operator.api.config.ConfigurationServiceProvider;
+import io.javaoperatorsdk.operator.api.config.ResourceConfiguration;
+import io.javaoperatorsdk.operator.health.InformerHealthIndicator;
+import io.javaoperatorsdk.operator.health.InformerWrappingEventSourceHealthIndicator;
+import io.javaoperatorsdk.operator.health.Status;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.Test;
 
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus.OK;
@@ -74,11 +81,11 @@ public class HealthProbeTest {
     }
 
     @Test
-    public void testHealthProbe() {
+    public void testHealthProbeInfomers() {
         var isRunning = new AtomicBoolean(false);
-        var isHealthy = new AtomicBoolean(false);
-
-        HealthProbe.INSTANCE.setRuntimeInfo(
+        var unhealthyEventSources =
+                new HashMap<String, Map<String, InformerWrappingEventSourceHealthIndicator>>();
+        var runtimeInfo =
                 new RuntimeInfo(new Operator(client)) {
                     @Override
                     public boolean isStarted() {
@@ -86,19 +93,85 @@ public class HealthProbeTest {
                     }
 
                     @Override
-                    public boolean allEventSourcesAreHealthy() {
-                        return isHealthy.get();
+                    public Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
+                            unhealthyInformerWrappingEventSourceHealthIndicator() {
+                        return unhealthyEventSources;
                     }
-                });
+                };
+
+        // Test if a new event source becomes unhealthy
+        HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
 
         assertFalse(HealthProbe.INSTANCE.isHealthy());
         isRunning.set(true);
-        assertFalse(HealthProbe.INSTANCE.isHealthy());
-        isHealthy.set(true);
         assertTrue(HealthProbe.INSTANCE.isHealthy());
-        isRunning.set(false);
+        unhealthyEventSources.put(
+                "c1", Map.of("e1", informerHealthIndicator(Map.of("i1", Status.UNHEALTHY))));
         assertFalse(HealthProbe.INSTANCE.isHealthy());
-        isRunning.set(true);
+        unhealthyEventSources.clear();
+        assertTrue(HealthProbe.INSTANCE.isHealthy());
+
+        // Test if we detect when there is an unhealthy at start
+        unhealthyEventSources.put(
+                "c1",
+                Map.of(
+                        "e1",
+                        informerHealthIndicator(
+                                Map.of("i1", Status.UNHEALTHY, "i2", Status.HEALTHY))));
+        HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
+        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        unhealthyEventSources.put(
+                "c1",
+                Map.of(
+                        "e1",
+                        informerHealthIndicator(
+                                Map.of("i1", Status.UNHEALTHY, "i2", Status.HEALTHY)),
+                        "e2",
+                        informerHealthIndicator(Map.of("i3", Status.UNHEALTHY))));
+        assertFalse(HealthProbe.INSTANCE.isHealthy());
+        assertFalse(HealthProbe.INSTANCE.isHealthy());
+        unhealthyEventSources.put(
+                "c1",
+                Map.of(
+                        "e1",
+                        informerHealthIndicator(
+                                Map.of("i1", Status.UNHEALTHY, "i2", Status.HEALTHY)),
+                        "e2",
+                        informerHealthIndicator(Map.of("i3", Status.HEALTHY))));
+        assertTrue(HealthProbe.INSTANCE.isHealthy());
+        unhealthyEventSources.put(
+                "c1",
+                Map.of(
+                        "e1",
+                        informerHealthIndicator(
+                                Map.of("i1", Status.UNHEALTHY, "i2", Status.UNHEALTHY))));
+        assertFalse(HealthProbe.INSTANCE.isHealthy());
+        unhealthyEventSources.clear();
+        assertTrue(HealthProbe.INSTANCE.isHealthy());
+
+        // All informers unhealthy at start:
+        unhealthyEventSources.put(
+                "c1", Map.of("e1", informerHealthIndicator(Map.of("i1", Status.UNHEALTHY))));
+        HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
+        assertFalse(HealthProbe.INSTANCE.isHealthy());
+    }
+
+    @Test
+    public void testHealthProbeCanary() {
+        var runtimeInfo =
+                new RuntimeInfo(new Operator(client)) {
+                    @Override
+                    public boolean isStarted() {
+                        return true;
+                    }
+
+                    @Override
+                    public Map<String, Map<String, InformerWrappingEventSourceHealthIndicator>>
+                            unhealthyInformerWrappingEventSourceHealthIndicator() {
+                        return Collections.emptyMap();
+                    }
+                };
+        HealthProbe.INSTANCE.setRuntimeInfo(runtimeInfo);
 
         var canaryManager =
                 new CanaryResourceManager<FlinkDeployment>(
@@ -141,5 +214,52 @@ public class HealthProbeTest {
         connection.setConnectTimeout(100000);
         connection.connect();
         return connection.getResponseCode() == OK.code();
+    }
+
+    private static InformerWrappingEventSourceHealthIndicator informerHealthIndicator(
+            Map<String, Status> informerStatuses) {
+        Map<String, InformerHealthIndicator> informers = new HashMap<>();
+        informerStatuses.forEach(
+                (n, s) ->
+                        informers.put(
+                                n,
+                                new InformerHealthIndicator() {
+                                    @Override
+                                    public boolean hasSynced() {
+                                        return false;
+                                    }
+
+                                    @Override
+                                    public boolean isWatching() {
+                                        return false;
+                                    }
+
+                                    @Override
+                                    public boolean isRunning() {
+                                        return false;
+                                    }
+
+                                    @Override
+                                    public Status getStatus() {
+                                        return s;
+                                    }
+
+                                    @Override
+                                    public String getTargetNamespace() {
+                                        return null;
+                                    }
+                                }));
+
+        return new InformerWrappingEventSourceHealthIndicator() {
+            @Override
+            public Map<String, InformerHealthIndicator> informerHealthIndicators() {
+                return informers;
+            }
+
+            @Override
+            public ResourceConfiguration getInformerConfiguration() {
+                return null;
+            }
+        };
     }
 }
