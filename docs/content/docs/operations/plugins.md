@@ -109,3 +109,18 @@ In order to enable your custom `FlinkResourceListener` you need to:
  1. Implement the interface
  2. Add your listener class to `org.apache.flink.kubernetes.operator.listener.FlinkResourceListener` in `META-INF/services`
  3. Package your JAR and add it to the plugins directory of your operator image (`/opt/flink/plugins`)
+
+
+## Additional Dependencies
+In some cases, users may need to add required dependencies onto the operator classpath.
+
+When building the custom image, The additional dependencies shall be copied to `/opt/flink/operator-lib` with the environment variable: `OPERATOR_LIB`
+That folder is added to classpath upon initialization.
+
+```shell script
+    FROM apache/flink-kubernetes-operator
+    ARG ARTIFACT1=custom-artifact1.jar
+    ARG ARTIFACT2=custom-artifact2.jar
+    COPY target/$ARTIFACT1 $OPERATOR_LIB
+    COPY target/$ARTIFACT2 $OPERATOR_LIB
+```
