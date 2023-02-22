@@ -30,7 +30,10 @@ import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 
 /** @link CmdStandaloneJobManagerDecorator unit tests */
@@ -135,14 +138,17 @@ public class CmdStandaloneJobManagerDecoratorTest {
                 StandaloneKubernetesConfigOptionsInternal.ClusterMode.APPLICATION);
 
         configuration.set(HighAvailabilityOptions.HA_MODE, "KUBERNETES");
+        configuration.set(ApplicationConfiguration.APPLICATION_ARGS, List.of("--test", "123"));
 
         FlinkPod decoratedPod = decorator.decorateFlinkPod(new FlinkPod.Builder().build());
 
         assertThat(
                 decoratedPod.getMainContainer().getArgs(),
-                containsInAnyOrder(
+                contains(
                         CmdStandaloneJobManagerDecorator.APPLICATION_MODE_ARG,
                         "--host",
-                        CmdStandaloneJobManagerDecorator.POD_IP_ARG));
+                        CmdStandaloneJobManagerDecorator.POD_IP_ARG,
+                        "--test",
+                        "123"));
     }
 }
