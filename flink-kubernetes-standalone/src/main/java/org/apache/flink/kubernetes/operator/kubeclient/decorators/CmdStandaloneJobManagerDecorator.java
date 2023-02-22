@@ -99,14 +99,14 @@ public class CmdStandaloneJobManagerDecorator extends AbstractKubernetesStepDeco
             args.add(savepointPath);
         }
 
-        List<String> jobSpecArgs = kubernetesJobManagerParameters.getJobSpecArgs();
-        if (jobSpecArgs != null) {
-            args.addAll(kubernetesJobManagerParameters.getJobSpecArgs());
-        }
-
         if (kubernetesJobManagerParameters.isHAEnabled()) {
             args.add("--host");
             args.add(POD_IP_ARG);
+        }
+
+        List<String> jobSpecArgs = kubernetesJobManagerParameters.getJobSpecArgs();
+        if (jobSpecArgs != null) {
+            args.addAll(kubernetesJobManagerParameters.getJobSpecArgs());
         }
 
         return args;
