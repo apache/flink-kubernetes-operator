@@ -38,6 +38,7 @@ import java.util.Map;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Spec diff test. */
 public class SpecDiffTest {
@@ -180,5 +181,17 @@ public class SpecDiffTest {
         diff = new ReflectiveDiffBuilder<>(left, right).build();
         assertEquals(DiffType.UPGRADE, diff.getType());
         assertEquals(11, diff.getNumDiffs());
+    }
+
+    @Test
+    public void testPodTemplateChanges() {
+        var left = BaseTestUtils.buildApplicationCluster().getSpec();
+        left.setPodTemplate(BaseTestUtils.getTestPod("localhost", "v1", List.of()));
+        var right = BaseTestUtils.buildApplicationCluster().getSpec();
+        right.setPodTemplate(BaseTestUtils.getTestPod("localhost", "v2", List.of()));
+
+        var diff = new ReflectiveDiffBuilder<>(left, right).build();
+        assertEquals(DiffType.UPGRADE, diff.getType());
+        assertTrue(diff.toString().contains("before") && diff.toString().contains("after"));
     }
 }
