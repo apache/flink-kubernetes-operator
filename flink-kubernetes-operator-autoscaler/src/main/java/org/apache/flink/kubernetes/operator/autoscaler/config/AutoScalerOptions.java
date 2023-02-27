@@ -161,5 +161,5 @@ public class AutoScalerOptions {
                     .asList()
                     .defaultValues(new String[0])
                     .withDescription(
-                            "A (semicolon-separated) list of vertex ids in hexstring to disable for autoscaler to ignore for scaling.");
+                            "A (semicolon-separated) list of vertex ids in hexstring for which to disable scaling. Caution: For non-sink vertices this will still scale their downstream operators until https://issues.apache.org/jira/browse/FLINK-31215 is implemented.");
 }

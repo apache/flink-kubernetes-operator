@@ -194,14 +194,15 @@ public class ScalingExecutorTest {
         var sink = JobVertexID.fromHexString(sinkHexString);
 
         var scalingInfo = new AutoScalerInfo(new HashMap<>());
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
         var metrics =
                 Map.of(
                         source,
-                        evaluated(1, 70, 100),
+                        evaluated(10, 80, 100),
                         filterOperator,
-                        evaluated(1, 100, 80),
+                        evaluated(10, 60, 100),
                         sink,
-                        evaluated(1, 70, 80));
+                        evaluated(10, 80, 100));
         // filter operator should not scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of(filterOperatorHexString));
         assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
