@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -162,5 +163,48 @@ public class DeploymentRecoveryTest {
         assertEquals(
                 JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersionsAndUpgradeModes")
+    public void verifyRecoveryWithoutHaData(FlinkVersion flinkVersion, UpgradeMode upgradeMode)
+            throws Exception {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
+        appCluster.getSpec().getJob().setUpgradeMode(upgradeMode);
+
+        // We disable HA for stateless to test recovery without HA metadata
+        if (upgradeMode == UpgradeMode.STATELESS) {
+            appCluster
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(HighAvailabilityOptions.HA_MODE.key(), "none");
+        }
+
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        // Remove deployment
+        flinkService.setPortReady(false);
+        flinkService.clear();
+
+        // Set HA metadata not available
+        flinkService.setHaDataAvailable(false);
+
+        testController.reconcile(appCluster, context);
+
+        if (upgradeMode == UpgradeMode.STATELESS) {
+            assertEquals(
+                    JobManagerDeploymentStatus.DEPLOYING,
+                    appCluster.getStatus().getJobManagerDeploymentStatus());
+        } else {
+            assertEquals(
+                    JobManagerDeploymentStatus.MISSING,
+                    appCluster.getStatus().getJobManagerDeploymentStatus());
+        }
     }
 }

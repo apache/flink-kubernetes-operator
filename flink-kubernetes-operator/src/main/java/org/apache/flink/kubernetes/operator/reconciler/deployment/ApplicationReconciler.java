@@ -280,10 +280,10 @@ public class ApplicationReconciler
                         MSG_RESTART_UNHEALTHY);
                 cleanupAfterFailedJob(ctx);
             }
-            boolean requireHaMetadata =
-                    ReconciliationUtils.getDeployedSpec(ctx.getResource()).getJob().getUpgradeMode()
-                            != UpgradeMode.STATELESS;
-            resubmitJob(ctx, requireHaMetadata);
+
+            resubmitJob(
+                    ctx,
+                    HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig()));
             return true;
         }
 
