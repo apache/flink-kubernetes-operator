@@ -89,7 +89,8 @@ public class TestingFlinkSessionJobController
                         configManager,
                         ValidatorUtils.discoverValidators(configManager),
                         ctxFactory,
-                        new SessionJobReconciler(kubernetesClient, eventRecorder, statusRecorder),
+                        new SessionJobReconciler(
+                                kubernetesClient, eventRecorder, statusRecorder, configManager),
                         new FlinkSessionJobObserver(configManager, eventRecorder),
                         statusRecorder,
                         eventRecorder,

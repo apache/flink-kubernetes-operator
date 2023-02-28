@@ -87,7 +87,8 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         reconciler =
                 new TestReconcilerAdapter<>(
                         this,
-                        new SessionJobReconciler(kubernetesClient, eventRecorder, statusRecorder));
+                        new SessionJobReconciler(
+                                kubernetesClient, eventRecorder, statusRecorder, configManager));
     }
 
     @Test
@@ -113,7 +114,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     }
 
     @Test
-    public void testSubmitAndCleanUpRescheduled() throws Exception {
+    public void testCancelJobRescheduled() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
 
         // session ready
@@ -133,6 +134,44 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
         assertEquals(true, deleteControl.isRemoveFinalizer());
         assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
+    }
+
+    @Test
+    public void testCancelJobNotFound() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // session ready
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+        // clean up
+        flinkService.setFlinkJobNotFound(true);
+        var deleteControl =
+                reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+
+        deleteControl =
+                reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(true, deleteControl.isRemoveFinalizer());
+    }
+
+    @Test
+    public void testCancelJobTerminatedWithoutCancellation() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+
+        // session ready
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+        // clean up
+        flinkService.setFlinkJobTerminatedWithoutCancellation(true);
+        var deleteControl =
+                reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+
+        deleteControl =
+                reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(true, deleteControl.isRemoveFinalizer());
     }
 
     @Test
