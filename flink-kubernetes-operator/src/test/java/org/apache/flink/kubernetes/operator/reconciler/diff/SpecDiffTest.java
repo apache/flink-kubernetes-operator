@@ -38,7 +38,6 @@ import java.util.Map;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Spec diff test. */
 public class SpecDiffTest {
@@ -186,12 +185,24 @@ public class SpecDiffTest {
     @Test
     public void testPodTemplateChanges() {
         var left = BaseTestUtils.buildApplicationCluster().getSpec();
-        left.setPodTemplate(BaseTestUtils.getTestPod("localhost", "v1", List.of()));
+        left.setPodTemplate(BaseTestUtils.getTestPod("localhost1", "v1", List.of()));
+        left.setImage("img1");
+        IngressSpec ingressSpec = new IngressSpec();
+        ingressSpec.setTemplate("temp");
+        left.setIngress(ingressSpec);
         var right = BaseTestUtils.buildApplicationCluster().getSpec();
-        right.setPodTemplate(BaseTestUtils.getTestPod("localhost", "v2", List.of()));
+        right.setPodTemplate(BaseTestUtils.getTestPod("localhost2", "v2", List.of()));
+        right.setImage("img2");
+        right.setRestartNonce(1L);
 
         var diff = new ReflectiveDiffBuilder<>(left, right).build();
         assertEquals(DiffType.UPGRADE, diff.getType());
-        assertTrue(diff.toString().contains("before") && diff.toString().contains("after"));
+        assertEquals(
+                "Diff: FlinkDeploymentSpec[image : \"img1\" -> \"img2\", "
+                        + "ingress : {\"template\":\"temp\",\"className\":null,\"annotations\":null} -> null, "
+                        + "podTemplate.apiVersion : \"v1\" -> \"v2\", "
+                        + "podTemplate.spec.hostname : \"localhost1\" -> \"localhost2\", "
+                        + "restartNonce : null -> 1]",
+                diff.toString());
     }
 }

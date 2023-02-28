@@ -21,11 +21,12 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 
-import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.zjsonpatch.JsonDiff;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import lombok.NonNull;
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 
 import java.util.List;
 
@@ -42,6 +43,8 @@ public class DiffResult<T> {
     @NonNull private final T left;
     @NonNull private final T right;
     @NonNull private final DiffType type;
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     DiffResult(@NonNull T left, @NonNull T right, @NonNull List<Diff<?>> diffList) {
         this.left = left;
@@ -60,23 +63,48 @@ public class DiffResult<T> {
             return "";
         }
 
-        final ToStringBuilder lhsBuilder =
-                new ToStringBuilder(left, ToStringStyle.SHORT_PREFIX_STYLE);
-        final ToStringBuilder rhsBuilder =
-                new ToStringBuilder(right, ToStringStyle.SHORT_PREFIX_STYLE);
+        final StringBuilder builder = new StringBuilder();
+        builder.append(left.getClass().getSimpleName()).append("[");
 
         diffList.forEach(
                 diff -> {
-                    if (diff.getLeft() instanceof Pod) {
-                        lhsBuilder.append(diff.getFieldName(), "before");
-                        rhsBuilder.append(diff.getFieldName(), "after");
-                    } else {
-                        lhsBuilder.append(diff.getFieldName(), diff.getLeft());
-                        rhsBuilder.append(diff.getFieldName(), diff.getRight());
+                    try {
+                        JsonNode before =
+                                objectMapper.readTree(
+                                        objectMapper.writeValueAsString(diff.getLeft()));
+                        JsonNode after =
+                                objectMapper.readTree(
+                                        objectMapper.writeValueAsString(diff.getRight()));
+                        JsonNode jsonDiff = JsonDiff.asJson(before, after);
+                        jsonDiff.forEach(
+                                row -> {
+                                    if (row.get("path").asText().equals("/")) {
+                                        builder.append(diff.getFieldName())
+                                                .append(" : ")
+                                                .append(before)
+                                                .append(" -> ")
+                                                .append(after)
+                                                .append(", ");
+                                    } else {
+                                        builder.append(diff.getFieldName())
+                                                .append(
+                                                        row.get("path")
+                                                                .asText()
+                                                                .replaceAll("/", "."))
+                                                .append(" : ")
+                                                .append(before.at(row.get("path").asText()))
+                                                .append(" -> ")
+                                                .append(after.at(row.get("path").asText()))
+                                                .append(", ");
+                                    }
+                                });
+                    } catch (JsonProcessingException je) {
+                        builder.append(diff.getLeft()).append(" -> ").append(diff.getRight());
                     }
                 });
-
-        return String.format("%s differs from %s", lhsBuilder.build(), rhsBuilder.build());
+        builder.setLength(builder.length() - 2);
+        builder.append("]");
+        return String.format("Diff: %s", builder);
     }
 
     private static DiffType getSpechChangeType(List<Diff<?>> diffs) {
