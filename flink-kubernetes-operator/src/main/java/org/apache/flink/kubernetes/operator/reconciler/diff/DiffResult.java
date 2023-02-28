@@ -21,10 +21,10 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 
-import io.fabric8.zjsonpatch.JsonDiff;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.fabric8.zjsonpatch.JsonDiff;
 import lombok.Getter;
 import lombok.NonNull;
 
@@ -98,9 +98,11 @@ public class DiffResult<T> {
                                                 .append(", ");
                                     }
                                 });
+                        builder.setLength(builder.length() - 2);
                     } catch (JsonProcessingException je) {
                         builder.append(diff.getLeft()).append(" -> ").append(diff.getRight());
                     }
+                    builder.append(", ");
                 });
         builder.setLength(builder.length() - 2);
         builder.append("]");
