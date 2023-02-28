@@ -428,7 +428,10 @@ public abstract class AbstractFlinkResourceReconciler<
 
             if (jmMissingForRunningDeployment(deployment)) {
                 LOG.debug("Jobmanager deployment is missing, trying to recover");
-                if (HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
+                var jobSpec = deployment.getSpec().getJob();
+                boolean stateless =
+                        jobSpec != null && jobSpec.getUpgradeMode() == UpgradeMode.STATELESS;
+                if (stateless || HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
                     LOG.debug("HA is enabled, recovering lost jobmanager deployment");
                     result = true;
                 } else {
