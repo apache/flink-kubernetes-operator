@@ -23,6 +23,7 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -222,19 +223,30 @@ public class ScalingExecutor {
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
+        var excludeVertexIdList = conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
         evaluatedMetrics.forEach(
                 (v, metrics) -> {
-                    var currentParallelism =
-                            (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
-                    var newParallelism =
-                            jobVertexScaler.computeScaleTargetParallelism(
-                                    resource,
-                                    conf,
+                    if (excludeVertexIdList.contains(v.toHexString())) {
+                        LOG.info(
+                                "Vertex {} is part of `vertex.exclude.ids` config, Ignoring it for scaling",
+                                v);
+                    } else {
+                        var currentParallelism =
+                                (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
+                        var newParallelism =
+                                jobVertexScaler.computeScaleTargetParallelism(
+                                        resource,
+                                        conf,
+                                        v,
+                                        metrics,
+                                        scalingHistory.getOrDefault(
+                                                v, Collections.emptySortedMap()));
+                        if (currentParallelism != newParallelism) {
+                            out.put(
                                     v,
-                                    metrics,
-                                    scalingHistory.getOrDefault(v, Collections.emptySortedMap()));
-                    if (currentParallelism != newParallelism) {
-                        out.put(v, new ScalingSummary(currentParallelism, newParallelism, metrics));
+                                    new ScalingSummary(
+                                            currentParallelism, newParallelism, metrics));
+                        }
                     }
                 });
 
