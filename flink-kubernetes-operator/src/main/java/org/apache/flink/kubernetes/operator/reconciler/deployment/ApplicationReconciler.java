@@ -224,12 +224,11 @@ public class ApplicationReconciler
     @Override
     protected void cleanupAfterFailedJob(FlinkResourceContext<FlinkDeployment> ctx) {
         // The job has already stopped. Delete the deployment and we are ready.
-        ctx.getFlinkService()
-                .deleteClusterDeployment(
-                        ctx.getResource().getMetadata(),
-                        ctx.getResource().getStatus(),
-                        ctx.getDeployConfig(ctx.getResource().getSpec()),
-                        false);
+        var flinkService = ctx.getFlinkService();
+        var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
+        flinkService.deleteClusterDeployment(
+                ctx.getResource().getMetadata(), ctx.getResource().getStatus(), conf, false);
+        flinkService.waitForClusterShutdown(conf);
     }
 
     // Workaround for https://issues.apache.org/jira/browse/FLINK-27569
