@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
+import io.fabric8.kubernetes.api.model.HostAlias;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -186,22 +187,31 @@ public class SpecDiffTest {
     public void testPodTemplateChanges() {
         var left = BaseTestUtils.buildApplicationCluster().getSpec();
         left.setPodTemplate(BaseTestUtils.getTestPod("localhost1", "v1", List.of()));
+        left.getPodTemplate()
+                .getSpec()
+                .getHostAliases()
+                .add(new HostAlias(List.of("host1", "host2"), "ip"));
         left.setImage("img1");
         IngressSpec ingressSpec = new IngressSpec();
         ingressSpec.setTemplate("temp");
         left.setIngress(ingressSpec);
         var right = BaseTestUtils.buildApplicationCluster().getSpec();
         right.setPodTemplate(BaseTestUtils.getTestPod("localhost2", "v2", List.of()));
+        right.getPodTemplate()
+                .getSpec()
+                .getHostAliases()
+                .add(new HostAlias(List.of("host1"), "ip"));
         right.setImage("img2");
         right.setRestartNonce(1L);
 
         var diff = new ReflectiveDiffBuilder<>(left, right).build();
         assertEquals(DiffType.UPGRADE, diff.getType());
         assertEquals(
-                "Diff: FlinkDeploymentSpec[image : \"img1\" -> \"img2\", "
-                        + "ingress : {\"template\":\"temp\",\"className\":null,\"annotations\":null} -> null, "
-                        + "podTemplate.apiVersion : \"v1\" -> \"v2\", "
-                        + "podTemplate.spec.hostname : \"localhost1\" -> \"localhost2\", "
+                "Diff: FlinkDeploymentSpec[image : img1 -> img2, "
+                        + "ingress : {..} -> null, "
+                        + "podTemplate.apiVersion : v1 -> v2, "
+                        + "podTemplate.spec.hostAliases.0.hostnames.1 : host2 -> null, "
+                        + "podTemplate.spec.hostname : localhost1 -> localhost2, "
                         + "restartNonce : null -> 1]",
                 diff.toString());
     }

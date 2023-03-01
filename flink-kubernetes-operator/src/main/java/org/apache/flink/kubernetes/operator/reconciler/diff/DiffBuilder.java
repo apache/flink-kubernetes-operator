@@ -40,17 +40,17 @@ public class DiffBuilder<T> implements Builder<DiffResult<?>> {
 
     private static final String DELIMITER = ".";
 
-    private final T left;
-    private final T right;
+    private final T before;
+    private final T after;
 
     private final List<Diff<?>> diffs;
     private boolean triviallyEqual;
 
-    public DiffBuilder(@NonNull final T left, @NonNull final T right) {
+    public DiffBuilder(@NonNull final T before, @NonNull final T after) {
         this.diffs = new ArrayList<>();
-        this.left = left;
-        this.right = right;
-        this.triviallyEqual = left == right || left.equals(right);
+        this.before = before;
+        this.after = after;
+        this.triviallyEqual = before == after || before.equals(after);
     }
 
     public DiffBuilder<T> testTriviallyEqual(boolean testTriviallyEqual) {
@@ -348,6 +348,6 @@ public class DiffBuilder<T> implements Builder<DiffResult<?>> {
 
     @Override
     public DiffResult<T> build() {
-        return new DiffResult<>(left, right, diffs);
+        return new DiffResult<>(before, after, diffs);
     }
 }

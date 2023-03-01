@@ -21,7 +21,6 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.zjsonpatch.JsonDiff;
@@ -40,15 +39,15 @@ import java.util.List;
 @Getter
 public class DiffResult<T> {
     @NonNull private final List<Diff<?>> diffList;
-    @NonNull private final T left;
-    @NonNull private final T right;
+    @NonNull private final T before;
+    @NonNull private final T after;
     @NonNull private final DiffType type;
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    DiffResult(@NonNull T left, @NonNull T right, @NonNull List<Diff<?>> diffList) {
-        this.left = left;
-        this.right = right;
+    DiffResult(@NonNull T before, @NonNull T after, @NonNull List<Diff<?>> diffList) {
+        this.before = before;
+        this.after = after;
         this.diffList = diffList;
         this.type = getSpechChangeType(diffList);
     }
@@ -64,42 +63,30 @@ public class DiffResult<T> {
         }
 
         final StringBuilder builder = new StringBuilder();
-        builder.append(left.getClass().getSimpleName()).append("[");
+        builder.append(before.getClass().getSimpleName()).append("[");
 
         diffList.forEach(
                 diff -> {
                     try {
-                        JsonNode before =
+                        JsonNode diffBefore =
                                 objectMapper.readTree(
                                         objectMapper.writeValueAsString(diff.getLeft()));
-                        JsonNode after =
+                        JsonNode diffAfter =
                                 objectMapper.readTree(
                                         objectMapper.writeValueAsString(diff.getRight()));
-                        JsonNode jsonDiff = JsonDiff.asJson(before, after);
+                        JsonNode jsonDiff = JsonDiff.asJson(diffBefore, diffAfter);
                         jsonDiff.forEach(
                                 row -> {
-                                    if (row.get("path").asText().equals("/")) {
-                                        builder.append(diff.getFieldName())
-                                                .append(" : ")
-                                                .append(before)
-                                                .append(" -> ")
-                                                .append(after)
-                                                .append(", ");
-                                    } else {
-                                        builder.append(diff.getFieldName())
-                                                .append(
-                                                        row.get("path")
-                                                                .asText()
-                                                                .replaceAll("/", "."))
-                                                .append(" : ")
-                                                .append(before.at(row.get("path").asText()))
-                                                .append(" -> ")
-                                                .append(after.at(row.get("path").asText()))
-                                                .append(", ");
-                                    }
+                                    addField(
+                                            builder,
+                                            diffBefore,
+                                            diffAfter,
+                                            diff.getFieldName(),
+                                            row);
+                                    builder.append(", ");
                                 });
                         builder.setLength(builder.length() - 2);
-                    } catch (JsonProcessingException je) {
+                    } catch (Exception je) {
                         builder.append(diff.getFieldName())
                                 .append(" : ")
                                 .append(diff.getLeft())
@@ -122,5 +109,36 @@ public class DiffResult<T> {
             }
         }
         return type;
+    }
+
+    private static void addField(
+            StringBuilder sb,
+            JsonNode parentBefore,
+            JsonNode parentAfter,
+            String fieldName,
+            JsonNode diff) {
+        JsonNode beforeNode = parentBefore;
+        JsonNode afterNode = parentAfter;
+        String extraPath = "";
+        if (!diff.get("path").asText().equals("/")) {
+            extraPath = diff.get("path").asText().replaceAll("/", ".");
+            beforeNode = beforeNode.at(diff.get("path").asText());
+            afterNode = afterNode.at(diff.get("path").asText());
+        }
+        sb.append(fieldName).append(extraPath).append(" : ");
+        if ((afterNode.isNull() || afterNode.isMissingNode()) && beforeNode.asText().equals("")) {
+            sb.append("{..}");
+        } else {
+            sb.append(getText(beforeNode));
+        }
+        sb.append(" -> ").append(getText(afterNode));
+    }
+
+    private static String getText(JsonNode node) {
+        if (node.isNull() || node.isMissingNode()) {
+            return null;
+        }
+        String text = node.asText();
+        return text.equals("") ? node.toString() : text;
     }
 }
