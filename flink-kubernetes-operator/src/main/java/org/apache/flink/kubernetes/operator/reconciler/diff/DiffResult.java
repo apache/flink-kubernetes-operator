@@ -100,7 +100,11 @@ public class DiffResult<T> {
                                 });
                         builder.setLength(builder.length() - 2);
                     } catch (JsonProcessingException je) {
-                        builder.append(diff.getLeft()).append(" -> ").append(diff.getRight());
+                        builder.append(diff.getFieldName())
+                                .append(" : ")
+                                .append(diff.getLeft())
+                                .append(" -> ")
+                                .append(diff.getRight());
                     }
                     builder.append(", ");
                 });
