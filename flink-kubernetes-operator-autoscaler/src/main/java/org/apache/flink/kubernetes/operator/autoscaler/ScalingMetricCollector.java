@@ -244,7 +244,9 @@ public abstract class ScalingMetricCollector {
                     var vertexScalingMetrics = new HashMap<ScalingMetric, Double>();
                     out.put(jobVertexID, vertexScalingMetrics);
 
-                    ScalingMetrics.computeLagMetrics(vertexFlinkMetrics, vertexScalingMetrics);
+                    if (jobTopology.isSource(jobVertexID)) {
+                        ScalingMetrics.computeLagMetrics(vertexFlinkMetrics, vertexScalingMetrics);
+                    }
                     ScalingMetrics.computeLoadMetrics(vertexFlinkMetrics, vertexScalingMetrics);
 
                     Optional<Double> lagGrowthRate =
@@ -391,19 +393,27 @@ public abstract class ScalingMetricCollector {
             requiredMetrics.add(FlinkMetric.NUM_RECORDS_OUT_PER_SEC);
         }
 
-        requiredMetrics.forEach(
-                flinkMetric ->
-                        filteredMetrics.put(
-                                flinkMetric
-                                        .findAny(allMetricNames)
-                                        .orElseThrow(
-                                                () ->
-                                                        new RuntimeException(
-                                                                "Could not find required metric "
-                                                                        + flinkMetric.name()
-                                                                        + " for "
-                                                                        + jobVertexID)),
-                                flinkMetric));
+        for (FlinkMetric flinkMetric : requiredMetrics) {
+            Optional<String> flinkMetricName = flinkMetric.findAny(allMetricNames);
+            if (flinkMetricName.isPresent()) {
+                // Add actual Flink metric name to list
+                filteredMetrics.put(flinkMetricName.get(), flinkMetric);
+            } else if (flinkMetric == FlinkMetric.PENDING_RECORDS) {
+                // Pending records metric won't be available for some sources.
+                // The Kafka source, for instance, lazily initializes this metric on receiving
+                // the first record. If this is a fresh topic or no new data has been read since
+                // the last checkpoint, the pendingRecords metrics won't be available.
+                LOG.warn(
+                        "pendingRecords metric for {} could not be found. This usually means the source hasn't read data. Assuming 0 pending records.",
+                        jobVertexID);
+            } else {
+                throw new RuntimeException(
+                        "Could not find required metric "
+                                + flinkMetric.name()
+                                + " for "
+                                + jobVertexID);
+            }
+        }
 
         return filteredMetrics;
     }
