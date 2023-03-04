@@ -121,6 +121,13 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Expected restart time to be used until the operator can determine it reliably from history.");
 
+    public static final ConfigOption<Duration> BACKLOG_PROCESSING_LAG_THRESHOLD =
+            autoScalerConfig("backlog-processing.lag-threshold")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(5))
+                    .withDescription(
+                            "Lag threshold which will prevent unnecessary scalings while removing the pending messages responsible for the lag.");
+
     public static final ConfigOption<Boolean> SCALING_EFFECTIVENESS_DETECTION_ENABLED =
             autoScalerConfig("scaling.effectiveness.detection.enabled")
                     .booleanType()

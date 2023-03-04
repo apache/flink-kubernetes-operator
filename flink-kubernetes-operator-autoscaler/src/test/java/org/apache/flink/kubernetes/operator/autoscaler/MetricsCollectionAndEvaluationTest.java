@@ -173,7 +173,6 @@ public class MetricsCollectionAndEvaluationTest {
         collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
         assertEquals(3, collectedMetrics.getMetricHistory().size());
 
-        evaluator.setClock(clock);
         var evaluation = evaluator.evaluate(conf, collectedMetrics);
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
 
@@ -258,7 +257,6 @@ public class MetricsCollectionAndEvaluationTest {
 
         var clock = Clock.fixed(Instant.now().plus(Duration.ofSeconds(3)), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
-        evaluator.setClock(clock);
 
         var collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
 
@@ -267,7 +265,6 @@ public class MetricsCollectionAndEvaluationTest {
 
         clock = Clock.fixed(Instant.now().plus(Duration.ofSeconds(3)), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
-        evaluator.setClock(clock);
 
         metricsCollector.setMetricNames(
                 Map.of(

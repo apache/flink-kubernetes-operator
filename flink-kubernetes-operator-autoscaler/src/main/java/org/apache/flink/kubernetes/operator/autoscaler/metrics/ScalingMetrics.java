@@ -96,6 +96,7 @@ public class ScalingMetrics {
                 targetDataRate =
                         flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC).getSum();
             }
+            scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, targetDataRate);
             scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, Double.NaN);
             scalingMetrics.put(ScalingMetric.OUTPUT_RATIO, outputPerSecond / targetDataRate);
             var trueOutputRate = busyTimeMultiplier * outputPerSecond;
@@ -128,6 +129,7 @@ public class ScalingMetrics {
                     trueProcessingRate = Double.NaN;
                 }
                 scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, trueProcessingRate);
+                scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
             } else {
                 LOG.error("Cannot compute true processing rate without numRecordsInPerSecond");
             }

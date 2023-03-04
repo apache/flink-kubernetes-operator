@@ -73,7 +73,9 @@ public class ScalingMetricsTest {
                         ScalingMetric.OUTPUT_RATIO,
                         2.,
                         ScalingMetric.SOURCE_DATA_RATE,
-                        1015.),
+                        1015.,
+                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                        1000.),
                 scalingMetrics);
 
         // test negative lag growth (catch up)
@@ -101,7 +103,9 @@ public class ScalingMetricsTest {
                         ScalingMetric.OUTPUT_RATIO,
                         2.,
                         ScalingMetric.SOURCE_DATA_RATE,
-                        950.),
+                        950.,
+                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                        1000.),
                 scalingMetrics);
 
         scalingMetrics.clear();
@@ -126,7 +130,9 @@ public class ScalingMetricsTest {
                         ScalingMetric.TRUE_OUTPUT_RATE,
                         20000.,
                         ScalingMetric.OUTPUT_RATIO,
-                        2.),
+                        2.,
+                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                        1000.),
                 scalingMetrics);
 
         // Test using avg busyTime aggregator
@@ -154,7 +160,9 @@ public class ScalingMetricsTest {
                         ScalingMetric.TRUE_OUTPUT_RATE,
                         20000.,
                         ScalingMetric.OUTPUT_RATIO,
-                        2.),
+                        2.,
+                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                        1000.),
                 scalingMetrics);
     }
 
@@ -217,7 +225,9 @@ public class ScalingMetricsTest {
                         ScalingMetric.OUTPUT_RATIO,
                         1.,
                         ScalingMetric.SOURCE_DATA_RATE,
-                        dataRate),
+                        dataRate,
+                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                        10.),
                 scalingMetrics);
     }
 
@@ -235,6 +245,8 @@ public class ScalingMetricsTest {
                         ScalingMetric.OUTPUT_RATIO,
                         1.,
                         ScalingMetric.SOURCE_DATA_RATE,
+                        ScalingMetrics.EFFECTIVELY_ZERO,
+                        ScalingMetric.CURRENT_PROCESSING_RATE,
                         ScalingMetrics.EFFECTIVELY_ZERO),
                 scalingMetrics);
     }
@@ -251,6 +263,8 @@ public class ScalingMetricsTest {
                         ScalingMetric.OUTPUT_RATIO,
                         1.,
                         ScalingMetric.SOURCE_DATA_RATE,
+                        ScalingMetrics.EFFECTIVELY_ZERO,
+                        ScalingMetric.CURRENT_PROCESSING_RATE,
                         ScalingMetrics.EFFECTIVELY_ZERO),
                 scalingMetrics);
     }
