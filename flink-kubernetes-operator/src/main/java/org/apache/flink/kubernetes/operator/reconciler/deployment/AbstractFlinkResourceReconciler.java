@@ -127,7 +127,7 @@ public abstract class AbstractFlinkResourceReconciler<
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();
 
-        var specDiff = new ReflectiveDiffBuilder<>(currentDeploySpec, lastReconciledSpec).build();
+        var specDiff = new ReflectiveDiffBuilder<>(lastReconciledSpec, currentDeploySpec).build();
 
         boolean specChanged =
                 DiffType.IGNORE != specDiff.getType()

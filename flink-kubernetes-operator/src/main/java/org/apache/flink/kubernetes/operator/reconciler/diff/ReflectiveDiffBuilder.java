@@ -46,23 +46,23 @@ import static org.apache.flink.kubernetes.operator.api.diff.DiffType.UPGRADE;
 @Experimental
 public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
 
-    private final Object left;
-    private final Object right;
+    private final Object before;
+    private final Object after;
     private final DiffBuilder<T> diffBuilder;
 
-    public ReflectiveDiffBuilder(@NonNull final T lhs, @NonNull final T rhs) {
-        this.left = lhs;
-        this.right = rhs;
-        diffBuilder = new DiffBuilder<>(lhs, rhs);
+    public ReflectiveDiffBuilder(@NonNull final T before, @NonNull final T after) {
+        this.before = before;
+        this.after = after;
+        diffBuilder = new DiffBuilder<>(before, after);
     }
 
     @Override
     public DiffResult<T> build() {
-        if (left.equals(right)) {
+        if (before.equals(after)) {
             return diffBuilder.build();
         }
 
-        appendFields(left.getClass());
+        appendFields(before.getClass());
         return diffBuilder.build();
     }
 
@@ -70,8 +70,8 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
         for (final Field field : FieldUtils.getAllFields(clazz)) {
             if (accept(field)) {
                 try {
-                    var leftField = readField(field, left, true);
-                    var rightField = readField(field, right, true);
+                    var leftField = readField(field, before, true);
+                    var rightField = readField(field, after, true);
                     if (field.isAnnotationPresent(SpecDiff.Config.class)
                             && Map.class.isAssignableFrom(field.getType())) {
                         diffBuilder.append(
@@ -99,8 +99,8 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
                     } else {
                         diffBuilder.append(
                                 field.getName(),
-                                readField(field, left, true),
-                                readField(field, right, true),
+                                readField(field, before, true),
+                                readField(field, after, true),
                                 UPGRADE);
                     }
 
