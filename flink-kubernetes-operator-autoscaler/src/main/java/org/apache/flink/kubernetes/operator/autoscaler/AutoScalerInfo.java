@@ -35,16 +35,24 @@ import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import lombok.SneakyThrows;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 /** Class for encapsulating information stored for each resource when using the autoscaler. */
 public class AutoScalerInfo {
@@ -53,11 +61,11 @@ public class AutoScalerInfo {
 
     private static final String LABEL_COMPONENT_AUTOSCALER = "autoscaler";
 
-    private static final String COLLECTED_METRICS_KEY = "collectedMetrics";
-    private static final String SCALING_HISTORY_KEY = "scalingHistory";
-    private static final String JOB_UPDATE_TS_KEY = "jobUpdateTs";
+    protected static final String COLLECTED_METRICS_KEY = "collectedMetrics";
+    protected static final String SCALING_HISTORY_KEY = "scalingHistory";
+    protected static final String JOB_UPDATE_TS_KEY = "jobUpdateTs";
 
-    private static final ObjectMapper YAML_MAPPER =
+    protected static final ObjectMapper YAML_MAPPER =
             new ObjectMapper(new YAMLFactory())
                     .registerModule(new JavaTimeModule())
                     .registerModule(new JobVertexSerDeModule());
@@ -82,14 +90,16 @@ public class AutoScalerInfo {
             return new TreeMap<>();
         }
 
-        return YAML_MAPPER.readValue(historyYaml, new TypeReference<>() {});
+        return YAML_MAPPER.readValue(decompress(historyYaml), new TypeReference<>() {});
     }
 
     @SneakyThrows
     public void updateMetricHistory(
             Instant jobUpdateTs,
             SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> history) {
-        configMap.getData().put(COLLECTED_METRICS_KEY, YAML_MAPPER.writeValueAsString(history));
+        configMap
+                .getData()
+                .put(COLLECTED_METRICS_KEY, compress(YAML_MAPPER.writeValueAsString(history)));
         configMap.getData().put(JOB_UPDATE_TS_KEY, jobUpdateTs.toString());
     }
 
@@ -99,9 +109,7 @@ public class AutoScalerInfo {
         getScalingHistory();
 
         if (scalingHistory.keySet().removeIf(v -> !vertexList.contains(v))) {
-            configMap
-                    .getData()
-                    .put(SCALING_HISTORY_KEY, YAML_MAPPER.writeValueAsString(scalingHistory));
+            storeScalingHistory();
         }
     }
 
@@ -119,7 +127,7 @@ public class AutoScalerInfo {
         if (scalingHistory != null) {
             return scalingHistory;
         }
-        var yaml = configMap.getData().get(SCALING_HISTORY_KEY);
+        var yaml = decompress(configMap.getData().get(SCALING_HISTORY_KEY));
         scalingHistory =
                 yaml == null
                         ? new HashMap<>()
@@ -158,9 +166,13 @@ public class AutoScalerInfo {
             }
         }
 
+        storeScalingHistory();
+    }
+
+    private void storeScalingHistory() throws Exception {
         configMap
                 .getData()
-                .put(SCALING_HISTORY_KEY, YAML_MAPPER.writeValueAsString(scalingHistory));
+                .put(SCALING_HISTORY_KEY, compress(YAML_MAPPER.writeValueAsString(scalingHistory)));
     }
 
     public void replaceInKubernetes(KubernetesClient client) {
@@ -204,5 +216,31 @@ public class AutoScalerInfo {
                         .inNamespace(objectMeta.getNamespace())
                         .withName(objectMeta.getName())
                         .get());
+    }
+
+    private static String compress(String original) throws IOException {
+        ByteArrayOutputStream rstBao = new ByteArrayOutputStream();
+        try (var zos = new GZIPOutputStream(rstBao)) {
+            zos.write(original.getBytes(StandardCharsets.UTF_8));
+        }
+
+        return Base64.getEncoder().encodeToString(rstBao.toByteArray());
+    }
+
+    private static String decompress(String compressed) {
+        if (compressed == null) {
+            return null;
+        }
+
+        try {
+            byte[] bytes = Base64.getDecoder().decode(compressed);
+            try (var zi = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
+                return IOUtils.toString(zi, StandardCharsets.UTF_8);
+            }
+        } catch (Exception e) {
+            LOG.warn("Error while decompressing scaling data, treating as uncompressed");
+            // Fall back to non-compressed for migration
+            return compressed;
+        }
     }
 }

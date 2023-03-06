@@ -263,6 +263,10 @@ public abstract class ScalingMetricCollector {
                             lagGrowthRate,
                             conf);
 
+                    vertexScalingMetrics
+                            .entrySet()
+                            .forEach(e -> e.setValue(ScalingMetrics.roundMetric(e.getValue())));
+
                     LOG.debug(
                             "Vertex scaling metrics for {}: {}", jobVertexID, vertexScalingMetrics);
                 });

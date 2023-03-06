@@ -19,15 +19,21 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -96,5 +102,46 @@ public class AutoScalerInfoTest {
         assertEquals(
                 Set.of(now.plus(Duration.ofSeconds(15))),
                 new AutoScalerInfo(data).getScalingHistory().get(v1).keySet());
+    }
+
+    @Test
+    public void testCompressionMigration() throws JsonProcessingException {
+        var jobUpdateTs = Instant.now();
+        var v1 = new JobVertexID();
+
+        var metricHistory = new TreeMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>>();
+        metricHistory.put(jobUpdateTs, Map.of(v1, Map.of(ScalingMetric.TRUE_PROCESSING_RATE, 1.)));
+
+        var scalingHistory = new HashMap<JobVertexID, SortedMap<Instant, ScalingSummary>>();
+        scalingHistory.put(v1, new TreeMap<>());
+        scalingHistory
+                .get(v1)
+                .put(
+                        jobUpdateTs,
+                        new ScalingSummary(
+                                1, 2, Map.of(ScalingMetric.LAG, EvaluatedScalingMetric.of(2.))));
+
+        // Store uncompressed data in map to simulate migration
+        var data = new HashMap<String, String>();
+        data.put(
+                AutoScalerInfo.COLLECTED_METRICS_KEY,
+                AutoScalerInfo.YAML_MAPPER.writeValueAsString(metricHistory));
+        data.put(AutoScalerInfo.JOB_UPDATE_TS_KEY, jobUpdateTs.toString());
+        data.put(
+                AutoScalerInfo.SCALING_HISTORY_KEY,
+                AutoScalerInfo.YAML_MAPPER.writeValueAsString(scalingHistory));
+
+        var info = new AutoScalerInfo(data);
+        assertEquals(scalingHistory, info.getScalingHistory());
+        assertEquals(metricHistory, info.getMetricHistory());
+
+        // Override with compressed data
+        var newTs = Instant.now();
+        info.updateMetricHistory(newTs, metricHistory);
+        info.addToScalingHistory(newTs, Map.of(), new Configuration());
+
+        // Make sure we can still access everything
+        assertEquals(scalingHistory, info.getScalingHistory());
+        assertEquals(metricHistory, info.getMetricHistory());
     }
 }

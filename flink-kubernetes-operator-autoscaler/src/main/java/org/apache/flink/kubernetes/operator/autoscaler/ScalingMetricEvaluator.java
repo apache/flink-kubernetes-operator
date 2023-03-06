@@ -70,7 +70,7 @@ public class ScalingMetricEvaluator {
         for (var vertex : topology.getVerticesInTopologicalOrder()) {
             scalingOutput.put(
                     vertex,
-                    computeVertexScalingSummary(
+                    evaluateMetrics(
                             conf,
                             scalingOutput,
                             metricsHistory,
@@ -110,7 +110,7 @@ public class ScalingMetricEvaluator {
     }
 
     @NotNull
-    private Map<ScalingMetric, EvaluatedScalingMetric> computeVertexScalingSummary(
+    private Map<ScalingMetric, EvaluatedScalingMetric> evaluateMetrics(
             Configuration conf,
             HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> scalingOutput,
             SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory,

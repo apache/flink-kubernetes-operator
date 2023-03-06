@@ -17,18 +17,21 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler.metrics;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /** Evaluated scaling metric. */
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
 public class EvaluatedScalingMetric {
     private double current;
 
     private double average;
+
+    public EvaluatedScalingMetric(double current, double average) {
+        this.current = ScalingMetrics.roundMetric(current);
+        this.average = ScalingMetrics.roundMetric(average);
+    }
 
     public static EvaluatedScalingMetric of(double value) {
         return new EvaluatedScalingMetric(value, Double.NaN);
