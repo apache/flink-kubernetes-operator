@@ -156,6 +156,8 @@ public class ScalingMetrics {
         var pendingRecords = flinkMetrics.get(FlinkMetric.PENDING_RECORDS);
         if (pendingRecords != null) {
             scalingMetrics.put(ScalingMetric.LAG, pendingRecords.getSum());
+        } else {
+            scalingMetrics.put(ScalingMetric.LAG, 0.);
         }
     }
 }
