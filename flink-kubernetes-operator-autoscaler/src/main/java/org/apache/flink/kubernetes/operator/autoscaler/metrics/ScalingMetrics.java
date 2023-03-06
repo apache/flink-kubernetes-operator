@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
+import org.apache.commons.math3.util.Precision;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -193,5 +194,11 @@ public class ScalingMetrics {
             return EFFECTIVELY_ZERO;
         }
         return number;
+    }
+
+    public static double roundMetric(double value) {
+        double rounded = Precision.round(value, 3);
+        // Never round down to 0, return original value instead
+        return rounded == 0 ? value : rounded;
     }
 }
