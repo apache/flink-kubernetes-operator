@@ -27,9 +27,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
-import java.util.Optional;
-
-import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SOURCE_SCALING_ENABLED;
 
 /** Utilities for computing scaling metrics based on Flink metrics. */
 public class ScalingMetrics {
@@ -65,85 +62,47 @@ public class ScalingMetrics {
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             Map<ScalingMetric, Double> scalingMetrics,
             JobTopology topology,
-            Optional<Double> lagGrowthOpt,
+            double lagGrowthRate,
             Configuration conf) {
 
-        var source = topology.getInputs().get(jobVertexID).isEmpty();
-        var sink = topology.getOutputs().get(jobVertexID).isEmpty();
+        var isSource = topology.getInputs().get(jobVertexID).isEmpty();
+        var isSink = topology.getOutputs().get(jobVertexID).isEmpty();
 
-        var busyTimeAggregator = conf.get(AutoScalerOptions.BUSY_TIME_AGGREGATOR);
-        var busyTimeOpt = busyTimeAggregator.get(flinkMetrics.get(FlinkMetric.BUSY_TIME_PER_SEC));
+        double busyTime = getBusyTime(flinkMetrics, conf, jobVertexID);
+        double busyTimeMultiplier = 1000 / keepAboveZero(busyTime);
 
-        if (busyTimeOpt.isEmpty()) {
-            LOG.error("Cannot compute true processing/output rate without busyTimeMsPerSecond");
-            return;
+        double numRecordsInPerSecond =
+                getNumRecordsInPerSecond(flinkMetrics, jobVertexID, isSource);
+        double outputPerSecond =
+                getNumRecordsOutPerSecond(flinkMetrics, jobVertexID, isSource, isSink);
+
+        if (isSource) {
+            double sourceDataRate = Math.max(0, numRecordsInPerSecond + lagGrowthRate);
+            LOG.info("Using computed source data rate {} for {}", sourceDataRate, jobVertexID);
+            scalingMetrics.put(ScalingMetric.SOURCE_DATA_RATE, sourceDataRate);
+            scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
         }
 
-        Double numRecordsInPerSecond = getNumRecordsInPerSecond(flinkMetrics, jobVertexID);
-        Double outputPerSecond = getNumRecordsOutPerSecond(flinkMetrics, jobVertexID, sink);
-
-        double busyTimeMultiplier = 1000 / keepAboveZero(busyTimeOpt.get());
-
-        if (source && !conf.getBoolean(SOURCE_SCALING_ENABLED)) {
-            double sourceInputRate = numRecordsInPerSecond;
-
-            double targetDataRate;
-            if (!Double.isNaN(sourceInputRate) && sourceInputRate > 0) {
-                targetDataRate = sourceInputRate;
-            } else {
-                // If source in metric is not available (maybe legacy source) we use source
-                // output that should always be available
-                targetDataRate =
-                        flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC).getSum();
+        if (!Double.isNaN(numRecordsInPerSecond)) {
+            double trueProcessingRate = busyTimeMultiplier * numRecordsInPerSecond;
+            if (trueProcessingRate <= 0 || !Double.isFinite(trueProcessingRate)) {
+                trueProcessingRate = Double.NaN;
             }
-            scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, targetDataRate);
-            scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, Double.NaN);
-            scalingMetrics.put(ScalingMetric.OUTPUT_RATIO, outputPerSecond / targetDataRate);
-            var trueOutputRate = busyTimeMultiplier * outputPerSecond;
-            scalingMetrics.put(ScalingMetric.TRUE_OUTPUT_RATE, trueOutputRate);
-            scalingMetrics.put(ScalingMetric.TARGET_DATA_RATE, trueOutputRate);
-            LOG.info(
-                    "Scaling disabled for source {} using output rate {} as target",
-                    jobVertexID,
-                    trueOutputRate);
+            scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, trueProcessingRate);
+            scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
         } else {
-            if (source) {
-                if (!lagGrowthOpt.isPresent() || numRecordsInPerSecond.isNaN()) {
-                    LOG.error(
-                            "Cannot compute source target data rate without numRecordsInPerSecond and pendingRecords (lag) metric for {}.",
-                            jobVertexID);
-                    scalingMetrics.put(ScalingMetric.TARGET_DATA_RATE, Double.NaN);
-                } else {
-                    double sourceDataRate = Math.max(0, numRecordsInPerSecond + lagGrowthOpt.get());
-                    LOG.info(
-                            "Using computed source data rate {} for {}",
-                            sourceDataRate,
-                            jobVertexID);
-                    scalingMetrics.put(ScalingMetric.SOURCE_DATA_RATE, sourceDataRate);
-                }
-            }
+            LOG.error("Cannot compute true processing rate without numRecordsInPerSecond");
+        }
 
-            if (!numRecordsInPerSecond.isNaN()) {
-                double trueProcessingRate = busyTimeMultiplier * numRecordsInPerSecond;
-                if (trueProcessingRate <= 0 || !Double.isFinite(trueProcessingRate)) {
-                    trueProcessingRate = Double.NaN;
-                }
-                scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, trueProcessingRate);
-                scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
+        if (!isSink) {
+            if (!Double.isNaN(outputPerSecond)) {
+                scalingMetrics.put(
+                        ScalingMetric.OUTPUT_RATIO, outputPerSecond / numRecordsInPerSecond);
+                scalingMetrics.put(
+                        ScalingMetric.TRUE_OUTPUT_RATE, busyTimeMultiplier * outputPerSecond);
             } else {
-                LOG.error("Cannot compute true processing rate without numRecordsInPerSecond");
-            }
-
-            if (!sink) {
-                if (!outputPerSecond.isNaN()) {
-                    scalingMetrics.put(
-                            ScalingMetric.OUTPUT_RATIO, outputPerSecond / numRecordsInPerSecond);
-                    scalingMetrics.put(
-                            ScalingMetric.TRUE_OUTPUT_RATE, busyTimeMultiplier * outputPerSecond);
-                } else {
-                    LOG.error(
-                            "Cannot compute processing and input rate without numRecordsOutPerSecond");
-                }
+                LOG.error(
+                        "Cannot compute processing and input rate without numRecordsOutPerSecond");
             }
         }
     }
@@ -159,12 +118,34 @@ public class ScalingMetrics {
         }
     }
 
-    private static Double getNumRecordsInPerSecond(
-            Map<FlinkMetric, AggregatedMetric> flinkMetrics, JobVertexID jobVertexID) {
+    private static double getBusyTime(
+            Map<FlinkMetric, AggregatedMetric> flinkMetrics,
+            Configuration conf,
+            JobVertexID jobVertexId) {
+        var busyTimeAggregator = conf.get(AutoScalerOptions.BUSY_TIME_AGGREGATOR);
+        var busyTime = busyTimeAggregator.get(flinkMetrics.get(FlinkMetric.BUSY_TIME_PER_SEC));
+        if (!Double.isFinite(busyTime)) {
+            LOG.error(
+                    "No busyTimeMsPerSecond metric available for {}. No scaling will be performed for this vertex.",
+                    jobVertexId);
+            // Pretend that the load is balanced because we don't know any better
+            return conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
+        }
+        return busyTime;
+    }
+
+    private static double getNumRecordsInPerSecond(
+            Map<FlinkMetric, AggregatedMetric> flinkMetrics,
+            JobVertexID jobVertexID,
+            boolean isSource) {
         var numRecordsInPerSecond = flinkMetrics.get(FlinkMetric.NUM_RECORDS_IN_PER_SEC);
-        if (numRecordsInPerSecond == null) {
+        if (isSource && (numRecordsInPerSecond == null || numRecordsInPerSecond.getSum() == 0)) {
             numRecordsInPerSecond =
                     flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC);
+        }
+        if (isSource && (numRecordsInPerSecond == null || numRecordsInPerSecond.getSum() == 0)) {
+            numRecordsInPerSecond =
+                    flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC);
         }
         if (numRecordsInPerSecond == null) {
             LOG.warn("Received null input rate for {}. Returning NaN.", jobVertexID);
@@ -173,25 +154,33 @@ public class ScalingMetrics {
         return keepAboveZero(numRecordsInPerSecond.getSum());
     }
 
-    private static Double getNumRecordsOutPerSecond(
+    private static double getNumRecordsOutPerSecond(
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             JobVertexID jobVertexID,
+            boolean isSource,
             boolean isSink) {
-        AggregatedMetric aggregatedMetric = flinkMetrics.get(FlinkMetric.NUM_RECORDS_OUT_PER_SEC);
-        if (aggregatedMetric == null) {
-            if (!isSink) {
-                LOG.warn("Received null output rate for {}. Returning NaN.", jobVertexID);
+        AggregatedMetric numRecordsOutPerSecond =
+                flinkMetrics.get(FlinkMetric.NUM_RECORDS_OUT_PER_SEC);
+        if (numRecordsOutPerSecond == null) {
+            if (isSource) {
+                numRecordsOutPerSecond =
+                        flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC);
             }
-            return Double.NaN;
+            if (numRecordsOutPerSecond == null) {
+                if (!isSink) {
+                    LOG.warn("Received null output rate for {}. Returning NaN.", jobVertexID);
+                }
+                return Double.NaN;
+            }
         }
-        return keepAboveZero(aggregatedMetric.getSum());
+        return keepAboveZero(numRecordsOutPerSecond.getSum());
     }
 
-    private static Double keepAboveZero(Double number) {
-        if (number <= 0) {
-            // Make busy time really tiny but not zero
+    private static double keepAboveZero(double value) {
+        if (value <= 0) {
+            // Make value tiny but not zero
             return EFFECTIVELY_ZERO;
         }
-        return number;
+        return value;
     }
 }

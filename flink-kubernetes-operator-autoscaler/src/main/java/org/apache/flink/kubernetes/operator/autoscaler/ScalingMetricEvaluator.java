@@ -205,11 +205,7 @@ public class ScalingMetricEvaluator {
         if (topology.isSource(vertex)) {
             double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
 
-            var sourceRateMetric =
-                    latestVertexMetrics.containsKey(TARGET_DATA_RATE)
-                            ? TARGET_DATA_RATE
-                            : SOURCE_DATA_RATE;
-            if (!latestVertexMetrics.containsKey(sourceRateMetric)) {
+            if (!latestVertexMetrics.containsKey(SOURCE_DATA_RATE)) {
                 throw new RuntimeException(
                         "Cannot evaluate metrics without source target rate information");
             }
@@ -217,8 +213,8 @@ public class ScalingMetricEvaluator {
             out.put(
                     TARGET_DATA_RATE,
                     new EvaluatedScalingMetric(
-                            latestVertexMetrics.get(sourceRateMetric),
-                            getAverage(sourceRateMetric, vertex, metricsHistory)));
+                            latestVertexMetrics.get(SOURCE_DATA_RATE),
+                            getAverage(SOURCE_DATA_RATE, vertex, metricsHistory)));
 
             double lag = latestVertexMetrics.getOrDefault(LAG, 0.);
             double catchUpInputRate = catchUpTargetSec == 0 ? 0 : lag / catchUpTargetSec;

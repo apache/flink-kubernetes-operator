@@ -59,15 +59,6 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Stabilization period in which no new scaling will be executed");
 
-    public static final ConfigOption<Boolean> SOURCE_SCALING_ENABLED =
-            autoScalerConfig("scaling.sources.enabled")
-                    .booleanType()
-                    .defaultValue(true)
-                    .withDescription(
-                            "Whether to enable scaling source vertices. "
-                                    + "Source vertices set the baseline ingestion rate for the processing based on the backlog size. "
-                                    + "If disabled, only regular job vertices will be scaled and source vertices will be unchanged.");
-
     public static final ConfigOption<Double> TARGET_UTILIZATION =
             autoScalerConfig("target.utilization")
                     .doubleType()
