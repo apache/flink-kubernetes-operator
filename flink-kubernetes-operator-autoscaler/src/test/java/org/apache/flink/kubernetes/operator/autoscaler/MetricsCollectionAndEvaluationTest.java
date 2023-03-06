@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetrics;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.VertexInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -390,6 +391,44 @@ public class MetricsCollectionAndEvaluationTest {
                 evaluation.get(source1).get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD).getCurrent());
         assertEquals(
                 625.,
+                evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
+
+        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
+        var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
+        assertEquals(1, scaledParallelism.get(source1));
+    }
+
+    @Test
+    public void testScaleDownWithZeroProcessingRate() throws Exception {
+        var topology = new JobTopology(new VertexInfo(source1, Set.of(), 10, 720));
+
+        metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector.setCurrentMetrics(
+                Map.of(
+                        // Set source1 metrics without the PENDING_RECORDS metric
+                        source1,
+                        Map.of(
+                                FlinkMetric.BUSY_TIME_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, 0.1, Double.NaN, Double.NaN),
+                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.),
+                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.))));
+
+        var collectedMetrics = collectMetrics();
+
+        Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluation =
+                evaluator.evaluate(conf, collectedMetrics);
+        assertEquals(
+                ScalingMetrics.EFFECTIVELY_ZERO,
+                evaluation.get(source1).get(ScalingMetric.TARGET_DATA_RATE).getCurrent());
+        assertEquals(
+                1E-6, evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getCurrent());
+        assertEquals(
+                0.,
+                evaluation.get(source1).get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD).getCurrent());
+        assertEquals(
+                0.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
 
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);

@@ -36,6 +36,12 @@ public class ScalingMetrics {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetrics.class);
 
+    /**
+     * The minimum value to avoid using zero values which cause side effects like division by zero
+     * or out of bounds (infinitive) floats.
+     */
+    public static final double EFFECTIVELY_ZERO = 1e-10;
+
     public static void computeLoadMetrics(
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             Map<ScalingMetric, Double> scalingMetrics) {
@@ -73,19 +79,13 @@ public class ScalingMetrics {
             return;
         }
 
-        var numRecordsInPerSecond = flinkMetrics.get(FlinkMetric.NUM_RECORDS_IN_PER_SEC);
-        if (numRecordsInPerSecond == null) {
-            numRecordsInPerSecond =
-                    flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC);
-        }
+        Double numRecordsInPerSecond = getNumRecordsInPerSecond(flinkMetrics, jobVertexID);
+        Double outputPerSecond = getNumRecordsOutPerSecond(flinkMetrics, jobVertexID, sink);
 
-        var outputPerSecond = flinkMetrics.get(FlinkMetric.NUM_RECORDS_OUT_PER_SEC);
-
-        double busyTimeMultiplier = 1000 / busyTimeOpt.get();
+        double busyTimeMultiplier = 1000 / keepAboveZero(busyTimeOpt.get());
 
         if (source && !conf.getBoolean(SOURCE_SCALING_ENABLED)) {
-            double sourceInputRate =
-                    numRecordsInPerSecond != null ? numRecordsInPerSecond.getSum() : Double.NaN;
+            double sourceInputRate = numRecordsInPerSecond;
 
             double targetDataRate;
             if (!Double.isNaN(sourceInputRate) && sourceInputRate > 0) {
@@ -97,9 +97,8 @@ public class ScalingMetrics {
                         flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC).getSum();
             }
             scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, Double.NaN);
-            scalingMetrics.put(
-                    ScalingMetric.OUTPUT_RATIO, outputPerSecond.getSum() / targetDataRate);
-            var trueOutputRate = busyTimeMultiplier * outputPerSecond.getSum();
+            scalingMetrics.put(ScalingMetric.OUTPUT_RATIO, outputPerSecond / targetDataRate);
+            var trueOutputRate = busyTimeMultiplier * outputPerSecond;
             scalingMetrics.put(ScalingMetric.TRUE_OUTPUT_RATE, trueOutputRate);
             scalingMetrics.put(ScalingMetric.TARGET_DATA_RATE, trueOutputRate);
             LOG.info(
@@ -108,14 +107,13 @@ public class ScalingMetrics {
                     trueOutputRate);
         } else {
             if (source) {
-                if (!lagGrowthOpt.isPresent() || numRecordsInPerSecond.getSum().isNaN()) {
+                if (!lagGrowthOpt.isPresent() || numRecordsInPerSecond.isNaN()) {
                     LOG.error(
                             "Cannot compute source target data rate without numRecordsInPerSecond and pendingRecords (lag) metric for {}.",
                             jobVertexID);
                     scalingMetrics.put(ScalingMetric.TARGET_DATA_RATE, Double.NaN);
                 } else {
-                    double sourceDataRate =
-                            Math.max(0, numRecordsInPerSecond.getSum() + lagGrowthOpt.get());
+                    double sourceDataRate = Math.max(0, numRecordsInPerSecond + lagGrowthOpt.get());
                     LOG.info(
                             "Using computed source data rate {} for {}",
                             sourceDataRate,
@@ -124,8 +122,8 @@ public class ScalingMetrics {
                 }
             }
 
-            if (!numRecordsInPerSecond.getSum().isNaN()) {
-                double trueProcessingRate = busyTimeMultiplier * numRecordsInPerSecond.getSum();
+            if (!numRecordsInPerSecond.isNaN()) {
+                double trueProcessingRate = busyTimeMultiplier * numRecordsInPerSecond;
                 if (trueProcessingRate <= 0 || !Double.isFinite(trueProcessingRate)) {
                     trueProcessingRate = Double.NaN;
                 }
@@ -135,13 +133,11 @@ public class ScalingMetrics {
             }
 
             if (!sink) {
-                if (!outputPerSecond.getSum().isNaN()) {
+                if (!outputPerSecond.isNaN()) {
                     scalingMetrics.put(
-                            ScalingMetric.OUTPUT_RATIO,
-                            outputPerSecond.getSum() / numRecordsInPerSecond.getSum());
+                            ScalingMetric.OUTPUT_RATIO, outputPerSecond / numRecordsInPerSecond);
                     scalingMetrics.put(
-                            ScalingMetric.TRUE_OUTPUT_RATE,
-                            busyTimeMultiplier * outputPerSecond.getSum());
+                            ScalingMetric.TRUE_OUTPUT_RATE, busyTimeMultiplier * outputPerSecond);
                 } else {
                     LOG.error(
                             "Cannot compute processing and input rate without numRecordsOutPerSecond");
@@ -159,5 +155,41 @@ public class ScalingMetrics {
         } else {
             scalingMetrics.put(ScalingMetric.LAG, 0.);
         }
+    }
+
+    private static Double getNumRecordsInPerSecond(
+            Map<FlinkMetric, AggregatedMetric> flinkMetrics, JobVertexID jobVertexID) {
+        var numRecordsInPerSecond = flinkMetrics.get(FlinkMetric.NUM_RECORDS_IN_PER_SEC);
+        if (numRecordsInPerSecond == null) {
+            numRecordsInPerSecond =
+                    flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC);
+        }
+        if (numRecordsInPerSecond == null) {
+            LOG.warn("Received null input rate for {}. Returning NaN.", jobVertexID);
+            return Double.NaN;
+        }
+        return keepAboveZero(numRecordsInPerSecond.getSum());
+    }
+
+    private static Double getNumRecordsOutPerSecond(
+            Map<FlinkMetric, AggregatedMetric> flinkMetrics,
+            JobVertexID jobVertexID,
+            boolean isSink) {
+        AggregatedMetric aggregatedMetric = flinkMetrics.get(FlinkMetric.NUM_RECORDS_OUT_PER_SEC);
+        if (aggregatedMetric == null) {
+            if (!isSink) {
+                LOG.warn("Received null output rate for {}. Returning NaN.", jobVertexID);
+            }
+            return Double.NaN;
+        }
+        return keepAboveZero(aggregatedMetric.getSum());
+    }
+
+    private static Double keepAboveZero(Double number) {
+        if (number <= 0) {
+            // Make busy time really tiny but not zero
+            return EFFECTIVELY_ZERO;
+        }
+        return number;
     }
 }

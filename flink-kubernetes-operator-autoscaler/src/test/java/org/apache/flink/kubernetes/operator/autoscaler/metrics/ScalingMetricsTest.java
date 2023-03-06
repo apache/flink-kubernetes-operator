@@ -203,4 +203,85 @@ public class ScalingMetricsTest {
         assertEquals(0.2, scalingMetrics.get(ScalingMetric.LOAD_MAX));
         assertEquals(0.1, scalingMetrics.get(ScalingMetric.LOAD_AVG));
     }
+
+    @Test
+    public void testZeroValuesForBusyness() {
+        double dataRate = 10;
+        Map<ScalingMetric, Double> scalingMetrics = testZeroValuesForRatesOrBusyness(dataRate, 0);
+        assertEquals(
+                Map.of(
+                        ScalingMetric.TRUE_PROCESSING_RATE,
+                        1.0E14,
+                        ScalingMetric.TRUE_OUTPUT_RATE,
+                        1.0E14,
+                        ScalingMetric.OUTPUT_RATIO,
+                        1.,
+                        ScalingMetric.SOURCE_DATA_RATE,
+                        dataRate),
+                scalingMetrics);
+    }
+
+    @Test
+    public void testZeroValuesForRates() {
+        double busyMillisecondPerSec = 100;
+        Map<ScalingMetric, Double> scalingMetrics =
+                testZeroValuesForRatesOrBusyness(0, busyMillisecondPerSec);
+        assertEquals(
+                Map.of(
+                        ScalingMetric.TRUE_PROCESSING_RATE,
+                        1.0E-9,
+                        ScalingMetric.TRUE_OUTPUT_RATE,
+                        1.0E-9,
+                        ScalingMetric.OUTPUT_RATIO,
+                        1.,
+                        ScalingMetric.SOURCE_DATA_RATE,
+                        ScalingMetrics.EFFECTIVELY_ZERO),
+                scalingMetrics);
+    }
+
+    @Test
+    public void testZeroValuesForRateAndBusyness() {
+        Map<ScalingMetric, Double> scalingMetrics = testZeroValuesForRatesOrBusyness(0, 0);
+        assertEquals(
+                Map.of(
+                        ScalingMetric.TRUE_PROCESSING_RATE,
+                        1000.0,
+                        ScalingMetric.TRUE_OUTPUT_RATE,
+                        1000.0,
+                        ScalingMetric.OUTPUT_RATIO,
+                        1.,
+                        ScalingMetric.SOURCE_DATA_RATE,
+                        ScalingMetrics.EFFECTIVELY_ZERO),
+                scalingMetrics);
+    }
+
+    private static Map<ScalingMetric, Double> testZeroValuesForRatesOrBusyness(
+            double rate, double busyness) {
+        var source = new JobVertexID();
+        var op = new JobVertexID();
+        var sink = new JobVertexID();
+
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Collections.emptySet(), 1, 1),
+                        new VertexInfo(op, Set.of(source), 1, 1),
+                        new VertexInfo(sink, Set.of(op), 1, 1));
+
+        Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
+        ScalingMetrics.computeDataRateMetrics(
+                source,
+                Map.of(
+                        FlinkMetric.BUSY_TIME_PER_SEC,
+                        new AggregatedMetric("", Double.NaN, busyness, Double.NaN, Double.NaN),
+                        FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, rate),
+                        FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
+                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, rate)),
+                scalingMetrics,
+                topology,
+                Optional.of(0.),
+                new Configuration());
+
+        return scalingMetrics;
+    }
 }
