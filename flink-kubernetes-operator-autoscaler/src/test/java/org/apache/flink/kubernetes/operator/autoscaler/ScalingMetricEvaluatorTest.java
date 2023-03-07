@@ -42,6 +42,7 @@ import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerO
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CURRENT_PROCESSING_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.LAG;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.OUTPUT_RATIO;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
@@ -51,6 +52,8 @@ import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMet
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TRUE_OUTPUT_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Scaling evaluator test. */
 public class ScalingMetricEvaluatorTest {
@@ -210,16 +213,99 @@ public class ScalingMetricEvaluatorTest {
         conf.set(CATCH_UP_DURATION, Duration.ofSeconds(2));
         assertEquals(Tuple2.of(1128.0, 1700.0), getThresholds(700, 350, conf));
         assertEquals(Tuple2.of(778.0, 1350.0), getThresholds(700, 0, conf));
+
+        // Test thresholds during catchup periods
+        assertEquals(
+                Tuple2.of(1050., Double.POSITIVE_INFINITY), getThresholds(700, 350, conf, true));
+        assertEquals(Tuple2.of(700., Double.POSITIVE_INFINITY), getThresholds(700, 0, conf, true));
+    }
+
+    @Test
+    public void testBacklogProcessingEvaluation() {
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+        var conf = new Configuration();
+
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Collections.emptySet(), 1, 1),
+                        new VertexInfo(sink, Set.of(source), 1, 1));
+
+        var metricHistory = new TreeMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>>();
+
+        // 0 lag
+        metricHistory.put(
+                Instant.now(),
+                Map.of(
+                        source,
+                        Map.of(LAG, 0., CURRENT_PROCESSING_RATE, 100.),
+                        sink,
+                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+        assertFalse(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
+
+        // Missing lag
+        metricHistory.clear();
+        metricHistory.put(
+                Instant.now(),
+                Map.of(
+                        source,
+                        Map.of(CURRENT_PROCESSING_RATE, 100.),
+                        sink,
+                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+
+        assertFalse(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
+
+        // Catch up time is more than a minute at avg proc rate (200)
+        metricHistory.put(
+                Instant.now(),
+                Map.of(
+                        source,
+                        Map.of(
+                                LAG,
+                                250.
+                                        * conf.get(
+                                                        AutoScalerOptions
+                                                                .BACKLOG_PROCESSING_LAG_THRESHOLD)
+                                                .toSeconds(),
+                                CURRENT_PROCESSING_RATE,
+                                300.),
+                        sink,
+                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+
+        assertTrue(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
+
+        // Catch up time is less than a minute at avg proc rate (200)
+        metricHistory.put(
+                Instant.now(),
+                Map.of(
+                        source,
+                        Map.of(
+                                LAG,
+                                180.
+                                        * conf.get(
+                                                        AutoScalerOptions
+                                                                .BACKLOG_PROCESSING_LAG_THRESHOLD)
+                                                .toSeconds(),
+                                CURRENT_PROCESSING_RATE,
+                                200.),
+                        sink,
+                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+        assertFalse(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
     }
 
     private Tuple2<Double, Double> getThresholds(
             double inputTargetRate, double catchUpRate, Configuration conf) {
+        return getThresholds(inputTargetRate, catchUpRate, conf, false);
+    }
+
+    private Tuple2<Double, Double> getThresholds(
+            double inputTargetRate, double catchUpRate, Configuration conf, boolean catchingUp) {
         var map = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
 
         map.put(TARGET_DATA_RATE, new EvaluatedScalingMetric(Double.NaN, inputTargetRate));
         map.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchUpRate));
 
-        ScalingMetricEvaluator.computeProcessingRateThresholds(map, conf);
+        ScalingMetricEvaluator.computeProcessingRateThresholds(map, conf, catchingUp);
         return Tuple2.of(
                 map.get(SCALE_UP_RATE_THRESHOLD).getCurrent(),
                 map.get(SCALE_DOWN_RATE_THRESHOLD).getCurrent());

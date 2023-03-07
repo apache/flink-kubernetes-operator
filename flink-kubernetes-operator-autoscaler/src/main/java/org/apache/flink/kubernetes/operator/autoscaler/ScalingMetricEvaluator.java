@@ -26,22 +26,22 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 import org.apache.flink.kubernetes.operator.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.util.Preconditions;
 
 import org.apache.commons.math3.stat.StatUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedMap;
 
+import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CURRENT_PROCESSING_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.LAG;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.OUTPUT_RATIO;
@@ -58,8 +58,6 @@ public class ScalingMetricEvaluator {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricEvaluator.class);
 
-    private Clock clock = Clock.systemDefaultZone();
-
     public Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluate(
             Configuration conf, CollectedMetrics collectedMetrics) {
 
@@ -67,14 +65,48 @@ public class ScalingMetricEvaluator {
         var metricsHistory = collectedMetrics.getMetricHistory();
         var topology = collectedMetrics.getJobTopology();
 
+        boolean processingBacklog = isProcessingBacklog(topology, metricsHistory, conf);
+
         for (var vertex : topology.getVerticesInTopologicalOrder()) {
             scalingOutput.put(
                     vertex,
                     computeVertexScalingSummary(
-                            conf, scalingOutput, metricsHistory, topology, vertex));
+                            conf,
+                            scalingOutput,
+                            metricsHistory,
+                            topology,
+                            vertex,
+                            processingBacklog));
         }
 
         return scalingOutput;
+    }
+
+    @VisibleForTesting
+    protected static boolean isProcessingBacklog(
+            JobTopology topology,
+            SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory,
+            Configuration conf) {
+        var lastMetrics = metricsHistory.get(metricsHistory.lastKey());
+        return topology.getVerticesInTopologicalOrder().stream()
+                .filter(topology::isSource)
+                .anyMatch(
+                        vertex -> {
+                            double lag = lastMetrics.get(vertex).getOrDefault(LAG, 0.0);
+                            double avgProcRate =
+                                    getAverage(CURRENT_PROCESSING_RATE, vertex, metricsHistory);
+                            if (Double.isNaN(avgProcRate)) {
+                                return false;
+                            }
+                            double lagSeconds = lag / avgProcRate;
+                            if (lagSeconds
+                                    > conf.get(BACKLOG_PROCESSING_LAG_THRESHOLD).toSeconds()) {
+                                LOG.info("Currently processing backlog at source {}", vertex);
+                                return true;
+                            } else {
+                                return false;
+                            }
+                        });
     }
 
     @NotNull
@@ -83,7 +115,8 @@ public class ScalingMetricEvaluator {
             HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> scalingOutput,
             SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory,
             JobTopology topology,
-            JobVertexID vertex) {
+            JobVertexID vertex,
+            boolean processingBacklog) {
 
         var latestVertexMetrics = metricsHistory.get(metricsHistory.lastKey()).get(vertex);
 
@@ -109,7 +142,7 @@ public class ScalingMetricEvaluator {
                 MAX_PARALLELISM,
                 EvaluatedScalingMetric.of(topology.getMaxParallelisms().get(vertex)));
 
-        computeProcessingRateThresholds(evaluatedMetrics, conf);
+        computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog);
 
         var isSink = topology.getOutputs().get(vertex).isEmpty();
         if (!isSink) {
@@ -130,17 +163,31 @@ public class ScalingMetricEvaluator {
 
     @VisibleForTesting
     protected static void computeProcessingRateThresholds(
-            Map<ScalingMetric, EvaluatedScalingMetric> metrics, Configuration conf) {
+            Map<ScalingMetric, EvaluatedScalingMetric> metrics,
+            Configuration conf,
+            boolean processingBacklog) {
 
         double utilizationBoundary = conf.getDouble(TARGET_UTILIZATION_BOUNDARY);
+        double targetUtilization = conf.get(TARGET_UTILIZATION);
+
+        double upperUtilization;
+        double lowerUtilization;
+
+        if (processingBacklog) {
+            // When we are processing backlog we allow max utilization and we do not trigger scale
+            // down on under utilization to avoid creating more lag.
+            upperUtilization = 1.0;
+            lowerUtilization = 0.0;
+        } else {
+            upperUtilization = targetUtilization + utilizationBoundary;
+            lowerUtilization = targetUtilization - utilizationBoundary;
+        }
 
         double scaleUpThreshold =
-                AutoScalerUtils.getTargetProcessingCapacity(
-                        metrics, conf, conf.get(TARGET_UTILIZATION) + utilizationBoundary, false);
+                AutoScalerUtils.getTargetProcessingCapacity(metrics, conf, upperUtilization, false);
 
         double scaleDownThreshold =
-                AutoScalerUtils.getTargetProcessingCapacity(
-                        metrics, conf, conf.get(TARGET_UTILIZATION) - utilizationBoundary, true);
+                AutoScalerUtils.getTargetProcessingCapacity(metrics, conf, lowerUtilization, true);
 
         metrics.put(SCALE_UP_RATE_THRESHOLD, EvaluatedScalingMetric.of(scaleUpThreshold));
         metrics.put(SCALE_DOWN_RATE_THRESHOLD, EvaluatedScalingMetric.of(scaleDownThreshold));
@@ -155,8 +202,7 @@ public class ScalingMetricEvaluator {
             Map<ScalingMetric, Double> latestVertexMetrics,
             Map<ScalingMetric, EvaluatedScalingMetric> out) {
 
-        boolean isSource = topology.getInputs().get(vertex).isEmpty();
-        if (isSource) {
+        if (topology.isSource(vertex)) {
             double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
 
             var sourceRateMetric =
@@ -205,7 +251,7 @@ public class ScalingMetricEvaluator {
         }
     }
 
-    private double getAverage(
+    private static double getAverage(
             ScalingMetric metric,
             JobVertexID jobVertexId,
             SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory) {
@@ -216,10 +262,5 @@ public class ScalingMetricEvaluator {
                         .mapToDouble(m -> m.get(metric))
                         .filter(d -> !Double.isNaN(d))
                         .toArray());
-    }
-
-    @VisibleForTesting
-    protected void setClock(Clock clock) {
-        this.clock = Preconditions.checkNotNull(clock);
     }
 }

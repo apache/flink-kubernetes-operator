@@ -35,6 +35,9 @@ public enum ScalingMetric {
     /** Output rate at full capacity (records/sec). */
     TRUE_OUTPUT_RATE(true),
 
+    /** Current processing rate. */
+    CURRENT_PROCESSING_RATE(true),
+
     /**
      * Incoming data rate to the source, e.g. rate of records written to the Kafka topic
      * (records/sec).

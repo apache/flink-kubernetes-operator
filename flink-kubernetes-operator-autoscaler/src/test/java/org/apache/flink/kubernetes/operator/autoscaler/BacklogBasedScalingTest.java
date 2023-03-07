@@ -337,7 +337,6 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
     private void setClocksTo(Instant time) {
         var clock = Clock.fixed(time, ZoneId.systemDefault());
         metricsCollector.setClock(clock);
-        evaluator.setClock(clock);
         scalingExecutor.setClock(clock);
     }
 

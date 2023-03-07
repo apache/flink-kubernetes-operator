@@ -252,7 +252,7 @@ public class ScalingExecutorTest {
         metrics.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchupRate));
         metrics.put(
                 ScalingMetric.TRUE_PROCESSING_RATE, new EvaluatedScalingMetric(procRate, procRate));
-        ScalingMetricEvaluator.computeProcessingRateThresholds(metrics, conf);
+        ScalingMetricEvaluator.computeProcessingRateThresholds(metrics, conf, false);
         return metrics;
     }
 
