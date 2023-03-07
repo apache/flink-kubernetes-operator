@@ -31,11 +31,14 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for AutoScalerInfo. */
 public class AutoScalerInfoTest {
@@ -143,5 +146,55 @@ public class AutoScalerInfoTest {
         // Make sure we can still access everything
         assertEquals(scalingHistory, info.getScalingHistory());
         assertEquals(metricHistory, info.getMetricHistory());
+    }
+
+    @Test
+    public void testMetricsTrimming() throws Exception {
+        var v1 = new JobVertexID();
+        Random rnd = new Random();
+
+        var metricHistory = new TreeMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>>();
+        for (int i = 0; i < 50; i++) {
+            var m = new HashMap<JobVertexID, Map<ScalingMetric, Double>>();
+            for (int j = 0; j < 500; j++) {
+                m.put(
+                        new JobVertexID(),
+                        Map.of(ScalingMetric.TRUE_PROCESSING_RATE, rnd.nextDouble()));
+            }
+            metricHistory.put(Instant.now(), m);
+        }
+
+        var scalingHistory = new HashMap<JobVertexID, SortedMap<Instant, ScalingSummary>>();
+        scalingHistory.put(v1, new TreeMap<>());
+        scalingHistory
+                .get(v1)
+                .put(
+                        Instant.now(),
+                        new ScalingSummary(
+                                1, 2, Map.of(ScalingMetric.LAG, EvaluatedScalingMetric.of(2.))));
+
+        var data = new HashMap<String, String>();
+        var info = new AutoScalerInfo(data);
+
+        info.addToScalingHistory(
+                Instant.now(),
+                Map.of(
+                        v1,
+                        new ScalingSummary(
+                                1, 2, Map.of(ScalingMetric.LAG, EvaluatedScalingMetric.of(2.)))),
+                new Configuration());
+
+        info.updateMetricHistory(Instant.now(), metricHistory);
+
+        assertFalse(
+                data.get(AutoScalerInfo.COLLECTED_METRICS_KEY).length()
+                                + data.get(AutoScalerInfo.SCALING_HISTORY_KEY).length()
+                        < AutoScalerInfo.MAX_CM_BYTES);
+
+        info.trimHistoryToMaxCmSize();
+        assertTrue(
+                data.get(AutoScalerInfo.COLLECTED_METRICS_KEY).length()
+                                + data.get(AutoScalerInfo.SCALING_HISTORY_KEY).length()
+                        < AutoScalerInfo.MAX_CM_BYTES);
     }
 }
