@@ -38,6 +38,7 @@ import lombok.SneakyThrows;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.yaml.snakeyaml.LoaderOptions;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -65,8 +66,10 @@ public class AutoScalerInfo {
     protected static final String SCALING_HISTORY_KEY = "scalingHistory";
     protected static final String JOB_UPDATE_TS_KEY = "jobUpdateTs";
 
+    protected static final int MAX_CM_BYTES = 1000000;
+
     protected static final ObjectMapper YAML_MAPPER =
-            new ObjectMapper(new YAMLFactory())
+            new ObjectMapper(yamlFactory())
                     .registerModule(new JavaTimeModule())
                     .registerModule(new JobVertexSerDeModule());
 
@@ -97,6 +100,7 @@ public class AutoScalerInfo {
     public void updateMetricHistory(
             Instant jobUpdateTs,
             SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> history) {
+
         configMap
                 .getData()
                 .put(COLLECTED_METRICS_KEY, compress(YAML_MAPPER.writeValueAsString(history)));
@@ -175,8 +179,33 @@ public class AutoScalerInfo {
                 .put(SCALING_HISTORY_KEY, compress(YAML_MAPPER.writeValueAsString(scalingHistory)));
     }
 
-    public void replaceInKubernetes(KubernetesClient client) {
+    public void replaceInKubernetes(KubernetesClient client) throws Exception {
+        trimHistoryToMaxCmSize();
         client.resource(configMap).replace();
+    }
+
+    @VisibleForTesting
+    protected void trimHistoryToMaxCmSize() throws Exception {
+        var data = configMap.getData();
+
+        int scalingHistorySize = data.getOrDefault(SCALING_HISTORY_KEY, "").length();
+        int metricHistorySize = data.getOrDefault(COLLECTED_METRICS_KEY, "").length();
+
+        SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricHistory = null;
+        while (scalingHistorySize + metricHistorySize > MAX_CM_BYTES) {
+            if (metricHistory == null) {
+                metricHistory = getMetricHistory();
+            }
+            if (metricHistory.isEmpty()) {
+                return;
+            }
+            var firstKey = metricHistory.firstKey();
+            LOG.info("Trimming metric history by removing {}", firstKey);
+            metricHistory.remove(firstKey);
+            String compressed = compress(YAML_MAPPER.writeValueAsString(metricHistory));
+            data.put(COLLECTED_METRICS_KEY, compressed);
+            metricHistorySize = compressed.length();
+        }
     }
 
     public static AutoScalerInfo forResource(
@@ -242,5 +271,12 @@ public class AutoScalerInfo {
             // Fall back to non-compressed for migration
             return compressed;
         }
+    }
+
+    private static YAMLFactory yamlFactory() {
+        // Set yaml size limit to 10mb
+        var loaderOptions = new LoaderOptions();
+        loaderOptions.setCodePointLimit(20 * 1024 * 1024);
+        return YAMLFactory.builder().loaderOptions(loaderOptions).build();
     }
 }
