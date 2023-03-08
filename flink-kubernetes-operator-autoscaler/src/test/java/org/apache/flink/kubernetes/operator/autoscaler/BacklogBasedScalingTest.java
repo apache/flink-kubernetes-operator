@@ -324,6 +324,30 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         assertEquals(2, scaledParallelism.get(sink));
     }
 
+    @Test
+    public void testMetricsPersistedAfterRedeploy() {
+        var ctx = createAutoscalerTestContext();
+        var now = Instant.ofEpochMilli(0);
+        setClocksTo(now);
+        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
+        metricsCollector.setCurrentMetrics(
+                Map.of(
+                        source1,
+                        Map.of(
+                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
+                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.)),
+                        sink,
+                        Map.of(
+                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                                new AggregatedMetric(
+                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
+
+        autoscaler.scale(getResourceContext(app, ctx));
+        assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
+    }
+
     private void redeployJob(Instant now) {
         // Offset the update time by one metrics window to simulate collecting one entire window
         app.getStatus()

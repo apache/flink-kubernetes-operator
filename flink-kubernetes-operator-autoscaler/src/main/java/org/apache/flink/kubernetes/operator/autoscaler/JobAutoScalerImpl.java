@@ -99,6 +99,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                             resource, autoScalerInfo, ctx.getFlinkService(), conf);
 
             if (collectedMetrics.getMetricHistory().isEmpty()) {
+                autoScalerInfo.replaceInKubernetes(kubernetesClient);
                 return false;
             }
 
