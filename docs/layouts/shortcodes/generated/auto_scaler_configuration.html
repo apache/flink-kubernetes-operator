@@ -87,12 +87,6 @@
             <td>Enable vertex scaling execution by the autoscaler. If disabled, the autoscaler will only collect metrics and evaluate the suggested parallelism for each vertex but will not upgrade the jobs.</td>
         </tr>
         <tr>
-            <td><h5>kubernetes.operator.job.autoscaler.scaling.sources.enabled</h5></td>
-            <td style="word-wrap: break-word;">true</td>
-            <td>Boolean</td>
-            <td>Whether to enable scaling source vertices. Source vertices set the baseline ingestion rate for the processing based on the backlog size. If disabled, only regular job vertices will be scaled and source vertices will be unchanged.</td>
-        </tr>
-        <tr>
             <td><h5>kubernetes.operator.job.autoscaler.stabilization.interval</h5></td>
             <td style="word-wrap: break-word;">5 min</td>
             <td>Duration</td>

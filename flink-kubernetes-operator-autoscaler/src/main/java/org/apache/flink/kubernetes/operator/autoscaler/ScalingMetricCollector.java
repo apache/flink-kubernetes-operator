@@ -42,7 +42,6 @@ import org.apache.flink.util.Preconditions;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.SneakyThrows;
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,8 +59,6 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
-
-import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SOURCE_SCALING_ENABLED;
 
 /** Metric collector using flink rest api. */
 public abstract class ScalingMetricCollector {
@@ -249,7 +246,7 @@ public abstract class ScalingMetricCollector {
                     }
                     ScalingMetrics.computeLoadMetrics(vertexFlinkMetrics, vertexScalingMetrics);
 
-                    Optional<Double> lagGrowthRate =
+                    double lagGrowthRate =
                             computeLagGrowthRate(
                                     resourceID,
                                     jobVertexID,
@@ -274,30 +271,29 @@ public abstract class ScalingMetricCollector {
         return out;
     }
 
-    @NotNull
-    private Optional<Double> computeLagGrowthRate(
+    private double computeLagGrowthRate(
             ResourceID resourceID, JobVertexID jobVertexID, Double currentLag) {
         var metricHistory = histories.get(resourceID);
 
         if (metricHistory == null || metricHistory.isEmpty()) {
-            return Optional.empty();
+            return Double.NaN;
         }
 
         var lastCollectionTime = metricHistory.lastKey();
         var lastCollectedMetrics = metricHistory.get(lastCollectionTime).get(jobVertexID);
 
         if (lastCollectedMetrics == null) {
-            return Optional.empty();
+            return Double.NaN;
         }
 
         var lastLag = lastCollectedMetrics.get(ScalingMetric.LAG);
 
         if (lastLag == null || currentLag == null) {
-            return Optional.empty();
+            return Double.NaN;
         }
 
         var timeDiff = Duration.between(lastCollectionTime, clock.instant()).toSeconds();
-        return Optional.of((currentLag - lastLag) / timeDiff);
+        return (currentLag - lastLag) / timeDiff;
     }
 
     /** Query the available metric names for each job vertex for the current spec generation. */
@@ -373,20 +369,25 @@ public abstract class ScalingMetricCollector {
 
         if (topology.isSource(jobVertexID)) {
             requiredMetrics.add(FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC);
-            if (conf.getBoolean(SOURCE_SCALING_ENABLED)) {
-                requiredMetrics.add(FlinkMetric.PENDING_RECORDS);
-            } else {
-                FlinkMetric.PENDING_RECORDS
-                        .findAny(allMetricNames)
-                        .ifPresent(m -> filteredMetrics.put(m, FlinkMetric.PENDING_RECORDS));
-                FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC
-                        .findAny(allMetricNames)
-                        .ifPresent(
-                                m ->
-                                        filteredMetrics.put(
-                                                m,
-                                                FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC));
-            }
+            // Pending records metric won't be available for some sources.
+            // The Kafka source, for instance, lazily initializes this metric on receiving
+            // the first record. If this is a fresh topic or no new data has been read since
+            // the last checkpoint, the pendingRecords metrics won't be available. Also, legacy
+            // sources do not have this metric.
+            Optional<String> pendingRecordsMetric =
+                    FlinkMetric.PENDING_RECORDS.findAny(allMetricNames);
+            pendingRecordsMetric.ifPresentOrElse(
+                    m -> filteredMetrics.put(m, FlinkMetric.PENDING_RECORDS),
+                    () ->
+                            LOG.warn(
+                                    "pendingRecords metric for {} could not be found. Either a legacy source or an idle source. Assuming no pending records.",
+                                    jobVertexID));
+            FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC
+                    .findAny(allMetricNames)
+                    .ifPresent(
+                            m ->
+                                    filteredMetrics.put(
+                                            m, FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC));
         } else {
             // Not a source so we must have numRecordsInPerSecond
             requiredMetrics.add(FlinkMetric.NUM_RECORDS_IN_PER_SEC);
@@ -402,14 +403,6 @@ public abstract class ScalingMetricCollector {
             if (flinkMetricName.isPresent()) {
                 // Add actual Flink metric name to list
                 filteredMetrics.put(flinkMetricName.get(), flinkMetric);
-            } else if (flinkMetric == FlinkMetric.PENDING_RECORDS) {
-                // Pending records metric won't be available for some sources.
-                // The Kafka source, for instance, lazily initializes this metric on receiving
-                // the first record. If this is a fresh topic or no new data has been read since
-                // the last checkpoint, the pendingRecords metrics won't be available.
-                LOG.warn(
-                        "pendingRecords metric for {} could not be found. This usually means the source hasn't read data. Assuming 0 pending records.",
-                        jobVertexID);
             } else {
                 throw new RuntimeException(
                         "Could not find required metric "

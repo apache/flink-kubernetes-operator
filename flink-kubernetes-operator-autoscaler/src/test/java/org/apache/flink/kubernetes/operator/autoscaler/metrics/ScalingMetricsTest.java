@@ -29,10 +29,10 @@ import org.junit.jupiter.api.Test;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for scaling metrics computation logic. */
 public class ScalingMetricsTest {
@@ -61,7 +61,7 @@ public class ScalingMetricsTest {
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 2000.)),
                 scalingMetrics,
                 topology,
-                Optional.of(15.),
+                15.,
                 new Configuration());
 
         assertEquals(
@@ -91,7 +91,7 @@ public class ScalingMetricsTest {
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 2000.)),
                 scalingMetrics,
                 topology,
-                Optional.of(-50.),
+                -50.,
                 new Configuration());
 
         assertEquals(
@@ -120,7 +120,7 @@ public class ScalingMetricsTest {
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 2000.)),
                 scalingMetrics,
                 topology,
-                Optional.empty(),
+                0.,
                 new Configuration());
 
         assertEquals(
@@ -150,7 +150,7 @@ public class ScalingMetricsTest {
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 2000.)),
                 scalingMetrics,
                 topology,
-                Optional.empty(),
+                0.,
                 conf);
 
         assertEquals(
@@ -167,35 +167,43 @@ public class ScalingMetricsTest {
     }
 
     @Test
-    public void testSourceScalingDisabled() {
+    public void testLegacySourceScaling() {
         var source = new JobVertexID();
+        var sink = new JobVertexID();
 
-        var topology = new JobTopology(new VertexInfo(source, Collections.emptySet(), 1, 1));
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Collections.emptySet(), 5, 1),
+                        new VertexInfo(sink, Collections.singleton(source), 10, 100));
 
         Configuration conf = new Configuration();
-        // Disable scaling sources
-        conf.setBoolean(AutoScalerOptions.SOURCE_SCALING_ENABLED, false);
 
         Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
         ScalingMetrics.computeDataRateMetrics(
                 source,
                 Map.of(
+                        // Busy time is NaN for legacy sources
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, 500., Double.NaN, Double.NaN),
+                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, Double.NaN),
                         FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 2000.),
                         FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 4000.)),
                 scalingMetrics,
                 topology,
-                Optional.empty(),
+                0.,
                 conf);
 
-        // Sources are not scaled, the rates are solely computed on the basis of the true output
-        // rate
-        assertEquals(Double.NaN, scalingMetrics.get(ScalingMetric.TRUE_PROCESSING_RATE));
-        assertEquals(8000, scalingMetrics.get(ScalingMetric.TARGET_DATA_RATE));
-        assertEquals(8000, scalingMetrics.get(ScalingMetric.TRUE_OUTPUT_RATE));
+        // Make sure vertex won't be scaled
+        assertTrue(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS).contains(source.toHexString()));
+        // Legacy source rates are computed based on the current rate and a balanced utilization
+        assertEquals(
+                2000 / conf.get(AutoScalerOptions.TARGET_UTILIZATION),
+                scalingMetrics.get(ScalingMetric.TRUE_PROCESSING_RATE));
+        assertEquals(2000, scalingMetrics.get(ScalingMetric.SOURCE_DATA_RATE));
+        assertEquals(
+                scalingMetrics.get(ScalingMetric.TRUE_PROCESSING_RATE) * 2,
+                scalingMetrics.get(ScalingMetric.TRUE_OUTPUT_RATE));
         assertEquals(2, scalingMetrics.get(ScalingMetric.OUTPUT_RATIO));
     }
 
@@ -287,13 +295,13 @@ public class ScalingMetricsTest {
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
                         new AggregatedMetric("", Double.NaN, busyness, Double.NaN, Double.NaN),
-                        FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                        FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, rate),
                         FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                         new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, rate)),
                 scalingMetrics,
                 topology,
-                Optional.of(0.),
+                0.,
                 new Configuration());
 
         return scalingMetrics;

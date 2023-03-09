@@ -409,7 +409,7 @@ public class MetricsCollectionAndEvaluationTest {
                                 new AggregatedMetric("", Double.NaN, 0.1, Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                                FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.))));
 
         var collectedMetrics = collectMetrics();
