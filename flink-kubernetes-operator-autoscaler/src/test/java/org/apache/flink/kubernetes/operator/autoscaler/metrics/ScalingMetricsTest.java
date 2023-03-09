@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for scaling metrics computation logic. */
 public class ScalingMetricsTest {
@@ -193,6 +194,8 @@ public class ScalingMetricsTest {
                 0.,
                 conf);
 
+        // Make sure vertex won't be scaled
+        assertTrue(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS).contains(source.toHexString()));
         // Legacy source rates are computed based on the current rate and a balanced utilization
         assertEquals(
                 2000 / conf.get(AutoScalerOptions.TARGET_UTILIZATION),

@@ -157,7 +157,7 @@ public class AutoScalerOptions {
             autoScalerConfig("vertex.exclude.ids")
                     .stringType()
                     .asList()
-                    .defaultValues(new String[0])
+                    .defaultValues()
                     .withDescription(
                             "A (semicolon-separated) list of vertex ids in hexstring for which to disable scaling. Caution: For non-sink vertices this will still scale their downstream operators until https://issues.apache.org/jira/browse/FLINK-31215 is implemented.");
 }

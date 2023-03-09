@@ -26,7 +26,10 @@ import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /** Utilities for computing scaling metrics based on Flink metrics. */
 public class ScalingMetrics {
@@ -128,6 +131,7 @@ public class ScalingMetrics {
             LOG.error(
                     "No busyTimeMsPerSecond metric available for {}. No scaling will be performed for this vertex.",
                     jobVertexId);
+            excludeVertexFromScaling(conf, jobVertexId);
             // Pretend that the load is balanced because we don't know any better
             return conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
         }
@@ -182,5 +186,11 @@ public class ScalingMetrics {
             return EFFECTIVELY_ZERO;
         }
         return value;
+    }
+
+    private static void excludeVertexFromScaling(Configuration conf, JobVertexID jobVertexId) {
+        Set<String> excludedIds = new HashSet<>(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS));
+        excludedIds.add(jobVertexId.toHexString());
+        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
     }
 }
