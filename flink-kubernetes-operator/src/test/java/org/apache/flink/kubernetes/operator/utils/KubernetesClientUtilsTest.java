@@ -45,11 +45,11 @@ public class KubernetesClientUtilsTest {
         var secondVersion = TestUtils.buildApplicationCluster(FlinkVersion.v1_15);
 
         kubernetesClient.resource(firstVersion).create();
-        firstVersion = kubernetesClient.resource(firstVersion).fromServer().get();
+        firstVersion = kubernetesClient.resource(firstVersion).get();
 
         // simulate external upgrade
-        kubernetesClient.resource(secondVersion).replace();
-        secondVersion = kubernetesClient.resource(secondVersion).fromServer().get();
+        kubernetesClient.resource(secondVersion).update();
+        secondVersion = kubernetesClient.resource(secondVersion).get();
 
         KubernetesClientUtils.applyToStoredCr(
                 kubernetesClient,
@@ -59,12 +59,7 @@ public class KubernetesClientUtilsTest {
         // Make sure the spec change wasn't applied
         assertEquals(
                 FlinkVersion.v1_15,
-                kubernetesClient
-                        .resource(secondVersion)
-                        .fromServer()
-                        .get()
-                        .getSpec()
-                        .getFlinkVersion());
+                kubernetesClient.resource(secondVersion).get().getSpec().getFlinkVersion());
 
         // Apply with correct version (generation)
         KubernetesClientUtils.applyToStoredCr(
@@ -73,11 +68,6 @@ public class KubernetesClientUtilsTest {
                 cr -> cr.getSpec().setFlinkVersion(FlinkVersion.v1_16));
         assertEquals(
                 FlinkVersion.v1_16,
-                kubernetesClient
-                        .resource(secondVersion)
-                        .fromServer()
-                        .get()
-                        .getSpec()
-                        .getFlinkVersion());
+                kubernetesClient.resource(secondVersion).get().getSpec().getFlinkVersion());
     }
 }

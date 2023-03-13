@@ -750,6 +750,13 @@ spec:
                               type: object
                             resources:
                               properties:
+                                claims:
+                                  items:
+                                    properties:
+                                      name:
+                                        type: string
+                                    type: object
+                                  type: array
                                 limits:
                                   additionalProperties:
                                     anyOf:
@@ -1265,6 +1272,13 @@ spec:
                               type: object
                             resources:
                               properties:
+                                claims:
+                                  items:
+                                    properties:
+                                      name:
+                                        type: string
+                                    type: object
+                                  type: array
                                 limits:
                                   additionalProperties:
                                     anyOf:
@@ -1786,6 +1800,13 @@ spec:
                               type: object
                             resources:
                               properties:
+                                claims:
+                                  items:
+                                    properties:
+                                      name:
+                                        type: string
+                                    type: object
+                                  type: array
                                 limits:
                                   additionalProperties:
                                     anyOf:
@@ -1991,12 +2012,33 @@ spec:
                               type: string
                           type: object
                         type: array
+                      resourceClaims:
+                        items:
+                          properties:
+                            name:
+                              type: string
+                            source:
+                              properties:
+                                resourceClaimName:
+                                  type: string
+                                resourceClaimTemplateName:
+                                  type: string
+                              type: object
+                          type: object
+                        type: array
                       restartPolicy:
                         type: string
                       runtimeClassName:
                         type: string
                       schedulerName:
                         type: string
+                      schedulingGates:
+                        items:
+                          properties:
+                            name:
+                              type: string
+                          type: object
+                        type: array
                       securityContext:
                         properties:
                           fsGroup:
@@ -2371,9 +2413,18 @@ spec:
                                               type: string
                                             name:
                                               type: string
+                                            namespace:
+                                              type: string
                                           type: object
                                         resources:
                                           properties:
+                                            claims:
+                                              items:
+                                                properties:
+                                                  name:
+                                                    type: string
+                                                type: object
+                                              type: array
                                             limits:
                                               additionalProperties:
                                                 anyOf:
@@ -3761,6 +3812,13 @@ spec:
                                   type: object
                                 resources:
                                   properties:
+                                    claims:
+                                      items:
+                                        properties:
+                                          name:
+                                            type: string
+                                        type: object
+                                      type: array
                                     limits:
                                       additionalProperties:
                                         anyOf:
@@ -4276,6 +4334,13 @@ spec:
                                   type: object
                                 resources:
                                   properties:
+                                    claims:
+                                      items:
+                                        properties:
+                                          name:
+                                            type: string
+                                        type: object
+                                      type: array
                                     limits:
                                       additionalProperties:
                                         anyOf:
@@ -4797,6 +4862,13 @@ spec:
                                   type: object
                                 resources:
                                   properties:
+                                    claims:
+                                      items:
+                                        properties:
+                                          name:
+                                            type: string
+                                        type: object
+                                      type: array
                                     limits:
                                       additionalProperties:
                                         anyOf:
@@ -5002,12 +5074,33 @@ spec:
                                   type: string
                               type: object
                             type: array
+                          resourceClaims:
+                            items:
+                              properties:
+                                name:
+                                  type: string
+                                source:
+                                  properties:
+                                    resourceClaimName:
+                                      type: string
+                                    resourceClaimTemplateName:
+                                      type: string
+                                  type: object
+                              type: object
+                            type: array
                           restartPolicy:
                             type: string
                           runtimeClassName:
                             type: string
                           schedulerName:
                             type: string
+                          schedulingGates:
+                            items:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            type: array
                           securityContext:
                             properties:
                               fsGroup:
@@ -5382,9 +5475,18 @@ spec:
                                                   type: string
                                                 name:
                                                   type: string
+                                                namespace:
+                                                  type: string
                                               type: object
                                             resources:
                                               properties:
+                                                claims:
+                                                  items:
+                                                    properties:
+                                                      name:
+                                                        type: string
+                                                    type: object
+                                                  type: array
                                                 limits:
                                                   additionalProperties:
                                                     anyOf:
@@ -6773,6 +6875,13 @@ spec:
                                   type: object
                                 resources:
                                   properties:
+                                    claims:
+                                      items:
+                                        properties:
+                                          name:
+                                            type: string
+                                        type: object
+                                      type: array
                                     limits:
                                       additionalProperties:
                                         anyOf:
@@ -7288,6 +7397,13 @@ spec:
                                   type: object
                                 resources:
                                   properties:
+                                    claims:
+                                      items:
+                                        properties:
+                                          name:
+                                            type: string
+                                        type: object
+                                      type: array
                                     limits:
                                       additionalProperties:
                                         anyOf:
@@ -7809,6 +7925,13 @@ spec:
                                   type: object
                                 resources:
                                   properties:
+                                    claims:
+                                      items:
+                                        properties:
+                                          name:
+                                            type: string
+                                        type: object
+                                      type: array
                                     limits:
                                       additionalProperties:
                                         anyOf:
@@ -8014,12 +8137,33 @@ spec:
                                   type: string
                               type: object
                             type: array
+                          resourceClaims:
+                            items:
+                              properties:
+                                name:
+                                  type: string
+                                source:
+                                  properties:
+                                    resourceClaimName:
+                                      type: string
+                                    resourceClaimTemplateName:
+                                      type: string
+                                  type: object
+                              type: object
+                            type: array
                           restartPolicy:
                             type: string
                           runtimeClassName:
                             type: string
                           schedulerName:
                             type: string
+                          schedulingGates:
+                            items:
+                              properties:
+                                name:
+                                  type: string
+                              type: object
+                            type: array
                           securityContext:
                             properties:
                               fsGroup:
@@ -8394,9 +8538,18 @@ spec:
                                                   type: string
                                                 name:
                                                   type: string
+                                                namespace:
+                                                  type: string
                                               type: object
                                             resources:
                                               properties:
+                                                claims:
+                                                  items:
+                                                    properties:
+                                                      name:
+                                                        type: string
+                                                    type: object
+                                                  type: array
                                                 limits:
                                                   additionalProperties:
                                                     anyOf:

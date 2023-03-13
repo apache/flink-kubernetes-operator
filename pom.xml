@@ -76,7 +76,7 @@ under the License.
         <operator.sdk.version>4.2.6</operator.sdk.version>
         <operator.sdk.admission-controller.version>0.2.0</operator.sdk.admission-controller.version>
 
-        <fabric8.version>6.2.0</fabric8.version>
+        <fabric8.version>6.5.0</fabric8.version>
 
         <lombok.version>1.18.22</lombok.version>
         <commons-lang3.version>3.12.0</commons-lang3.version>
