@@ -26,8 +26,10 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
+import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
@@ -50,6 +52,7 @@ import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
+import org.apache.flink.runtime.instance.HardwareDescription;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.webmonitor.JobDetails;
@@ -70,6 +73,9 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusHead
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
+import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagerInfo;
+import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersHeaders;
+import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersInfo;
 import org.apache.flink.runtime.rest.util.RestConstants;
 import org.apache.flink.runtime.state.memory.NonPersistentMetadataCheckpointStorageLocation;
 import org.apache.flink.runtime.webmonitor.handlers.JarDeleteHeaders;
@@ -118,9 +124,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
@@ -133,6 +141,8 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractFlinkService.class);
     private static final String EMPTY_JAR_FILENAME = "empty.jar";
+    public static final String FIELD_NAME_TOTAL_CPU = "total-cpu";
+    public static final String FIELD_NAME_TOTAL_MEMORY = "total-memory";
 
     protected final KubernetesClient kubernetesClient;
     protected final FlinkConfigManager configManager;
@@ -623,7 +633,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public Map<String, String> getClusterInfo(Configuration conf) throws Exception {
-        Map<String, String> runtimeVersion = new HashMap<>();
+        Map<String, String> clusterInfo = new HashMap<>();
 
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
@@ -641,14 +651,42 @@ public abstract class AbstractFlinkService implements FlinkService {
                                             .toSeconds(),
                                     TimeUnit.SECONDS);
 
-            runtimeVersion.put(
+            clusterInfo.put(
                     DashboardConfiguration.FIELD_NAME_FLINK_VERSION,
                     dashboardConfiguration.getFlinkVersion());
-            runtimeVersion.put(
+            clusterInfo.put(
                     DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
                     dashboardConfiguration.getFlinkRevision());
         }
-        return runtimeVersion;
+
+        // JobManager resource usage can be deduced from the CR
+        var jmParameters =
+                new KubernetesJobManagerParameters(
+                        conf, new KubernetesClusterClientFactory().getClusterSpecification(conf));
+        var jmTotalCpu =
+                jmParameters.getJobManagerCPU()
+                        * jmParameters.getJobManagerCPULimitFactor()
+                        * jmParameters.getReplicas();
+        var jmTotalMemory =
+                Math.round(
+                        jmParameters.getJobManagerMemoryMB()
+                                * Math.pow(1024, 2)
+                                * jmParameters.getJobManagerMemoryLimitFactor()
+                                * jmParameters.getReplicas());
+
+        // TaskManager resource usage is best gathered from the REST API to get current replicas
+        var taskManagerInfos = getTaskManagersInfo(conf).getTaskManagerInfos();
+        Supplier<Stream<HardwareDescription>> tmHardwareDesc =
+                () -> taskManagerInfos.stream().map(TaskManagerInfo::getHardwareDescription);
+        var tmTotalCpu =
+                tmHardwareDesc.get().mapToInt(HardwareDescription::getNumberOfCPUCores).sum();
+        var tmTotalMemory =
+                tmHardwareDesc.get().mapToLong(HardwareDescription::getSizeOfPhysicalMemory).sum();
+
+        clusterInfo.put(FIELD_NAME_TOTAL_CPU, String.valueOf(tmTotalCpu + jmTotalCpu));
+        clusterInfo.put(FIELD_NAME_TOTAL_MEMORY, String.valueOf(tmTotalMemory + jmTotalMemory));
+
+        return clusterInfo;
     }
 
     @Override
@@ -909,8 +947,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     public Map<String, String> getMetrics(
             Configuration conf, String jobId, List<String> metricNames) throws Exception {
-        try (RestClusterClient<String> clusterClient =
-                (RestClusterClient<String>) getClusterClient(conf)) {
+        try (var clusterClient = (RestClusterClient<String>) getClusterClient(conf)) {
             var jobMetricsMessageParameters =
                     JobMetricsHeaders.getInstance().getUnresolvedMessageParameters();
             jobMetricsMessageParameters.jobPathParameter.resolve(JobID.fromHexString(jobId));
@@ -921,10 +958,31 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     JobMetricsHeaders.getInstance(),
                                     jobMetricsMessageParameters,
                                     EmptyRequestBody.getInstance())
-                            .get();
+                            .get(
+                                    configManager
+                                            .getOperatorConfiguration()
+                                            .getFlinkClientTimeout()
+                                            .toSeconds(),
+                                    TimeUnit.SECONDS);
             return responseBody.getMetrics().stream()
                     .map(metric -> Tuple2.of(metric.getId(), metric.getValue()))
                     .collect(Collectors.toMap((t) -> t.f0, (t) -> t.f1));
+        }
+    }
+
+    public TaskManagersInfo getTaskManagersInfo(Configuration conf) throws Exception {
+        try (var clusterClient = (RestClusterClient<String>) getClusterClient(conf)) {
+            return clusterClient
+                    .sendRequest(
+                            TaskManagersHeaders.getInstance(),
+                            EmptyMessageParameters.getInstance(),
+                            EmptyRequestBody.getInstance())
+                    .get(
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkClientTimeout()
+                                    .toSeconds(),
+                            TimeUnit.SECONDS);
         }
     }
 
