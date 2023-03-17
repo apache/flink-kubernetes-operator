@@ -43,8 +43,9 @@ public class FlinkSessionJobContext extends FlinkResourceContext<FlinkSessionJob
             Context<?> josdkContext,
             KubernetesResourceMetricGroup resourceMetricGroup,
             FlinkResourceContextFactory flinkResourceContextFactory,
-            FlinkConfigManager configManager) {
-        super(resource, josdkContext, resourceMetricGroup);
+            FlinkConfigManager configManager,
+            ClusterScalingContext clusterScalingContext) {
+        super(resource, josdkContext, resourceMetricGroup, clusterScalingContext);
         this.flinkResourceContextFactory = flinkResourceContextFactory;
         this.configManager = configManager;
     }

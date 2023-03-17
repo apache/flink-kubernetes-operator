@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.ClusterScalingContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -33,8 +34,9 @@ public class TestingFlinkResourceContextFactory extends FlinkResourceContextFact
             KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
             KubernetesOperatorMetricGroup operatorMetricGroup,
-            FlinkService flinkService) {
-        super(kubernetesClient, configManager, operatorMetricGroup);
+            FlinkService flinkService,
+            ClusterScalingContext clusterScalingContext) {
+        super(kubernetesClient, configManager, operatorMetricGroup, clusterScalingContext);
         this.flinkService = flinkService;
     }
 

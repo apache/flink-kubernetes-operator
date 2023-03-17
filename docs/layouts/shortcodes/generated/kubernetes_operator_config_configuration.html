@@ -225,6 +225,12 @@
             <td>The maximum number of threads running the reconciliation loop. Use -1 for infinite.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.rescaling.cluster-cooldown</h5></td>
+            <td style="word-wrap: break-word;">1 min</td>
+            <td>Duration</td>
+            <td>Cooldown period after rescaling jobs where no further scaling will be performed to minimize cluster churn.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.resource.cleanup.timeout</h5></td>
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>

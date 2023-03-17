@@ -458,4 +458,12 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(Duration.ofDays(1))
                     .withDescription(
                             "Time after which jobmanager pods of terminal application deployments are shut down.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Duration> OPERATOR_RESCALING_CLUSTER_COOLDOWN =
+            operatorConfig("rescaling.cluster-cooldown")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(1))
+                    .withDescription(
+                            "Cooldown period after rescaling jobs where no further scaling will be performed to minimize cluster churn.");
 }

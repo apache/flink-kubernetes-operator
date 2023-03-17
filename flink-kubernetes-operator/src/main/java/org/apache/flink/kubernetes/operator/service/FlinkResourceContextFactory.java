@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.ClusterScalingContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobContext;
@@ -48,6 +49,7 @@ public class FlinkResourceContextFactory {
     private final KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager;
     private final KubernetesOperatorMetricGroup operatorMetricGroup;
+    private final ClusterScalingContext clusterScalingContext;
     private final Map<KubernetesDeploymentMode, FlinkService> serviceMap;
 
     private final Map<Tuple2<Class<?>, ResourceID>, KubernetesResourceMetricGroup>
@@ -56,10 +58,12 @@ public class FlinkResourceContextFactory {
     public FlinkResourceContextFactory(
             KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
-            KubernetesOperatorMetricGroup operatorMetricGroup) {
+            KubernetesOperatorMetricGroup operatorMetricGroup,
+            ClusterScalingContext clusterScalingContext) {
         this.kubernetesClient = kubernetesClient;
         this.configManager = configManager;
         this.operatorMetricGroup = operatorMetricGroup;
+        this.clusterScalingContext = clusterScalingContext;
         this.serviceMap = new ConcurrentHashMap<>();
     }
 
@@ -80,11 +84,17 @@ public class FlinkResourceContextFactory {
                             josdkContext,
                             resMg,
                             getOrCreateFlinkService(flinkDep),
-                            configManager);
+                            configManager,
+                            clusterScalingContext);
         } else if (resource instanceof FlinkSessionJob) {
             return (FlinkResourceContext<CR>)
                     new FlinkSessionJobContext(
-                            (FlinkSessionJob) resource, josdkContext, resMg, this, configManager);
+                            (FlinkSessionJob) resource,
+                            josdkContext,
+                            resMg,
+                            this,
+                            configManager,
+                            clusterScalingContext);
         } else {
             throw new IllegalArgumentException(
                     "Unknown resource type " + resource.getClass().getSimpleName());

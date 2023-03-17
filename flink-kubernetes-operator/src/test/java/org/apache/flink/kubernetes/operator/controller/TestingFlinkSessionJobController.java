@@ -72,7 +72,8 @@ public class TestingFlinkSessionJobController
                         kubernetesClient,
                         configManager,
                         TestUtils.createTestMetricGroup(new Configuration()),
-                        flinkService);
+                        flinkService,
+                        new ClusterScalingContext(configManager.getOperatorConfiguration()));
 
         eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
 

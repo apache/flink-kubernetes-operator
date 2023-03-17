@@ -159,7 +159,8 @@ public class SavepointObserverTest extends OperatorTestBase {
         assertEquals(SavepointStatus.PENDING, SavepointUtils.getLastSavepointStatus(deployment));
         assertTrue(triggerTs > 0);
 
-        new FlinkDeploymentContext(deployment, null, null, flinkService, configManager);
+        new FlinkDeploymentContext(
+                deployment, null, null, flinkService, configManager, clusterScalingContext);
         // Pending
         observer.observeSavepointStatus(getResourceContext(deployment));
         // Completed

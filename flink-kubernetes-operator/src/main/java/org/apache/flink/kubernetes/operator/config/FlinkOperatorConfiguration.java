@@ -67,6 +67,7 @@ public class FlinkOperatorConfiguration {
     int exceptionThrowableCountThreshold;
     String labelSelector;
     LeaderElectionConfiguration leaderElectionConfiguration;
+    Duration rescalingClusterCoolDown;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -172,6 +173,10 @@ public class FlinkOperatorConfiguration {
         String labelSelector =
                 operatorConfig.getString(KubernetesOperatorConfigOptions.OPERATOR_LABEL_SELECTOR);
 
+        Duration rescalingClusterCoolDown =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.OPERATOR_RESCALING_CLUSTER_COOLDOWN);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -196,7 +201,8 @@ public class FlinkOperatorConfiguration {
                 exceptionFieldLengthThreshold,
                 exceptionThrowableCountThreshold,
                 labelSelector,
-                getLeaderElectionConfig(operatorConfig));
+                getLeaderElectionConfig(operatorConfig),
+                rescalingClusterCoolDown);
     }
 
     private static LeaderElectionConfiguration getLeaderElectionConfig(Configuration conf) {

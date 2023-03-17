@@ -25,6 +25,7 @@ import org.apache.flink.core.plugin.PluginUtils;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.controller.ClusterScalingContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentController;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobController;
 import org.apache.flink.kubernetes.operator.health.HealthProbe;
@@ -90,7 +91,10 @@ public class FlinkOperator {
                 KubernetesClientUtils.getKubernetesClient(
                         configManager.getOperatorConfiguration(), this.metricGroup);
         this.operator = createOperator();
-        this.ctxFactory = new FlinkResourceContextFactory(client, configManager, metricGroup);
+        var toBeNamedContext = new ClusterScalingContext(configManager.getOperatorConfiguration());
+        this.ctxFactory =
+                new FlinkResourceContextFactory(
+                        client, configManager, metricGroup, toBeNamedContext);
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.listeners = ListenerUtils.discoverListeners(configManager);
         PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(defaultConfig);

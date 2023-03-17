@@ -87,6 +87,12 @@
             <td>Interval at which periodic savepoints will be triggered. The triggering schedule is not guaranteed, savepoints will be triggered as part of the regular reconcile loop.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.rescaling.cluster-cooldown</h5></td>
+            <td style="word-wrap: break-word;">1 min</td>
+            <td>Duration</td>
+            <td>Cooldown period after rescaling jobs where no further scaling will be performed to minimize cluster churn.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.savepoint.format.type</h5></td>
             <td style="word-wrap: break-word;">CANONICAL</td>
             <td><p>Enum</p></td>

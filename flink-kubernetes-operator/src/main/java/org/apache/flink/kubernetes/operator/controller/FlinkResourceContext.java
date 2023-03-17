@@ -34,6 +34,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
     @Getter private final CR resource;
     @Getter private final Context<?> josdkContext;
     @Getter private final KubernetesResourceMetricGroup resourceMetricGroup;
+    @Getter private final ClusterScalingContext clusterScalingContext;
 
     private Configuration observeConfig;
 

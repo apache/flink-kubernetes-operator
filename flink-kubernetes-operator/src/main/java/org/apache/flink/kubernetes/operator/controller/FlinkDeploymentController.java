@@ -70,6 +70,8 @@ public class FlinkDeploymentController
     private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
     private final EventRecorder eventRecorder;
 
+    private final ClusterScalingContext clusterScalingContext;
+
     public FlinkDeploymentController(
             FlinkConfigManager configManager,
             Set<FlinkResourceValidator> validators,
@@ -85,6 +87,8 @@ public class FlinkDeploymentController
         this.observerFactory = observerFactory;
         this.statusRecorder = statusRecorder;
         this.eventRecorder = eventRecorder;
+        this.clusterScalingContext =
+                new ClusterScalingContext(configManager.getOperatorConfiguration());
     }
 
     @Override

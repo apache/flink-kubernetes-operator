@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.VertexInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.ClusterScalingContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -52,6 +53,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for scaling metrics collection logic. */
 @EnableKubernetesMockClient(crud = true)
@@ -348,6 +350,57 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
     }
 
+    @Test
+    public void testClusterCoolDownAfterRescaling() {
+        var ctx = createAutoscalerTestContext();
+        var startTime = Instant.ofEpochMilli(0);
+        // Set a cluster cool down of 10 seconds
+        Duration clusterCoolDown = Duration.ofSeconds(10);
+        clusterScalingContext =
+                new ClusterScalingContext(
+                        clusterCoolDown, Clock.fixed(startTime, ZoneId.systemDefault()));
+        setClocksTo(startTime);
+        redeployJob(startTime);
+
+        metricsCollector.setCurrentMetrics(
+                Map.of(
+                        source1,
+                        Map.of(
+                                FlinkMetric.BUSY_TIME_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
+                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
+                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
+                                FlinkMetric.PENDING_RECORDS,
+                                new AggregatedMetric(
+                                        "", Double.NaN, Double.NaN, Double.NaN, 2000.)),
+                        sink,
+                        Map.of(
+                                FlinkMetric.BUSY_TIME_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
+                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                                new AggregatedMetric(
+                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
+
+        // Collect metrics initially
+        assertFalse(autoscaler.scale(getResourceContext(app, ctx)));
+        assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
+
+        setClocksTo(startTime.plus(Duration.ofSeconds(1)));
+        // Collect metrics twice (now able to scale)
+        // Cooldown still active, so no scale will happen.
+        assertFalse(autoscaler.scale(getResourceContext(app, ctx)));
+
+        // Advance by the cool down to unlock scaling
+        setClocksTo(startTime.plus(clusterCoolDown));
+        assertTrue(autoscaler.scale(getResourceContext(app, ctx)));
+
+        var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
+        assertEquals(4, scaledParallelism.get(source1));
+        assertEquals(4, scaledParallelism.get(sink));
+    }
+
     private void redeployJob(Instant now) {
         // Offset the update time by one metrics window to simulate collecting one entire window
         app.getStatus()
@@ -362,6 +415,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         var clock = Clock.fixed(time, ZoneId.systemDefault());
         metricsCollector.setClock(clock);
         scalingExecutor.setClock(clock);
+        clusterScalingContext.updateClock(clock);
     }
 
     @NotNull

@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.ClusterScalingContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
@@ -30,10 +31,19 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+
 /** @link JobStatusObserver unit tests */
 public abstract class OperatorTestBase {
 
     protected FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+    protected ClusterScalingContext clusterScalingContext =
+            new ClusterScalingContext(
+                    Duration.ZERO, Clock.fixed(Instant.ofEpochMilli(0), ZoneId.systemDefault()));
+
     protected TestingFlinkService flinkService;
     protected EventCollector eventCollector = new EventCollector();
     protected EventRecorder eventRecorder;
@@ -66,7 +76,11 @@ public abstract class OperatorTestBase {
             CR cr, Context josdkContext) {
         var ctxFactory =
                 new TestingFlinkResourceContextFactory(
-                        getKubernetesClient(), configManager, operatorMetricGroup, flinkService);
+                        getKubernetesClient(),
+                        configManager,
+                        operatorMetricGroup,
+                        flinkService,
+                        clusterScalingContext);
         return ctxFactory.getResourceContext(cr, josdkContext);
     }
 }

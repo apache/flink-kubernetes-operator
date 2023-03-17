@@ -39,8 +39,9 @@ public class FlinkDeploymentContext extends FlinkResourceContext<FlinkDeployment
             Context<?> josdkContext,
             KubernetesResourceMetricGroup resourceMetricGroup,
             FlinkService flinkService,
-            FlinkConfigManager configManager) {
-        super(resource, josdkContext, resourceMetricGroup);
+            FlinkConfigManager configManager,
+            ClusterScalingContext clusterScalingContext) {
+        super(resource, josdkContext, resourceMetricGroup, clusterScalingContext);
         this.configManager = configManager;
         this.flinkService = flinkService;
     }
