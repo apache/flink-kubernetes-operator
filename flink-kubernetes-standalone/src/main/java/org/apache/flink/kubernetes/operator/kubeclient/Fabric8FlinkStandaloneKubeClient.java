@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.Fabric8FlinkKubeClient;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
@@ -57,14 +58,14 @@ public class Fabric8FlinkStandaloneKubeClient extends Fabric8FlinkKubeClient
                 .apps()
                 .deployments()
                 .withName(StandaloneKubernetesUtils.getJobManagerDeploymentName(clusterId))
-                .cascading(true)
+                .withPropagationPolicy(DeletionPropagation.FOREGROUND)
                 .delete();
 
         this.internalClient
                 .apps()
                 .deployments()
                 .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
-                .cascading(true)
+                .withPropagationPolicy(DeletionPropagation.FOREGROUND)
                 .delete();
     }
 

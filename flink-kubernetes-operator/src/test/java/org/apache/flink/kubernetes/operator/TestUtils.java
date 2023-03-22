@@ -288,7 +288,7 @@ public class TestUtils extends BaseTestUtils {
     }
 
     public static Stream<Arguments> flinkVersions() {
-        return List.of(arguments(FlinkVersion.v1_14), arguments(FlinkVersion.v1_15)).stream();
+        return Stream.of(arguments(FlinkVersion.v1_14), arguments(FlinkVersion.v1_15));
     }
 
     /** Testing ResponseProvider. */

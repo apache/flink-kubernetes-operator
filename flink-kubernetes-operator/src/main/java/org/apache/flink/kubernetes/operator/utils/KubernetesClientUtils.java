@@ -73,12 +73,12 @@ public class KubernetesClientUtils {
 
     public static <T extends AbstractFlinkResource<?, ?>> void applyToStoredCr(
             KubernetesClient kubernetesClient, T cr, Consumer<T> function) {
-        var inKube = kubernetesClient.resource(cr).fromServer().get();
+        var inKube = kubernetesClient.resource(cr).get();
         Long localGeneration = cr.getMetadata().getGeneration();
         Long serverGeneration = inKube.getMetadata().getGeneration();
         if (serverGeneration.equals(localGeneration)) {
             function.accept(inKube);
-            kubernetesClient.resource(inKube).lockResourceVersion().replace();
+            kubernetesClient.resource(inKube).lockResourceVersion().update();
         } else {
             LOG.info(
                     "Spec already upgrading in kube (generation - local: {} server: {}), skipping scale operation.",

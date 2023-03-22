@@ -181,7 +181,7 @@ public class AutoScalerInfo {
 
     public void replaceInKubernetes(KubernetesClient client) throws Exception {
         trimHistoryToMaxCmSize();
-        client.resource(configMap).replace();
+        client.resource(configMap).update();
     }
 
     @VisibleForTesting

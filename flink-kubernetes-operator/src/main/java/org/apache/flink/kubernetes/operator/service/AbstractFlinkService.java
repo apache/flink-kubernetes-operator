@@ -808,7 +808,6 @@ public abstract class AbstractFlinkService implements FlinkService {
                                 .inNamespace(namespace)
                                 .withName(
                                         ExternalServiceDecorator.getExternalServiceName(clusterId))
-                                .fromServer()
                                 .get();
                 if (service == null) {
                     serviceRunning = false;
