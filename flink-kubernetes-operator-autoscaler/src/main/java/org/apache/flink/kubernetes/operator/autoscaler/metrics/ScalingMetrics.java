@@ -195,8 +195,8 @@ public class ScalingMetrics {
         return value;
     }
 
-    private static boolean isEffectivelyZero(double numRecordsInPerSecond) {
-        return numRecordsInPerSecond <= EFFECTIVELY_ZERO;
+    private static boolean isEffectivelyZero(double value) {
+        return value <= EFFECTIVELY_ZERO;
     }
 
     private static void excludeVertexFromScaling(Configuration conf, JobVertexID jobVertexId) {
