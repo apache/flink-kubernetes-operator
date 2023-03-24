@@ -77,8 +77,6 @@ public class ScalingMetrics {
 
         double numRecordsInPerSecond =
                 getNumRecordsInPerSecond(flinkMetrics, jobVertexID, isSource);
-        double outputPerSecond =
-                getNumRecordsOutPerSecond(flinkMetrics, jobVertexID, isSource, isSink);
 
         if (isSource) {
             double sourceDataRate = Math.max(0, numRecordsInPerSecond + lagGrowthRate);
@@ -99,11 +97,15 @@ public class ScalingMetrics {
         }
 
         if (!isSink) {
-            if (!Double.isNaN(outputPerSecond)) {
+            double numRecordsOutPerSecond =
+                    getNumRecordsOutPerSecond(
+                            flinkMetrics, jobVertexID, isSource, numRecordsInPerSecond);
+            if (!Double.isNaN(numRecordsOutPerSecond)) {
                 scalingMetrics.put(
-                        ScalingMetric.OUTPUT_RATIO, outputPerSecond / numRecordsInPerSecond);
+                        ScalingMetric.OUTPUT_RATIO, numRecordsOutPerSecond / numRecordsInPerSecond);
                 scalingMetrics.put(
-                        ScalingMetric.TRUE_OUTPUT_RATE, busyTimeMultiplier * outputPerSecond);
+                        ScalingMetric.TRUE_OUTPUT_RATE,
+                        busyTimeMultiplier * numRecordsOutPerSecond);
             } else {
                 LOG.error(
                         "Cannot compute processing and input rate without numRecordsOutPerSecond");
@@ -163,7 +165,13 @@ public class ScalingMetrics {
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             JobVertexID jobVertexID,
             boolean isSource,
-            boolean isSink) {
+            double numRecordsInPerSecond) {
+        if (isEffectivelyZero(numRecordsInPerSecond)) {
+            // If the input rate is zero, we also need to flatten the output rate.
+            // Otherwise, the OUTPUT_RATIO would be outrageously large, leading to
+            // a rapid scale up.
+            return EFFECTIVELY_ZERO;
+        }
         AggregatedMetric numRecordsOutPerSecond =
                 flinkMetrics.get(FlinkMetric.NUM_RECORDS_OUT_PER_SEC);
         if (numRecordsOutPerSecond == null) {
@@ -172,9 +180,7 @@ public class ScalingMetrics {
                         flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC);
             }
             if (numRecordsOutPerSecond == null) {
-                if (!isSink) {
-                    LOG.warn("Received null output rate for {}. Returning NaN.", jobVertexID);
-                }
+                LOG.warn("Received null output rate for {}. Returning NaN.", jobVertexID);
                 return Double.NaN;
             }
         }
@@ -187,6 +193,10 @@ public class ScalingMetrics {
             return EFFECTIVELY_ZERO;
         }
         return value;
+    }
+
+    private static boolean isEffectivelyZero(double numRecordsInPerSecond) {
+        return numRecordsInPerSecond <= EFFECTIVELY_ZERO;
     }
 
     private static void excludeVertexFromScaling(Configuration conf, JobVertexID jobVertexId) {
