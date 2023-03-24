@@ -37,7 +37,7 @@ Please check the [related section](#upgrading-from-v1alpha1---v1beta1).
 
 ## Normal Upgrade Process
 
-Normally upgrading the operator to a new release or development version consists of the following two steps:
+If you are upgrading from `kubernetes-operator-1.0.0` or later, please refer to the following two steps:
 1. Upgrading the CRDs
 2. Upgrading the Helm deployment
 
@@ -59,6 +59,16 @@ Please note that we are using the `replace` command here which ensures that runn
 
 ### 2. Upgrading the Helm deployment
 
+{{< hint danger >}}
+Before upgrading, please compare the version difference between the currently generated yaml and the running yaml, which will be used for backup and restore.
+{{< /hint >}}
+
+
+```sh
+helm template flink-kubernetes-operator <helm-repo>/flink-kubernetes-operator  <custom settings> | kubectl diff -f -
+```
+
+
 Once we have the new CRDs versions we can upgrade the Helm deployment:
 
 
@@ -78,28 +88,33 @@ The exact installation/upgrade command depends on your current environment and s
 
 ## Upgrading from v1alpha1 -> v1beta1
 
-The first stable `v1beta1` release introduced some breaking changes on the operator side when upgrading from the preview (`v1alpha1`) release.
+If you are upgrading from `kubernetes-operator-0.1.0` , please refer to the following steps. Because the first stable `v1beta1` release introduced some breaking changes on the operator side when upgrading from the preview (`v1alpha1`) release.
 These changes require a one time manual upgrade process for the running jobs.
 
-### Upgrading without existing FlinkDeployments
+### 1. Upgrading without existing FlinkDeployments
 
-In an environment without any `FlinkDeployments` you need to uninstall the operator and delete the v1alpha1 CRD.
+In an environment without any `FlinkDeployments` you need to uninstall the operator and delete the `v1alpha1` CRD.
 
 ```sh
+# Uninstall helm deployment
 helm uninstall flink-kubernetes-operator
+
+# Delete CRD
 kubectl delete crd flinkdeployments.flink.apache.org
+
 # Now reinstall the operator with the new v1beta1 version
+helm install flink-kubernetes-operator <helm-repo>/flink-kubernetes-operator <custom settings>
 ```
 
-### Upgrading with existing FlinkDeployments
+### 2. Upgrading with existing FlinkDeployments
 
 The following steps demonstrate the CRD upgrade process from `v1alpha1` to `v1beta1` in an environment with an existing [stateful](https://github.com/apache/flink-kubernetes-operator/blob/main/examples/basic-checkpoint-ha.yaml) job with an old `v1alpha1` apiVersion. After the CRD upgrade, the job will resumed from the savepoint.
-
+Here is a reference example of upgrading a `basic-checkpoint-ha-example` deployment.
 1. Suspend the job and create savepoint:
     ```sh
     kubectl patch flinkdeployment/basic-checkpoint-ha-example --type=merge -p '{"spec": {"job": {"state": "suspended", "upgradeMode": "savepoint"}}}'
     ```
-    Verify `deploy/basic-checkpoint-ha-example` has terminated and `flinkdeployment/basic-checkpoint-ha-example` has the Last Savepoint Location similar to `file:/flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata`. This file will used to restore the job. See [stateful and stateless application upgrade](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-release-0.1/docs/custom-resource/job-management/#stateful-and-stateless-application-upgrades) for more detail.
+    Verify `deploy/basic-checkpoint-ha-example` has terminated and `flinkdeployment/basic-checkpoint-ha-example` has the Last Savepoint Location similar to `file:/flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata`. This file will used to restore the job. See [stateful and stateless application upgrade]({{< ref "docs/custom-resource/job-management/#stateful-and-stateless-application-upgrades" >}})  for more detail.
 
 2. Delete the job:
    ```sh
@@ -134,6 +149,7 @@ The following steps demonstrate the CRD upgrade process from `v1alpha1` to `v1be
       ...
       job:
         initialSavepointPath: /flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata
+        upgradeMode: savepoint
       ...
     ```
     Alternatively, we may use this command to edit and deploy the manifest:
@@ -142,10 +158,10 @@ The following steps demonstrate the CRD upgrade process from `v1alpha1` to `v1be
     ```
    Finally, verify that `deploy/basic-checkpoint-ha-example` log has:
     ```
-    Starting job 00000000000000000000000000000000 from savepoint /flink-data/savepoints/savepoint-000000-2f40a9c8e4b9/_metadat
+    Starting job 00000000000000000000000000000000 from savepoint /flink-data/savepoints/savepoint-000000-2f40a9c8e4b9/_metadata
     ```
 
-### Changes of default values of FlinkDeployment
+### 3. Changes of default values of FlinkDeployment
 There are some changes or improvement of default values in the fields of the FlinkDeployment in `v1beta1`:
 1. Default value of `crd.spec.Resource#cpu` is `1.0`.
 2. Default value of `crd.spec.JobManagerSpec#replicas` is `1`.
