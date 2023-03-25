@@ -30,6 +30,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.RuntimeInfo;
+import io.javaoperatorsdk.operator.api.config.ConfigurationServiceProvider;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.Test;
 
@@ -57,6 +58,7 @@ public class HealthProbeTest {
                     new FlinkOperator(conf) {
                         @Override
                         protected Operator createOperator() {
+                            ConfigurationServiceProvider.reset();
                             return new Operator(client);
                         }
                     };
