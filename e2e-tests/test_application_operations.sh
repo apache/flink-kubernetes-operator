@@ -56,7 +56,7 @@ fi
 # Testing last-state mode upgrade
 # Update the FlinkDeployment and trigger the last state upgrade
 kubectl patch flinkdep ${CLUSTER_ID} --type merge --patch '{"spec":{"job": {"parallelism": 1 } } }'
-kubectl wait --for=delete pod --timeout=${TIMEOUT}s --selector="app=${CLUSTER_ID}"
+kubectl wait --for=delete deployment --timeout=${TIMEOUT}s --selector="app=${CLUSTER_ID}"
 wait_for_jobmanager_running $CLUSTER_ID $TIMEOUT
 jm_pod_name=$(get_jm_pod_name $CLUSTER_ID)
 
