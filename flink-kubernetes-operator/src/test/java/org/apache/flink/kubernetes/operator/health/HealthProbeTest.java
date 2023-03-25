@@ -15,17 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator;
+package org.apache.flink.kubernetes.operator.health;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.FlinkOperator;
+import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.health.HealthProbe;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.util.NetUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.Operator;
 import io.javaoperatorsdk.operator.RuntimeInfo;
+import io.javaoperatorsdk.operator.api.config.ConfigurationServiceProvider;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.Test;
 
 import java.net.HttpURLConnection;
@@ -50,7 +56,9 @@ public class HealthProbeTest {
 
             FlinkOperator operator =
                     new FlinkOperator(conf) {
-                        Operator createOperator() {
+                        @Override
+                        protected Operator createOperator() {
+                            ConfigurationServiceProvider.reset();
                             return new Operator(client);
                         }
                     };
@@ -90,6 +98,36 @@ public class HealthProbeTest {
         assertTrue(HealthProbe.INSTANCE.isHealthy());
         isRunning.set(false);
         assertFalse(HealthProbe.INSTANCE.isHealthy());
+        isRunning.set(true);
+
+        var canaryManager =
+                new CanaryResourceManager<FlinkDeployment>(
+                        new FlinkConfigManager(new Configuration()), client);
+        HealthProbe.INSTANCE.registerCanaryResourceManager(canaryManager);
+
+        // No canary resources
+        assertTrue(HealthProbe.INSTANCE.isHealthy());
+
+        var canary = TestUtils.createCanaryDeployment();
+        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary));
+
+        // Canary resource healthy before health check
+        assertTrue(HealthProbe.INSTANCE.isHealthy());
+
+        // No reconciliation before health check
+        canaryManager.checkHealth(ResourceID.fromResource(canary));
+        assertFalse(HealthProbe.INSTANCE.isHealthy());
+
+        // Healthy again
+        canary.getMetadata().setGeneration(2L);
+        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary));
+        canaryManager.checkHealth(ResourceID.fromResource(canary));
+        assertTrue(HealthProbe.INSTANCE.isHealthy());
+
+        canary.getMetadata().setGeneration(3L);
+        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary));
+        canaryManager.checkHealth(ResourceID.fromResource(canary));
+        assertTrue(HealthProbe.INSTANCE.isHealthy());
     }
 
     private boolean callHealthEndpoint(Configuration conf) throws Exception {

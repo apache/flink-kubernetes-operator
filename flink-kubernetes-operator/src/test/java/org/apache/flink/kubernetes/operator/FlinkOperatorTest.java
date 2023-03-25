@@ -59,6 +59,7 @@ public class FlinkOperatorTest {
         operatorConfig.set(
                 KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_LEASE_NAME, testLeaseName);
 
+        ConfigurationServiceProvider.reset();
         var testOperator = new FlinkOperator(operatorConfig);
         testOperator.registerDeploymentController();
         testOperator.registerSessionJobController();
@@ -86,15 +87,6 @@ public class FlinkOperatorTest {
         Assertions.assertEquals(testLeaseName, leaderElectionConfiguration.getLeaseName());
         Assertions.assertFalse(leaderElectionConfiguration.getLeaseNamespace().isPresent());
         Assertions.assertFalse(leaderElectionConfiguration.getIdentity().isPresent());
-
-        // TODO: Overriding operator configuration twice in JOSDK v3 yields IllegalStateException
-        var secondParallelism = 420;
-        var secondConfig = new Configuration();
-
-        secondConfig.setInteger(
-                KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_PARALLELISM, secondParallelism);
-
-        Assertions.assertThrows(IllegalStateException.class, () -> new FlinkOperator(secondConfig));
     }
 
     @Test
@@ -103,6 +95,7 @@ public class FlinkOperatorTest {
         operatorConfig.set(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_ENABLED, true);
 
         try {
+            ConfigurationServiceProvider.reset();
             new FlinkOperator(operatorConfig);
         } catch (IllegalConfigurationException ice) {
             assertTrue(
@@ -110,5 +103,11 @@ public class FlinkOperatorTest {
                             .startsWith(
                                     "kubernetes.operator.leader-election.lease-name must be defined"));
         }
+
+        ConfigurationServiceProvider.reset();
+        new FlinkOperator(new Configuration());
+
+        assertTrue(
+                ConfigurationServiceProvider.instance().getLeaderElectionConfiguration().isEmpty());
     }
 }

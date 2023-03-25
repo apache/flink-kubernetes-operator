@@ -499,4 +499,16 @@ class FlinkSessionJobControllerTest {
         testController.reconcile(sessionJob, context);
         assertEquals("msp", flinkService.listJobs().get(0).f0);
     }
+
+    @Test
+    public void verifyCanaryHandling() throws Exception {
+        var canary = TestUtils.createCanaryJob();
+        kubernetesClient.resource(canary).create();
+        assertTrue(testController.reconcile(canary, context).isNoUpdate());
+        assertEquals(0, testController.getInternalStatusUpdateCount());
+        assertEquals(1, testController.getCanaryResourceManager().getNumberOfActiveCanaries());
+        testController.cleanup(canary, context);
+        assertEquals(0, testController.getInternalStatusUpdateCount());
+        assertEquals(0, testController.getCanaryResourceManager().getNumberOfActiveCanaries());
+    }
 }

@@ -23,6 +23,8 @@ import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Flink operator health probe. */
@@ -35,8 +37,10 @@ public enum HealthProbe {
 
     @Setter @Getter private RuntimeInfo runtimeInfo;
 
-    public void markUnhealthy() {
-        isHealthy.set(false);
+    private final List<CanaryResourceManager<?>> canaryResourceManagers = new ArrayList<>();
+
+    public void registerCanaryResourceManager(CanaryResourceManager<?> canaryResourceManager) {
+        canaryResourceManagers.add(canaryResourceManager);
     }
 
     public boolean isHealthy() {
@@ -46,10 +50,20 @@ public enum HealthProbe {
 
         if (runtimeInfo != null) {
             LOG.debug("Checking operator health");
-            if (runtimeInfo.allEventSourcesAreHealthy()) {
-                return runtimeInfo.isStarted();
-            } else {
+            if (!runtimeInfo.allEventSourcesAreHealthy()) {
                 LOG.error("Unhealthy event sources: {}", runtimeInfo.unhealthyEventSources());
+                return false;
+            }
+
+            if (!runtimeInfo.isStarted()) {
+                LOG.error("Operator not running");
+                return false;
+            }
+        }
+
+        for (CanaryResourceManager<?> canaryResourceManager : canaryResourceManagers) {
+            if (!canaryResourceManager.allCanariesHealthy()) {
+                LOG.error("Unhealthy canary resources");
                 return false;
             }
         }

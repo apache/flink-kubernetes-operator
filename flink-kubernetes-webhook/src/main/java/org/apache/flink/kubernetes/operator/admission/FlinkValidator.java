@@ -21,6 +21,7 @@ import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -52,6 +53,10 @@ public class FlinkValidator implements Validator<HasMetadata> {
     @Override
     public void validate(HasMetadata resource, Operation operation) throws NotAllowedException {
         LOG.debug("Validating resource {}", resource);
+
+        if (CanaryResourceManager.isCanaryResource(resource)) {
+            return;
+        }
 
         if (CrdConstants.KIND_FLINK_DEPLOYMENT.equals(resource.getKind())) {
             validateDeployment(resource);
