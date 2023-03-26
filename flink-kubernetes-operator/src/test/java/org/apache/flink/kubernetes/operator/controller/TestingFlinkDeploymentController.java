@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -46,6 +47,7 @@ import io.javaoperatorsdk.operator.api.reconciler.EventSourceInitializer;
 import io.javaoperatorsdk.operator.api.reconciler.Reconciler;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import io.javaoperatorsdk.operator.processing.event.source.EventSource;
+import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.Map;
@@ -59,13 +61,14 @@ public class TestingFlinkDeploymentController
                 EventSourceInitializer<FlinkDeployment>,
                 Cleaner<FlinkDeployment> {
 
-    private ReconcilerFactory reconcilerFactory;
+    @Getter private ReconcilerFactory reconcilerFactory;
     private FlinkDeploymentController flinkDeploymentController;
     private StatusUpdateCounter statusUpdateCounter = new StatusUpdateCounter();
     private EventCollector eventCollector = new EventCollector();
 
     private EventRecorder eventRecorder;
     private StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
+    @Getter private CanaryResourceManager<FlinkDeployment> canaryResourceManager;
 
     public TestingFlinkDeploymentController(
             FlinkConfigManager configManager,
@@ -88,6 +91,7 @@ public class TestingFlinkDeploymentController
                         eventRecorder,
                         statusRecorder,
                         new NoopJobAutoscalerFactory());
+        canaryResourceManager = new CanaryResourceManager<>(configManager, kubernetesClient);
         flinkDeploymentController =
                 new FlinkDeploymentController(
                         configManager,
@@ -96,7 +100,8 @@ public class TestingFlinkDeploymentController
                         reconcilerFactory,
                         new FlinkDeploymentObserverFactory(configManager, eventRecorder),
                         statusRecorder,
-                        eventRecorder);
+                        eventRecorder,
+                        canaryResourceManager);
     }
 
     @Override
@@ -161,9 +166,5 @@ public class TestingFlinkDeploymentController
 
     public int getInternalStatusUpdateCount() {
         return statusUpdateCounter.getCount();
-    }
-
-    public ReconcilerFactory getReconcilerFactory() {
-        return reconcilerFactory;
     }
 }

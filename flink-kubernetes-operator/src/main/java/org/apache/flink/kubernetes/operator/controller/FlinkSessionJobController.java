@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
+import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -65,6 +66,7 @@ public class FlinkSessionJobController
     private final Observer<FlinkSessionJob> observer;
     private final StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder;
     private final EventRecorder eventRecorder;
+    private final CanaryResourceManager<FlinkSessionJob> canaryResourceManager;
 
     public FlinkSessionJobController(
             FlinkConfigManager configManager,
@@ -73,7 +75,8 @@ public class FlinkSessionJobController
             Reconciler<FlinkSessionJob> reconciler,
             Observer<FlinkSessionJob> observer,
             StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder,
-            EventRecorder eventRecorder) {
+            EventRecorder eventRecorder,
+            CanaryResourceManager<FlinkSessionJob> canaryResourceManager) {
         this.configManager = configManager;
         this.validators = validators;
         this.ctxFactory = ctxFactory;
@@ -81,11 +84,17 @@ public class FlinkSessionJobController
         this.observer = observer;
         this.statusRecorder = statusRecorder;
         this.eventRecorder = eventRecorder;
+        this.canaryResourceManager = canaryResourceManager;
     }
 
     @Override
     public UpdateControl<FlinkSessionJob> reconcile(
             FlinkSessionJob flinkSessionJob, Context josdkContext) {
+
+        if (canaryResourceManager.handleCanaryResourceReconciliation(flinkSessionJob)) {
+            return UpdateControl.noUpdate();
+        }
+
         LOG.info("Starting reconciliation");
 
         statusRecorder.updateStatusFromCache(flinkSessionJob);
@@ -118,7 +127,12 @@ public class FlinkSessionJobController
 
     @Override
     public DeleteControl cleanup(FlinkSessionJob sessionJob, Context josdkContext) {
+        if (canaryResourceManager.handleCanaryResourceDeletion(sessionJob)) {
+            return DeleteControl.defaultDelete();
+        }
+
         String msg = "Cleaning up " + FlinkSessionJob.class.getSimpleName();
+
         LOG.info(msg);
         eventRecorder.triggerEvent(
                 sessionJob,

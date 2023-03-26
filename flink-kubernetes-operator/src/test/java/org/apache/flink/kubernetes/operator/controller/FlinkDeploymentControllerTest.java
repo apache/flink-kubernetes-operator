@@ -1105,6 +1105,18 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getJobStatus().getState());
     }
 
+    @Test
+    public void verifyCanaryHandling() throws Exception {
+        var canary = TestUtils.createCanaryDeployment();
+        kubernetesClient.resource(canary).create();
+        assertTrue(testController.reconcile(canary, context).isNoUpdate());
+        assertEquals(0, testController.getInternalStatusUpdateCount());
+        assertEquals(1, testController.getCanaryResourceManager().getNumberOfActiveCanaries());
+        testController.cleanup(canary, context);
+        assertEquals(0, testController.getInternalStatusUpdateCount());
+        assertEquals(0, testController.getCanaryResourceManager().getNumberOfActiveCanaries());
+    }
+
     private HasMetadata getIngress(FlinkDeployment deployment) {
         if (IngressUtils.ingressInNetworkingV1(kubernetesClient)) {
             return kubernetesClient

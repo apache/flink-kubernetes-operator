@@ -223,7 +223,8 @@ public class ScalingMetricsTest {
     @Test
     public void testZeroValuesForBusyness() {
         double dataRate = 10;
-        Map<ScalingMetric, Double> scalingMetrics = testZeroValuesForRatesOrBusyness(dataRate, 0);
+        Map<ScalingMetric, Double> scalingMetrics =
+                testZeroValuesForRatesOrBusyness(dataRate, dataRate, 0);
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
@@ -243,7 +244,7 @@ public class ScalingMetricsTest {
     public void testZeroValuesForRates() {
         double busyMillisecondPerSec = 100;
         Map<ScalingMetric, Double> scalingMetrics =
-                testZeroValuesForRatesOrBusyness(0, busyMillisecondPerSec);
+                testZeroValuesForRatesOrBusyness(0, 0, busyMillisecondPerSec);
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
@@ -260,8 +261,27 @@ public class ScalingMetricsTest {
     }
 
     @Test
-    public void testZeroValuesForRateAndBusyness() {
-        Map<ScalingMetric, Double> scalingMetrics = testZeroValuesForRatesOrBusyness(0, 0);
+    public void testZeroProcessingRateOnly() {
+        Map<ScalingMetric, Double> scalingMetrics = testZeroValuesForRatesOrBusyness(0, 1, 100);
+        assertEquals(
+                Map.of(
+                        // Output ratio should be kept to 1
+                        ScalingMetric.OUTPUT_RATIO,
+                        1.,
+                        ScalingMetric.TRUE_PROCESSING_RATE,
+                        ScalingMetrics.EFFECTIVELY_ZERO * 10,
+                        ScalingMetric.TRUE_OUTPUT_RATE,
+                        ScalingMetrics.EFFECTIVELY_ZERO * 10,
+                        ScalingMetric.SOURCE_DATA_RATE,
+                        ScalingMetrics.EFFECTIVELY_ZERO,
+                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                        ScalingMetrics.EFFECTIVELY_ZERO),
+                scalingMetrics);
+    }
+
+    @Test
+    public void testZeroValuesForRatesAndBusyness() {
+        Map<ScalingMetric, Double> scalingMetrics = testZeroValuesForRatesOrBusyness(0, 0, 0);
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
@@ -278,7 +298,7 @@ public class ScalingMetricsTest {
     }
 
     private static Map<ScalingMetric, Double> testZeroValuesForRatesOrBusyness(
-            double rate, double busyness) {
+            double processingRate, double outputRate, double busyness) {
         var source = new JobVertexID();
         var op = new JobVertexID();
         var sink = new JobVertexID();
@@ -296,9 +316,10 @@ public class ScalingMetricsTest {
                         FlinkMetric.BUSY_TIME_PER_SEC,
                         new AggregatedMetric("", Double.NaN, busyness, Double.NaN, Double.NaN),
                         FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, rate),
+                        new AggregatedMetric(
+                                "", Double.NaN, Double.NaN, Double.NaN, processingRate),
                         FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, rate)),
+                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, outputRate)),
                 scalingMetrics,
                 topology,
                 0.,
