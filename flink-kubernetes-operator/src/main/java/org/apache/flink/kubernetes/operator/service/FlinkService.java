@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.service;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.client.program.ClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -91,6 +92,11 @@ public interface FlinkService {
     Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) throws Exception;
 
     SavepointFetchResult fetchSavepointInfo(String triggerId, String jobId, Configuration conf);
+
+    Tuple2<
+                    Optional<CheckpointHistoryWrapper.CompletedCheckpointInfo>,
+                    Optional<CheckpointHistoryWrapper.PendingCheckpointInfo>>
+            getCheckpointInfo(JobID jobId, Configuration conf) throws Exception;
 
     void disposeSavepoint(String savepointPath, Configuration conf) throws Exception;
 

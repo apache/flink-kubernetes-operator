@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
@@ -34,9 +36,11 @@ import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
+import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -48,9 +52,11 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -417,6 +423,104 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                 flinkService.listJobs().get(0).f0);
     }
 
+    @Test
+    public void testLastStateMaxCheckpointAge() throws Exception {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        // Set job status to running
+        var jobStatus = deployment.getStatus().getJobStatus();
+        long now = System.currentTimeMillis();
+
+        jobStatus.setState("RUNNING");
+        jobStatus.setStartTime(Long.toString(now));
+        jobStatus.setJobId(new JobID().toString());
+
+        var jobReconciler = (ApplicationReconciler) this.reconciler.getReconciler();
+        var ctx = getResourceContext(deployment);
+        var deployConf = ctx.getDeployConfig(deployment.getSpec());
+
+        assertEquals(
+                AbstractJobReconciler.AvailableUpgradeMode.of(UpgradeMode.LAST_STATE),
+                jobReconciler.getAvailableUpgradeMode(ctx, deployConf));
+
+        deployConf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE,
+                Duration.ofMinutes(1));
+
+        // Test without available checkpoints
+        flinkService.setCheckpointInfo(Tuple2.of(Optional.empty(), Optional.empty()));
+
+        // Job started just now
+        jobStatus.setStartTime(Long.toString(now));
+        assertEquals(
+                AbstractJobReconciler.AvailableUpgradeMode.of(UpgradeMode.LAST_STATE),
+                jobReconciler.getAvailableUpgradeMode(ctx, deployConf));
+
+        // Job started more than a minute ago
+        jobStatus.setStartTime(Long.toString(now - 61000));
+        assertEquals(
+                AbstractJobReconciler.AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT),
+                jobReconciler.getAvailableUpgradeMode(ctx, deployConf));
+
+        // If we have a pending savepoint within the max age, wait
+        flinkService.setCheckpointInfo(
+                Tuple2.of(
+                        Optional.empty(),
+                        Optional.of(
+                                new CheckpointHistoryWrapper.PendingCheckpointInfo(
+                                        0, now - 30000))));
+        assertEquals(
+                AbstractJobReconciler.AvailableUpgradeMode.pendingUpgrade(),
+                jobReconciler.getAvailableUpgradeMode(ctx, deployConf));
+
+        // If pending savepoint triggered before max age, use savepoint
+        flinkService.setCheckpointInfo(
+                Tuple2.of(
+                        Optional.empty(),
+                        Optional.of(
+                                new CheckpointHistoryWrapper.PendingCheckpointInfo(
+                                        0, now - 61000))));
+        assertEquals(
+                AbstractJobReconciler.AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT),
+                jobReconciler.getAvailableUpgradeMode(ctx, deployConf));
+
+        // Allow fallback to job start even with pending savepoint
+        jobStatus.setStartTime(Long.toString(now - 30000));
+        assertEquals(
+                AbstractJobReconciler.AvailableUpgradeMode.of(UpgradeMode.LAST_STATE),
+                jobReconciler.getAvailableUpgradeMode(ctx, deployConf));
+
+        // Recent completed checkpoint
+        jobStatus.setStartTime(Long.toString(now - 61000));
+        flinkService.setCheckpointInfo(
+                Tuple2.of(
+                        Optional.of(
+                                new CheckpointHistoryWrapper.CompletedCheckpointInfo(
+                                        0, "s", now - 30000)),
+                        Optional.of(
+                                new CheckpointHistoryWrapper.PendingCheckpointInfo(
+                                        0, now - 61000))));
+        assertEquals(
+                AbstractJobReconciler.AvailableUpgradeMode.of(UpgradeMode.LAST_STATE),
+                jobReconciler.getAvailableUpgradeMode(ctx, deployConf));
+
+        // Job start and checkpoint too old, trigger savepoint
+        jobStatus.setStartTime(Long.toString(now - 61000));
+        flinkService.setCheckpointInfo(
+                Tuple2.of(
+                        Optional.of(
+                                new CheckpointHistoryWrapper.CompletedCheckpointInfo(
+                                        0, "s", now - 61000)),
+                        Optional.of(
+                                new CheckpointHistoryWrapper.PendingCheckpointInfo(
+                                        0, now - 61000))));
+        assertEquals(
+                AbstractJobReconciler.AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT),
+                jobReconciler.getAvailableUpgradeMode(ctx, deployConf));
+    }
+
     private static Stream<Arguments> testInitialJmDeployCannotStartParams() {
         return Stream.of(
                 Arguments.of(UpgradeMode.LAST_STATE, true),
@@ -623,6 +727,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                                 .toBuilder()
                                 .jobId(runningJobs.get(0).f1.getJobId().toHexString())
                                 .jobName(runningJobs.get(0).f1.getJobName())
+                                .startTime(Long.toString(System.currentTimeMillis()))
                                 .state("RUNNING")
                                 .build());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);

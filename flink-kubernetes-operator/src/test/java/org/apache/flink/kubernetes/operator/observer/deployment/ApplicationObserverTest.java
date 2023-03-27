@@ -621,7 +621,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
                 deployment.getStatus().getJobManagerDeploymentStatus());
         // simulate deployment failure
         String podFailedMessage = "list jobs error";
-        flinkService.setJmPodList(
+        flinkService.setPodList(
                 TestUtils.createFailedPodList(
                         podFailedMessage, DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF));
         flinkService.setPortReady(false);
