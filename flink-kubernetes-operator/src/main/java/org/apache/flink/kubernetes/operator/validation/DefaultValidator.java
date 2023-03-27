@@ -248,6 +248,14 @@ public class DefaultValidator implements FlinkResourceValidator {
                         String.format(
                                 "Periodic savepoints cannot be enabled when config key[%s] is not set",
                                 CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
+            } else if (configuration.get(
+                            KubernetesOperatorConfigOptions
+                                    .OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE)
+                    != null) {
+                return Optional.of(
+                        String.format(
+                                "In order to use max-checkpoint age functionality config key[%s] must be set to allow triggering savepoint upgrades.",
+                                CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
             }
         }
 

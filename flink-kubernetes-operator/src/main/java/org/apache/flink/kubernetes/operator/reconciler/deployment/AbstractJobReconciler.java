@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
@@ -28,17 +30,22 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import lombok.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE;
 
 /**
  * Reconciler responsible for handling the job lifecycle according to the desired and current
@@ -95,8 +102,8 @@ public abstract class AbstractJobReconciler<
             if (desiredJobState == JobState.RUNNING) {
                 LOG.info("Upgrading/Restarting running job, suspending first...");
             }
-            Optional<UpgradeMode> availableUpgradeMode = getAvailableUpgradeMode(ctx, deployConfig);
-            if (availableUpgradeMode.isEmpty()) {
+            AvailableUpgradeMode availableUpgradeMode = getAvailableUpgradeMode(ctx, deployConfig);
+            if (!availableUpgradeMode.isAvailable()) {
                 return false;
             }
 
@@ -107,8 +114,8 @@ public abstract class AbstractJobReconciler<
                     EventRecorder.Component.JobManagerDeployment,
                     MSG_SUSPENDED);
             // We must record the upgrade mode used to the status later
-            currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.get());
-            cancelJob(ctx, availableUpgradeMode.get());
+            currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.getUpgradeMode().get());
+            cancelJob(ctx, availableUpgradeMode.getUpgradeMode().get());
             if (desiredJobState == JobState.RUNNING) {
                 ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
                         resource, deployConfig, clock);
@@ -140,15 +147,15 @@ public abstract class AbstractJobReconciler<
         return true;
     }
 
-    protected Optional<UpgradeMode> getAvailableUpgradeMode(
-            FlinkResourceContext<CR> ctx, Configuration deployConfig) {
+    protected AvailableUpgradeMode getAvailableUpgradeMode(
+            FlinkResourceContext<CR> ctx, Configuration deployConfig) throws Exception {
         var resource = ctx.getResource();
         var status = resource.getStatus();
         var upgradeMode = resource.getSpec().getJob().getUpgradeMode();
 
         if (upgradeMode == UpgradeMode.STATELESS) {
             LOG.info("Stateless job, ready for upgrade");
-            return Optional.of(UpgradeMode.STATELESS);
+            return AvailableUpgradeMode.of(UpgradeMode.STATELESS);
         }
 
         var flinkService = ctx.getFlinkService();
@@ -156,7 +163,7 @@ public abstract class AbstractJobReconciler<
                 && !flinkService.isHaMetadataAvailable(ctx.getObserveConfig())) {
             LOG.info(
                     "Job is in terminal state, ready for upgrade from observed latest checkpoint/savepoint");
-            return Optional.of(UpgradeMode.SAVEPOINT);
+            return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
         }
 
         if (ReconciliationUtils.isJobRunning(status)) {
@@ -167,19 +174,69 @@ public abstract class AbstractJobReconciler<
             if (changedToLastStateWithoutHa) {
                 LOG.info(
                         "Using savepoint upgrade mode when switching to last-state without HA previously enabled");
-                return Optional.of(UpgradeMode.SAVEPOINT);
+                return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
             }
 
             if (flinkVersionChanged(
                     ReconciliationUtils.getDeployedSpec(resource), resource.getSpec())) {
                 LOG.info("Using savepoint upgrade mode when upgrading Flink version");
-                return Optional.of(UpgradeMode.SAVEPOINT);
+                return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
             }
 
-            return Optional.of(upgradeMode);
+            if (upgradeMode == UpgradeMode.LAST_STATE) {
+                return changeLastStateIfCheckpointTooOld(ctx, deployConfig);
+            }
+
+            return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
         }
 
-        return Optional.empty();
+        return AvailableUpgradeMode.unavailable();
+    }
+
+    @VisibleForTesting
+    protected AvailableUpgradeMode changeLastStateIfCheckpointTooOld(
+            FlinkResourceContext<CR> ctx, Configuration deployConfig) throws Exception {
+
+        var maxAge = deployConfig.get(OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE);
+        if (maxAge == null) {
+            return AvailableUpgradeMode.of(UpgradeMode.LAST_STATE);
+        }
+
+        var jobStatus = ctx.getResource().getStatus().getJobStatus();
+        var jobId = JobID.fromHexString(jobStatus.getJobId());
+        var startTime = Instant.ofEpochMilli(Long.parseLong(jobStatus.getStartTime()));
+        var now = clock.instant();
+
+        Predicate<Instant> withinMaxAge = ts -> now.minus(maxAge).isBefore(ts);
+
+        // If job started recently, no need to query checkpoint
+        if (withinMaxAge.test(startTime)) {
+            return AvailableUpgradeMode.of(UpgradeMode.LAST_STATE);
+        }
+
+        var chkInfo = ctx.getFlinkService().getCheckpointInfo(jobId, ctx.getObserveConfig());
+        var completedTs =
+                chkInfo.f0
+                        .map(CheckpointHistoryWrapper.CompletedCheckpointInfo::getTimestamp)
+                        .map(Instant::ofEpochMilli)
+                        .orElse(Instant.MIN);
+        var pendingTs =
+                chkInfo.f1
+                        .map(CheckpointHistoryWrapper.PendingCheckpointInfo::getTimestamp)
+                        .map(Instant::ofEpochMilli)
+                        .orElse(Instant.MIN);
+
+        if (withinMaxAge.test(completedTs)) {
+            // We have a recent enough checkpoint
+            return AvailableUpgradeMode.of(UpgradeMode.LAST_STATE);
+        } else if (withinMaxAge.test(pendingTs)) {
+            LOG.info("Waiting for pending checkpoint to complete before upgrading.");
+            return AvailableUpgradeMode.pendingUpgrade();
+        } else {
+            LOG.info(
+                    "Using savepoint upgrade mode because latest checkpoint is too old for last-state upgrade");
+            return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
+        }
     }
 
     protected void restoreJob(
@@ -273,4 +330,27 @@ public abstract class AbstractJobReconciler<
      * @throws Exception Error during cancellation.
      */
     protected abstract void cleanupAfterFailedJob(FlinkResourceContext<CR> ctx) throws Exception;
+
+    /** Object to capture available upgrade mode. */
+    @Value
+    public static class AvailableUpgradeMode {
+        Optional<UpgradeMode> upgradeMode;
+        boolean allowFallback;
+
+        public boolean isAvailable() {
+            return upgradeMode.isPresent();
+        }
+
+        static AvailableUpgradeMode of(UpgradeMode upgradeMode) {
+            return new AvailableUpgradeMode(Optional.of(upgradeMode), false);
+        }
+
+        static AvailableUpgradeMode unavailable() {
+            return new AvailableUpgradeMode(Optional.empty(), true);
+        }
+
+        static AvailableUpgradeMode pendingUpgrade() {
+            return new AvailableUpgradeMode(Optional.empty(), false);
+        }
+    }
 }

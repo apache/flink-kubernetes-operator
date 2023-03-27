@@ -72,14 +72,15 @@ public class ApplicationReconciler
     }
 
     @Override
-    protected Optional<UpgradeMode> getAvailableUpgradeMode(
-            FlinkResourceContext<FlinkDeployment> ctx, Configuration deployConfig) {
+    protected AvailableUpgradeMode getAvailableUpgradeMode(
+            FlinkResourceContext<FlinkDeployment> ctx, Configuration deployConfig)
+            throws Exception {
 
         var deployment = ctx.getResource();
         var status = deployment.getStatus();
         var availableUpgradeMode = super.getAvailableUpgradeMode(ctx, deployConfig);
 
-        if (availableUpgradeMode.isPresent()) {
+        if (availableUpgradeMode.isAvailable() || !availableUpgradeMode.isAllowFallback()) {
             return availableUpgradeMode;
         }
         var flinkService = ctx.getFlinkService();
@@ -95,7 +96,7 @@ public class ApplicationReconciler
             if (flinkService.isHaMetadataAvailable(deployConfig)) {
                 LOG.info(
                         "Job is not running but HA metadata is available for last state restore, ready for upgrade");
-                return Optional.of(UpgradeMode.LAST_STATE);
+                return AvailableUpgradeMode.of(UpgradeMode.LAST_STATE);
             }
         }
 
@@ -123,7 +124,7 @@ public class ApplicationReconciler
 
         LOG.info(
                 "Job is not running and HA metadata is not available or usable for executing the upgrade, waiting for upgradeable state");
-        return Optional.empty();
+        return AvailableUpgradeMode.unavailable();
     }
 
     private void deleteJmThatNeverStarted(

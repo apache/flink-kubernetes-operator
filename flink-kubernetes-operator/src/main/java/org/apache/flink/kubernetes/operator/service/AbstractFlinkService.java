@@ -513,6 +513,30 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) throws Exception {
+        var latestCheckpointOpt = getCheckpointInfo(jobId, conf).f0;
+
+        if (latestCheckpointOpt.isPresent()
+                && latestCheckpointOpt
+                        .get()
+                        .getExternalPointer()
+                        .equals(NonPersistentMetadataCheckpointStorageLocation.EXTERNAL_POINTER)) {
+            throw new RecoveryFailureException(
+                    "Latest checkpoint not externally addressable, manual recovery required.",
+                    "CheckpointNotFound");
+        }
+        return latestCheckpointOpt.map(
+                pointer ->
+                        Savepoint.of(
+                                pointer.getExternalPointer(),
+                                pointer.getTimestamp(),
+                                SavepointTriggerType.UNKNOWN));
+    }
+
+    @Override
+    public Tuple2<
+                    Optional<CheckpointHistoryWrapper.CompletedCheckpointInfo>,
+                    Optional<CheckpointHistoryWrapper.PendingCheckpointInfo>>
+            getCheckpointInfo(JobID jobId, Configuration conf) throws Exception {
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
 
@@ -531,20 +555,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     .getSeconds(),
                             TimeUnit.SECONDS);
 
-            var latestCheckpointOpt = checkpoints.getLatestCheckpointPath();
-
-            if (latestCheckpointOpt.isPresent()
-                    && latestCheckpointOpt
-                            .get()
-                            .equals(
-                                    NonPersistentMetadataCheckpointStorageLocation
-                                            .EXTERNAL_POINTER)) {
-                throw new RecoveryFailureException(
-                        "Latest checkpoint not externally addressable, manual recovery required.",
-                        "CheckpointNotFound");
-            }
-            return latestCheckpointOpt.map(
-                    pointer -> Savepoint.of(pointer, SavepointTriggerType.UNKNOWN));
+            return Tuple2.of(
+                    checkpoints.getLatestCompletedCheckpoint(),
+                    checkpoints.getInProgressCheckpoint());
         }
     }
 

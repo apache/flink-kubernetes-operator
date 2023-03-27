@@ -331,7 +331,7 @@ public class FlinkDeploymentControllerTest {
                 .andReply(validatingResponseProvider)
                 .once();
 
-        flinkService.setJmPodList(TestUtils.createFailedPodList(crashLoopMessage, reason));
+        flinkService.setPodList(TestUtils.createFailedPodList(crashLoopMessage, reason));
 
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         UpdateControl<FlinkDeployment> updateControl;
@@ -908,7 +908,7 @@ public class FlinkDeploymentControllerTest {
     @Test
     public void testSuccessfulObservationShouldClearErrors() throws Exception {
         final String crashLoopMessage = "deploy errors";
-        flinkService.setJmPodList(
+        flinkService.setPodList(
                 TestUtils.createFailedPodList(
                         crashLoopMessage, DeploymentFailedException.REASON_CRASH_LOOP_BACKOFF));
 
