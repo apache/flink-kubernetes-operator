@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetrics.EFFECTIVELY_INFINITE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -228,9 +229,10 @@ public class ScalingMetricsTest {
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
-                        1.0E14,
+                        // When not busy at all, we have infinite processing power
+                        EFFECTIVELY_INFINITE * dataRate,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        1.0E14,
+                        EFFECTIVELY_INFINITE * dataRate,
                         ScalingMetric.OUTPUT_RATIO,
                         1.,
                         ScalingMetric.SOURCE_DATA_RATE,
@@ -248,15 +250,17 @@ public class ScalingMetricsTest {
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
-                        1.0E-9,
+                        // When no records are coming in, we assume infinite processing power
+                        EFFECTIVELY_INFINITE,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        1.0E-9,
+                        0.,
                         ScalingMetric.OUTPUT_RATIO,
-                        1.,
+                        // We are not producing any records
+                        0.,
                         ScalingMetric.SOURCE_DATA_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO,
+                        0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO),
+                        0.),
                 scalingMetrics);
     }
 
@@ -265,17 +269,18 @@ public class ScalingMetricsTest {
         Map<ScalingMetric, Double> scalingMetrics = testZeroValuesForRatesOrBusyness(0, 1, 100);
         assertEquals(
                 Map.of(
-                        // Output ratio should be kept to 1
+                        // If there is zero input the out ratio must be zero
                         ScalingMetric.OUTPUT_RATIO,
-                        1.,
+                        0.,
                         ScalingMetric.TRUE_PROCESSING_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO * 10,
+                        // When no records are coming in, we assume infinite processing power
+                        EFFECTIVELY_INFINITE,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO * 10,
+                        0.,
                         ScalingMetric.SOURCE_DATA_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO,
+                        0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO),
+                        0.),
                 scalingMetrics);
     }
 
@@ -285,15 +290,16 @@ public class ScalingMetricsTest {
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
-                        1000.0,
+                        // Nothing is coming in, we must assume infinite processing power
+                        EFFECTIVELY_INFINITE,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        1000.0,
+                        0.,
                         ScalingMetric.OUTPUT_RATIO,
-                        1.,
+                        0.,
                         ScalingMetric.SOURCE_DATA_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO,
+                        0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO),
+                        0.),
                 scalingMetrics);
     }
 
