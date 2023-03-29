@@ -56,7 +56,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetrics.EFFECTIVELY_INFINITE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -418,7 +417,7 @@ public class MetricsCollectionAndEvaluationTest {
                 evaluator.evaluate(conf, collectedMetrics);
         assertEquals(0, evaluation.get(source1).get(ScalingMetric.TARGET_DATA_RATE).getCurrent());
         assertEquals(
-                EFFECTIVELY_INFINITE,
+                Double.POSITIVE_INFINITY,
                 evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getCurrent());
         assertEquals(
                 0.,

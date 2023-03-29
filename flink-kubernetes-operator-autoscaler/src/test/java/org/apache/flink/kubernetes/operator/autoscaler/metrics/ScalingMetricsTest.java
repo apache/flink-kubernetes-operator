@@ -31,7 +31,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetrics.EFFECTIVELY_INFINITE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -230,9 +229,9 @@ public class ScalingMetricsTest {
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
                         // When not busy at all, we have infinite processing power
-                        EFFECTIVELY_INFINITE * dataRate,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        EFFECTIVELY_INFINITE * dataRate,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.OUTPUT_RATIO,
                         1.,
                         ScalingMetric.SOURCE_DATA_RATE,
@@ -251,9 +250,9 @@ public class ScalingMetricsTest {
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
                         // When no records are coming in, we assume infinite processing power
-                        EFFECTIVELY_INFINITE,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        0.,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.OUTPUT_RATIO,
                         // We are not producing any records
                         0.,
@@ -274,9 +273,9 @@ public class ScalingMetricsTest {
                         0.,
                         ScalingMetric.TRUE_PROCESSING_RATE,
                         // When no records are coming in, we assume infinite processing power
-                        EFFECTIVELY_INFINITE,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        0.,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.SOURCE_DATA_RATE,
                         0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
@@ -291,9 +290,9 @@ public class ScalingMetricsTest {
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
                         // Nothing is coming in, we must assume infinite processing power
-                        EFFECTIVELY_INFINITE,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        0.,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.OUTPUT_RATIO,
                         0.,
                         ScalingMetric.SOURCE_DATA_RATE,
