@@ -87,6 +87,7 @@ import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.Service;
@@ -784,6 +785,8 @@ public abstract class AbstractFlinkService implements FlinkService {
     /** Wait until the FLink cluster has completely shut down. */
     @VisibleForTesting
     void waitForClusterShutdown(String namespace, String clusterId, long shutdownTimeout) {
+        LOG.info("Waiting for cluster shutdown...");
+
         boolean jobManagerRunning = true;
         boolean serviceRunning = true;
 
@@ -918,7 +921,10 @@ public abstract class AbstractFlinkService implements FlinkService {
             FlinkDeploymentStatus status,
             Configuration conf,
             boolean deleteHaData) {
-        deleteClusterInternal(meta, conf, deleteHaData);
+
+        var deletionPropagation = configManager.getOperatorConfiguration().getDeletionPropagation();
+        LOG.info("Deleting cluster with {} propagation", deletionPropagation);
+        deleteClusterInternal(meta, conf, deleteHaData, deletionPropagation);
         updateStatusAfterClusterDeletion(status);
     }
 
@@ -930,9 +936,13 @@ public abstract class AbstractFlinkService implements FlinkService {
      * @param conf Configuration of the Flink application
      * @param deleteHaData Flag to indicate whether k8s or Zookeeper HA metadata should be removed
      *     as well
+     * @param deletionPropagation Resource deletion propagation policy
      */
     protected abstract void deleteClusterInternal(
-            ObjectMeta meta, Configuration conf, boolean deleteHaData);
+            ObjectMeta meta,
+            Configuration conf,
+            boolean deleteHaData,
+            DeletionPropagation deletionPropagation);
 
     protected void deleteHAData(String namespace, String clusterId, Configuration conf) {
         // We need to wait for cluster shutdown otherwise HA data might be recreated
@@ -950,8 +960,6 @@ public abstract class AbstractFlinkService implements FlinkService {
         } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
             LOG.info("Deleting Zookeeper HA metadata");
             FlinkUtils.deleteZookeeperHAMetadata(conf);
-        } else {
-            LOG.warn("Can't delete HA metadata since HA is not enabled");
         }
     }
 

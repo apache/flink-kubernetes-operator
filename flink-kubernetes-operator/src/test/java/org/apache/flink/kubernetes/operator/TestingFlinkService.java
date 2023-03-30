@@ -60,6 +60,7 @@ import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.util.SerializedThrowable;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -429,7 +430,10 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     protected void deleteClusterInternal(
-            ObjectMeta meta, Configuration conf, boolean deleteHaMeta) {
+            ObjectMeta meta,
+            Configuration conf,
+            boolean deleteHaMeta,
+            DeletionPropagation deletionPropagation) {
         jobs.clear();
         sessions.remove(meta.getName());
     }

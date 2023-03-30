@@ -465,7 +465,7 @@ public abstract class AbstractFlinkResourceReconciler<
                         "kind", owner.getKind(),
                         "name", owner.getMetadata().getName(),
                         "uid", owner.getMetadata().getUid(),
-                        "blockOwnerDeletion", "false",
+                        "blockOwnerDeletion", "true",
                         "controller", "false");
         deployConfig.set(
                 KubernetesConfigOptions.JOB_MANAGER_OWNER_REFERENCE, List.of(ownerReference));
