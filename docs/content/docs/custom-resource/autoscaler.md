@@ -36,7 +36,7 @@ Key benefits to the user:
  - Detailed utilization metrics for performance debugging
 
 Job requirements:
- - The autoscaler currently only works with the latest [Flink 1.17 snapshot images](https://ghcr.io/apache/flink-docker) or after backporting the following fixes to your 1.15/1.16 Flink image
+ - The autoscaler currently only works with the latest [Flink 1.17](https://hub.docker.com/_/flink) or after backporting the following fixes to your 1.15/1.16 Flink image
    - [Job vertex parallelism overrides](https://github.com/apache/flink/commit/23ce2281a0bb4047c64def9af7ddd5f19d88e2a9) (must have)
    - [Support timespan for busyTime metrics](https://github.com/apache/flink/commit/a7fdab8b23cddf568fa32ee7eb804d7c3eb23a35) (good to have)
  - All sources must use the new [Source API](https://cwiki.apache.org/confluence/display/FLINK/FLIP-27%3A+Refactor+Source+Interface) (most common connectors already do)

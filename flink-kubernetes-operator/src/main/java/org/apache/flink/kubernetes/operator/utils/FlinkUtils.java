@@ -50,6 +50,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -63,7 +64,7 @@ public class FlinkUtils {
 
     public static final String CR_GENERATION_LABEL = "flinkdeployment.flink.apache.org/generation";
 
-    public static Pod mergePodTemplates(Pod toPod, Pod fromPod) {
+    public static Pod mergePodTemplates(Pod toPod, Pod fromPod, boolean mergeArraysByName) {
         if (fromPod == null) {
             return toPod;
         } else if (toPod == null) {
@@ -71,7 +72,7 @@ public class FlinkUtils {
         }
         JsonNode node1 = MAPPER.valueToTree(toPod);
         JsonNode node2 = MAPPER.valueToTree(fromPod);
-        mergeInto(node1, node2);
+        mergeInto(node1, node2, mergeArraysByName);
         try {
             return MAPPER.treeToValue(node1, Pod.class);
         } catch (Exception ex) {
@@ -79,7 +80,7 @@ public class FlinkUtils {
         }
     }
 
-    private static void mergeInto(JsonNode toNode, JsonNode fromNode) {
+    private static void mergeInto(JsonNode toNode, JsonNode fromNode, boolean mergeArraysByName) {
         Iterator<String> fieldNames = fromNode.fieldNames();
         while (fieldNames.hasNext()) {
             String fieldName = fieldNames.next();
@@ -87,23 +88,63 @@ public class FlinkUtils {
             JsonNode fromChildNode = fromNode.get(fieldName);
 
             if (toChildNode != null && toChildNode.isArray() && fromChildNode.isArray()) {
-                // TODO: does merging arrays even make sense or should it just override?
-                for (int i = 0; i < fromChildNode.size(); i++) {
-                    JsonNode updatedChildNode = fromChildNode.get(i);
-                    if (toChildNode.size() <= i) {
-                        // append new node
-                        ((ArrayNode) toChildNode).add(updatedChildNode);
-                    }
-                    mergeInto(toChildNode.get(i), updatedChildNode);
-                }
+                mergeArray((ArrayNode) toChildNode, (ArrayNode) fromChildNode, mergeArraysByName);
             } else if (toChildNode != null && toChildNode.isObject()) {
-                mergeInto(toChildNode, fromChildNode);
+                mergeInto(toChildNode, fromChildNode, mergeArraysByName);
             } else {
                 if (toNode instanceof ObjectNode) {
                     ((ObjectNode) toNode).replace(fieldName, fromChildNode);
                 }
             }
         }
+    }
+
+    private static void mergeArray(
+            ArrayNode toChildNode, ArrayNode fromChildNode, boolean mergeArraysByName) {
+        if (namesDefined(toChildNode) && namesDefined(fromChildNode) && mergeArraysByName) {
+            var toGrouped = groupByName(toChildNode);
+            var fromGrouped = groupByName(fromChildNode);
+            fromGrouped.forEach(
+                    (name, fromElement) ->
+                            toGrouped.compute(
+                                    name,
+                                    (n, toElement) -> {
+                                        if (toElement == null) {
+                                            return fromElement;
+                                        }
+                                        mergeInto(toElement, fromElement, mergeArraysByName);
+                                        return toElement;
+                                    }));
+
+            toChildNode.removeAll();
+            toGrouped.values().forEach(toChildNode::add);
+        } else {
+            for (int i = 0; i < fromChildNode.size(); i++) {
+                JsonNode updatedChildNode = fromChildNode.get(i);
+                if (toChildNode.size() <= i) {
+                    // append new node
+                    toChildNode.add(updatedChildNode);
+                }
+                mergeInto(toChildNode.get(i), updatedChildNode, mergeArraysByName);
+            }
+        }
+    }
+
+    private static boolean namesDefined(ArrayNode node) {
+        var it = node.elements();
+        while (it.hasNext()) {
+            var next = it.next();
+            if (!next.has("name")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Map<String, ObjectNode> groupByName(ArrayNode node) {
+        var out = new LinkedHashMap<String, ObjectNode>();
+        node.elements().forEachRemaining(e -> out.put((e.get("name").asText()), (ObjectNode) e));
+        return out;
     }
 
     public static void deleteZookeeperHAMetadata(Configuration conf) {

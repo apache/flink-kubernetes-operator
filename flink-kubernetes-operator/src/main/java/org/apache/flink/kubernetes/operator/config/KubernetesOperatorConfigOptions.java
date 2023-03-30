@@ -466,4 +466,12 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(Duration.ofMinutes(1))
                     .withDescription(
                             "Allowed max time between spec update and reconciliation for canary resources.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> POD_TEMPLATE_MERGE_BY_NAME =
+            operatorConfig("pod-template.merge-arrays-by-name")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Configure the array merge behaviour during pod merging. Arrays can be either merged by position or name matching.");
 }
