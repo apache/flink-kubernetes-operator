@@ -51,6 +51,8 @@ import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.Acknowledge;
+import org.apache.flink.runtime.messages.FlinkJobNotFoundException;
+import org.apache.flink.runtime.messages.FlinkJobTerminatedWithoutCancellationException;
 import org.apache.flink.runtime.messages.webmonitor.JobDetails;
 import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
@@ -96,6 +98,8 @@ public class TestingFlinkService extends AbstractFlinkService {
     private final Map<JobID, String> jobErrors = new HashMap<>();
     private final Set<String> sessions = new HashSet<>();
     private boolean isPortReady = true;
+    private boolean isFlinkJobNotFound = false;
+    private boolean isFlinkJobTerminatedWithoutCancellation = false;
     private boolean haDataAvailable = true;
     private boolean jobManagerReady = true;
     private boolean deployFailure = false;
@@ -380,7 +384,26 @@ public class TestingFlinkService extends AbstractFlinkService {
             throws Exception {
         cancelJobCallCount++;
 
+        if (!isPortReady) {
+            throw new TimeoutException("JM port is unavailable");
+        }
+
+        if (isFlinkJobNotFound) {
+            throw new FlinkJobNotFoundException(jobID);
+        }
+
         var jobOpt = jobs.stream().filter(js -> js.f1.getJobId().equals(jobID)).findAny();
+
+        if (isFlinkJobTerminatedWithoutCancellation) {
+            JobStatusMessage oldStatus = jobOpt.get().f1;
+            jobOpt.get().f1 =
+                    new JobStatusMessage(
+                            oldStatus.getJobId(),
+                            oldStatus.getJobName(),
+                            JobStatus.FAILED,
+                            oldStatus.getStartTime());
+            throw new FlinkJobTerminatedWithoutCancellationException(jobID, JobStatus.FAILED);
+        }
 
         if (jobOpt.isEmpty()) {
             throw new Exception("Job not found");
@@ -450,6 +473,15 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     public void setPortReady(boolean isPortReady) {
         this.isPortReady = isPortReady;
+    }
+
+    public void setFlinkJobTerminatedWithoutCancellation(
+            boolean isFlinkJobTerminatedWithoutCancellation) {
+        this.isFlinkJobTerminatedWithoutCancellation = isFlinkJobTerminatedWithoutCancellation;
+    }
+
+    public void setFlinkJobNotFound(boolean isFlinkJobNotFound) {
+        this.isFlinkJobNotFound = isFlinkJobNotFound;
     }
 
     @Override

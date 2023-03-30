@@ -68,7 +68,8 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         reconciler =
                 new TestReconcilerAdapter<>(
                         this,
-                        new SessionJobReconciler(kubernetesClient, eventRecorder, statusRecorder));
+                        new SessionJobReconciler(
+                                kubernetesClient, eventRecorder, statusRecorder, configManager));
     }
 
     @Test
