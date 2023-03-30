@@ -251,20 +251,20 @@ public class ScalingMetricEvaluator {
             ScalingMetric metric,
             JobVertexID jobVertexId,
             SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory) {
-        double[] metricsValues =
+        double[] metricValues =
                 metricsHistory.values().stream()
                         .map(m -> m.get(jobVertexId))
                         .filter(m -> m.containsKey(metric))
                         .mapToDouble(m -> m.get(metric))
                         .filter(d -> !Double.isNaN(d))
                         .toArray();
-        for (double metricsValue : metricsValues) {
-            if (Double.isInfinite(metricsValue)) {
+        for (double metricValue : metricValues) {
+            if (Double.isInfinite(metricValue)) {
                 // As long as infinite values are present, we can't properly average. We need to
                 // wait until they are evicted.
-                return metricsValue;
+                return metricValue;
             }
         }
-        return StatUtils.mean(metricsValues);
+        return StatUtils.mean(metricValues);
     }
 }
