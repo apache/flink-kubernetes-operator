@@ -228,9 +228,10 @@ public class ScalingMetricsTest {
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
-                        1.0E14,
+                        // When not busy at all, we have infinite processing power
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        1.0E14,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.OUTPUT_RATIO,
                         1.,
                         ScalingMetric.SOURCE_DATA_RATE,
@@ -248,15 +249,17 @@ public class ScalingMetricsTest {
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
-                        1.0E-9,
+                        // When no records are coming in, we assume infinite processing power
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        1.0E-9,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.OUTPUT_RATIO,
-                        1.,
+                        // We are not producing any records
+                        0.,
                         ScalingMetric.SOURCE_DATA_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO,
+                        0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO),
+                        0.),
                 scalingMetrics);
     }
 
@@ -265,17 +268,18 @@ public class ScalingMetricsTest {
         Map<ScalingMetric, Double> scalingMetrics = testZeroValuesForRatesOrBusyness(0, 1, 100);
         assertEquals(
                 Map.of(
-                        // Output ratio should be kept to 1
+                        // If there is zero input the out ratio must be zero
                         ScalingMetric.OUTPUT_RATIO,
-                        1.,
+                        0.,
                         ScalingMetric.TRUE_PROCESSING_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO * 10,
+                        // When no records are coming in, we assume infinite processing power
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO * 10,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.SOURCE_DATA_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO,
+                        0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO),
+                        0.),
                 scalingMetrics);
     }
 
@@ -285,15 +289,16 @@ public class ScalingMetricsTest {
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
-                        1000.0,
+                        // Nothing is coming in, we must assume infinite processing power
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        1000.0,
+                        Double.POSITIVE_INFINITY,
                         ScalingMetric.OUTPUT_RATIO,
-                        1.,
+                        0.,
                         ScalingMetric.SOURCE_DATA_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO,
+                        0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
-                        ScalingMetrics.EFFECTIVELY_ZERO),
+                        0.),
                 scalingMetrics);
     }
 

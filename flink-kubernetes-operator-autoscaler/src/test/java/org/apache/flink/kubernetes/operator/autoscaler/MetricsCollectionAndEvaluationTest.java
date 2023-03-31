@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
-import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetrics;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.VertexInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -416,11 +415,10 @@ public class MetricsCollectionAndEvaluationTest {
 
         Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluation =
                 evaluator.evaluate(conf, collectedMetrics);
+        assertEquals(0, evaluation.get(source1).get(ScalingMetric.TARGET_DATA_RATE).getCurrent());
         assertEquals(
-                ScalingMetrics.EFFECTIVELY_ZERO,
-                evaluation.get(source1).get(ScalingMetric.TARGET_DATA_RATE).getCurrent());
-        assertEquals(
-                1E-6, evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getCurrent());
+                Double.POSITIVE_INFINITY,
+                evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getCurrent());
         assertEquals(
                 0.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD).getCurrent());
