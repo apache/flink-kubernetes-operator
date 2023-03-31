@@ -39,6 +39,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -190,11 +191,56 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    protected FlinkConfigBuilder applyCommonPodTemplate() throws IOException {
-        if (spec.getPodTemplate() != null) {
-            effectiveConfig.setString(
-                    "kubernetes.pod-template-file", createTempFile(spec.getPodTemplate()));
+    protected FlinkConfigBuilder applyPodTemplate() throws IOException {
+        Pod commonPodTemplate = spec.getPodTemplate();
+        boolean mergeByName =
+                effectiveConfig.get(KubernetesOperatorConfigOptions.POD_TEMPLATE_MERGE_BY_NAME);
+
+        Pod jmPodTemplate;
+        if (spec.getJobManager() != null) {
+            jmPodTemplate =
+                    mergePodTemplates(
+                            commonPodTemplate, spec.getJobManager().getPodTemplate(), mergeByName);
+
+            jmPodTemplate =
+                    applyResourceToPodTemplate(jmPodTemplate, spec.getJobManager().getResource());
+        } else {
+            jmPodTemplate = ReconciliationUtils.clone(commonPodTemplate);
         }
+
+        if (effectiveConfig.get(
+                KubernetesOperatorConfigOptions.OPERATOR_JM_STARTUP_PROBE_ENABLED)) {
+            if (jmPodTemplate == null) {
+                jmPodTemplate = new Pod();
+            }
+            FlinkUtils.addStartupProbe(jmPodTemplate);
+        }
+
+        String jmTemplateFile = null;
+        if (jmPodTemplate != null) {
+            jmTemplateFile = createTempFile(jmPodTemplate);
+            effectiveConfig.set(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE, jmTemplateFile);
+        }
+
+        Pod tmPodTemplate;
+        if (spec.getTaskManager() != null) {
+            tmPodTemplate =
+                    mergePodTemplates(
+                            commonPodTemplate, spec.getTaskManager().getPodTemplate(), mergeByName);
+            tmPodTemplate =
+                    applyResourceToPodTemplate(tmPodTemplate, spec.getTaskManager().getResource());
+        } else {
+            tmPodTemplate = ReconciliationUtils.clone(commonPodTemplate);
+        }
+
+        if (tmPodTemplate != null) {
+            effectiveConfig.set(
+                    KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE,
+                    tmPodTemplate.equals(jmPodTemplate)
+                            ? jmTemplateFile
+                            : createTempFile(tmPodTemplate));
+        }
+
         return this;
     }
 
@@ -216,15 +262,9 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    protected FlinkConfigBuilder applyJobManagerSpec() throws IOException {
+    protected FlinkConfigBuilder applyJobManagerSpec() {
         if (spec.getJobManager() != null) {
             setResource(spec.getJobManager().getResource(), effectiveConfig, true);
-            setPodTemplate(
-                    spec.getPodTemplate(),
-                    spec.getJobManager().getPodTemplate(),
-                    spec.getJobManager().getResource(),
-                    effectiveConfig,
-                    true);
             if (spec.getJobManager().getReplicas() > 0) {
                 effectiveConfig.set(
                         KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS,
@@ -234,16 +274,9 @@ public class FlinkConfigBuilder {
         return this;
     }
 
-    protected FlinkConfigBuilder applyTaskManagerSpec() throws IOException {
+    protected FlinkConfigBuilder applyTaskManagerSpec() {
         if (spec.getTaskManager() != null) {
             setResource(spec.getTaskManager().getResource(), effectiveConfig, false);
-            setPodTemplate(
-                    spec.getPodTemplate(),
-                    spec.getTaskManager().getPodTemplate(),
-                    spec.getTaskManager().getResource(),
-                    effectiveConfig,
-                    false);
-
             if (spec.getTaskManager().getReplicas() != null
                     && spec.getTaskManager().getReplicas() > 0) {
                 effectiveConfig.set(
@@ -369,7 +402,7 @@ public class FlinkConfigBuilder {
                 .applyImage()
                 .applyImagePullPolicy()
                 .applyServiceAccount()
-                .applyCommonPodTemplate()
+                .applyPodTemplate()
                 .applyIngressDomain()
                 .applyJobManagerSpec()
                 .applyTaskManagerSpec()
@@ -418,39 +451,6 @@ public class FlinkConfigBuilder {
             }
         }
         conf.setDouble(configKey, resource.getCpu());
-    }
-
-    private static void setPodTemplate(
-            Pod basicPod,
-            Pod appendPod,
-            Resource resource,
-            Configuration effectiveConfig,
-            boolean isJM)
-            throws IOException {
-
-        // Avoid to create temporary pod template files for JobManager and TaskManager if it is not
-        // configured explicitly via .spec.JobManagerSpec.podTemplate or
-        // .spec.TaskManagerSpec.podTemplate.
-        final ConfigOption<String> podConfigOption =
-                isJM
-                        ? KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE
-                        : KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE;
-
-        Pod podTemplate;
-        if (basicPod != null || appendPod != null) {
-            Pod mergedPodTemplate =
-                    mergePodTemplates(
-                            basicPod,
-                            appendPod,
-                            effectiveConfig.get(
-                                    KubernetesOperatorConfigOptions.POD_TEMPLATE_MERGE_BY_NAME));
-            podTemplate = applyResourceToPodTemplate(mergedPodTemplate, resource);
-        } else {
-            podTemplate = applyResourceToPodTemplate(null, resource);
-        }
-        if (podTemplate != null) {
-            effectiveConfig.setString(podConfigOption, createTempFile(podTemplate));
-        }
     }
 
     @VisibleForTesting
@@ -542,9 +542,6 @@ public class FlinkConfigBuilder {
     }
 
     protected static void cleanupTmpFiles(Configuration configuration) {
-        configuration
-                .getOptional(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE)
-                .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
         configuration
                 .getOptional(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE)
                 .ifPresent(FlinkConfigBuilder::deleteSilentlyIfGenerated);
