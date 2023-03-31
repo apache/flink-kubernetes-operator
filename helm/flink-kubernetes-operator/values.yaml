@@ -59,6 +59,7 @@ rbac:
     name: "flink-role-binding"
 
 operatorPod:
+  priorityClassName: null
   annotations: {}
   labels: {}
   env:
