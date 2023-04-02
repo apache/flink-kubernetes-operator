@@ -22,11 +22,17 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.COUNTER_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.CPU_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.MEMORY_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.RESOURCE_USAGE_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.STATUS_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -185,6 +191,137 @@ public class FlinkDeploymentMetricsTest {
             assertEquals(0, listener.getGauge(statusId1).get().getValue());
             assertEquals(0, listener.getGauge(statusId2).get().getValue());
         }
+    }
+
+    @Test
+    public void testResourceMetrics() {
+        var namespace1 = "ns1";
+        var namespace2 = "ns2";
+        var deployment1 = TestUtils.buildApplicationCluster("deployment1", namespace1);
+        var deployment2 = TestUtils.buildApplicationCluster("deployment2", namespace1);
+        var deployment3 = TestUtils.buildApplicationCluster("deployment3", namespace2);
+
+        deployment1
+                .getStatus()
+                .getClusterInfo()
+                .putAll(
+                        Map.of(
+                                AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "5",
+                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "1024"));
+
+        deployment2
+                .getStatus()
+                .getClusterInfo()
+                .putAll(
+                        Map.of(
+                                AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "10",
+                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "2048"));
+
+        deployment3
+                .getStatus()
+                .getClusterInfo()
+                .putAll(
+                        Map.of(
+                                AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "13",
+                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "4096"));
+
+        var cpuGroupId1 =
+                listener.getNamespaceMetricId(
+                        FlinkDeployment.class, namespace1, RESOURCE_USAGE_GROUP_NAME, CPU_NAME);
+        var memoryGroupId1 =
+                listener.getNamespaceMetricId(
+                        FlinkDeployment.class, namespace1, RESOURCE_USAGE_GROUP_NAME, MEMORY_NAME);
+        var cpuGroupId2 =
+                listener.getNamespaceMetricId(
+                        FlinkDeployment.class, namespace2, RESOURCE_USAGE_GROUP_NAME, CPU_NAME);
+        var memoryGroupId2 =
+                listener.getNamespaceMetricId(
+                        FlinkDeployment.class, namespace2, RESOURCE_USAGE_GROUP_NAME, MEMORY_NAME);
+
+        assertTrue(listener.getGauge(cpuGroupId1).isEmpty());
+        assertTrue(listener.getGauge(memoryGroupId1).isEmpty());
+        assertTrue(listener.getGauge(cpuGroupId2).isEmpty());
+        assertTrue(listener.getGauge(memoryGroupId2).isEmpty());
+
+        metricManager.onUpdate(deployment1);
+        metricManager.onUpdate(deployment2);
+        metricManager.onUpdate(deployment3);
+
+        assertEquals(15D, listener.getGauge(cpuGroupId1).get().getValue());
+        assertEquals(3072L, listener.getGauge(memoryGroupId1).get().getValue());
+        assertEquals(13D, listener.getGauge(cpuGroupId2).get().getValue());
+        assertEquals(4096L, listener.getGauge(memoryGroupId2).get().getValue());
+    }
+
+    @Test
+    public void testResourceMetricsWithInvalidInput() {
+        var namespace = "ns";
+        var deployment = TestUtils.buildApplicationCluster("deployment", namespace);
+
+        var cpuGroupId =
+                listener.getNamespaceMetricId(
+                        FlinkDeployment.class, namespace, RESOURCE_USAGE_GROUP_NAME, CPU_NAME);
+        var memoryGroupId =
+                listener.getNamespaceMetricId(
+                        FlinkDeployment.class, namespace, RESOURCE_USAGE_GROUP_NAME, MEMORY_NAME);
+
+        metricManager.onUpdate(deployment);
+
+        assertTrue(listener.getGauge(cpuGroupId).isPresent());
+        assertTrue(listener.getGauge(memoryGroupId).isPresent());
+        assertEquals(0D, listener.getGauge(cpuGroupId).get().getValue());
+        assertEquals(0L, listener.getGauge(memoryGroupId).get().getValue());
+
+        deployment
+                .getStatus()
+                .getClusterInfo()
+                .putAll(
+                        Map.of(
+                                AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "5",
+                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY,
+                                        "9223372036854775808"));
+        metricManager.onUpdate(deployment);
+
+        assertEquals(5D, listener.getGauge(cpuGroupId).get().getValue());
+        assertEquals(0L, listener.getGauge(memoryGroupId).get().getValue());
+
+        deployment
+                .getStatus()
+                .getClusterInfo()
+                .putAll(
+                        Map.of(
+                                AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "null",
+                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY,
+                                        "9223372036854775808"));
+        metricManager.onUpdate(deployment);
+
+        assertEquals(0D, listener.getGauge(cpuGroupId).get().getValue());
+        assertEquals(0L, listener.getGauge(memoryGroupId).get().getValue());
+
+        deployment
+                .getStatus()
+                .getClusterInfo()
+                .putAll(
+                        Map.of(
+                                AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "",
+                                AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY, "invalid"));
+        metricManager.onUpdate(deployment);
+
+        assertEquals(0D, listener.getGauge(cpuGroupId).get().getValue());
+        assertEquals(0L, listener.getGauge(memoryGroupId).get().getValue());
+
+        deployment
+                .getStatus()
+                .getClusterInfo()
+                .put(AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "Infinity");
+        deployment
+                .getStatus()
+                .getClusterInfo()
+                .remove(AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY);
+        metricManager.onUpdate(deployment);
+
+        assertEquals(0D, listener.getGauge(cpuGroupId).get().getValue());
+        assertEquals(0L, listener.getGauge(memoryGroupId).get().getValue());
     }
 
     @Test

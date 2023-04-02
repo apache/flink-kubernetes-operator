@@ -71,6 +71,12 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
                 .get(flinkApp.getStatus().getJobManagerDeploymentStatus())
                 .add(deploymentName);
 
+        var totalCpu =
+                NumberUtils.toDouble(
+                        clusterInfo.getOrDefault(AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "0"));
+        if (!Double.isFinite(totalCpu)) {
+            totalCpu = 0;
+        }
         deploymentCpuUsage
                 .computeIfAbsent(
                         namespace,
@@ -78,11 +84,7 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
                             initNamespaceCpuUsage(ns);
                             return new ConcurrentHashMap<>();
                         })
-                .put(
-                        deploymentName,
-                        NumberUtils.toDouble(
-                                clusterInfo.getOrDefault(
-                                        AbstractFlinkService.FIELD_NAME_TOTAL_CPU, "0")));
+                .put(deploymentName, totalCpu);
 
         deploymentMemoryUsage
                 .computeIfAbsent(

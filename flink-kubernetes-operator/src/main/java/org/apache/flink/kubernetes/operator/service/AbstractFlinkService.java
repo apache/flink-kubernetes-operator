@@ -26,10 +26,8 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
-import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
-import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
@@ -52,7 +50,6 @@ import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
-import org.apache.flink.runtime.instance.HardwareDescription;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
 import org.apache.flink.runtime.messages.webmonitor.JobDetails;
@@ -73,7 +70,6 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusHead
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
-import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagerInfo;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersHeaders;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersInfo;
 import org.apache.flink.runtime.rest.util.RestConstants;
@@ -124,11 +120,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Supplier;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
@@ -659,32 +653,13 @@ public abstract class AbstractFlinkService implements FlinkService {
                     dashboardConfiguration.getFlinkRevision());
         }
 
-        // JobManager resource usage can be deduced from the CR
-        var jmParameters =
-                new KubernetesJobManagerParameters(
-                        conf, new KubernetesClusterClientFactory().getClusterSpecification(conf));
-        var jmTotalCpu =
-                jmParameters.getJobManagerCPU()
-                        * jmParameters.getJobManagerCPULimitFactor()
-                        * jmParameters.getReplicas();
-        var jmTotalMemory =
-                Math.round(
-                        jmParameters.getJobManagerMemoryMB()
-                                * Math.pow(1024, 2)
-                                * jmParameters.getJobManagerMemoryLimitFactor()
-                                * jmParameters.getReplicas());
-
-        // TaskManager resource usage is best gathered from the REST API to get current replicas
-        var taskManagerInfos = getTaskManagersInfo(conf).getTaskManagerInfos();
-        Supplier<Stream<HardwareDescription>> tmHardwareDesc =
-                () -> taskManagerInfos.stream().map(TaskManagerInfo::getHardwareDescription);
-        var tmTotalCpu =
-                tmHardwareDesc.get().mapToInt(HardwareDescription::getNumberOfCPUCores).sum();
-        var tmTotalMemory =
-                tmHardwareDesc.get().mapToLong(HardwareDescription::getSizeOfPhysicalMemory).sum();
-
-        clusterInfo.put(FIELD_NAME_TOTAL_CPU, String.valueOf(tmTotalCpu + jmTotalCpu));
-        clusterInfo.put(FIELD_NAME_TOTAL_MEMORY, String.valueOf(tmTotalMemory + jmTotalMemory));
+        var taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
+        clusterInfo.put(
+                FIELD_NAME_TOTAL_CPU,
+                String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, taskManagerReplicas)));
+        clusterInfo.put(
+                FIELD_NAME_TOTAL_MEMORY,
+                String.valueOf(FlinkUtils.calculateClusterMemoryUsage(conf, taskManagerReplicas)));
 
         return clusterInfo;
     }
