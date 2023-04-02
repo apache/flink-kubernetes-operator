@@ -22,8 +22,10 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
+import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.utils.Constants;
@@ -292,6 +294,42 @@ public class FlinkUtils {
     public static int getNumTaskManagers(Configuration conf, int parallelism) {
         int taskSlots = conf.get(TaskManagerOptions.NUM_TASK_SLOTS);
         return (parallelism + taskSlots - 1) / taskSlots;
+    }
+
+    public static Double calculateClusterCpuUsage(Configuration conf, int taskManagerReplicas) {
+        var jmTotalCpu =
+                conf.getDouble(KubernetesConfigOptions.JOB_MANAGER_CPU)
+                        * conf.getDouble(KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR)
+                        * conf.get(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS);
+
+        var tmTotalCpu =
+                conf.getDouble(KubernetesConfigOptions.TASK_MANAGER_CPU, 1)
+                        * conf.getDouble(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR)
+                        * taskManagerReplicas;
+
+        return tmTotalCpu + jmTotalCpu;
+    }
+
+    public static Long calculateClusterMemoryUsage(Configuration conf, int taskManagerReplicas) {
+        var clusterSpec = new KubernetesClusterClientFactory().getClusterSpecification(conf);
+
+        var jmParameters = new KubernetesJobManagerParameters(conf, clusterSpec);
+        var jmTotalMemory =
+                Math.round(
+                        jmParameters.getJobManagerMemoryMB()
+                                * Math.pow(1024, 2)
+                                * jmParameters.getJobManagerMemoryLimitFactor()
+                                * jmParameters.getReplicas());
+
+        var tmTotalMemory =
+                Math.round(
+                        clusterSpec.getTaskManagerMemoryMB()
+                                * Math.pow(1024, 2)
+                                * conf.getDouble(
+                                        KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR)
+                                * taskManagerReplicas);
+
+        return tmTotalMemory + jmTotalMemory;
     }
 
     public static void setGenerationAnnotation(Configuration conf, Long generation) {

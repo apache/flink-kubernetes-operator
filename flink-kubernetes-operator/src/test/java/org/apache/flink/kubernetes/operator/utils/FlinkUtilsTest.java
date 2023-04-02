@@ -21,11 +21,16 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
+import org.apache.flink.configuration.HighAvailabilityOptions;
+import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
@@ -225,6 +230,41 @@ public class FlinkUtilsTest {
         conf.set(CoreOptions.DEFAULT_PARALLELISM, 7);
         conf.set(TaskManagerOptions.NUM_TASK_SLOTS, 2);
         assertEquals(4, FlinkUtils.getNumTaskManagers(conf));
+    }
+
+    @Test
+    public void testCalculateClusterCpuUsage() {
+        Configuration conf = new Configuration();
+        conf.set(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS, 2);
+        conf.set(KubernetesConfigOptions.JOB_MANAGER_CPU, 2.5);
+        conf.set(KubernetesConfigOptions.JOB_MANAGER_CPU_LIMIT_FACTOR, 2.0);
+        conf.set(KubernetesConfigOptions.TASK_MANAGER_CPU, 3.5);
+        conf.set(KubernetesConfigOptions.TASK_MANAGER_CPU_LIMIT_FACTOR, 1.5);
+
+        assertEquals(10, FlinkUtils.calculateClusterCpuUsage(conf, 0));
+        assertEquals(15.25, FlinkUtils.calculateClusterCpuUsage(conf, 1));
+        assertEquals(20.5, FlinkUtils.calculateClusterCpuUsage(conf, 2));
+    }
+
+    @Test
+    public void testCalculateClusterMemoryUsage() {
+        Configuration conf = new Configuration();
+        conf.set(HighAvailabilityOptions.HA_MODE, HighAvailabilityMode.KUBERNETES.toString());
+
+        conf.set(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS, 2);
+        conf.set(JobManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.parse("1g"));
+        conf.set(KubernetesConfigOptions.JOB_MANAGER_MEMORY_LIMIT_FACTOR, 2.0);
+
+        conf.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.parse("2g"));
+        conf.set(KubernetesConfigOptions.TASK_MANAGER_MEMORY_LIMIT_FACTOR, 1.5);
+
+        assertEquals(
+                MemorySize.parse("4g").getBytes(), FlinkUtils.calculateClusterMemoryUsage(conf, 0));
+        assertEquals(
+                MemorySize.parse("7g").getBytes(), FlinkUtils.calculateClusterMemoryUsage(conf, 1));
+        assertEquals(
+                MemorySize.parse("10g").getBytes(),
+                FlinkUtils.calculateClusterMemoryUsage(conf, 2));
     }
 
     @Test
