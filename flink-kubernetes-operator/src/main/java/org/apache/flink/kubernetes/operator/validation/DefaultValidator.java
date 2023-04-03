@@ -47,6 +47,8 @@ import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.jobmanager.JobManagerProcessUtils;
 import org.apache.flink.util.StringUtils;
 
+import io.fabric8.kubernetes.api.model.Quantity;
+
 import javax.annotation.Nullable;
 
 import java.util.Map;
@@ -356,14 +358,30 @@ public class DefaultValidator implements FlinkResourceValidator {
         }
 
         String memory = resource.getMemory();
-        if (memory == null) {
-            return Optional.empty();
+        String storage = resource.getEphemeralStorage();
+        StringBuilder builder = new StringBuilder();
+
+        if (memory != null) {
+            try {
+                MemorySize.parse(memory);
+            } catch (IllegalArgumentException iae) {
+                builder.append(component + " resource memory parse error: " + iae.getMessage());
+            }
         }
 
-        try {
-            MemorySize.parse(memory);
-        } catch (IllegalArgumentException iae) {
-            return Optional.of(component + " resource memory parse error: " + iae.getMessage());
+        if (storage != null) {
+            try {
+                Quantity quantity = Quantity.parse(storage);
+                Quantity.getAmountInBytes(quantity);
+            } catch (IllegalArgumentException iae) {
+                builder.append(
+                        component + " resource ephemeral storage parse error: " + iae.getMessage());
+            }
+        }
+
+        String errorMessage = builder.toString();
+        if (!StringUtils.isNullOrWhitespaceOnly(errorMessage)) {
+            return Optional.of(errorMessage);
         }
 
         return Optional.empty();

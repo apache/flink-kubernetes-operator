@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.config;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
@@ -31,6 +32,7 @@ import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -40,6 +42,7 @@ import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.streaming.api.environment.CheckpointConfig;
@@ -47,7 +50,11 @@ import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
 
+import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodSpec;
+import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.client.utils.Serialization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -211,6 +218,7 @@ public class FlinkConfigBuilder {
             setPodTemplate(
                     spec.getPodTemplate(),
                     spec.getJobManager().getPodTemplate(),
+                    spec.getJobManager().getResource(),
                     effectiveConfig,
                     true);
             if (spec.getJobManager().getReplicas() > 0) {
@@ -228,6 +236,7 @@ public class FlinkConfigBuilder {
             setPodTemplate(
                     spec.getPodTemplate(),
                     spec.getTaskManager().getPodTemplate(),
+                    spec.getTaskManager().getResource(),
                     effectiveConfig,
                     false);
 
@@ -391,31 +400,98 @@ public class FlinkConfigBuilder {
     }
 
     private static void setPodTemplate(
-            Pod basicPod, Pod appendPod, Configuration effectiveConfig, boolean isJM)
+            Pod basicPod,
+            Pod appendPod,
+            Resource resource,
+            Configuration effectiveConfig,
+            boolean isJM)
             throws IOException {
-
-        if (basicPod == null && appendPod == null) {
-            return;
-        }
 
         // Avoid to create temporary pod template files for JobManager and TaskManager if it is not
         // configured explicitly via .spec.JobManagerSpec.podTemplate or
         // .spec.TaskManagerSpec.podTemplate.
-        if (appendPod != null) {
-            final ConfigOption<String> podConfigOption =
-                    isJM
-                            ? KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE
-                            : KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE;
-            effectiveConfig.setString(
-                    podConfigOption,
-                    createTempFile(
-                            mergePodTemplates(
-                                    basicPod,
-                                    appendPod,
-                                    effectiveConfig.get(
-                                            KubernetesOperatorConfigOptions
-                                                    .POD_TEMPLATE_MERGE_BY_NAME))));
+        final ConfigOption<String> podConfigOption =
+                isJM
+                        ? KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE
+                        : KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE;
+
+        if (basicPod != null || appendPod != null) {
+            Pod mergedPodTemplate =
+                    mergePodTemplates(
+                            basicPod,
+                            appendPod,
+                            effectiveConfig.get(
+                                    KubernetesOperatorConfigOptions.POD_TEMPLATE_MERGE_BY_NAME));
+            Pod newPodTemplate = applyResourceToPodTemplate(mergedPodTemplate, resource);
+            effectiveConfig.setString(podConfigOption, createTempFile(newPodTemplate));
+        } else {
+            Pod newPodTemplate = applyResourceToPodTemplate(null, resource);
+            effectiveConfig.setString(podConfigOption, createTempFile(newPodTemplate));
         }
+    }
+
+    @VisibleForTesting
+    protected static Pod applyResourceToPodTemplate(Pod podTemplate, Resource resource) {
+        if (resource == null
+                || StringUtils.isNullOrWhitespaceOnly(resource.getEphemeralStorage())) {
+            return podTemplate;
+        }
+
+        if (podTemplate == null) {
+            Pod newPodTemplate = new Pod();
+            newPodTemplate.setSpec(createPodSpecWithResource(resource));
+            return newPodTemplate;
+        } else if (podTemplate.getSpec() == null) {
+            podTemplate.setSpec(createPodSpecWithResource(resource));
+            return podTemplate;
+        } else {
+            boolean hasMainContainer = false;
+            for (Container container : podTemplate.getSpec().getContainers()) {
+                if (container.getName().equals(Constants.MAIN_CONTAINER_NAME)) {
+                    decorateContainerWithEphemeralStorage(
+                            container, resource.getEphemeralStorage());
+                    hasMainContainer = true;
+                }
+            }
+
+            if (!hasMainContainer) {
+                podTemplate
+                        .getSpec()
+                        .getContainers()
+                        .add(
+                                decorateContainerWithEphemeralStorage(
+                                        new Container(), resource.getEphemeralStorage()));
+            }
+        }
+
+        return podTemplate;
+    }
+
+    private static PodSpec createPodSpecWithResource(Resource resource) {
+        PodSpec spec = new PodSpec();
+        spec.getContainers()
+                .add(
+                        decorateContainerWithEphemeralStorage(
+                                new Container(), resource.getEphemeralStorage()));
+
+        return spec;
+    }
+
+    private static Container decorateContainerWithEphemeralStorage(
+            Container container, String ephemeralStorage) {
+        container.setName(Constants.MAIN_CONTAINER_NAME);
+        ResourceRequirements resourceRequirements =
+                container.getResources() == null
+                        ? new ResourceRequirements()
+                        : container.getResources();
+        resourceRequirements
+                .getLimits()
+                .put(CrdConstants.EPHEMERAL_STORAGE, Quantity.parse(ephemeralStorage));
+        resourceRequirements
+                .getRequests()
+                .put(CrdConstants.EPHEMERAL_STORAGE, Quantity.parse(ephemeralStorage));
+        container.setResources(resourceRequirements);
+        return container;
     }
 
     private static String createLogConfigFiles(String log4jConf, String logbackConf)

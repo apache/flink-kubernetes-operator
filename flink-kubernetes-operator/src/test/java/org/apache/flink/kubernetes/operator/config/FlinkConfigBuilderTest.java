@@ -33,10 +33,12 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
+import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -48,6 +50,7 @@ import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.fabric8.kubernetes.api.model.Container;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -84,8 +87,9 @@ public class FlinkConfigBuilderTest {
         flinkDeployment = TestUtils.buildApplicationCluster();
         final Container container0 = new Container();
         container0.setName("container0");
-        final Pod pod0 =
-                TestUtils.getTestPod("pod0 hostname", "pod0 api version", List.of(container0));
+        List<Container> containers = new ArrayList<>();
+        containers.add(container0);
+        final Pod pod0 = TestUtils.getTestPod("pod0 hostname", "pod0 api version", containers);
 
         flinkDeployment.getSpec().setPodTemplate(pod0);
         flinkDeployment.getSpec().setIngress(IngressSpec.builder().template("test.com").build());
@@ -244,13 +248,13 @@ public class FlinkConfigBuilderTest {
 
     @Test
     public void testApplyJobManagerSpec() throws Exception {
+        FlinkDeployment deploymentClone = ReconciliationUtils.clone(flinkDeployment);
+        deploymentClone.getSpec().setPodTemplate(null);
         Configuration configuration =
-                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                new FlinkConfigBuilder(deploymentClone, new Configuration())
                         .applyJobManagerSpec()
                         .build();
 
-        Assertions.assertNull(
-                configuration.getString(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE));
         Assertions.assertEquals(
                 MemorySize.parse("2048m"),
                 configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
@@ -259,6 +263,43 @@ public class FlinkConfigBuilderTest {
         Assertions.assertEquals(
                 Integer.valueOf(2),
                 configuration.get(KubernetesConfigOptions.KUBERNETES_JOBMANAGER_REPLICAS));
+
+        Pod jmPod =
+                OBJECT_MAPPER.readValue(
+                        new File(
+                                configuration.getString(
+                                        KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE)),
+                        Pod.class);
+        assertMainContainerEphemeralStorage(jmPod.getSpec().getContainers().get(0), "2G");
+
+        deploymentClone = ReconciliationUtils.clone(flinkDeployment);
+        deploymentClone.getSpec().setPodTemplate(null);
+        deploymentClone.getSpec().getJobManager().setPodTemplate(createTestPodWithContainers());
+        configuration =
+                new FlinkConfigBuilder(deploymentClone, new Configuration())
+                        .applyJobManagerSpec()
+                        .build();
+
+        jmPod =
+                OBJECT_MAPPER.readValue(
+                        new File(
+                                configuration.getString(
+                                        KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE)),
+                        Pod.class);
+        assertMainContainerEphemeralStorage(jmPod.getSpec().getContainers().get(0), "2G");
+
+        configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobManagerSpec()
+                        .build();
+
+        jmPod =
+                OBJECT_MAPPER.readValue(
+                        new File(
+                                configuration.getString(
+                                        KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE)),
+                        Pod.class);
+        assertMainContainerEphemeralStorage(jmPod.getSpec().getContainers().get(1), "2G");
 
         flinkDeployment
                 .getSpec()
@@ -271,51 +312,87 @@ public class FlinkConfigBuilderTest {
                         .applyJobManagerSpec()
                         .build();
 
-        final Pod jmPod =
+        jmPod =
                 OBJECT_MAPPER.readValue(
                         new File(
                                 configuration.getString(
                                         KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE)),
                         Pod.class);
         Assertions.assertEquals("pod1 api version", jmPod.getApiVersion());
+        assertMainContainerEphemeralStorage(jmPod.getSpec().getContainers().get(1), "2G");
     }
 
     @Test
     public void testApplyTaskManagerSpec() throws Exception {
         FlinkDeployment deploymentClone = ReconciliationUtils.clone(flinkDeployment);
         deploymentClone.getSpec().setPodTemplate(null);
-
         Configuration configuration =
                 new FlinkConfigBuilder(deploymentClone, new Configuration())
                         .applyTaskManagerSpec()
                         .build();
 
-        Assertions.assertNull(
-                configuration.getString(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE));
         Assertions.assertEquals(
                 MemorySize.parse("2048m"),
                 configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
         Assertions.assertEquals(
                 Double.valueOf(1), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
 
-        deploymentClone
+        Pod tmPod =
+                OBJECT_MAPPER.readValue(
+                        new File(
+                                configuration.getString(
+                                        KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE)),
+                        Pod.class);
+        assertMainContainerEphemeralStorage(tmPod.getSpec().getContainers().get(0), "2G");
+
+        deploymentClone = ReconciliationUtils.clone(flinkDeployment);
+        deploymentClone.getSpec().setPodTemplate(null);
+        deploymentClone.getSpec().getTaskManager().setPodTemplate(createTestPodWithContainers());
+        configuration =
+                new FlinkConfigBuilder(deploymentClone, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+
+        tmPod =
+                OBJECT_MAPPER.readValue(
+                        new File(
+                                configuration.getString(
+                                        KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE)),
+                        Pod.class);
+        assertMainContainerEphemeralStorage(tmPod.getSpec().getContainers().get(0), "2G");
+
+        configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+
+        tmPod =
+                OBJECT_MAPPER.readValue(
+                        new File(
+                                configuration.getString(
+                                        KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE)),
+                        Pod.class);
+        assertMainContainerEphemeralStorage(tmPod.getSpec().getContainers().get(1), "2G");
+
+        flinkDeployment
                 .getSpec()
                 .getTaskManager()
                 .setPodTemplate(
                         TestUtils.getTestPod(
                                 "pod2 hostname", "pod2 api version", new ArrayList<>()));
         configuration =
-                new FlinkConfigBuilder(deploymentClone, new Configuration())
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
                         .applyTaskManagerSpec()
                         .build();
 
-        final Pod tmPod =
+        tmPod =
                 OBJECT_MAPPER.readValue(
                         new File(
                                 configuration.getString(
                                         KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE)),
                         Pod.class);
         Assertions.assertEquals("pod2 api version", tmPod.getApiVersion());
+        assertMainContainerEphemeralStorage(tmPod.getSpec().getContainers().get(1), "2G");
     }
 
     @Test
@@ -484,5 +561,53 @@ public class FlinkConfigBuilderTest {
         // and clusterId here.
         Assertions.assertEquals(namespace, configuration.get(KubernetesConfigOptions.NAMESPACE));
         Assertions.assertEquals(clusterId, configuration.get(KubernetesConfigOptions.CLUSTER_ID));
+    }
+
+    @Test
+    public void testApplyResourceToPodTemplate() {
+        Resource resource = flinkDeployment.getSpec().getTaskManager().getResource();
+
+        Pod pod = FlinkConfigBuilder.applyResourceToPodTemplate(null, resource);
+        Assertions.assertEquals(
+                Constants.MAIN_CONTAINER_NAME, pod.getSpec().getContainers().get(0).getName());
+        assertMainContainerEphemeralStorage(pod.getSpec().getContainers().get(0), "2G");
+
+        Pod podWithMetadata = new Pod();
+        ObjectMeta metaData = new ObjectMeta();
+        podWithMetadata.setMetadata(metaData);
+        pod = FlinkConfigBuilder.applyResourceToPodTemplate(podWithMetadata, resource);
+        Assertions.assertEquals(metaData, pod.getMetadata());
+        Assertions.assertEquals(
+                Constants.MAIN_CONTAINER_NAME, pod.getSpec().getContainers().get(0).getName());
+        assertMainContainerEphemeralStorage(pod.getSpec().getContainers().get(0), "2G");
+    }
+
+    private void assertMainContainerEphemeralStorage(
+            Container container, String expectedEphemeralStorage) {
+        Assertions.assertEquals(
+                expectedEphemeralStorage,
+                container
+                        .getResources()
+                        .getLimits()
+                        .get(CrdConstants.EPHEMERAL_STORAGE)
+                        .toString());
+        Assertions.assertEquals(
+                expectedEphemeralStorage,
+                container
+                        .getResources()
+                        .getRequests()
+                        .get(CrdConstants.EPHEMERAL_STORAGE)
+                        .toString());
+    }
+
+    private Pod createTestPodWithContainers() {
+        Container mainContainer = new Container();
+        mainContainer.setName(Constants.MAIN_CONTAINER_NAME);
+        Container sideCarContainer = new Container();
+        sideCarContainer.setName("sidecar");
+        Pod pod =
+                TestUtils.getTestPod(
+                        "hostname", "api version", List.of(mainContainer, sideCarContainer));
+        return pod;
     }
 }

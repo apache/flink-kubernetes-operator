@@ -3113,6 +3113,8 @@ spec:
                         type: number
                       memory:
                         type: string
+                      ephemeralStorage:
+                        type: string
                     type: object
                   replicas:
                     type: integer
@@ -6175,6 +6177,8 @@ spec:
                       cpu:
                         type: number
                       memory:
+                        type: string
+                      ephemeralStorage:
                         type: string
                     type: object
                   replicas:

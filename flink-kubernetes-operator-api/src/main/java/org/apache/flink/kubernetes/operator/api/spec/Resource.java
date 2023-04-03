@@ -34,4 +34,7 @@ public class Resource {
 
     /** Amount of memory allocated to the pod. Example: 1024m, 1g */
     private String memory;
+
+    /** Amount of ephemeral storage allocated to the pod. Example: 1024m, 2G */
+    private String ephemeralStorage;
 }
