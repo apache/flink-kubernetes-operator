@@ -104,7 +104,9 @@ public class EventUtils {
                             .withNamespace(target.getMetadata().getNamespace())
                             .endMetadata()
                             .build();
-            client.resource(event).createOrReplace();
+
+            var ev = client.resource(event).createOrReplace();
+            event.getMetadata().setUid(ev.getMetadata().getUid());
             eventListener.accept(event);
             return true;
         }
