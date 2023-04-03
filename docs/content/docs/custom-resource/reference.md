@@ -152,6 +152,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | cpu | java.lang.Double | Amount of CPU allocated to the pod. |
 | memory | java.lang.String | Amount of memory allocated to the pod. Example: 1024m, 1g |
+| ephemeralStorage | java.lang.String | Amount of ephemeral storage allocated to the pod. Example: 1024m, 2G |
 
 ### TaskManagerSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec
