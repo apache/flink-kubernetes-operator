@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -108,7 +109,10 @@ public class NativeFlinkService extends AbstractFlinkService {
 
     @Override
     protected void deleteClusterInternal(
-            ObjectMeta meta, Configuration conf, boolean deleteHaData) {
+            ObjectMeta meta,
+            Configuration conf,
+            boolean deleteHaData,
+            DeletionPropagation deletionPropagation) {
 
         String namespace = meta.getNamespace();
         String clusterId = meta.getName();
@@ -121,6 +125,7 @@ public class NativeFlinkService extends AbstractFlinkService {
                 .deployments()
                 .inNamespace(namespace)
                 .withName(KubernetesUtils.getDeploymentName(clusterId))
+                .withPropagationPolicy(deletionPropagation)
                 .delete();
 
         if (deleteHaData) {

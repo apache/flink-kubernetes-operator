@@ -37,12 +37,6 @@ public class ScalingMetrics {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetrics.class);
 
-    /**
-     * The minimum value to avoid using zero values which cause side effects like division by zero
-     * or out of bounds (infinitive) floats.
-     */
-    public static final double EFFECTIVELY_ZERO = 1e-10;
-
     public static void computeLoadMetrics(
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             Map<ScalingMetric, Double> scalingMetrics) {
@@ -72,9 +66,7 @@ public class ScalingMetrics {
         var isSource = topology.getInputs().get(jobVertexID).isEmpty();
         var isSink = topology.getOutputs().get(jobVertexID).isEmpty();
 
-        double busyTime = getBusyTime(flinkMetrics, conf, jobVertexID);
-        double busyTimeMultiplier = 1000 / keepAboveZero(busyTime);
-
+        double busyTimeMsPerSecond = getBusyTimeMsPerSecond(flinkMetrics, conf, jobVertexID);
         double numRecordsInPerSecond =
                 getNumRecordsInPerSecond(flinkMetrics, jobVertexID, isSource);
 
@@ -86,10 +78,7 @@ public class ScalingMetrics {
         }
 
         if (!Double.isNaN(numRecordsInPerSecond)) {
-            double trueProcessingRate = busyTimeMultiplier * numRecordsInPerSecond;
-            if (trueProcessingRate <= 0 || !Double.isFinite(trueProcessingRate)) {
-                trueProcessingRate = Double.NaN;
-            }
+            double trueProcessingRate = computeTrueRate(numRecordsInPerSecond, busyTimeMsPerSecond);
             scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, trueProcessingRate);
             scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
         } else {
@@ -101,11 +90,12 @@ public class ScalingMetrics {
                     getNumRecordsOutPerSecond(
                             flinkMetrics, jobVertexID, isSource, numRecordsInPerSecond);
             if (!Double.isNaN(numRecordsOutPerSecond)) {
-                scalingMetrics.put(
-                        ScalingMetric.OUTPUT_RATIO, numRecordsOutPerSecond / numRecordsInPerSecond);
+                double outputRatio =
+                        computeOutputRatio(numRecordsInPerSecond, numRecordsOutPerSecond);
+                scalingMetrics.put(ScalingMetric.OUTPUT_RATIO, outputRatio);
                 scalingMetrics.put(
                         ScalingMetric.TRUE_OUTPUT_RATE,
-                        busyTimeMultiplier * numRecordsOutPerSecond);
+                        computeTrueRate(numRecordsOutPerSecond, busyTimeMsPerSecond));
             } else {
                 LOG.error(
                         "Cannot compute processing and input rate without numRecordsOutPerSecond");
@@ -124,21 +114,24 @@ public class ScalingMetrics {
         }
     }
 
-    private static double getBusyTime(
+    private static double getBusyTimeMsPerSecond(
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             Configuration conf,
             JobVertexID jobVertexId) {
         var busyTimeAggregator = conf.get(AutoScalerOptions.BUSY_TIME_AGGREGATOR);
-        var busyTime = busyTimeAggregator.get(flinkMetrics.get(FlinkMetric.BUSY_TIME_PER_SEC));
-        if (!Double.isFinite(busyTime)) {
+        var busyTimeMsPerSecond =
+                busyTimeAggregator.get(flinkMetrics.get(FlinkMetric.BUSY_TIME_PER_SEC));
+        if (!Double.isFinite(busyTimeMsPerSecond)) {
             LOG.error(
                     "No busyTimeMsPerSecond metric available for {}. No scaling will be performed for this vertex.",
                     jobVertexId);
             excludeVertexFromScaling(conf, jobVertexId);
             // Pretend that the load is balanced because we don't know any better
-            return conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
+            busyTimeMsPerSecond = conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
+        } else {
+            includeVertexForScaling(conf, jobVertexId);
         }
-        return busyTime;
+        return busyTimeMsPerSecond;
     }
 
     private static double getNumRecordsInPerSecond(
@@ -158,7 +151,7 @@ public class ScalingMetrics {
             LOG.warn("Received null input rate for {}. Returning NaN.", jobVertexID);
             return Double.NaN;
         }
-        return keepAboveZero(numRecordsInPerSecond.getSum());
+        return numRecordsInPerSecond.getSum();
     }
 
     private static double getNumRecordsOutPerSecond(
@@ -166,11 +159,11 @@ public class ScalingMetrics {
             JobVertexID jobVertexID,
             boolean isSource,
             double numRecordsInPerSecond) {
-        if (isEffectivelyZero(numRecordsInPerSecond)) {
+        if (numRecordsInPerSecond <= 0) {
             // If the input rate is zero, we also need to flatten the output rate.
             // Otherwise, the OUTPUT_RATIO would be outrageously large, leading to
             // a rapid scale up.
-            return EFFECTIVELY_ZERO;
+            return 0;
         }
         AggregatedMetric numRecordsOutPerSecond =
                 flinkMetrics.get(FlinkMetric.NUM_RECORDS_OUT_PER_SEC);
@@ -184,24 +177,35 @@ public class ScalingMetrics {
                 return Double.NaN;
             }
         }
-        return keepAboveZero(numRecordsOutPerSecond.getSum());
+        return numRecordsOutPerSecond.getSum();
     }
 
-    private static double keepAboveZero(double value) {
-        if (value <= 0) {
-            // Make value tiny but not zero
-            return EFFECTIVELY_ZERO;
+    private static double computeOutputRatio(
+            double numRecordsInPerSecond, double numRecordsOutPerSecond) {
+        if (numRecordsInPerSecond <= 0) {
+            return 0;
         }
-        return value;
+        return numRecordsOutPerSecond / numRecordsInPerSecond;
     }
 
-    private static boolean isEffectivelyZero(double value) {
-        return value <= EFFECTIVELY_ZERO;
+    private static double computeTrueRate(double rate, double busyTimeMsPerSecond) {
+        if (rate <= 0 || busyTimeMsPerSecond <= 0) {
+            // Nothing is coming in, we assume infinite processing power
+            // until we can sample the true processing rate (i.e. data flows).
+            return Double.POSITIVE_INFINITY;
+        }
+        return rate / (busyTimeMsPerSecond / 1000);
     }
 
     private static void excludeVertexFromScaling(Configuration conf, JobVertexID jobVertexId) {
         Set<String> excludedIds = new HashSet<>(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS));
         excludedIds.add(jobVertexId.toHexString());
+        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
+    }
+
+    private static void includeVertexForScaling(Configuration conf, JobVertexID jobVertexId) {
+        Set<String> excludedIds = new HashSet<>(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS));
+        excludedIds.remove(jobVertexId.toHexString());
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
     }
 

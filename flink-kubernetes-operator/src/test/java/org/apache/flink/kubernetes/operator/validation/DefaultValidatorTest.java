@@ -172,6 +172,19 @@ public class DefaultValidatorTest {
                         "Periodic savepoints cannot be enabled when config key[%s] is not set",
                         CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
 
+        testError(
+                dep ->
+                        dep.getSpec()
+                                .setFlinkConfiguration(
+                                        Map.of(
+                                                KubernetesOperatorConfigOptions
+                                                        .OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE
+                                                        .key(),
+                                                "1m")),
+                String.format(
+                        "In order to use max-checkpoint age functionality config key[%s] must be set to allow triggering savepoint upgrades.",
+                        CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
+
         // Test conf validation
         testSuccess(
                 dep ->

@@ -23,6 +23,7 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
 import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Constants;
@@ -326,6 +327,14 @@ public class KubernetesOperatorConfigOptions {
                             "Enables last-state fallback for savepoint upgrade mode. When the job is not running thus savepoint cannot be triggered but HA metadata is available for last state restore the operator can initiate the upgrade process when the flag is enabled.");
 
     @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Duration> OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE =
+            operatorConfig("job.upgrade.last-state.max.allowed.checkpoint.age")
+                    .durationType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Max allowed checkpoint age for initiating last-state upgrades on running jobs. If a checkpoint is not available within the desired age (and nothing in progress) a savepoint will be triggered.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<SavepointFormatType> OPERATOR_SAVEPOINT_FORMAT_TYPE =
             operatorConfig("savepoint.format.type")
                     .enumType(SavepointFormatType.class)
@@ -474,4 +483,11 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(false)
                     .withDescription(
                             "Configure the array merge behaviour during pod merging. Arrays can be either merged by position or name matching.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<DeletionPropagation> RESOURCE_DELETION_PROPAGATION =
+            operatorConfig("resource.deletion.propagation")
+                    .enumType(DeletionPropagation.class)
+                    .defaultValue(DeletionPropagation.FOREGROUND)
+                    .withDescription("JM/TM Deployment deletion propagation.");
 }

@@ -70,6 +70,8 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusHead
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
+import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersHeaders;
+import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersInfo;
 import org.apache.flink.runtime.rest.util.RestConstants;
 import org.apache.flink.runtime.state.memory.NonPersistentMetadataCheckpointStorageLocation;
 import org.apache.flink.runtime.webmonitor.handlers.JarDeleteHeaders;
@@ -87,6 +89,7 @@ import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.Service;
@@ -132,6 +135,8 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractFlinkService.class);
     private static final String EMPTY_JAR_FILENAME = "empty.jar";
+    public static final String FIELD_NAME_TOTAL_CPU = "total-cpu";
+    public static final String FIELD_NAME_TOTAL_MEMORY = "total-memory";
 
     protected final KubernetesClient kubernetesClient;
     protected final FlinkConfigManager configManager;
@@ -512,6 +517,30 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) throws Exception {
+        var latestCheckpointOpt = getCheckpointInfo(jobId, conf).f0;
+
+        if (latestCheckpointOpt.isPresent()
+                && latestCheckpointOpt
+                        .get()
+                        .getExternalPointer()
+                        .equals(NonPersistentMetadataCheckpointStorageLocation.EXTERNAL_POINTER)) {
+            throw new RecoveryFailureException(
+                    "Latest checkpoint not externally addressable, manual recovery required.",
+                    "CheckpointNotFound");
+        }
+        return latestCheckpointOpt.map(
+                pointer ->
+                        Savepoint.of(
+                                pointer.getExternalPointer(),
+                                pointer.getTimestamp(),
+                                SavepointTriggerType.UNKNOWN));
+    }
+
+    @Override
+    public Tuple2<
+                    Optional<CheckpointHistoryWrapper.CompletedCheckpointInfo>,
+                    Optional<CheckpointHistoryWrapper.PendingCheckpointInfo>>
+            getCheckpointInfo(JobID jobId, Configuration conf) throws Exception {
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
 
@@ -530,20 +559,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     .getSeconds(),
                             TimeUnit.SECONDS);
 
-            var latestCheckpointOpt = checkpoints.getLatestCheckpointPath();
-
-            if (latestCheckpointOpt.isPresent()
-                    && latestCheckpointOpt
-                            .get()
-                            .equals(
-                                    NonPersistentMetadataCheckpointStorageLocation
-                                            .EXTERNAL_POINTER)) {
-                throw new RecoveryFailureException(
-                        "Latest checkpoint not externally addressable, manual recovery required.",
-                        "CheckpointNotFound");
-            }
-            return latestCheckpointOpt.map(
-                    pointer -> Savepoint.of(pointer, SavepointTriggerType.UNKNOWN));
+            return Tuple2.of(
+                    checkpoints.getLatestCompletedCheckpoint(),
+                    checkpoints.getInProgressCheckpoint());
         }
     }
 
@@ -609,7 +627,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public Map<String, String> getClusterInfo(Configuration conf) throws Exception {
-        Map<String, String> runtimeVersion = new HashMap<>();
+        Map<String, String> clusterInfo = new HashMap<>();
 
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {
@@ -627,14 +645,23 @@ public abstract class AbstractFlinkService implements FlinkService {
                                             .toSeconds(),
                                     TimeUnit.SECONDS);
 
-            runtimeVersion.put(
+            clusterInfo.put(
                     DashboardConfiguration.FIELD_NAME_FLINK_VERSION,
                     dashboardConfiguration.getFlinkVersion());
-            runtimeVersion.put(
+            clusterInfo.put(
                     DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
                     dashboardConfiguration.getFlinkRevision());
         }
-        return runtimeVersion;
+
+        var taskManagerReplicas = getTaskManagersInfo(conf).getTaskManagerInfos().size();
+        clusterInfo.put(
+                FIELD_NAME_TOTAL_CPU,
+                String.valueOf(FlinkUtils.calculateClusterCpuUsage(conf, taskManagerReplicas)));
+        clusterInfo.put(
+                FIELD_NAME_TOTAL_MEMORY,
+                String.valueOf(FlinkUtils.calculateClusterMemoryUsage(conf, taskManagerReplicas)));
+
+        return clusterInfo;
     }
 
     @Override
@@ -784,6 +811,8 @@ public abstract class AbstractFlinkService implements FlinkService {
     /** Wait until the FLink cluster has completely shut down. */
     @VisibleForTesting
     void waitForClusterShutdown(String namespace, String clusterId, long shutdownTimeout) {
+        LOG.info("Waiting for cluster shutdown...");
+
         boolean jobManagerRunning = true;
         boolean serviceRunning = true;
 
@@ -893,8 +922,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     public Map<String, String> getMetrics(
             Configuration conf, String jobId, List<String> metricNames) throws Exception {
-        try (RestClusterClient<String> clusterClient =
-                (RestClusterClient<String>) getClusterClient(conf)) {
+        try (var clusterClient = (RestClusterClient<String>) getClusterClient(conf)) {
             var jobMetricsMessageParameters =
                     JobMetricsHeaders.getInstance().getUnresolvedMessageParameters();
             jobMetricsMessageParameters.jobPathParameter.resolve(JobID.fromHexString(jobId));
@@ -905,10 +933,31 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     JobMetricsHeaders.getInstance(),
                                     jobMetricsMessageParameters,
                                     EmptyRequestBody.getInstance())
-                            .get();
+                            .get(
+                                    configManager
+                                            .getOperatorConfiguration()
+                                            .getFlinkClientTimeout()
+                                            .toSeconds(),
+                                    TimeUnit.SECONDS);
             return responseBody.getMetrics().stream()
                     .map(metric -> Tuple2.of(metric.getId(), metric.getValue()))
                     .collect(Collectors.toMap((t) -> t.f0, (t) -> t.f1));
+        }
+    }
+
+    public TaskManagersInfo getTaskManagersInfo(Configuration conf) throws Exception {
+        try (var clusterClient = (RestClusterClient<String>) getClusterClient(conf)) {
+            return clusterClient
+                    .sendRequest(
+                            TaskManagersHeaders.getInstance(),
+                            EmptyMessageParameters.getInstance(),
+                            EmptyRequestBody.getInstance())
+                    .get(
+                            configManager
+                                    .getOperatorConfiguration()
+                                    .getFlinkClientTimeout()
+                                    .toSeconds(),
+                            TimeUnit.SECONDS);
         }
     }
 
@@ -918,7 +967,10 @@ public abstract class AbstractFlinkService implements FlinkService {
             FlinkDeploymentStatus status,
             Configuration conf,
             boolean deleteHaData) {
-        deleteClusterInternal(meta, conf, deleteHaData);
+
+        var deletionPropagation = configManager.getOperatorConfiguration().getDeletionPropagation();
+        LOG.info("Deleting cluster with {} propagation", deletionPropagation);
+        deleteClusterInternal(meta, conf, deleteHaData, deletionPropagation);
         updateStatusAfterClusterDeletion(status);
     }
 
@@ -930,9 +982,13 @@ public abstract class AbstractFlinkService implements FlinkService {
      * @param conf Configuration of the Flink application
      * @param deleteHaData Flag to indicate whether k8s or Zookeeper HA metadata should be removed
      *     as well
+     * @param deletionPropagation Resource deletion propagation policy
      */
     protected abstract void deleteClusterInternal(
-            ObjectMeta meta, Configuration conf, boolean deleteHaData);
+            ObjectMeta meta,
+            Configuration conf,
+            boolean deleteHaData,
+            DeletionPropagation deletionPropagation);
 
     protected void deleteHAData(String namespace, String clusterId, Configuration conf) {
         // We need to wait for cluster shutdown otherwise HA data might be recreated
@@ -950,8 +1006,6 @@ public abstract class AbstractFlinkService implements FlinkService {
         } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
             LOG.info("Deleting Zookeeper HA metadata");
             FlinkUtils.deleteZookeeperHAMetadata(conf);
-        } else {
-            LOG.warn("Can't delete HA metadata since HA is not enabled");
         }
     }
 
