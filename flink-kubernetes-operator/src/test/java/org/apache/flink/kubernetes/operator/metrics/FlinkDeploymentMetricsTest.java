@@ -23,18 +23,23 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
+import org.apache.flink.metrics.Gauge;
+import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.COUNTER_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.CPU_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.FLINK_VERSION_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.MEMORY_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.RESOURCE_USAGE_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.STATUS_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -190,6 +195,86 @@ public class FlinkDeploymentMetricsTest {
                             COUNTER_NAME);
             assertEquals(0, listener.getGauge(statusId1).get().getValue());
             assertEquals(0, listener.getGauge(statusId2).get().getValue());
+        }
+    }
+
+    @Test
+    public void testFlinkVersionMetrics() {
+        Map<String, String> ns1Values = new HashMap<>();
+        ns1Values.put("deployment1", "    ");
+        ns1Values.put("deployment2", "1.14");
+        ns1Values.put("deployment3", "1.14");
+        ns1Values.put("deployment4", "1.15");
+        ns1Values.put("deployment5", "1.15");
+        ns1Values.put("deployment6", "1.16");
+        ns1Values.put("deployment7", "1.17");
+        ns1Values.put("deployment8", "1.14");
+
+        Map<String, String> ns2Values = new HashMap<>();
+        ns2Values.put("deployment1", "");
+        ns2Values.put("deployment2", "1.14");
+        ns2Values.put("deployment3", "1.15");
+        ns2Values.put("deployment4", "1.15");
+        ns2Values.put("deployment5", "1.16");
+        ns2Values.put("deployment6", "1.17");
+        ns2Values.put("deployment7", "1.14");
+        ns2Values.put("deployment8", null);
+        ns2Values.put("deployment9", "1.15");
+
+        var namespaceVersions = Map.of("ns1", ns1Values, "ns2", ns2Values);
+        var expected =
+                Map.of(
+                        "ns1", Map.of("UNKNOWN", 1, "1.14", 3, "1.15", 2, "1.16", 1, "1.17", 1),
+                        "ns2", Map.of("UNKNOWN", 2, "1.14", 2, "1.15", 3, "1.16", 1, "1.17", 1));
+        updateFlinkVersionsAndAssert(namespaceVersions, expected);
+
+        // Remove invalid version and insert 1.14
+        namespaceVersions.get("ns1").put("deployment1", "1.14");
+        expected =
+                Map.of(
+                        "ns1", Map.of("UNKNOWN", 0, "1.14", 4, "1.15", 2, "1.16", 1, "1.17", 1),
+                        "ns2", Map.of("UNKNOWN", 2, "1.14", 2, "1.15", 3, "1.16", 1, "1.17", 1));
+        updateFlinkVersionsAndAssert(namespaceVersions, expected);
+    }
+
+    private void updateFlinkVersionsAndAssert(
+            Map<String, Map<String, String>> namespaceVersions,
+            Map<String, Map<String, Integer>> expected) {
+        for (var namespaceEntry : namespaceVersions.entrySet()) {
+            var namespaceName = namespaceEntry.getKey();
+            for (var versionEntry : namespaceEntry.getValue().entrySet()) {
+                var deploymentName = versionEntry.getKey();
+                var version = versionEntry.getValue();
+                var deployment = TestUtils.buildApplicationCluster(deploymentName, namespaceName);
+
+                deployment
+                        .getStatus()
+                        .getClusterInfo()
+                        .put(DashboardConfiguration.FIELD_NAME_FLINK_VERSION, version);
+
+                metricManager.onUpdate(deployment);
+            }
+        }
+
+        for (var namespaceEntry : expected.entrySet()) {
+            var namespaceName = namespaceEntry.getKey();
+
+            for (var versionEntry : namespaceEntry.getValue().entrySet()) {
+                var version = versionEntry.getKey();
+                var expectedCount = versionEntry.getValue();
+
+                var versionGroupId =
+                        listener.getNamespaceMetricId(
+                                FlinkDeployment.class,
+                                namespaceName,
+                                FLINK_VERSION_GROUP_NAME,
+                                version,
+                                COUNTER_NAME);
+
+                assertThat(listener.getGauge(versionGroupId))
+                        .map(Gauge::getValue)
+                        .hasValue(expectedCount);
+            }
         }
     }
 
