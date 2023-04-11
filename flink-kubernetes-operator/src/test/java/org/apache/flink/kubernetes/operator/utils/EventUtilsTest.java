@@ -72,6 +72,7 @@ public class EventUtilsTest {
                         .withName(eventName)
                         .get();
         Assertions.assertEquals(event.getMetadata().getUid(), eventConsumed.getMetadata().getUid());
+        Assertions.assertEquals(eventConsumed, event);
         eventConsumed = null;
         Assertions.assertNotNull(event);
         Assertions.assertEquals(1, event.getCount());
@@ -93,7 +94,7 @@ public class EventUtilsTest {
                         .inNamespace(flinkApp.getMetadata().getNamespace())
                         .withName(eventName)
                         .get();
-        Assertions.assertEquals(event.getMetadata().getUid(), eventConsumed.getMetadata().getUid());
+        Assertions.assertEquals(eventConsumed, event);
         Assertions.assertEquals(2, event.getCount());
     }
 
