@@ -142,6 +142,11 @@ public class SavepointObserver<
             SavepointInfo currentSavepointInfo,
             Configuration observeConfig) {
 
+        if (!configManager.getOperatorConfiguration().isSavepointCleanerEnabled()) {
+            LOG.info("Operator savepoint cleaner is not enabled, do not clean savepointHistory");
+            return;
+        }
+
         // maintain history
         List<Savepoint> savepointHistory = currentSavepointInfo.getSavepointHistory();
         if (savepointHistory.size() < 2) {
