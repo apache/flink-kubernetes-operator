@@ -69,6 +69,7 @@ public class FlinkOperatorConfiguration {
     String labelSelector;
     LeaderElectionConfiguration leaderElectionConfiguration;
     DeletionPropagation deletionPropagation;
+    boolean eventRecorderEnabled;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -177,6 +178,9 @@ public class FlinkOperatorConfiguration {
         DeletionPropagation deletionPropagation =
                 operatorConfig.get(KubernetesOperatorConfigOptions.RESOURCE_DELETION_PROPAGATION);
 
+        boolean eventRecorderEnabled =
+                operatorConfig.get(KubernetesOperatorConfigOptions.EVENT_RECORDER_ENABLED);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -202,7 +206,8 @@ public class FlinkOperatorConfiguration {
                 exceptionThrowableCountThreshold,
                 labelSelector,
                 getLeaderElectionConfig(operatorConfig),
-                deletionPropagation);
+                deletionPropagation,
+                eventRecorderEnabled);
     }
 
     private static LeaderElectionConfiguration getLeaderElectionConfig(Configuration conf) {

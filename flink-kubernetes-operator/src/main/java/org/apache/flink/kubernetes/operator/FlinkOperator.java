@@ -157,7 +157,7 @@ public class FlinkOperator {
         var metricManager =
                 MetricManager.createFlinkDeploymentMetricManager(configManager, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
-        var eventRecorder = EventRecorder.create(client, listeners);
+        var eventRecorder = EventRecorder.create(client, listeners, configManager);
         var autoscalerFactory = AutoscalerLoader.loadJobAutoscalerFactory();
         var reconcilerFactory =
                 new ReconcilerFactory(
@@ -182,7 +182,7 @@ public class FlinkOperator {
 
     @VisibleForTesting
     void registerSessionJobController() {
-        var eventRecorder = EventRecorder.create(client, listeners);
+        var eventRecorder = EventRecorder.create(client, listeners, configManager);
         var metricManager =
                 MetricManager.createFlinkSessionJobMetricManager(configManager, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);

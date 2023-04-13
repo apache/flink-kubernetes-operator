@@ -72,7 +72,7 @@ public class MetricsCollectionAndEvaluationTest {
     private TestingFlinkService service;
     private TestingMetricsCollector metricsCollector;
     private ScalingExecutor scalingExecutor;
-
+    private FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private FlinkDeployment app;
     private Configuration conf;
     private JobVertexID source1, source2, map, sink;
@@ -90,7 +90,7 @@ public class MetricsCollectionAndEvaluationTest {
         scalingExecutor =
                 new ScalingExecutor(
                         kubernetesClient,
-                        new EventRecorder(kubernetesClient, new EventCollector()));
+                        new EventRecorder(kubernetesClient, new EventCollector(), configManager));
         service = new TestingFlinkService();
 
         app = TestUtils.buildApplicationCluster();

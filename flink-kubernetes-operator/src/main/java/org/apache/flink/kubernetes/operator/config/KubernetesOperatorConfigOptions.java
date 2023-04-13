@@ -490,4 +490,11 @@ public class KubernetesOperatorConfigOptions {
                     .enumType(DeletionPropagation.class)
                     .defaultValue(DeletionPropagation.FOREGROUND)
                     .withDescription("JM/TM Deployment deletion propagation.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Boolean> EVENT_RECORDER_ENABLED =
+            operatorConfig("event-recorder.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription("Whether to enable rolling back failed deployment upgrades.");
 }

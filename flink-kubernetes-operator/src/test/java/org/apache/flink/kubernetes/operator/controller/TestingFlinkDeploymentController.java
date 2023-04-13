@@ -81,7 +81,7 @@ public class TestingFlinkDeploymentController
                         TestUtils.createTestMetricGroup(new Configuration()),
                         flinkService);
 
-        eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
+        eventRecorder = new EventRecorder(kubernetesClient, eventCollector, configManager);
         statusRecorder =
                 new StatusRecorder<>(kubernetesClient, new MetricManager<>(), statusUpdateCounter);
         reconcilerFactory =

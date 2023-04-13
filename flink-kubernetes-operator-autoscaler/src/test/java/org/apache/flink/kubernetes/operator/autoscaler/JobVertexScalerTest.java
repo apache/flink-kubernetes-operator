@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -52,7 +53,7 @@ public class JobVertexScalerTest {
 
     private JobVertexScaler vertexScaler;
     private Configuration conf;
-
+    private FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private KubernetesClient kubernetesClient;
     private EventCollector eventCollector;
 
@@ -63,7 +64,9 @@ public class JobVertexScalerTest {
         flinkDep = TestUtils.buildApplicationCluster();
         kubernetesClient.resource(flinkDep).createOrReplace();
         eventCollector = new EventCollector();
-        vertexScaler = new JobVertexScaler(new EventRecorder(kubernetesClient, eventCollector));
+        vertexScaler =
+                new JobVertexScaler(
+                        new EventRecorder(kubernetesClient, eventCollector, configManager));
         conf = new Configuration();
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
         conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ZERO);

@@ -74,7 +74,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         scalingExecutor =
                 new ScalingExecutor(
                         kubernetesClient,
-                        new EventRecorder(kubernetesClient, new EventCollector()));
+                        new EventRecorder(kubernetesClient, new EventCollector(), configManager));
 
         app = TestUtils.buildApplicationCluster();
         app.getMetadata().setGeneration(1L);

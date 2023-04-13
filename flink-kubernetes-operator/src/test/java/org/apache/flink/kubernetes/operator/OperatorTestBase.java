@@ -48,7 +48,7 @@ public abstract class OperatorTestBase {
         getKubernetesClient().resource(TestUtils.buildSessionJob()).createOrReplace();
         flinkService = new TestingFlinkService(getKubernetesClient());
         context = flinkService.getContext();
-        eventRecorder = new EventRecorder(getKubernetesClient(), eventCollector);
+        eventRecorder = new EventRecorder(getKubernetesClient(), eventCollector, configManager);
         operatorMetricGroup = TestUtils.createTestMetricGroup(configManager.getDefaultConfig());
         setup();
     }

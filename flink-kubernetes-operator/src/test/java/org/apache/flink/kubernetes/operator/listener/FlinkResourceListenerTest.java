@@ -17,11 +17,14 @@
 
 package org.apache.flink.kubernetes.operator.listener;
 
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -42,6 +45,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class FlinkResourceListenerTest {
 
     private KubernetesClient kubernetesClient;
+    private FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
     @BeforeEach
     public void before() {
@@ -56,7 +60,7 @@ public class FlinkResourceListenerTest {
 
         StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder =
                 StatusRecorder.create(kubernetesClient, new MetricManager<>(), listeners);
-        var eventRecorder = EventRecorder.create(kubernetesClient, listeners);
+        var eventRecorder = EventRecorder.create(kubernetesClient, listeners, configManager);
 
         var deployment = TestUtils.buildApplicationCluster();
 
@@ -123,5 +127,26 @@ public class FlinkResourceListenerTest {
             assertEquals(
                     listener1.events.get(i).getTimestamp(), listener2.events.get(i).getTimestamp());
         }
+    }
+
+    @Test
+    public void testDisabledEventRecorder() {
+        var listener1 = new TestingListener();
+        var listener2 = new TestingListener();
+        var listeners = List.<FlinkResourceListener>of(listener1, listener2);
+        var eventRecorder = EventRecorder.create(kubernetesClient, listeners, configManager);
+        var deployment = TestUtils.buildApplicationCluster();
+
+        Configuration conf = new Configuration();
+        conf.set(KubernetesOperatorConfigOptions.EVENT_RECORDER_ENABLED, false);
+        configManager.updateDefaultConfig(conf);
+
+        eventRecorder.triggerEvent(
+                deployment,
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.SavepointError,
+                EventRecorder.Component.Operator,
+                "err");
+        assertEquals(0, listener1.events.size());
     }
 }

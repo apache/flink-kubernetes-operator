@@ -21,24 +21,31 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.function.BiConsumer;
 
 /** Helper class for creating Kubernetes events for Flink resources. */
 public class EventRecorder {
-
+    private static final Logger LOG = LoggerFactory.getLogger(EventRecorder.class);
     private final KubernetesClient client;
     private final BiConsumer<AbstractFlinkResource<?, ?>, Event> eventListener;
+    private final FlinkConfigManager configManager;
 
     public EventRecorder(
-            KubernetesClient client, BiConsumer<AbstractFlinkResource<?, ?>, Event> eventListener) {
+            KubernetesClient client,
+            BiConsumer<AbstractFlinkResource<?, ?>, Event> eventListener,
+            FlinkConfigManager configManager) {
         this.client = client;
         this.eventListener = eventListener;
+        this.configManager = configManager;
     }
 
     public boolean triggerEvent(
@@ -56,6 +63,12 @@ public class EventRecorder {
             String reason,
             String message,
             Component component) {
+
+        if (!configManager.getOperatorConfiguration().isEventRecorderEnabled()) {
+            LOG.debug("Event Recorder disabled, do not create K8 Events");
+            return false;
+        }
+
         return EventUtils.createOrUpdateEvent(
                 client,
                 resource,
@@ -67,7 +80,9 @@ public class EventRecorder {
     }
 
     public static EventRecorder create(
-            KubernetesClient client, Collection<FlinkResourceListener> listeners) {
+            KubernetesClient client,
+            Collection<FlinkResourceListener> listeners,
+            FlinkConfigManager configManager) {
 
         BiConsumer<AbstractFlinkResource<?, ?>, Event> biConsumer =
                 (resource, event) -> {
@@ -99,7 +114,7 @@ public class EventRecorder {
                     AuditUtils.logContext(ctx);
                 };
 
-        return new EventRecorder(client, biConsumer);
+        return new EventRecorder(client, biConsumer, configManager);
     }
 
     /** The type of the events. */

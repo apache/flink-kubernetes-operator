@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -58,7 +59,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class ScalingExecutorTest {
 
     private ScalingExecutor scalingDecisionExecutor;
-
+    private FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private EventCollector eventCollector;
     private Configuration conf;
     private KubernetesClient kubernetesClient;
@@ -69,7 +70,8 @@ public class ScalingExecutorTest {
         eventCollector = new EventCollector();
         scalingDecisionExecutor =
                 new ScalingExecutor(
-                        kubernetesClient, new EventRecorder(kubernetesClient, eventCollector));
+                        kubernetesClient,
+                        new EventRecorder(kubernetesClient, eventCollector, configManager));
         conf = new Configuration();
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
