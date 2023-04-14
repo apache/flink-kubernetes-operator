@@ -21,6 +21,8 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
+import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
+import org.apache.flink.util.StringUtils;
 
 import org.apache.commons.lang3.math.NumberUtils;
 
@@ -37,10 +39,14 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
     // map(namespace, map(status, set(deployment))
     private final Map<String, Map<JobManagerDeploymentStatus, Set<String>>> deploymentStatuses =
             new ConcurrentHashMap<>();
+    // map(namespace, map(version, set(deployment)))
+    private final Map<String, Map<String, Set<String>>> deploymentFlinkVersions =
+            new ConcurrentHashMap<>();
     // map(namespace, map(deployment, cpu))
     private final Map<String, Map<String, Double>> deploymentCpuUsage = new ConcurrentHashMap<>();
     // map(namespace, map(deployment, memory))
     private final Map<String, Map<String, Long>> deploymentMemoryUsage = new ConcurrentHashMap<>();
+    public static final String FLINK_VERSION_GROUP_NAME = "FlinkVersion";
     public static final String STATUS_GROUP_NAME = "JmDeploymentStatus";
     public static final String RESOURCE_USAGE_GROUP_NAME = "ResourceUsage";
     public static final String COUNTER_NAME = "Count";
@@ -69,6 +75,23 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
                             return createDeploymentStatusMap();
                         })
                 .get(flinkApp.getStatus().getJobManagerDeploymentStatus())
+                .add(deploymentName);
+
+        var flinkVersion =
+                flinkApp.getStatus()
+                        .getClusterInfo()
+                        .getOrDefault(DashboardConfiguration.FIELD_NAME_FLINK_VERSION, "");
+        if (StringUtils.isNullOrWhitespaceOnly(flinkVersion)) {
+            flinkVersion = "UNKNOWN";
+        }
+        deploymentFlinkVersions
+                .computeIfAbsent(namespace, ns -> new ConcurrentHashMap<>())
+                .computeIfAbsent(
+                        flinkVersion,
+                        v -> {
+                            initFlinkVersions(namespace, v);
+                            return ConcurrentHashMap.newKeySet();
+                        })
                 .add(deploymentName);
 
         var totalCpu =
@@ -104,13 +127,18 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
         var namespace = flinkApp.getMetadata().getNamespace();
         var name = flinkApp.getMetadata().getName();
 
-        if (!deploymentStatuses.containsKey(namespace)) {
-            return;
+        if (deploymentStatuses.containsKey(namespace)) {
+            deploymentStatuses.get(namespace).values().forEach(names -> names.remove(name));
         }
-        deploymentStatuses.get(namespace).values().forEach(names -> names.remove(name));
-
-        deploymentCpuUsage.get(namespace).remove(name);
-        deploymentMemoryUsage.get(namespace).remove(name);
+        if (deploymentFlinkVersions.containsKey(namespace)) {
+            deploymentFlinkVersions.get(namespace).values().forEach(names -> names.remove(name));
+        }
+        if (deploymentCpuUsage.containsKey(namespace)) {
+            deploymentCpuUsage.get(namespace).remove(name);
+        }
+        if (deploymentMemoryUsage.containsKey(namespace)) {
+            deploymentMemoryUsage.get(namespace).remove(name);
+        }
     }
 
     private void initNamespaceDeploymentCounts(String ns) {
@@ -132,6 +160,16 @@ public class FlinkDeploymentMetrics implements CustomResourceMetrics<FlinkDeploy
                     .addGroup(status.toString())
                     .gauge(COUNTER_NAME, () -> deploymentStatuses.get(ns).get(status).size());
         }
+    }
+
+    private void initFlinkVersions(String ns, String flinkVersion) {
+        parentMetricGroup
+                .createResourceNamespaceGroup(configuration, FlinkDeployment.class, ns)
+                .addGroup(FLINK_VERSION_GROUP_NAME)
+                .addGroup(flinkVersion)
+                .gauge(
+                        COUNTER_NAME,
+                        () -> deploymentFlinkVersions.get(ns).get(flinkVersion).size());
     }
 
     private void initNamespaceCpuUsage(String ns) {
