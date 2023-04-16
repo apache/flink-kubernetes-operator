@@ -65,7 +65,7 @@ This project bundles the following dependencies under the Apache Software Licens
 - org.objenesis:objenesis:2.1
 - org.slf4j:slf4j-api:1.7.36
 - org.xerial.snappy:snappy-java:1.1.8.3
-- org.yaml:snakeyaml:1.33
+- org.yaml:snakeyaml:2.0
 
 This project bundles the following dependencies under the BSD License.
 See bundled license files for details.
