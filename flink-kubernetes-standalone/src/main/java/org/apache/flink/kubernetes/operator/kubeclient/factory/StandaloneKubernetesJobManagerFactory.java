@@ -30,9 +30,11 @@ import org.apache.flink.kubernetes.kubeclient.decorators.KubernetesStepDecorator
 import org.apache.flink.kubernetes.kubeclient.decorators.MountSecretsDecorator;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.kubeclient.resources.KubernetesOwnerReference;
+import org.apache.flink.kubernetes.operator.decorators.KubernetesStepDecoratorPlugin;
 import org.apache.flink.kubernetes.operator.kubeclient.decorators.CmdStandaloneJobManagerDecorator;
 import org.apache.flink.kubernetes.operator.kubeclient.decorators.UserLibMountDecorator;
 import org.apache.flink.kubernetes.operator.kubeclient.parameters.StandaloneKubernetesJobManagerParameters;
+import org.apache.flink.kubernetes.operator.utils.DecoratorUtils;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.util.Preconditions;
@@ -46,6 +48,7 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -61,19 +64,25 @@ public class StandaloneKubernetesJobManagerFactory {
         FlinkPod flinkPod = Preconditions.checkNotNull(podTemplate).copy();
         List<HasMetadata> accompanyingResources = new ArrayList<>();
 
-        final KubernetesStepDecorator[] stepDecorators =
-                new KubernetesStepDecorator[] {
-                    new InitJobManagerDecorator(kubernetesJobManagerParameters),
-                    new EnvSecretsDecorator(kubernetesJobManagerParameters),
-                    new MountSecretsDecorator(kubernetesJobManagerParameters),
-                    new CmdStandaloneJobManagerDecorator(kubernetesJobManagerParameters),
-                    new InternalServiceDecorator(kubernetesJobManagerParameters),
-                    new ExternalServiceDecorator(kubernetesJobManagerParameters),
-                    new HadoopConfMountDecorator(kubernetesJobManagerParameters),
-                    new KerberosMountDecorator(kubernetesJobManagerParameters),
-                    new FlinkConfMountDecorator(kubernetesJobManagerParameters),
-                    new UserLibMountDecorator(kubernetesJobManagerParameters),
-                };
+        final List<KubernetesStepDecorator> stepDecorators =
+                new ArrayList<>(
+                        Arrays.asList(
+                                new InitJobManagerDecorator(kubernetesJobManagerParameters),
+                                new EnvSecretsDecorator(kubernetesJobManagerParameters),
+                                new MountSecretsDecorator(kubernetesJobManagerParameters),
+                                new CmdStandaloneJobManagerDecorator(
+                                        kubernetesJobManagerParameters),
+                                new InternalServiceDecorator(kubernetesJobManagerParameters),
+                                new ExternalServiceDecorator(kubernetesJobManagerParameters),
+                                new HadoopConfMountDecorator(kubernetesJobManagerParameters),
+                                new KerberosMountDecorator(kubernetesJobManagerParameters),
+                                new FlinkConfMountDecorator(kubernetesJobManagerParameters),
+                                new UserLibMountDecorator(kubernetesJobManagerParameters)));
+
+        stepDecorators.addAll(
+                DecoratorUtils.discoverDecorators(
+                        kubernetesJobManagerParameters.getFlinkConfiguration(),
+                        KubernetesStepDecoratorPlugin.DecoratorComponent.JOB_MANAGER));
 
         for (KubernetesStepDecorator stepDecorator : stepDecorators) {
             flinkPod = stepDecorator.decorateFlinkPod(flinkPod);

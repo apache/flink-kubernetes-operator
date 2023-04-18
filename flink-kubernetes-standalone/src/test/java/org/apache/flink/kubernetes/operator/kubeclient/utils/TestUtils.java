@@ -26,9 +26,17 @@ import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.utils.Constants;
 
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Testing utilities. */
 public class TestUtils {
@@ -53,6 +61,9 @@ public class TestUtils {
 
     public static final double TASK_MANAGER_CPU = 4;
     public static final double JOB_MANAGER_CPU = 2;
+
+    private static final String TEST_PLUGINS = "test-plugins";
+    private static final String PlUGINS_JAR = TEST_PLUGINS + "-test-jar.jar";
 
     public static Map<String, String> generateTestStringStringMap(
             String keyPrefix, String valuePrefix, int entries) {
@@ -105,5 +116,46 @@ public class TestUtils {
         flinkConf.setString(BlobServerOptions.PORT, String.valueOf(Constants.BLOB_SERVER_PORT));
         flinkConf.setString(RestOptions.BIND_PORT, String.valueOf(Constants.REST_PORT));
         return flinkConf;
+    }
+
+    public static String getTestPluginsRootDir(Path temporaryFolder) throws IOException {
+        File testValidatorFolder = new File(temporaryFolder.toFile(), TEST_PLUGINS);
+        assertTrue(testValidatorFolder.mkdirs());
+        File testValidatorJar = new File("target", PlUGINS_JAR);
+        assertTrue(testValidatorJar.exists());
+        Files.copy(
+                testValidatorJar.toPath(), Paths.get(testValidatorFolder.toString(), PlUGINS_JAR));
+
+        return temporaryFolder.toAbsolutePath().toString();
+    }
+
+    // This code is taken slightly modified from: http://stackoverflow.com/a/7201825/568695
+    // it changes the environment variables of this JVM. Use only for testing purposes!
+    @SuppressWarnings("unchecked")
+    public static void setEnv(Map<String, String> newEnv) {
+        try {
+            Map<String, String> env = System.getenv();
+            Class<?> clazz = env.getClass();
+            Field field = clazz.getDeclaredField("m");
+            field.setAccessible(true);
+            Map<String, String> map = (Map<String, String>) field.get(env);
+            map.clear();
+            map.putAll(newEnv);
+            // only for Windows
+            Class<?> processEnvironmentClass = Class.forName("java.lang.ProcessEnvironment");
+            try {
+                Field theCaseInsensitiveEnvironmentField =
+                        processEnvironmentClass.getDeclaredField("theCaseInsensitiveEnvironment");
+                theCaseInsensitiveEnvironmentField.setAccessible(true);
+                Map<String, String> ciEnv =
+                        (Map<String, String>) theCaseInsensitiveEnvironmentField.get(null);
+                ciEnv.clear();
+                ciEnv.putAll(newEnv);
+            } catch (NoSuchFieldException ignored) {
+            }
+
+        } catch (Exception e1) {
+            throw new RuntimeException(e1);
+        }
     }
 }
