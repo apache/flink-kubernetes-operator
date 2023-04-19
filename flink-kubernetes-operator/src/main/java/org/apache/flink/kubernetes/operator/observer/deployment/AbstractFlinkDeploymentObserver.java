@@ -29,9 +29,11 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.MissingJobManagerException;
 import org.apache.flink.kubernetes.operator.observer.AbstractFlinkResourceObserver;
+import org.apache.flink.kubernetes.operator.observer.FlinkResourceObserverPlugin;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
+import org.apache.flink.kubernetes.operator.utils.ObserverUtils;
 
 import io.fabric8.kubernetes.api.model.ContainerStateWaiting;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
@@ -58,6 +60,9 @@ public abstract class AbstractFlinkDeploymentObserver
     public AbstractFlinkDeploymentObserver(
             FlinkConfigManager configManager, EventRecorder eventRecorder) {
         super(configManager, eventRecorder);
+        this.observerPlugins =
+                ObserverUtils.discoverObserverPlugin(
+                        configManager, FlinkResourceObserverPlugin.ObserverType.FLINK_DEPLOYMENT);
     }
 
     @Override

@@ -28,6 +28,7 @@ under the License.
             <outputDirectory>/</outputDirectory>
             <!-- the service impl -->
             <includes>
+                <include>org/apache/flink/kubernetes/operator/observer/TestFlinkResourceObserverPlugin.class</include>
                 <include>org/apache/flink/kubernetes/operator/validation/TestValidator.class</include>
                 <include>org/apache/flink/kubernetes/operator/listener/TestingListener.class</include>
                 <include>org/apache/flink/kubernetes/operator/autoscaler/TestingAutoscaler.class</include>

@@ -28,6 +28,9 @@ import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+import java.util.Set;
+
 /** Base observer for all Flink resources. */
 public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkResource<?, ?>>
         implements Observer<CR> {
@@ -36,6 +39,7 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
 
     protected final FlinkConfigManager configManager;
     protected final EventRecorder eventRecorder;
+    protected Set<FlinkResourceObserverPlugin> observerPlugins = Collections.emptySet();
 
     public AbstractFlinkResourceObserver(
             FlinkConfigManager configManager, EventRecorder eventRecorder) {
@@ -51,6 +55,8 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
 
         // Trigger resource specific observe logic
         observeInternal(ctx);
+        observerPlugins.forEach(
+                flinkResourceObserverPlugin -> flinkResourceObserverPlugin.observe(ctx));
 
         SavepointUtils.resetTriggerIfJobNotRunning(ctx.getResource(), eventRecorder);
     }

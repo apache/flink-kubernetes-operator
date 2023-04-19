@@ -128,8 +128,6 @@ public class ScalingMetrics {
             excludeVertexFromScaling(conf, jobVertexId);
             // Pretend that the load is balanced because we don't know any better
             busyTimeMsPerSecond = conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
-        } else {
-            includeVertexForScaling(conf, jobVertexId);
         }
         return busyTimeMsPerSecond;
     }
@@ -197,15 +195,10 @@ public class ScalingMetrics {
         return rate / (busyTimeMsPerSecond / 1000);
     }
 
+    /** Temporarily exclude vertex from scaling for this run. This does not update the spec. */
     private static void excludeVertexFromScaling(Configuration conf, JobVertexID jobVertexId) {
         Set<String> excludedIds = new HashSet<>(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS));
         excludedIds.add(jobVertexId.toHexString());
-        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
-    }
-
-    private static void includeVertexForScaling(Configuration conf, JobVertexID jobVertexId) {
-        Set<String> excludedIds = new HashSet<>(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS));
-        excludedIds.remove(jobVertexId.toHexString());
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
     }
 

@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -177,6 +178,8 @@ public class ScalingMetricsTest {
                         new VertexInfo(sink, Collections.singleton(source), 10, 100));
 
         Configuration conf = new Configuration();
+        assertTrue(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS).isEmpty());
+        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of(sink.toHexString()));
 
         Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
         ScalingMetrics.computeDataRateMetrics(
@@ -196,6 +199,8 @@ public class ScalingMetricsTest {
 
         // Make sure vertex won't be scaled
         assertTrue(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS).contains(source.toHexString()));
+        // Existing overrides should be preserved
+        assertTrue(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS).contains(sink.toHexString()));
         // Legacy source rates are computed based on the current rate and a balanced utilization
         assertEquals(
                 2000 / conf.get(AutoScalerOptions.TARGET_UTILIZATION),

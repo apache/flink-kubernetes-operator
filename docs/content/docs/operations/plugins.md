@@ -110,6 +110,19 @@ In order to enable your custom `FlinkResourceListener` you need to:
  2. Add your listener class to `org.apache.flink.kubernetes.operator.listener.FlinkResourceListener` in `META-INF/services`
  3. Package your JAR and add it to the plugins directory of your operator image (`/opt/flink/plugins`)
 
+## Custom Flink Resource Observer
+
+The Flink Kubernetes Operator observes the Flink Job State and updates the Custom Resource fields with the observed state.
+
+By implementing the `FlinkResourceObserverPlugin` interface, users can add custom observer logic. An example use case would be if user would like to track if the job has entered FINISHED state, user can implement custom observer logic to catch this and update the CR field.
+
+Similar to custom validator implementations, resource listeners are loaded via the Flink [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism.
+
+In order to enable your custom `FlinkResourceObserverPlugin` you need to:
+
+1. Implement the interface
+2. Add your listener class to `org.apache.flink.kubernetes.operator.observer.FlinkResourceObserverPlugin` in `META-INF/services`
+3. Package your JAR and add it to the plugins directory of your operator image (`/opt/flink/plugins`)
 
 ## Additional Dependencies
 In some cases, users may need to add required dependencies onto the operator classpath.

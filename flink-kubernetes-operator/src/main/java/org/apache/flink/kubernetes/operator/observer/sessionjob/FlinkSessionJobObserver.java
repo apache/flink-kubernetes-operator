@@ -26,10 +26,12 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.MissingSessionJobException;
 import org.apache.flink.kubernetes.operator.observer.AbstractFlinkResourceObserver;
+import org.apache.flink.kubernetes.operator.observer.FlinkResourceObserverPlugin;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.ObserverUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.util.Preconditions;
@@ -55,6 +57,9 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
         super(configManager, eventRecorder);
         this.jobStatusObserver = new SessionJobStatusObserver(configManager, eventRecorder);
         this.savepointObserver = new SavepointObserver<>(configManager, eventRecorder);
+        this.observerPlugins =
+                ObserverUtils.discoverObserverPlugin(
+                        configManager, FlinkResourceObserverPlugin.ObserverType.FLINK_SESSION_JOB);
     }
 
     @Override
