@@ -41,6 +41,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
+import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
@@ -84,6 +85,15 @@ public class FlinkDeploymentControllerTest {
 
     private KubernetesMockServer mockServer;
     private KubernetesClient kubernetesClient;
+
+    Event mockedEvent =
+            new EventBuilder()
+                    .withNewMetadata()
+                    .withName("name")
+                    .endMetadata()
+                    .withType("type")
+                    .withReason("reason")
+                    .build();
 
     @BeforeEach
     public void setup() {
@@ -217,9 +227,10 @@ public class FlinkDeploymentControllerTest {
 
     @Test
     public void verifyFailedDeployment() throws Exception {
+
         var submittedEventValidatingResponseProvider =
                 new TestUtils.ValidatingResponseProvider<>(
-                        new EventBuilder().withNewMetadata().endMetadata().build(),
+                        mockedEvent,
                         r ->
                                 assertTrue(
                                         r.getBody()
@@ -236,7 +247,7 @@ public class FlinkDeploymentControllerTest {
 
         var validatingResponseProvider =
                 new TestUtils.ValidatingResponseProvider<>(
-                        new EventBuilder().withNewMetadata().endMetadata().build(),
+                        mockedEvent,
                         r ->
                                 assertTrue(
                                         r.getBody()
@@ -301,7 +312,7 @@ public class FlinkDeploymentControllerTest {
 
         var submittedEventValidatingResponseProvider =
                 new TestUtils.ValidatingResponseProvider<>(
-                        new EventBuilder().withNewMetadata().endMetadata().build(),
+                        mockedEvent,
                         r ->
                                 assertTrue(
                                         r.getBody()
@@ -318,7 +329,7 @@ public class FlinkDeploymentControllerTest {
 
         var validatingResponseProvider =
                 new TestUtils.ValidatingResponseProvider<>(
-                        new EventBuilder().withNewMetadata().endMetadata().build(),
+                        mockedEvent,
                         r -> {
                             String recordedRequestBody = r.getBody().readUtf8();
                             assertTrue(recordedRequestBody.contains(reason));
