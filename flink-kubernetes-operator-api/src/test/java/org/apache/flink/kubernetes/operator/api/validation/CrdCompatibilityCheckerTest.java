@@ -17,10 +17,16 @@
 
 package org.apache.flink.kubernetes.operator.api.validation;
 
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.junit.jupiter.api.Test;
+
+import java.io.File;
+import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -237,6 +243,31 @@ public class CrdCompatibilityCheckerTest {
                         + "      maxLength: 123\n"
                         + "      type: string\n"
                         + "  type: object");
+    }
+
+    @Test
+    public void testCreateFlinkSessionJobIgnoreUnknownFields() throws IOException {
+        FlinkSessionJob flinkSessionJobWithUnknownFields =
+                objectMapper.readValue(
+                        new File("src/test/resources/test-session-job-with-unknown-fields.yaml"),
+                        FlinkSessionJob.class);
+        FlinkSessionJob flinkSessionJob =
+                objectMapper.readValue(
+                        new File("src/test/resources/test-session-job.yaml"),
+                        FlinkSessionJob.class);
+        assertEquals(flinkSessionJobWithUnknownFields.toString(), flinkSessionJob.toString());
+    }
+
+    @Test
+    public void testCreateFlinkDeploymentIgnoreUnknownFields() throws IOException {
+        FlinkDeployment flinkDeploymentWithUnknownFields =
+                objectMapper.readValue(
+                        new File("src/test/resources/test-deployment-with-unknown-fields.yaml"),
+                        FlinkDeployment.class);
+        FlinkDeployment flinkDeployment =
+                objectMapper.readValue(
+                        new File("src/test/resources/test-deployment.yaml"), FlinkDeployment.class);
+        assertEquals(flinkDeploymentWithUnknownFields.toString(), flinkDeployment.toString());
     }
 
     private void expectSuccess(String oldSchema, String newSchema) throws JsonProcessingException {
