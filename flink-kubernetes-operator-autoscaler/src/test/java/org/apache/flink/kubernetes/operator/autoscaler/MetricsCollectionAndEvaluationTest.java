@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
-import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetrics;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
@@ -431,7 +431,7 @@ public class MetricsCollectionAndEvaluationTest {
         assertEquals(1, scaledParallelism.get(source1));
     }
 
-    private CollectedMetrics collectMetrics() throws Exception {
+    private CollectedMetricHistory collectMetrics() throws Exception {
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.METRICS_WINDOW, Duration.ofSeconds(2));
 
