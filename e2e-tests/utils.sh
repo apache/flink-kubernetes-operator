@@ -242,6 +242,8 @@ function stop_minikube {
 }
 
 function cleanup_and_exit() {
+    echo "Starting cleanup"
+
     if [ $TRAPPED_EXIT_CODE != 0 ];then
       debug_and_show_logs
     fi
@@ -251,9 +253,14 @@ function cleanup_and_exit() {
     CLUSTER_ID=$3
 
     kubectl config set-context --current --namespace=default
-    kubectl delete -f $APPLICATION_YAML
-    kubectl wait --for=delete pod --timeout=${TIMEOUT}s --selector="app=${CLUSTER_ID}"
+    echo "Deleting test resources"
+    # We send deletion to a background process as it gets stuck sometimes
+    kubectl delete -f $APPLICATION_YAML &
+    echo "Waiting for deployment to be deleted..."
+    kubectl wait --for=delete deployment --timeout=${TIMEOUT}s --selector="app=${CLUSTER_ID}"
+    echo "Deployment deleted"
     kubectl delete cm --selector="app=${CLUSTER_ID},configmap-type=high-availability"
+    echo "Cleanup completed"
 }
 
 function _on_exit_callback {
