@@ -207,7 +207,11 @@ public class JobVertexScaler {
                 message);
 
         if (conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED)) {
-            LOG.info(message);
+            LOG.info(
+                    "Ineffective scaling detected for {}, expected increase {}, actual {}",
+                    vertex,
+                    expectedIncrease,
+                    actualIncrease);
             return true;
         } else {
             return false;

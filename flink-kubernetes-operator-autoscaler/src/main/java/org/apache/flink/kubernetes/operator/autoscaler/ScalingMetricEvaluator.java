@@ -20,7 +20,9 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetrics;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.Edge;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
@@ -44,13 +46,11 @@ import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMet
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CURRENT_PROCESSING_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.LAG;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
-import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.OUTPUT_RATIO;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SOURCE_DATA_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
-import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TRUE_OUTPUT_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /** Job scaling evaluator for autoscaler. */
@@ -59,7 +59,7 @@ public class ScalingMetricEvaluator {
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricEvaluator.class);
 
     public Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluate(
-            Configuration conf, CollectedMetrics collectedMetrics) {
+            Configuration conf, CollectedMetricHistory collectedMetrics) {
 
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
@@ -85,9 +85,9 @@ public class ScalingMetricEvaluator {
     @VisibleForTesting
     protected static boolean isProcessingBacklog(
             JobTopology topology,
-            SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory,
+            SortedMap<Instant, CollectedMetrics> metricsHistory,
             Configuration conf) {
-        var lastMetrics = metricsHistory.get(metricsHistory.lastKey());
+        var lastMetrics = metricsHistory.get(metricsHistory.lastKey()).getVertexMetrics();
         return topology.getVerticesInTopologicalOrder().stream()
                 .filter(topology::isSource)
                 .anyMatch(
@@ -113,12 +113,13 @@ public class ScalingMetricEvaluator {
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluateMetrics(
             Configuration conf,
             HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> scalingOutput,
-            SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory,
+            SortedMap<Instant, CollectedMetrics> metricsHistory,
             JobTopology topology,
             JobVertexID vertex,
             boolean processingBacklog) {
 
-        var latestVertexMetrics = metricsHistory.get(metricsHistory.lastKey()).get(vertex);
+        var latestVertexMetrics =
+                metricsHistory.get(metricsHistory.lastKey()).getVertexMetrics().get(vertex);
 
         var evaluatedMetrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
         computeTargetDataRate(
@@ -143,21 +144,6 @@ public class ScalingMetricEvaluator {
                 EvaluatedScalingMetric.of(topology.getMaxParallelisms().get(vertex)));
 
         computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog);
-
-        var isSink = topology.getOutputs().get(vertex).isEmpty();
-        if (!isSink) {
-            evaluatedMetrics.put(
-                    TRUE_OUTPUT_RATE,
-                    new EvaluatedScalingMetric(
-                            latestVertexMetrics.get(TRUE_OUTPUT_RATE),
-                            getAverage(TRUE_OUTPUT_RATE, vertex, metricsHistory)));
-            evaluatedMetrics.put(
-                    OUTPUT_RATIO,
-                    new EvaluatedScalingMetric(
-                            latestVertexMetrics.get(OUTPUT_RATIO),
-                            getAverage(OUTPUT_RATIO, vertex, metricsHistory)));
-        }
-
         return evaluatedMetrics;
     }
 
@@ -198,7 +184,7 @@ public class ScalingMetricEvaluator {
             JobVertexID vertex,
             Configuration conf,
             HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> alreadyEvaluated,
-            SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory,
+            SortedMap<Instant, CollectedMetrics> metricsHistory,
             Map<ScalingMetric, Double> latestVertexMetrics,
             Map<ScalingMetric, EvaluatedScalingMetric> out) {
 
@@ -233,7 +219,8 @@ public class ScalingMetricEvaluator {
             for (var inputVertex : inputs) {
                 var inputEvaluatedMetrics = alreadyEvaluated.get(inputVertex);
                 var inputTargetRate = inputEvaluatedMetrics.get(TARGET_DATA_RATE);
-                var outputRateMultiplier = inputEvaluatedMetrics.get(OUTPUT_RATIO).getAverage();
+                var outputRateMultiplier =
+                        getAverageOutputRatio(new Edge(inputVertex, vertex), metricsHistory);
                 sumCurrentTargetRate += inputTargetRate.getCurrent() * outputRateMultiplier;
                 sumAvgTargetRate += inputTargetRate.getAverage() * outputRateMultiplier;
                 sumCatchUpDataRate +=
@@ -250,12 +237,31 @@ public class ScalingMetricEvaluator {
     private static double getAverage(
             ScalingMetric metric,
             JobVertexID jobVertexId,
-            SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricsHistory) {
+            SortedMap<Instant, CollectedMetrics> metricsHistory) {
         double[] metricValues =
                 metricsHistory.values().stream()
-                        .map(m -> m.get(jobVertexId))
+                        .map(m -> m.getVertexMetrics().get(jobVertexId))
                         .filter(m -> m.containsKey(metric))
                         .mapToDouble(m -> m.get(metric))
+                        .filter(d -> !Double.isNaN(d))
+                        .toArray();
+        for (double metricValue : metricValues) {
+            if (Double.isInfinite(metricValue)) {
+                // As long as infinite values are present, we can't properly average. We need to
+                // wait until they are evicted.
+                return metricValue;
+            }
+        }
+        return StatUtils.mean(metricValues);
+    }
+
+    private static double getAverageOutputRatio(
+            Edge edge, SortedMap<Instant, CollectedMetrics> metricsHistory) {
+        double[] metricValues =
+                metricsHistory.values().stream()
+                        .map(m -> m.getOutputRatios())
+                        .filter(m -> m.containsKey(edge))
+                        .mapToDouble(m -> m.get(edge))
                         .filter(d -> !Double.isNaN(d))
                         .toArray();
         for (double metricValue : metricValues) {

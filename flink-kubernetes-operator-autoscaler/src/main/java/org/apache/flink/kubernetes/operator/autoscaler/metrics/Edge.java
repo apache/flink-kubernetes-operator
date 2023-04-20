@@ -23,13 +23,11 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.Map;
-
 /** Collected scaling metrics. */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class CollectedMetrics {
-    private Map<JobVertexID, Map<ScalingMetric, Double>> vertexMetrics;
-    private Map<Edge, Double> outputRatios;
+public class Edge {
+    private JobVertexID from;
+    private JobVertexID to;
 }

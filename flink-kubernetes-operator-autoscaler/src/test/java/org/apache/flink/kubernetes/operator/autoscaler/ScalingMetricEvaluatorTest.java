@@ -20,7 +20,9 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetrics;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.Edge;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
@@ -44,12 +46,10 @@ import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerO
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CURRENT_PROCESSING_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.LAG;
-import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.OUTPUT_RATIO;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SOURCE_DATA_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
-import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TRUE_OUTPUT_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -70,45 +70,37 @@ public class ScalingMetricEvaluatorTest {
 
         var evaluator = new ScalingMetricEvaluator();
 
-        var metricHistory = new TreeMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>>();
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
 
         metricHistory.put(
                 Instant.now(),
-                Map.of(
-                        source,
+                new CollectedMetrics(
                         Map.of(
-                                SOURCE_DATA_RATE,
-                                100.,
-                                LAG,
-                                0.,
-                                OUTPUT_RATIO,
-                                2.,
-                                TRUE_OUTPUT_RATE,
-                                200.,
-                                TRUE_PROCESSING_RATE,
-                                200.),
-                        sink,
-                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+                                source,
+                                Map.of(SOURCE_DATA_RATE, 100., LAG, 0., TRUE_PROCESSING_RATE, 200.),
+                                sink,
+                                Map.of(TRUE_PROCESSING_RATE, 2000.)),
+                        Map.of(new Edge(source, sink), 2.)));
 
         metricHistory.put(
                 Instant.now(),
-                Map.of(
-                        source,
+                new CollectedMetrics(
                         Map.of(
-                                SOURCE_DATA_RATE, 200.,
-                                LAG, 1000.,
-                                OUTPUT_RATIO, 2.,
-                                TRUE_OUTPUT_RATE, 200.,
-                                TRUE_PROCESSING_RATE, 200.),
-                        sink,
-                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+                                source,
+                                Map.of(
+                                        SOURCE_DATA_RATE, 200.,
+                                        LAG, 1000.,
+                                        TRUE_PROCESSING_RATE, 200.),
+                                sink,
+                                Map.of(TRUE_PROCESSING_RATE, 2000.)),
+                        Map.of(new Edge(source, sink), 2.)));
 
         var conf = new Configuration();
 
         conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ofSeconds(2));
         conf.set(AutoScalerOptions.RESTART_TIME, Duration.ZERO);
         var evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetrics(topology, metricHistory));
+                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -123,7 +115,8 @@ public class ScalingMetricEvaluatorTest {
                 evaluatedMetrics.get(sink).get(CATCH_UP_DATA_RATE));
 
         conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ofSeconds(1));
-        evaluatedMetrics = evaluator.evaluate(conf, new CollectedMetrics(topology, metricHistory));
+        evaluatedMetrics =
+                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -140,7 +133,8 @@ public class ScalingMetricEvaluatorTest {
         // Restart time should not affect evaluated metrics
         conf.set(AutoScalerOptions.RESTART_TIME, Duration.ofSeconds(2));
 
-        evaluatedMetrics = evaluator.evaluate(conf, new CollectedMetrics(topology, metricHistory));
+        evaluatedMetrics =
+                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -156,7 +150,8 @@ public class ScalingMetricEvaluatorTest {
 
         // Turn off lag based scaling
         conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ZERO);
-        evaluatedMetrics = evaluator.evaluate(conf, new CollectedMetrics(topology, metricHistory));
+        evaluatedMetrics =
+                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -172,24 +167,17 @@ public class ScalingMetricEvaluatorTest {
         metricHistory.clear();
         metricHistory.put(
                 Instant.now(),
-                Map.of(
-                        source,
+                new CollectedMetrics(
                         Map.of(
-                                SOURCE_DATA_RATE,
-                                100.,
-                                LAG,
-                                0.,
-                                OUTPUT_RATIO,
-                                2.,
-                                TRUE_OUTPUT_RATE,
-                                200.,
-                                TRUE_PROCESSING_RATE,
-                                200.),
-                        sink,
-                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+                                source,
+                                Map.of(SOURCE_DATA_RATE, 100., LAG, 0., TRUE_PROCESSING_RATE, 200.),
+                                sink,
+                                Map.of(TRUE_PROCESSING_RATE, 2000.)),
+                        Map.of(new Edge(source, sink), 2.)));
 
         conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ofMinutes(1));
-        evaluatedMetrics = evaluator.evaluate(conf, new CollectedMetrics(topology, metricHistory));
+        evaluatedMetrics =
+                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
         assertEquals(
                 new EvaluatedScalingMetric(100, 100),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -231,65 +219,73 @@ public class ScalingMetricEvaluatorTest {
                         new VertexInfo(source, Collections.emptySet(), 1, 1),
                         new VertexInfo(sink, Set.of(source), 1, 1));
 
-        var metricHistory = new TreeMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>>();
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
 
         // 0 lag
         metricHistory.put(
                 Instant.now(),
-                Map.of(
-                        source,
-                        Map.of(LAG, 0., CURRENT_PROCESSING_RATE, 100.),
-                        sink,
-                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(LAG, 0., CURRENT_PROCESSING_RATE, 100.),
+                                sink,
+                                Map.of(TRUE_PROCESSING_RATE, 2000.)),
+                        Collections.emptyMap()));
         assertFalse(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
 
         // Missing lag
         metricHistory.clear();
         metricHistory.put(
                 Instant.now(),
-                Map.of(
-                        source,
-                        Map.of(CURRENT_PROCESSING_RATE, 100.),
-                        sink,
-                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(CURRENT_PROCESSING_RATE, 100.),
+                                sink,
+                                Map.of(TRUE_PROCESSING_RATE, 2000.)),
+                        Collections.emptyMap()));
 
         assertFalse(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
 
         // Catch up time is more than a minute at avg proc rate (200)
         metricHistory.put(
                 Instant.now(),
-                Map.of(
-                        source,
+                new CollectedMetrics(
                         Map.of(
-                                LAG,
-                                250.
-                                        * conf.get(
-                                                        AutoScalerOptions
-                                                                .BACKLOG_PROCESSING_LAG_THRESHOLD)
-                                                .toSeconds(),
-                                CURRENT_PROCESSING_RATE,
-                                300.),
-                        sink,
-                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+                                source,
+                                Map.of(
+                                        LAG,
+                                        250.
+                                                * conf.get(
+                                                                AutoScalerOptions
+                                                                        .BACKLOG_PROCESSING_LAG_THRESHOLD)
+                                                        .toSeconds(),
+                                        CURRENT_PROCESSING_RATE,
+                                        300.),
+                                sink,
+                                Map.of(TRUE_PROCESSING_RATE, 2000.)),
+                        Collections.emptyMap()));
 
         assertTrue(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
 
         // Catch up time is less than a minute at avg proc rate (200)
         metricHistory.put(
                 Instant.now(),
-                Map.of(
-                        source,
+                new CollectedMetrics(
                         Map.of(
-                                LAG,
-                                180.
-                                        * conf.get(
-                                                        AutoScalerOptions
-                                                                .BACKLOG_PROCESSING_LAG_THRESHOLD)
-                                                .toSeconds(),
-                                CURRENT_PROCESSING_RATE,
-                                200.),
-                        sink,
-                        Map.of(TRUE_PROCESSING_RATE, 2000.)));
+                                source,
+                                Map.of(
+                                        LAG,
+                                        180.
+                                                * conf.get(
+                                                                AutoScalerOptions
+                                                                        .BACKLOG_PROCESSING_LAG_THRESHOLD)
+                                                        .toSeconds(),
+                                        CURRENT_PROCESSING_RATE,
+                                        200.),
+                                sink,
+                                Map.of(TRUE_PROCESSING_RATE, 2000.)),
+                        Collections.emptyMap()));
         assertFalse(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
     }
 

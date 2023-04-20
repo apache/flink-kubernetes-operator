@@ -17,19 +17,16 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler.metrics;
 
-import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.Value;
 
-import java.util.Map;
+import java.time.Instant;
+import java.util.SortedMap;
 
-/** Collected scaling metrics. */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class CollectedMetrics {
-    private Map<JobVertexID, Map<ScalingMetric, Double>> vertexMetrics;
-    private Map<Edge, Double> outputRatios;
+/** Topology and collected metric history. */
+@Value
+public class CollectedMetricHistory {
+    JobTopology jobTopology;
+    SortedMap<Instant, CollectedMetrics> metricHistory;
 }

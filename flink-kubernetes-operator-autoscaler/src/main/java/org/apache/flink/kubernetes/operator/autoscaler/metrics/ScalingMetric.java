@@ -32,9 +32,6 @@ public enum ScalingMetric {
     /** Processing rate at full capacity (records/sec). */
     TRUE_PROCESSING_RATE(true),
 
-    /** Output rate at full capacity (records/sec). */
-    TRUE_OUTPUT_RATE(true),
-
     /** Current processing rate. */
     CURRENT_PROCESSING_RATE(true),
 
@@ -49,9 +46,6 @@ public enum ScalingMetric {
 
     /** Target processing rate of operators as derived from backlog (records/sec). */
     CATCH_UP_DATA_RATE(false),
-
-    /** Number of outputs produced on average for every input record. */
-    OUTPUT_RATIO(true),
 
     /** Total number of pending records. */
     LAG(false),
