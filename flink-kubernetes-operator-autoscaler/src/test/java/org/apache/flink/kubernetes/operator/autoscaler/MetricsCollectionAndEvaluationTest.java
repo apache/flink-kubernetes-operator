@@ -331,15 +331,19 @@ public class MetricsCollectionAndEvaluationTest {
         metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
         assertEquals(3, metricsHistory.getMetricHistory().size());
 
-        // Completely new metric window with just the currently connected metric
+        // Complete new metric window with just the currently collected metric
         metricsCollector.setClock(
                 Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW).plusDays(1)));
         metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
         assertEquals(1, metricsHistory.getMetricHistory().size());
 
-        // Everything should reset on job updates
-        app.getStatus().getJobStatus().setUpdateTime("0");
-        assertEquals(1, metricsHistory.getMetricHistory().size());
+        // Existing metrics should be cleared on job updates
+        app.getStatus()
+                .getJobStatus()
+                .setUpdateTime(
+                        String.valueOf(clock.instant().plus(Duration.ofDays(10)).toEpochMilli()));
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(0, metricsHistory.getMetricHistory().size());
     }
 
     @Test
@@ -435,7 +439,7 @@ public class MetricsCollectionAndEvaluationTest {
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.METRICS_WINDOW, Duration.ofSeconds(2));
 
-        metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(1)));
+        metricsCollector.setClock(clock);
 
         var collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
         assertTrue(collectedMetrics.getMetricHistory().isEmpty());

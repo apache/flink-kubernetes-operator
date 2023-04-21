@@ -134,7 +134,6 @@ public class AutoScalerInfoTest {
         data.put(
                 AutoScalerInfo.COLLECTED_METRICS_KEY,
                 AutoScalerInfo.YAML_MAPPER.writeValueAsString(metricHistory));
-        data.put(AutoScalerInfo.JOB_UPDATE_TS_KEY, jobUpdateTs.toString());
         data.put(
                 AutoScalerInfo.SCALING_HISTORY_KEY,
                 AutoScalerInfo.YAML_MAPPER.writeValueAsString(scalingHistory));
@@ -145,7 +144,7 @@ public class AutoScalerInfoTest {
 
         // Override with compressed data
         var newTs = Instant.now();
-        info.updateMetricHistory(newTs, metricHistory);
+        info.updateMetricHistory(metricHistory);
         info.addToScalingHistory(newTs, Map.of(), new Configuration());
 
         // Make sure we can still access everything
@@ -189,7 +188,7 @@ public class AutoScalerInfoTest {
                                 1, 2, Map.of(ScalingMetric.LAG, EvaluatedScalingMetric.of(2.)))),
                 new Configuration());
 
-        info.updateMetricHistory(Instant.now(), metricHistory);
+        info.updateMetricHistory(metricHistory);
 
         assertFalse(
                 data.get(AutoScalerInfo.COLLECTED_METRICS_KEY).length()
