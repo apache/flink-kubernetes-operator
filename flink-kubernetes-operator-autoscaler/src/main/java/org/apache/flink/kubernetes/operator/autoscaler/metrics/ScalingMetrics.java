@@ -83,6 +83,8 @@ public class ScalingMetrics {
             scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
         } else {
             LOG.error("Cannot compute true processing rate without numRecordsInPerSecond");
+            scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, Double.NaN);
+            scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, Double.NaN);
         }
     }
 
