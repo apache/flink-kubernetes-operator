@@ -52,6 +52,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for scaling metrics collection logic. */
 @EnableKubernetesMockClient(crud = true)
@@ -67,6 +68,8 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
     private JobVertexID source1, sink;
 
     private JobAutoScalerImpl autoscaler;
+
+    private EventCollector eventCollector = new EventCollector();
 
     @BeforeEach
     public void setup() {
@@ -108,7 +111,11 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
 
         autoscaler =
                 new JobAutoScalerImpl(
-                        kubernetesClient, metricsCollector, evaluator, scalingExecutor);
+                        kubernetesClient,
+                        metricsCollector,
+                        evaluator,
+                        scalingExecutor,
+                        new EventRecorder(kubernetesClient, eventCollector));
 
         // Reset custom window size to default
         metricsCollector.setTestMetricWindowSize(null);
@@ -371,6 +378,20 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
 
         autoscaler.scale(getResourceContext(app, ctx));
         assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
+    }
+
+    @Test
+    public void testEventOnError() {
+        // Invalid config
+        app.getSpec()
+                .getFlinkConfiguration()
+                .put("kubernetes.operator.job.autoscaler.enabled", "3");
+        autoscaler.scale(getResourceContext(app, createAutoscalerTestContext()));
+
+        var event = eventCollector.events.poll();
+        assertTrue(eventCollector.events.isEmpty());
+        assertEquals(EventRecorder.Reason.AutoscalerError.toString(), event.getReason());
+        assertTrue(event.getMessage().startsWith("Could not parse"));
     }
 
     private void redeployJob(Instant now) {

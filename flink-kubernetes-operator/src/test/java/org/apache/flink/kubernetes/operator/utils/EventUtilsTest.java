@@ -96,6 +96,16 @@ public class EventUtilsTest {
         Assertions.assertNotNull(event);
         Assertions.assertEquals(eventConsumed, event);
         Assertions.assertEquals(2, event.getCount());
+
+        Assertions.assertTrue(
+                EventUtils.createOrUpdateEvent(
+                        kubernetesClient,
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        null,
+                        EventRecorder.Component.Operator,
+                        consumer));
     }
 
     @Test

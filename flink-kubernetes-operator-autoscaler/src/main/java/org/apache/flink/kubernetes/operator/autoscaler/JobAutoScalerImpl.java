@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScaler;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -48,6 +49,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
     private final ScalingMetricCollector metricsCollector;
     private final ScalingMetricEvaluator evaluator;
     private final ScalingExecutor scalingExecutor;
+    private final EventRecorder eventRecorder;
 
     private final Map<ResourceID, Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
             lastEvaluatedMetrics = new ConcurrentHashMap<>();
@@ -57,13 +59,13 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             KubernetesClient kubernetesClient,
             ScalingMetricCollector metricsCollector,
             ScalingMetricEvaluator evaluator,
-            ScalingExecutor scalingExecutor) {
-
+            ScalingExecutor scalingExecutor,
+            EventRecorder eventRecorder) {
         this.kubernetesClient = kubernetesClient;
-
         this.metricsCollector = metricsCollector;
         this.evaluator = evaluator;
         this.scalingExecutor = scalingExecutor;
+        this.eventRecorder = eventRecorder;
     }
 
     @Override
@@ -81,17 +83,17 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         var conf = ctx.getObserveConfig();
         var resource = ctx.getResource();
 
-        if (resource.getSpec().getJob() == null || !conf.getBoolean(AUTOSCALER_ENABLED)) {
-            LOG.info("Job autoscaler is disabled");
-            return false;
-        }
-
-        if (!resource.getStatus().getJobStatus().getState().equals(JobStatus.RUNNING.name())) {
-            LOG.info("Job autoscaler is waiting for RUNNING job state");
-            return false;
-        }
-
         try {
+            if (resource.getSpec().getJob() == null || !conf.getBoolean(AUTOSCALER_ENABLED)) {
+                LOG.info("Job autoscaler is disabled");
+                return false;
+            }
+
+            if (!resource.getStatus().getJobStatus().getState().equals(JobStatus.RUNNING.name())) {
+                LOG.info("Job autoscaler is waiting for RUNNING job state");
+                return false;
+            }
+
             var autoScalerInfo = AutoScalerInfo.forResource(resource, kubernetesClient);
 
             var collectedMetrics =
@@ -113,8 +115,14 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                     scalingExecutor.scaleResource(resource, autoScalerInfo, conf, evaluatedMetrics);
             autoScalerInfo.replaceInKubernetes(kubernetesClient);
             return specAdjusted;
-        } catch (Exception e) {
+        } catch (Throwable e) {
             LOG.error("Error while scaling resource", e);
+            eventRecorder.triggerEvent(
+                    resource,
+                    EventRecorder.Type.Warning,
+                    EventRecorder.Reason.AutoscalerError,
+                    EventRecorder.Component.Operator,
+                    e.getMessage());
             return false;
         }
     }
