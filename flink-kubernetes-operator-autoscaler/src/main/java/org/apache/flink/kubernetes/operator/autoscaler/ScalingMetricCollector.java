@@ -94,7 +94,7 @@ public abstract class ScalingMetricCollector {
         var jobUpdateTs = getJobUpdateTs(cr);
         if (jobUpdateTs.isAfter(metricCollectionStartTs)) {
             LOG.info("Job updated. Clearing metrics.");
-            autoscalerInfo.resetMetricHistory();
+            autoscalerInfo.clearMetricHistory();
             cleanup(cr);
             metricHistory.clear();
             metricCollectionStartTs = now;

@@ -119,7 +119,7 @@ public class AutoScalerInfo {
         }
     }
 
-    public void resetMetricHistory() {
+    public void clearMetricHistory() {
         configMap.getData().remove(COLLECTED_METRICS_KEY);
     }
 
