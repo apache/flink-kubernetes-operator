@@ -98,6 +98,7 @@ public class AutoScalerInfo {
         } catch (JacksonException e) {
             LOG.error(
                     "Could not deserialize metric history, possibly the format changed. Discarding...");
+            configMap.getData().remove(COLLECTED_METRICS_KEY);
             return new TreeMap<>();
         }
     }
@@ -105,7 +106,6 @@ public class AutoScalerInfo {
     @SneakyThrows
     public void updateMetricHistory(
             Instant jobUpdateTs, SortedMap<Instant, CollectedMetrics> history) {
-
         configMap
                 .getData()
                 .put(COLLECTED_METRICS_KEY, compress(YAML_MAPPER.writeValueAsString(history)));
@@ -146,6 +146,7 @@ public class AutoScalerInfo {
         } catch (JacksonException e) {
             LOG.error(
                     "Could not deserialize scaling history, possibly the format changed. Discarding...");
+            configMap.getData().remove(SCALING_HISTORY_KEY);
             scalingHistory = new HashMap<>();
         }
         return scalingHistory;
