@@ -205,7 +205,14 @@ public class AutoScalerInfoTest {
 
     @Test
     public void testDiscardInvalidHistory() {
-        var info = new AutoScalerInfo(Map.of(AutoScalerInfo.COLLECTED_METRICS_KEY, "invalid"));
+        var info =
+                new AutoScalerInfo(
+                        Map.of(
+                                AutoScalerInfo.COLLECTED_METRICS_KEY,
+                                "invalid",
+                                AutoScalerInfo.SCALING_HISTORY_KEY,
+                                "invalid2"));
         assertEquals(new TreeMap<>(), info.getMetricHistory());
+        assertEquals(new TreeMap<>(), info.getScalingHistory());
     }
 }
