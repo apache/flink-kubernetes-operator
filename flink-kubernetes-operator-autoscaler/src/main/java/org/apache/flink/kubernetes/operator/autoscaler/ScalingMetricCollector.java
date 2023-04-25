@@ -67,7 +67,7 @@ public abstract class ScalingMetricCollector {
     private final Map<ResourceID, Tuple2<Long, Map<JobVertexID, Map<String, FlinkMetric>>>>
             availableVertexMetricNames = new ConcurrentHashMap<>();
 
-    protected final Map<ResourceID, SortedMap<Instant, CollectedMetrics>> histories =
+    private final Map<ResourceID, SortedMap<Instant, CollectedMetrics>> histories =
             new ConcurrentHashMap<>();
 
     private final Map<ResourceID, JobTopology> topologies = new ConcurrentHashMap<>();
