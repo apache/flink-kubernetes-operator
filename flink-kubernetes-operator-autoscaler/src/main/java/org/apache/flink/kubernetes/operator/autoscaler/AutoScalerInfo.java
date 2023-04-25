@@ -27,7 +27,7 @@ import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -94,16 +94,16 @@ public class AutoScalerInfo {
 
         try {
             return YAML_MAPPER.readValue(decompress(historyYaml), new TypeReference<>() {});
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             LOG.error(
                     "Could not deserialize metric history, possibly the format changed. Discarding...");
+            configMap.getData().remove(COLLECTED_METRICS_KEY);
             return new TreeMap<>();
         }
     }
 
     @SneakyThrows
     public void updateMetricHistory(SortedMap<Instant, CollectedMetrics> history) {
-
         configMap
                 .getData()
                 .put(COLLECTED_METRICS_KEY, compress(YAML_MAPPER.writeValueAsString(history)));
@@ -129,10 +129,18 @@ public class AutoScalerInfo {
             return scalingHistory;
         }
         var yaml = decompress(configMap.getData().get(SCALING_HISTORY_KEY));
-        scalingHistory =
-                yaml == null
-                        ? new HashMap<>()
-                        : YAML_MAPPER.readValue(yaml, new TypeReference<>() {});
+        if (yaml == null) {
+            scalingHistory = new HashMap<>();
+            return scalingHistory;
+        }
+        try {
+            scalingHistory = YAML_MAPPER.readValue(yaml, new TypeReference<>() {});
+        } catch (JacksonException e) {
+            LOG.error(
+                    "Could not deserialize scaling history, possibly the format changed. Discarding...");
+            configMap.getData().remove(SCALING_HISTORY_KEY);
+            scalingHistory = new HashMap<>();
+        }
         return scalingHistory;
     }
 

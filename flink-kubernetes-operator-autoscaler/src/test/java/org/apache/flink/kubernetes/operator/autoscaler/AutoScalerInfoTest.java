@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -40,6 +41,7 @@ import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for AutoScalerInfo. */
@@ -204,7 +206,22 @@ public class AutoScalerInfoTest {
 
     @Test
     public void testDiscardInvalidHistory() {
-        var info = new AutoScalerInfo(Map.of(AutoScalerInfo.COLLECTED_METRICS_KEY, "invalid"));
+        ConfigMap configMap = new ConfigMap();
+        configMap.setData(
+                new HashMap<>(
+                        Map.of(
+                                AutoScalerInfo.COLLECTED_METRICS_KEY,
+                                "invalid",
+                                AutoScalerInfo.SCALING_HISTORY_KEY,
+                                "invalid2")));
+
+        var info = new AutoScalerInfo(configMap);
+        assertEquals(2, configMap.getData().size());
+
         assertEquals(new TreeMap<>(), info.getMetricHistory());
+        assertNull(configMap.getData().get(AutoScalerInfo.COLLECTED_METRICS_KEY));
+
+        assertEquals(new TreeMap<>(), info.getScalingHistory());
+        assertNull(configMap.getData().get(AutoScalerInfo.SCALING_HISTORY_KEY));
     }
 }
