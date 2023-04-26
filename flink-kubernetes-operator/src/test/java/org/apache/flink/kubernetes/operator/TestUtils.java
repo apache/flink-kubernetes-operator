@@ -42,6 +42,7 @@ import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.api.model.apps.DeploymentStatus;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.mockwebserver.utils.ResponseProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -396,6 +397,11 @@ public class TestUtils extends BaseTestUtils {
         @Override
         public EventSourceRetriever<T> eventSourceRetriever() {
             return null;
+        }
+
+        @Override
+        public KubernetesClient getClient() {
+            throw new UnsupportedOperationException("Not implemented");
         }
     }
 }
