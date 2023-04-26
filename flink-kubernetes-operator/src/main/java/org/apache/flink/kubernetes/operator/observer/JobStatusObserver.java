@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
@@ -86,7 +85,7 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             if (targetJobStatusMessage.isEmpty()) {
                 LOG.warn("No matching jobs found on the cluster");
                 ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-                onTargetJobNotFound(resource, ctx.getObserveConfig());
+                onTargetJobNotFound(ctx);
                 return false;
             } else {
                 updateJobStatus(ctx, targetJobStatusMessage.get());
@@ -97,7 +96,7 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
             LOG.debug("No jobs found on the cluster");
             // No jobs found on the cluster, it is possible that the jobmanager is still starting up
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-            onNoJobsFound(resource, ctx.getObserveConfig());
+            onNoJobsFound(ctx);
             return false;
         }
     }
@@ -105,18 +104,16 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     /**
      * Callback when no matching target job was found on a cluster where jobs were found.
      *
-     * @param resource The Flink resource.
-     * @param config Deployed/observe configuration.
+     * @param ctx The Flink resource context.
      */
-    protected abstract void onTargetJobNotFound(R resource, Configuration config);
+    protected abstract void onTargetJobNotFound(FlinkResourceContext<R> ctx);
 
     /**
      * Callback when no jobs were found on the cluster.
      *
-     * @param resource The Flink resource.
-     * @param config Deployed/observe configuration.
+     * @param ctx The Flink resource context.
      */
-    protected void onNoJobsFound(R resource, Configuration config) {}
+    protected void onNoJobsFound(FlinkResourceContext<R> ctx) {}
 
     /**
      * If we observed the job previously in RUNNING state we move to RECONCILING instead as we are
@@ -181,7 +178,7 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
             setErrorIfPresent(ctx, clusterJobStatus);
             eventRecorder.triggerEvent(
-                    resource,
+                    ctx,
                     EventRecorder.Type.Normal,
                     EventRecorder.Reason.JobStatusChanged,
                     EventRecorder.Component.Job,

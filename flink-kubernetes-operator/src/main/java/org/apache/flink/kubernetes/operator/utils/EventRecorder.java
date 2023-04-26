@@ -21,16 +21,21 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.function.BiConsumer;
 
 /** Helper class for creating Kubernetes events for Flink resources. */
 public class EventRecorder {
+
+    private static final Logger LOG = LoggerFactory.getLogger(EventRecorder.class);
 
     private final KubernetesClient client;
     private final BiConsumer<AbstractFlinkResource<?, ?>, Event> eventListener;
@@ -42,28 +47,37 @@ public class EventRecorder {
     }
 
     public boolean triggerEvent(
-            AbstractFlinkResource<?, ?> resource,
+            FlinkResourceContext<?> ctx,
             Type type,
             Reason reason,
             Component component,
             String message) {
-        return triggerEvent(resource, type, reason.toString(), message, component);
+        return triggerEvent(ctx, type, reason.toString(), message, component);
     }
 
     public boolean triggerEvent(
-            AbstractFlinkResource<?, ?> resource,
+            FlinkResourceContext<?> ctx,
             Type type,
             String reason,
             String message,
             Component component) {
-        return EventUtils.createOrUpdateEvent(
-                client,
-                resource,
-                type,
-                reason,
-                message,
-                component,
-                e -> eventListener.accept(resource, e));
+        try {
+            return EventUtils.createOrUpdateEvent(
+                    client,
+                    ctx.getResource(),
+                    type,
+                    reason,
+                    message,
+                    component,
+                    e -> eventListener.accept(ctx.getResource(), e));
+        } catch (Exception err) {
+            if (ctx.isIgnoreEventErrors()) {
+                LOG.error("Error while creating event, ignoring...", err);
+                return false;
+            } else {
+                throw err;
+            }
+        }
     }
 
     public static EventRecorder create(

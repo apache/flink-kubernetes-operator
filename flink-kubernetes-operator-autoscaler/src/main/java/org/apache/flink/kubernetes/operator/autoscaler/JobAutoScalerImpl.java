@@ -110,7 +110,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             registerResourceScalingMetrics(resource, ctx.getResourceMetricGroup());
 
             var specAdjusted =
-                    scalingExecutor.scaleResource(resource, autoScalerInfo, conf, evaluatedMetrics);
+                    scalingExecutor.scaleResource(ctx, autoScalerInfo, conf, evaluatedMetrics);
             autoScalerInfo.replaceInKubernetes(kubernetesClient);
             return specAdjusted;
         } catch (Exception e) {

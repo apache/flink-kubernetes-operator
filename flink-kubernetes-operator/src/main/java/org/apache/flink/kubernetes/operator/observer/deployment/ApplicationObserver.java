@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
@@ -88,31 +87,31 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
         }
 
         @Override
-        protected void onTargetJobNotFound(FlinkDeployment resource, Configuration config) {
+        protected void onTargetJobNotFound(FlinkResourceContext<FlinkDeployment> ctx) {
             // This should never happen for application clusters, there is something
             // wrong
-            setUnknownJobError(resource);
+            setUnknownJobError(ctx);
         }
 
         /**
          * We found a job on an application cluster that doesn't match the expected job. Trigger
          * error.
          *
-         * @param deployment Application deployment.
+         * @param ctx Application deployment ctx.
          */
-        private void setUnknownJobError(FlinkDeployment deployment) {
-            deployment
+        private void setUnknownJobError(FlinkResourceContext<FlinkDeployment> ctx) {
+            ctx.getResource()
                     .getStatus()
                     .getJobStatus()
                     .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
             String err = "Unrecognized Job for Application deployment";
             logger.error(err);
             ReconciliationUtils.updateForReconciliationError(
-                    deployment,
+                    ctx.getResource(),
                     new UnknownJobException(err),
                     configManager.getOperatorConfiguration());
             eventRecorder.triggerEvent(
-                    deployment,
+                    ctx,
                     EventRecorder.Type.Warning,
                     EventRecorder.Reason.Missing,
                     EventRecorder.Component.Job,

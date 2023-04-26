@@ -31,6 +31,8 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.VertexInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -84,6 +86,8 @@ public class MetricsCollectionAndEvaluationTest {
 
     private Instant startTime;
 
+    private FlinkResourceContext<?> ctx;
+
     @BeforeEach
     public void setup() {
         evaluator = new ScalingMetricEvaluator();
@@ -126,6 +130,8 @@ public class MetricsCollectionAndEvaluationTest {
         app.getStatus().getJobStatus().setStartTime(String.valueOf(startTime.toEpochMilli()));
         app.getStatus().getJobStatus().setUpdateTime(String.valueOf(startTime.toEpochMilli()));
         app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
+
+        ctx = new FlinkDeploymentContext(app, null, null, null, null);
     }
 
     @Test
@@ -173,7 +179,7 @@ public class MetricsCollectionAndEvaluationTest {
         assertEquals(3, collectedMetrics.getMetricHistory().size());
 
         var evaluation = evaluator.evaluate(conf, collectedMetrics);
-        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
+        scalingExecutor.scaleResource(ctx, scalingInfo, conf, evaluation);
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(4, scaledParallelism.size());
@@ -187,7 +193,7 @@ public class MetricsCollectionAndEvaluationTest {
         conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
 
         evaluation = evaluator.evaluate(conf, collectedMetrics);
-        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
+        scalingExecutor.scaleResource(ctx, scalingInfo, conf, evaluation);
 
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(4, scaledParallelism.get(source1));
@@ -393,7 +399,7 @@ public class MetricsCollectionAndEvaluationTest {
                 625.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
 
-        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
+        scalingExecutor.scaleResource(ctx, scalingInfo, conf, evaluation);
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(1, scaledParallelism.get(source1));
     }
@@ -430,7 +436,7 @@ public class MetricsCollectionAndEvaluationTest {
                 0.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
 
-        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
+        scalingExecutor.scaleResource(ctx, scalingInfo, conf, evaluation);
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(1, scaledParallelism.get(source1));
     }

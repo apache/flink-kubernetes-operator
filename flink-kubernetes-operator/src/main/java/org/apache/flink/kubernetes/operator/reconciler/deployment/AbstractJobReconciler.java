@@ -108,7 +108,7 @@ public abstract class AbstractJobReconciler<
             }
 
             eventRecorder.triggerEvent(
-                    resource,
+                    ctx,
                     EventRecorder.Type.Normal,
                     EventRecorder.Reason.Suspended,
                     EventRecorder.Component.JobManagerDeployment,

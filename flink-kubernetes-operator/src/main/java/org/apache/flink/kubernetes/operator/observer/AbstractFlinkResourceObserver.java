@@ -52,7 +52,7 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
         // Trigger resource specific observe logic
         observeInternal(ctx);
 
-        SavepointUtils.resetTriggerIfJobNotRunning(ctx.getResource(), eventRecorder);
+        SavepointUtils.resetTriggerIfJobNotRunning(ctx, eventRecorder);
     }
 
     /**

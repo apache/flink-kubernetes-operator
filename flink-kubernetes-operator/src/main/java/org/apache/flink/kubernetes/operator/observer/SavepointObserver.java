@@ -111,7 +111,7 @@ public class SavepointObserver<
                 LOG.warn("Savepoint failed within grace period, retrying: " + err);
             }
             eventRecorder.triggerEvent(
-                    resource,
+                    ctx,
                     EventRecorder.Type.Warning,
                     EventRecorder.Reason.SavepointError,
                     EventRecorder.Component.Operator,

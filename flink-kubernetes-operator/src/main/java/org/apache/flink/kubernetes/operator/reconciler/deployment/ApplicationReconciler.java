@@ -175,7 +175,7 @@ public class ApplicationReconciler
         setJobIdIfNecessary(spec, relatedResource, deployConfig);
 
         eventRecorder.triggerEvent(
-                relatedResource,
+                ctx,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.Submit,
                 EventRecorder.Component.JobManagerDeployment,
@@ -265,7 +265,7 @@ public class ApplicationReconciler
         if (shouldRestartJobBecauseUnhealthy || shouldRecoverDeployment) {
             if (shouldRecoverDeployment) {
                 eventRecorder.triggerEvent(
-                        deployment,
+                        ctx,
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.RecoverDeployment,
                         EventRecorder.Component.Job,
@@ -274,7 +274,7 @@ public class ApplicationReconciler
 
             if (shouldRestartJobBecauseUnhealthy) {
                 eventRecorder.triggerEvent(
-                        deployment,
+                        ctx,
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.RestartUnhealthyJob,
                         EventRecorder.Component.Job,

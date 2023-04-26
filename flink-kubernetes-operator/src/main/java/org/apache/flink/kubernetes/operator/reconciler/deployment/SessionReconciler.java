@@ -150,7 +150,7 @@ public class SessionReconciler
                                     .map(job -> job.getMetadata().getName())
                                     .collect(Collectors.toList()));
             if (eventRecorder.triggerEvent(
-                    deployment,
+                    ctx,
                     EventRecorder.Type.Warning,
                     EventRecorder.Reason.CleanupFailed,
                     EventRecorder.Component.Operator,

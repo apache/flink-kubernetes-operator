@@ -25,6 +25,8 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -64,6 +66,8 @@ public class ScalingExecutorTest {
     private KubernetesClient kubernetesClient;
     private FlinkDeployment flinkDep;
 
+    private FlinkResourceContext<?> ctx;
+
     @BeforeEach
     public void setup() {
         eventCollector = new EventCollector();
@@ -82,6 +86,7 @@ public class ScalingExecutorTest {
         jobStatus.setStartTime(String.valueOf(System.currentTimeMillis()));
         jobStatus.setUpdateTime(String.valueOf(System.currentTimeMillis()));
         jobStatus.setState(JobStatus.RUNNING.name());
+        ctx = new FlinkDeploymentContext(flinkDep, null, null, null, null);
     }
 
     @Test
@@ -97,35 +102,35 @@ public class ScalingExecutorTest {
         jobStatus.setUpdateTime(String.valueOf(clock.instant().toEpochMilli()));
 
         scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
 
         clock = Clock.offset(clock, Duration.ofSeconds(30));
         scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
 
         clock = Clock.offset(clock, Duration.ofSeconds(20));
         scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
 
         clock = Clock.offset(clock, Duration.ofSeconds(20));
         scalingDecisionExecutor.setClock(clock);
-        assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertTrue(scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
 
         // A job should not be considered stable in a non-RUNNING state
         jobStatus.setState(JobStatus.FAILING.name());
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
 
         jobStatus.setState(JobStatus.RUNNING.name());
         jobStatus.setUpdateTime(String.valueOf(clock.instant().toEpochMilli()));
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
 
         clock = Clock.offset(clock, Duration.ofSeconds(59));
         scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
 
         clock = Clock.offset(clock, Duration.ofSeconds(2));
         scalingDecisionExecutor.setClock(clock);
-        assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertTrue(scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
     }
 
     @Test
@@ -205,10 +210,10 @@ public class ScalingExecutorTest {
                         evaluated(10, 80, 100));
         // filter operator should not scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of(filterOperatorHexString));
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
         // filter operator should scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of());
-        assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertTrue(scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
     }
 
     @ParameterizedTest
@@ -220,7 +225,7 @@ public class ScalingExecutorTest {
         var scalingInfo = new AutoScalerInfo(new HashMap<>());
         assertEquals(
                 scalingEnabled,
-                scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+                scalingDecisionExecutor.scaleResource(ctx, scalingInfo, conf, metrics));
         assertEquals(1, eventCollector.events.size());
         var event = eventCollector.events.poll();
         assertTrue(

@@ -97,16 +97,18 @@ public class FlinkDeploymentController
             return DeleteControl.defaultDelete();
         }
 
+        statusRecorder.updateStatusFromCache(flinkApp);
+        var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
+        ctx.setIgnoreEventErrors(true);
+
         String msg = "Cleaning up " + FlinkDeployment.class.getSimpleName();
         LOG.info(msg);
         eventRecorder.triggerEvent(
-                flinkApp,
+                ctx,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.Cleanup,
                 EventRecorder.Component.Operator,
                 msg);
-        statusRecorder.updateStatusFromCache(flinkApp);
-        var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
         try {
             observerFactory.getOrCreate(flinkApp).observe(ctx);
         } catch (DeploymentFailedException dfe) {
@@ -131,7 +133,7 @@ public class FlinkDeploymentController
         var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
         try {
             observerFactory.getOrCreate(flinkApp).observe(ctx);
-            if (!validateDeployment(flinkApp)) {
+            if (!validateDeployment(ctx)) {
                 statusRecorder.patchAndCacheStatus(flinkApp);
                 return ReconciliationUtils.toUpdateControl(
                         configManager.getOperatorConfiguration(),
@@ -142,12 +144,12 @@ public class FlinkDeploymentController
             statusRecorder.patchAndCacheStatus(flinkApp);
             reconcilerFactory.getOrCreate(flinkApp).reconcile(ctx);
         } catch (RecoveryFailureException rfe) {
-            handleRecoveryFailed(flinkApp, rfe);
+            handleRecoveryFailed(ctx, rfe);
         } catch (DeploymentFailedException dfe) {
-            handleDeploymentFailed(flinkApp, dfe);
+            handleDeploymentFailed(ctx, dfe);
         } catch (Exception e) {
             eventRecorder.triggerEvent(
-                    flinkApp,
+                    ctx,
                     EventRecorder.Type.Warning,
                     "ClusterDeploymentException",
                     e.getMessage(),
@@ -161,26 +163,29 @@ public class FlinkDeploymentController
                 configManager.getOperatorConfiguration(), flinkApp, previousDeployment, true);
     }
 
-    private void handleDeploymentFailed(FlinkDeployment flinkApp, DeploymentFailedException dfe) {
+    private void handleDeploymentFailed(
+            FlinkResourceContext<FlinkDeployment> ctx, DeploymentFailedException dfe) {
         LOG.error("Flink Deployment failed", dfe);
-        flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-        flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
+        var status = ctx.getResource().getStatus();
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
+        status.getJobStatus().setState(JobStatus.RECONCILING.name());
         ReconciliationUtils.updateForReconciliationError(
-                flinkApp, dfe, configManager.getOperatorConfiguration());
+                ctx.getResource(), dfe, configManager.getOperatorConfiguration());
         eventRecorder.triggerEvent(
-                flinkApp,
+                ctx,
                 EventRecorder.Type.Warning,
                 dfe.getReason(),
                 dfe.getMessage(),
                 EventRecorder.Component.JobManagerDeployment);
     }
 
-    private void handleRecoveryFailed(FlinkDeployment flinkApp, RecoveryFailureException rfe) {
+    private void handleRecoveryFailed(
+            FlinkResourceContext<FlinkDeployment> ctx, RecoveryFailureException rfe) {
         LOG.error("Flink recovery failed", rfe);
         ReconciliationUtils.updateForReconciliationError(
-                flinkApp, rfe, configManager.getOperatorConfiguration());
+                ctx.getResource(), rfe, configManager.getOperatorConfiguration());
         eventRecorder.triggerEvent(
-                flinkApp,
+                ctx,
                 EventRecorder.Type.Warning,
                 rfe.getReason(),
                 rfe.getMessage(),
@@ -206,12 +211,13 @@ public class FlinkDeploymentController
                 configManager.getOperatorConfiguration());
     }
 
-    private boolean validateDeployment(FlinkDeployment deployment) {
+    private boolean validateDeployment(FlinkResourceContext<FlinkDeployment> ctx) {
+        var deployment = ctx.getResource();
         for (FlinkResourceValidator validator : validators) {
             Optional<String> validationError = validator.validateDeployment(deployment);
             if (validationError.isPresent()) {
                 eventRecorder.triggerEvent(
-                        deployment,
+                        ctx,
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.ValidationError,
                         EventRecorder.Component.Operator,

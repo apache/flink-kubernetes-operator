@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -100,15 +101,16 @@ public class FlinkResourceListenerTest {
                 JobManagerDeploymentStatus.DEPLOYING,
                 updateContext.getNewStatus().getJobManagerDeploymentStatus());
 
+        var ctx = new FlinkDeploymentContext(deployment, null, null, null, null);
         eventRecorder.triggerEvent(
-                deployment,
+                ctx,
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.SavepointError,
                 EventRecorder.Component.Operator,
                 "err");
         assertEquals(1, listener1.events.size());
         eventRecorder.triggerEvent(
-                deployment,
+                ctx,
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.SavepointError,
                 EventRecorder.Component.Operator,

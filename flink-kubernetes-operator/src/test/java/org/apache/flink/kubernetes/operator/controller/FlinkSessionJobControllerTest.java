@@ -33,7 +33,9 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.junit.jupiter.api.Assertions;
@@ -55,6 +57,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 /** {@link FlinkSessionJobController} tests. */
 @EnableKubernetesMockClient(crud = true)
 class FlinkSessionJobControllerTest {
+
+    private KubernetesMockServer mockServer;
     private KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
     private final Context context = TestUtils.createContextWithReadyFlinkDeployment();
@@ -510,5 +514,23 @@ class FlinkSessionJobControllerTest {
         testController.cleanup(canary, context);
         assertEquals(0, testController.getInternalStatusUpdateCount());
         assertEquals(0, testController.getCanaryResourceManager().getNumberOfActiveCanaries());
+    }
+
+    @Test
+    public void testEventErrorHandlingDuringCleanup() {
+        mockServer
+                .expect()
+                .post()
+                .withPath("/api/v1/namespaces/flink-operator-test/events")
+                .andReply(
+                        400,
+                        r -> {
+                            throw new KubernetesClientException("TestErr");
+                        })
+                .always();
+        var deleteControl = testController.cleanup(sessionJob, context);
+        assertTrue(deleteControl.isRemoveFinalizer());
+        assertNotNull(deleteControl);
+        assertTrue(testController.events().isEmpty());
     }
 }

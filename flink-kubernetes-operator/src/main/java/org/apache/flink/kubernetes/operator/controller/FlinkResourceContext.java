@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkService;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 
 /** Context for reconciling a Flink resource. * */
 @RequiredArgsConstructor
@@ -34,6 +35,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
     @Getter private final CR resource;
     @Getter private final Context<?> josdkContext;
     @Getter private final KubernetesResourceMetricGroup resourceMetricGroup;
+    @Getter @Setter private boolean ignoreEventErrors;
 
     private Configuration observeConfig;
 

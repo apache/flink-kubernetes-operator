@@ -143,7 +143,7 @@ public abstract class AbstractFlinkResourceReconciler<
             LOG.info(specChangeMessage);
             if (reconciliationStatus.getState() != ReconciliationState.UPGRADING) {
                 eventRecorder.triggerEvent(
-                        cr,
+                        ctx,
                         EventRecorder.Type.Normal,
                         EventRecorder.Reason.SpecChanged,
                         EventRecorder.Component.JobManagerDeployment,
@@ -168,7 +168,7 @@ public abstract class AbstractFlinkResourceReconciler<
             }
             LOG.warn(MSG_ROLLBACK);
             eventRecorder.triggerEvent(
-                    cr,
+                    ctx,
                     EventRecorder.Type.Normal,
                     EventRecorder.Reason.Rollback,
                     EventRecorder.Component.JobManagerDeployment,

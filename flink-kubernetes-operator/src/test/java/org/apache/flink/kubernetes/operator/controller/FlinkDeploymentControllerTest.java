@@ -47,6 +47,7 @@ import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRule;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -1126,6 +1127,25 @@ public class FlinkDeploymentControllerTest {
         testController.cleanup(canary, context);
         assertEquals(0, testController.getInternalStatusUpdateCount());
         assertEquals(0, testController.getCanaryResourceManager().getNumberOfActiveCanaries());
+    }
+
+    @Test
+    public void testEventErrorHandlingDuringCleanup() {
+        FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        mockServer
+                .expect()
+                .post()
+                .withPath("/api/v1/namespaces/flink-operator-test/events")
+                .andReply(
+                        400,
+                        r -> {
+                            throw new KubernetesClientException("TestErr");
+                        })
+                .always();
+        var deleteControl = testController.cleanup(flinkDeployment, context);
+        assertTrue(deleteControl.isRemoveFinalizer());
+        assertNotNull(deleteControl);
+        assertTrue(testController.events().isEmpty());
     }
 
     private HasMetadata getIngress(FlinkDeployment deployment) {

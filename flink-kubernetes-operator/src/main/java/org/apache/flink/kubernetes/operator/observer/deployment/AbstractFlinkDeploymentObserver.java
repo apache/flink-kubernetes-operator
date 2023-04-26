@@ -155,7 +155,7 @@ public abstract class AbstractFlinkDeploymentObserver
 
         if (previousJmStatus != JobManagerDeploymentStatus.MISSING
                 && previousJmStatus != JobManagerDeploymentStatus.ERROR) {
-            onMissingDeployment(flinkApp);
+            onMissingDeployment(ctx);
         }
     }
 
@@ -217,15 +217,15 @@ public abstract class AbstractFlinkDeploymentObserver
                 && lastReconciledSpec.getJob().getState() == JobState.SUSPENDED;
     }
 
-    private void onMissingDeployment(FlinkDeployment deployment) {
+    private void onMissingDeployment(FlinkResourceContext<FlinkDeployment> ctx) {
         String err = "Missing JobManager deployment";
         logger.error(err);
         ReconciliationUtils.updateForReconciliationError(
-                deployment,
+                ctx.getResource(),
                 new MissingJobManagerException(err),
                 configManager.getOperatorConfiguration());
         eventRecorder.triggerEvent(
-                deployment,
+                ctx,
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.Missing,
                 EventRecorder.Component.JobManagerDeployment,

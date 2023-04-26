@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.observer.sessionjob;
 
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
@@ -164,38 +163,36 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
         }
 
         @Override
-        protected void onTargetJobNotFound(FlinkSessionJob resource, Configuration config) {
-            ifHaDisabledMarkSessionJobMissing(resource, config);
+        protected void onTargetJobNotFound(FlinkResourceContext<FlinkSessionJob> ctx) {
+            ifHaDisabledMarkSessionJobMissing(ctx);
         }
 
         @Override
-        protected void onNoJobsFound(FlinkSessionJob resource, Configuration config) {
-            ifHaDisabledMarkSessionJobMissing(resource, config);
+        protected void onNoJobsFound(FlinkResourceContext<FlinkSessionJob> ctx) {
+            ifHaDisabledMarkSessionJobMissing(ctx);
         }
 
         /**
          * When HA is disabled the session job will not recover on JM restarts. If the JM goes down
          * / restarted the session job should be marked missing.
          *
-         * @param sessionJob Flink session job.
-         * @param conf Flink config.
+         * @param ctx Flink session job context.
          */
-        private void ifHaDisabledMarkSessionJobMissing(
-                FlinkSessionJob sessionJob, Configuration conf) {
-            if (HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
+        private void ifHaDisabledMarkSessionJobMissing(FlinkResourceContext<FlinkSessionJob> ctx) {
+            if (HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig())) {
                 return;
             }
-            sessionJob
+            ctx.getResource()
                     .getStatus()
                     .getJobStatus()
                     .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
             LOG.error(MISSING_SESSION_JOB_ERR);
             ReconciliationUtils.updateForReconciliationError(
-                    sessionJob,
+                    ctx.getResource(),
                     new MissingSessionJobException(MISSING_SESSION_JOB_ERR),
                     configManager.getOperatorConfiguration());
             eventRecorder.triggerEvent(
-                    sessionJob,
+                    ctx,
                     EventRecorder.Type.Warning,
                     EventRecorder.Reason.Missing,
                     EventRecorder.Component.Job,

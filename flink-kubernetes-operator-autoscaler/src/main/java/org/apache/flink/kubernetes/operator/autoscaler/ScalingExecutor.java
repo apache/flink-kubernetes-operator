@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -88,18 +89,18 @@ public class ScalingExecutor {
     }
 
     public boolean scaleResource(
-            AbstractFlinkResource<?, ?> resource,
+            FlinkResourceContext<?> ctx,
             AutoScalerInfo scalingInformation,
             Configuration conf,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
 
+        var resource = ctx.getResource();
         if (!stabilizationPeriodPassed(resource, conf)) {
             return false;
         }
 
         var scalingHistory = scalingInformation.getScalingHistory();
-        var scalingSummaries =
-                computeScalingSummary(resource, conf, evaluatedMetrics, scalingHistory);
+        var scalingSummaries = computeScalingSummary(ctx, conf, evaluatedMetrics, scalingHistory);
 
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
@@ -114,7 +115,7 @@ public class ScalingExecutor {
 
         var scalingReport = scalingReport(scalingSummaries, scalingEnabled);
         eventRecorder.triggerEvent(
-                resource,
+                ctx,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.ScalingReport,
                 EventRecorder.Component.Operator,
@@ -217,7 +218,7 @@ public class ScalingExecutor {
     }
 
     private Map<JobVertexID, ScalingSummary> computeScalingSummary(
-            AbstractFlinkResource<?, ?> resource,
+            FlinkResourceContext<?> ctx,
             Configuration conf,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
@@ -235,7 +236,7 @@ public class ScalingExecutor {
                                 (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
                         var newParallelism =
                                 jobVertexScaler.computeScaleTargetParallelism(
-                                        resource,
+                                        ctx,
                                         conf,
                                         v,
                                         metrics,
