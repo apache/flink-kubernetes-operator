@@ -128,7 +128,7 @@ metadata:
 spec:
   deploymentName: session-cluster-1
   job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.16.1/flink-examples-streaming_2.12-1.16.1.jar
     parallelism: 2
     upgradeMode: savepoint
     entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample
@@ -142,7 +142,7 @@ metadata:
 spec:
   deploymentName: session-cluster-1
   job:
-    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.14.4/flink-examples-streaming_2.12-1.14.4.jar
+    jarURI: https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.16.1/flink-examples-streaming_2.12-1.16.1.jar
     parallelism: 2
     upgradeMode: savepoint
     entryClass: org.apache.flink.streaming.examples.statemachine.StateMachineExample
