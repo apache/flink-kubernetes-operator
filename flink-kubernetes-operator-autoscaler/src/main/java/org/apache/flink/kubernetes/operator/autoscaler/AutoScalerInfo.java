@@ -65,7 +65,6 @@ public class AutoScalerInfo {
 
     protected static final String COLLECTED_METRICS_KEY = "collectedMetrics";
     protected static final String SCALING_HISTORY_KEY = "scalingHistory";
-    protected static final String JOB_UPDATE_TS_KEY = "jobUpdateTs";
 
     protected static final int MAX_CM_BYTES = 1000000;
 
@@ -104,12 +103,10 @@ public class AutoScalerInfo {
     }
 
     @SneakyThrows
-    public void updateMetricHistory(
-            Instant jobUpdateTs, SortedMap<Instant, CollectedMetrics> history) {
+    public void updateMetricHistory(SortedMap<Instant, CollectedMetrics> history) {
         configMap
                 .getData()
                 .put(COLLECTED_METRICS_KEY, compress(YAML_MAPPER.writeValueAsString(history)));
-        configMap.getData().put(JOB_UPDATE_TS_KEY, jobUpdateTs.toString());
     }
 
     @SneakyThrows
@@ -124,11 +121,6 @@ public class AutoScalerInfo {
 
     public void clearMetricHistory() {
         configMap.getData().remove(COLLECTED_METRICS_KEY);
-        configMap.getData().remove(JOB_UPDATE_TS_KEY);
-    }
-
-    public Optional<Instant> getJobUpdateTs() {
-        return Optional.ofNullable(configMap.getData().get(JOB_UPDATE_TS_KEY)).map(Instant::parse);
     }
 
     @SneakyThrows
