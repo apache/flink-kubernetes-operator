@@ -110,9 +110,9 @@ public class AutoScalerInfo {
     }
 
     @SneakyThrows
-    public void updateVertexList(List<JobVertexID> vertexList) {
+    public void updateVertexList(List<JobVertexID> vertexList, Instant now, Configuration conf) {
         // Make sure to init history
-        getScalingHistory();
+        getScalingHistory(now, conf);
 
         if (scalingHistory.keySet().removeIf(v -> !vertexList.contains(v))) {
             storeScalingHistory();
@@ -123,9 +123,34 @@ public class AutoScalerInfo {
         configMap.getData().remove(COLLECTED_METRICS_KEY);
     }
 
+    private void trimScalingHistory(Instant now, Configuration conf) {
+        var entryIt = scalingHistory.entrySet().iterator();
+        while (entryIt.hasNext()) {
+            var entry = entryIt.next();
+            // Limit how long past scaling decisions are remembered
+            entry.setValue(
+                    entry.getValue()
+                            .tailMap(
+                                    now.minus(
+                                            conf.get(
+                                                    AutoScalerOptions
+                                                            .VERTEX_SCALING_HISTORY_AGE))));
+            var vertexHistory = entry.getValue();
+            while (vertexHistory.size()
+                    > conf.get(AutoScalerOptions.VERTEX_SCALING_HISTORY_COUNT)) {
+                vertexHistory.remove(vertexHistory.firstKey());
+            }
+            if (vertexHistory.isEmpty()) {
+                entryIt.remove();
+            }
+        }
+    }
+
     @SneakyThrows
-    public Map<JobVertexID, SortedMap<Instant, ScalingSummary>> getScalingHistory() {
+    public Map<JobVertexID, SortedMap<Instant, ScalingSummary>> getScalingHistory(
+            Instant now, Configuration conf) {
         if (scalingHistory != null) {
+            trimScalingHistory(now, conf);
             return scalingHistory;
         }
         var yaml = decompress(configMap.getData().get(SCALING_HISTORY_KEY));
@@ -148,32 +173,11 @@ public class AutoScalerInfo {
     public void addToScalingHistory(
             Instant now, Map<JobVertexID, ScalingSummary> summaries, Configuration conf) {
         // Make sure to init history
-        getScalingHistory();
+        getScalingHistory(now, conf);
 
         summaries.forEach(
                 (id, summary) ->
                         scalingHistory.computeIfAbsent(id, j -> new TreeMap<>()).put(now, summary));
-
-        var entryIt = scalingHistory.entrySet().iterator();
-        while (entryIt.hasNext()) {
-            var entry = entryIt.next();
-            // Limit how long past scaling decisions are remembered
-            entry.setValue(
-                    entry.getValue()
-                            .tailMap(
-                                    now.minus(
-                                            conf.get(
-                                                    AutoScalerOptions
-                                                            .VERTEX_SCALING_HISTORY_AGE))));
-            var vertexHistory = entry.getValue();
-            while (vertexHistory.size()
-                    > conf.get(AutoScalerOptions.VERTEX_SCALING_HISTORY_COUNT)) {
-                vertexHistory.remove(vertexHistory.firstKey());
-            }
-            if (vertexHistory.isEmpty()) {
-                entryIt.remove();
-            }
-        }
 
         storeScalingHistory();
     }

@@ -97,7 +97,8 @@ public class ScalingExecutor {
             return false;
         }
 
-        var scalingHistory = scalingInformation.getScalingHistory();
+        var now = Instant.now();
+        var scalingHistory = scalingInformation.getScalingHistory(now, conf);
         var scalingSummaries =
                 computeScalingSummary(resource, conf, evaluatedMetrics, scalingHistory);
 
