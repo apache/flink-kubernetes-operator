@@ -161,7 +161,8 @@ public abstract class ScalingMetricCollector {
                             ResourceID.fromResource(cr),
                             r -> {
                                 var t = queryJobTopology(restClient, jobId);
-                                scalerInfo.updateVertexList(t.getVerticesInTopologicalOrder());
+                                scalerInfo.updateVertexList(
+                                        t.getVerticesInTopologicalOrder(), clock.instant(), conf);
                                 return t;
                             });
             updateKafkaSourceMaxParallelisms(restClient, jobId, topology);

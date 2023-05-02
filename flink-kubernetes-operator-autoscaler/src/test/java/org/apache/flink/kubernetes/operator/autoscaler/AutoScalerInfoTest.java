@@ -60,16 +60,20 @@ public class AutoScalerInfoTest {
         history.put(v1, new ScalingSummary(1, 2, null));
         history.put(v2, new ScalingSummary(1, 2, null));
 
-        info.addToScalingHistory(Instant.now(), history, new Configuration());
+        var conf = new Configuration();
+        var now = Instant.now();
 
-        assertEquals(history.keySet(), info.getScalingHistory().keySet());
-        assertEquals(history.keySet(), new AutoScalerInfo(data).getScalingHistory().keySet());
+        info.addToScalingHistory(now, history, conf);
 
-        info.updateVertexList(List.of(v2, v3));
+        assertEquals(history.keySet(), info.getScalingHistory(now, conf).keySet());
+        assertEquals(
+                history.keySet(), new AutoScalerInfo(data).getScalingHistory(now, conf).keySet());
+
+        info.updateVertexList(List.of(v2, v3), now, conf);
 
         // Expect v1 to be removed
-        assertEquals(Set.of(v2), info.getScalingHistory().keySet());
-        assertEquals(Set.of(v2), new AutoScalerInfo(data).getScalingHistory().keySet());
+        assertEquals(Set.of(v2), info.getScalingHistory(now, conf).keySet());
+        assertEquals(Set.of(v2), new AutoScalerInfo(data).getScalingHistory(now, conf).keySet());
     }
 
     @Test
@@ -90,25 +94,30 @@ public class AutoScalerInfoTest {
 
         // Verify count based expiration
         info.addToScalingHistory(now, history, conf);
-        assertEquals(1, info.getScalingHistory().get(v1).size());
+        assertEquals(1, info.getScalingHistory(now, conf).get(v1).size());
 
         info.addToScalingHistory(now.plus(Duration.ofSeconds(1)), history, conf);
         info.addToScalingHistory(now.plus(Duration.ofSeconds(2)), history, conf);
 
-        assertEquals(2, info.getScalingHistory().get(v1).size());
+        assertEquals(
+                2, info.getScalingHistory(now.plus(Duration.ofSeconds(2)), conf).get(v1).size());
         assertEquals(
                 Set.of(now.plus(Duration.ofSeconds(1)), now.plus(Duration.ofSeconds(2))),
-                info.getScalingHistory().get(v1).keySet());
+                info.getScalingHistory(now.plus(Duration.ofSeconds(2)), conf).get(v1).keySet());
 
         // Verify time based expiration
         info.addToScalingHistory(now.plus(Duration.ofSeconds(15)), history, conf);
-        assertEquals(1, info.getScalingHistory().get(v1).size());
+        assertEquals(
+                1, info.getScalingHistory(now.plus(Duration.ofSeconds(15)), conf).get(v1).size());
         assertEquals(
                 Set.of(now.plus(Duration.ofSeconds(15))),
-                info.getScalingHistory().get(v1).keySet());
+                info.getScalingHistory(now.plus(Duration.ofSeconds(15)), conf).get(v1).keySet());
         assertEquals(
                 Set.of(now.plus(Duration.ofSeconds(15))),
-                new AutoScalerInfo(data).getScalingHistory().get(v1).keySet());
+                new AutoScalerInfo(data)
+                        .getScalingHistory(now.plus(Duration.ofSeconds(15)), conf)
+                        .get(v1)
+                        .keySet());
     }
 
     @Test
@@ -141,16 +150,19 @@ public class AutoScalerInfoTest {
                 AutoScalerInfo.YAML_MAPPER.writeValueAsString(scalingHistory));
 
         var info = new AutoScalerInfo(data);
-        assertEquals(scalingHistory, info.getScalingHistory());
+        var conf = new Configuration();
+        var now = Instant.now();
+
+        assertEquals(scalingHistory, info.getScalingHistory(now, conf));
         assertEquals(metricHistory, info.getMetricHistory());
 
         // Override with compressed data
         var newTs = Instant.now();
         info.updateMetricHistory(metricHistory);
-        info.addToScalingHistory(newTs, Map.of(), new Configuration());
+        info.addToScalingHistory(newTs, Map.of(), conf);
 
         // Make sure we can still access everything
-        assertEquals(scalingHistory, info.getScalingHistory());
+        assertEquals(scalingHistory, info.getScalingHistory(newTs, conf));
         assertEquals(metricHistory, info.getMetricHistory());
     }
 
@@ -216,12 +228,15 @@ public class AutoScalerInfoTest {
                                 "invalid2")));
 
         var info = new AutoScalerInfo(configMap);
+        var now = Instant.now();
+        var conf = new Configuration();
+
         assertEquals(2, configMap.getData().size());
 
         assertEquals(new TreeMap<>(), info.getMetricHistory());
         assertNull(configMap.getData().get(AutoScalerInfo.COLLECTED_METRICS_KEY));
 
-        assertEquals(new TreeMap<>(), info.getScalingHistory());
+        assertEquals(new TreeMap<>(), info.getScalingHistory(now, conf));
         assertNull(configMap.getData().get(AutoScalerInfo.SCALING_HISTORY_KEY));
     }
 }
