@@ -190,8 +190,8 @@ public class KubernetesOperatorConfigOptions {
                             "Whether to enable recovery of missing/deleted jobmanager deployments.");
 
     @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<Boolean> OPERATOR_SAVEPOINT_CLEANER_ENABLED =
-            operatorConfig("savepoint.cleaner.enabled")
+    public static final ConfigOption<Boolean> OPERATOR_SAVEPOINT_CLEANUP_ENABLED =
+            operatorConfig("savepoint.cleanup.enabled")
                     .booleanType()
                     .defaultValue(true)
                     .withDescription("Whether to enable clean up of savepoint history.");

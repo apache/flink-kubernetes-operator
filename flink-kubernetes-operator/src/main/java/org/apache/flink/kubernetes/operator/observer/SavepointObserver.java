@@ -141,11 +141,9 @@ public class SavepointObserver<
             FlinkService flinkService,
             SavepointInfo currentSavepointInfo,
             Configuration observeConfig) {
-
-        if (!configManager.getOperatorConfiguration().isSavepointCleanerEnabled()) {
-            LOG.info("Operator savepoint cleaner is not enabled, do not clean savepointHistory");
-            return;
-        }
+        final boolean savepointCleanupEnabled =
+                observeConfig.getBoolean(
+                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED);
 
         // maintain history
         List<Savepoint> savepointHistory = currentSavepointInfo.getSavepointHistory();
@@ -166,7 +164,10 @@ public class SavepointObserver<
                                         .getSavepointHistoryCountThreshold()));
         while (savepointHistory.size() > maxCount) {
             // remove oldest entries
-            disposeSavepointQuietly(flinkService, savepointHistory.remove(0), observeConfig);
+            Savepoint sp = savepointHistory.remove(0);
+            if (savepointCleanupEnabled) {
+                disposeSavepointQuietly(flinkService, sp, observeConfig);
+            }
         }
 
         Duration maxAge =
@@ -180,7 +181,9 @@ public class SavepointObserver<
             Savepoint sp = it.next();
             if (sp.getTimeStamp() < maxTms && sp != lastSavepoint) {
                 it.remove();
-                disposeSavepointQuietly(flinkService, sp, observeConfig);
+                if (savepointCleanupEnabled) {
+                    disposeSavepointQuietly(flinkService, sp, observeConfig);
+                }
             }
         }
     }

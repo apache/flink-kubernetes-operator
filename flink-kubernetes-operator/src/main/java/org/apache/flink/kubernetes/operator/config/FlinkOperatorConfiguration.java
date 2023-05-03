@@ -59,7 +59,6 @@ public class FlinkOperatorConfiguration {
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
     String artifactsBaseDir;
-    boolean savepointCleanerEnabled;
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
     RetryConfiguration retryConfiguration;
@@ -102,9 +101,6 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions.OPERATOR_USER_ARTIFACTS_BASE_DIR);
 
-        boolean savepointCleanerEnabled =
-                operatorConfig.get(
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANER_ENABLED);
         Integer savepointHistoryCountThreshold =
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions
@@ -197,7 +193,6 @@ public class FlinkOperatorConfiguration {
                 flinkCancelJobTimeout,
                 flinkShutdownClusterTimeout,
                 artifactsBaseDir,
-                savepointCleanerEnabled,
                 savepointHistoryCountThreshold,
                 savepointHistoryAgeThreshold,
                 retryConfiguration,

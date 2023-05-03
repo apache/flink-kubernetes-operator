@@ -142,20 +142,33 @@ public class SavepointObserverTest extends OperatorTestBase {
     @Test
     public void testDisabledDispose() {
         Configuration conf = new Configuration();
-        conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANER_ENABLED, false);
+        conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED, false);
+        conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1000);
+        conf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                Duration.ofDays(100L));
+
         configManager.updateDefaultConfig(conf);
 
         SavepointInfo spInfo = new SavepointInfo();
 
         Savepoint sp1 =
                 new Savepoint(
-                        1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
+                        9999999999999998L,
+                        "sp1",
+                        SavepointTriggerType.MANUAL,
+                        SavepointFormatType.CANONICAL,
+                        123L);
         spInfo.updateLastSavepoint(sp1);
         observer.cleanupSavepointHistory(flinkService, spInfo, conf);
 
         Savepoint sp2 =
                 new Savepoint(
-                        2, "sp2", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
+                        9999999999999999L,
+                        "sp2",
+                        SavepointTriggerType.MANUAL,
+                        SavepointFormatType.CANONICAL,
+                        123L);
         spInfo.updateLastSavepoint(sp2);
         observer.cleanupSavepointHistory(flinkService, spInfo, conf);
         Assertions.assertIterableEquals(List.of(sp1, sp2), spInfo.getSavepointHistory());
