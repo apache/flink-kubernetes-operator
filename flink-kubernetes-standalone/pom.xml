@@ -46,7 +46,8 @@ under the License.
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
-            <version>${snakeyaml.version}</version>
+            <!-- Cannot upgrade to 2.0 due to flink incompatibility -->
+            <version>1.33</version>
         </dependency>
 
         <dependency>
