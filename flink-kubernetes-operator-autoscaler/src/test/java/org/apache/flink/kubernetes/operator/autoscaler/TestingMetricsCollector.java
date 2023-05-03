@@ -29,6 +29,7 @@ import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import lombok.Setter;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -38,6 +39,8 @@ import java.util.Map;
 public class TestingMetricsCollector extends ScalingMetricCollector {
 
     @Setter private JobTopology jobTopology;
+
+    @Setter private Duration testMetricWindowSize;
 
     @Setter
     private Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> currentMetrics = new HashMap<>();
@@ -75,5 +78,13 @@ public class TestingMetricsCollector extends ScalingMetricCollector {
     protected Collection<AggregatedMetric> queryAggregatedMetricNames(
             RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
         return metricNames.getOrDefault(jobVertexID, Collections.emptyList());
+    }
+
+    @Override
+    protected Duration getMetricWindowSize(Configuration conf) {
+        if (testMetricWindowSize != null) {
+            return testMetricWindowSize;
+        }
+        return super.getMetricWindowSize(conf);
     }
 }

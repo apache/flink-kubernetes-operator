@@ -496,6 +496,18 @@ public class DefaultValidatorTest {
                                     // dependency to 1.16
                                     "kubernetes");
                 });
+
+        testError(
+                dep -> {
+                    dep.getSpec().getJobManager().getResource().setEphemeralStorage("abc");
+                },
+                "JobManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
+
+        testError(
+                dep -> {
+                    dep.getSpec().getTaskManager().getResource().setEphemeralStorage("abc");
+                },
+                "TaskManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
     }
 
     @Test

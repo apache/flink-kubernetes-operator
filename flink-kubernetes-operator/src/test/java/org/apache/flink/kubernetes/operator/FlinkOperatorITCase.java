@@ -129,6 +129,7 @@ public class FlinkOperatorITCase {
         Resource resource = new Resource();
         resource.setMemory("2048m");
         resource.setCpu(1.0);
+        resource.setEphemeralStorage("2G");
         JobManagerSpec jm = new JobManagerSpec();
         jm.setResource(resource);
         jm.setReplicas(1);

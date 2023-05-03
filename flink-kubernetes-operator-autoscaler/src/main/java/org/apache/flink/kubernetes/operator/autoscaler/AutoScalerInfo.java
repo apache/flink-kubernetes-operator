@@ -21,12 +21,13 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
-import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
-import org.apache.flink.kubernetes.operator.autoscaler.utils.JobVertexSerDeModule;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetrics;
+import org.apache.flink.kubernetes.operator.autoscaler.utils.AutoScalerSerDeModule;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -64,14 +65,13 @@ public class AutoScalerInfo {
 
     protected static final String COLLECTED_METRICS_KEY = "collectedMetrics";
     protected static final String SCALING_HISTORY_KEY = "scalingHistory";
-    protected static final String JOB_UPDATE_TS_KEY = "jobUpdateTs";
 
     protected static final int MAX_CM_BYTES = 1000000;
 
     protected static final ObjectMapper YAML_MAPPER =
             new ObjectMapper(yamlFactory())
                     .registerModule(new JavaTimeModule())
-                    .registerModule(new JobVertexSerDeModule());
+                    .registerModule(new AutoScalerSerDeModule());
 
     private final ConfigMap configMap;
     private Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory;
@@ -86,25 +86,27 @@ public class AutoScalerInfo {
         configMap.setData(Preconditions.checkNotNull(data));
     }
 
-    @SneakyThrows
-    public SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> getMetricHistory() {
+    public SortedMap<Instant, CollectedMetrics> getMetricHistory() {
         var historyYaml = configMap.getData().get(COLLECTED_METRICS_KEY);
         if (historyYaml == null) {
             return new TreeMap<>();
         }
 
-        return YAML_MAPPER.readValue(decompress(historyYaml), new TypeReference<>() {});
+        try {
+            return YAML_MAPPER.readValue(decompress(historyYaml), new TypeReference<>() {});
+        } catch (JacksonException e) {
+            LOG.error(
+                    "Could not deserialize metric history, possibly the format changed. Discarding...");
+            configMap.getData().remove(COLLECTED_METRICS_KEY);
+            return new TreeMap<>();
+        }
     }
 
     @SneakyThrows
-    public void updateMetricHistory(
-            Instant jobUpdateTs,
-            SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> history) {
-
+    public void updateMetricHistory(SortedMap<Instant, CollectedMetrics> history) {
         configMap
                 .getData()
                 .put(COLLECTED_METRICS_KEY, compress(YAML_MAPPER.writeValueAsString(history)));
-        configMap.getData().put(JOB_UPDATE_TS_KEY, jobUpdateTs.toString());
     }
 
     @SneakyThrows
@@ -119,11 +121,6 @@ public class AutoScalerInfo {
 
     public void clearMetricHistory() {
         configMap.getData().remove(COLLECTED_METRICS_KEY);
-        configMap.getData().remove(JOB_UPDATE_TS_KEY);
-    }
-
-    public Optional<Instant> getJobUpdateTs() {
-        return Optional.ofNullable(configMap.getData().get(JOB_UPDATE_TS_KEY)).map(Instant::parse);
     }
 
     @SneakyThrows
@@ -132,10 +129,18 @@ public class AutoScalerInfo {
             return scalingHistory;
         }
         var yaml = decompress(configMap.getData().get(SCALING_HISTORY_KEY));
-        scalingHistory =
-                yaml == null
-                        ? new HashMap<>()
-                        : YAML_MAPPER.readValue(yaml, new TypeReference<>() {});
+        if (yaml == null) {
+            scalingHistory = new HashMap<>();
+            return scalingHistory;
+        }
+        try {
+            scalingHistory = YAML_MAPPER.readValue(yaml, new TypeReference<>() {});
+        } catch (JacksonException e) {
+            LOG.error(
+                    "Could not deserialize scaling history, possibly the format changed. Discarding...");
+            configMap.getData().remove(SCALING_HISTORY_KEY);
+            scalingHistory = new HashMap<>();
+        }
         return scalingHistory;
     }
 
@@ -191,7 +196,7 @@ public class AutoScalerInfo {
         int scalingHistorySize = data.getOrDefault(SCALING_HISTORY_KEY, "").length();
         int metricHistorySize = data.getOrDefault(COLLECTED_METRICS_KEY, "").length();
 
-        SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>> metricHistory = null;
+        SortedMap<Instant, CollectedMetrics> metricHistory = null;
         while (scalingHistorySize + metricHistorySize > MAX_CM_BYTES) {
             if (metricHistory == null) {
                 metricHistory = getMetricHistory();

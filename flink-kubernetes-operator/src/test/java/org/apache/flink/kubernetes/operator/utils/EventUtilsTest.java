@@ -71,12 +71,12 @@ public class EventUtilsTest {
                         .inNamespace(flinkApp.getMetadata().getNamespace())
                         .withName(eventName)
                         .get();
-        Assertions.assertEquals(event.getMetadata().getUid(), eventConsumed.getMetadata().getUid());
-        eventConsumed = null;
         Assertions.assertNotNull(event);
+        Assertions.assertEquals(eventConsumed, event);
         Assertions.assertEquals(1, event.getCount());
         Assertions.assertEquals(reason, event.getReason());
 
+        eventConsumed = null;
         Assertions.assertFalse(
                 EventUtils.createOrUpdateEvent(
                         kubernetesClient,
@@ -93,8 +93,19 @@ public class EventUtilsTest {
                         .inNamespace(flinkApp.getMetadata().getNamespace())
                         .withName(eventName)
                         .get();
-        Assertions.assertEquals(event.getMetadata().getUid(), eventConsumed.getMetadata().getUid());
+        Assertions.assertNotNull(event);
+        Assertions.assertEquals(eventConsumed, event);
         Assertions.assertEquals(2, event.getCount());
+
+        Assertions.assertTrue(
+                EventUtils.createOrUpdateEvent(
+                        kubernetesClient,
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        null,
+                        EventRecorder.Component.Operator,
+                        consumer));
     }
 
     @Test

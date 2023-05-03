@@ -160,8 +160,8 @@ public class BaseTestUtils {
                 .serviceAccount(SERVICE_ACCOUNT)
                 .flinkVersion(version)
                 .flinkConfiguration(conf)
-                .jobManager(new JobManagerSpec(new Resource(1.0, "2048m"), 1, null))
-                .taskManager(new TaskManagerSpec(new Resource(1.0, "2048m"), null, null))
+                .jobManager(new JobManagerSpec(new Resource(1.0, "2048m", "2G"), 1, null))
+                .taskManager(new TaskManagerSpec(new Resource(1.0, "2048m", "2G"), null, null))
                 .build();
     }
 

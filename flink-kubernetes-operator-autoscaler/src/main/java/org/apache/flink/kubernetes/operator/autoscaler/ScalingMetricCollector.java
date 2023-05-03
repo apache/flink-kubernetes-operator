@@ -24,6 +24,7 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
@@ -56,7 +57,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
-import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -67,58 +67,49 @@ public abstract class ScalingMetricCollector {
     private final Map<ResourceID, Tuple2<Long, Map<JobVertexID, Map<String, FlinkMetric>>>>
             availableVertexMetricNames = new ConcurrentHashMap<>();
 
-    private final Map<ResourceID, SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>>>
-            histories = new ConcurrentHashMap<>();
+    private final Map<ResourceID, SortedMap<Instant, CollectedMetrics>> histories =
+            new ConcurrentHashMap<>();
 
     private final Map<ResourceID, JobTopology> topologies = new ConcurrentHashMap<>();
 
     private Clock clock = Clock.systemDefaultZone();
 
-    public CollectedMetrics updateMetrics(
+    public CollectedMetricHistory updateMetrics(
             AbstractFlinkResource<?, ?> cr,
-            AutoScalerInfo scalingInformation,
+            AutoScalerInfo autoscalerInfo,
             FlinkService flinkService,
             Configuration conf)
             throws Exception {
 
+        var topology = getJobTopology(flinkService, cr, conf, autoscalerInfo);
         var resourceID = ResourceID.fromResource(cr);
-        var jobStatus = cr.getStatus().getJobStatus();
-        var currentJobUpdateTs = Instant.ofEpochMilli(Long.parseLong(jobStatus.getUpdateTime()));
         var now = clock.instant();
 
-        if (!currentJobUpdateTs.equals(
-                scalingInformation.getJobUpdateTs().orElse(currentJobUpdateTs))) {
-            scalingInformation.clearMetricHistory();
+        var metricHistory =
+                histories.computeIfAbsent(resourceID, (k) -> autoscalerInfo.getMetricHistory());
+
+        // The timestamp of the first metric observation marks the start
+        // If we haven't collected any metrics, we are starting now
+        var metricCollectionStartTs = metricHistory.isEmpty() ? now : metricHistory.firstKey();
+        var jobUpdateTs = getJobUpdateTs(cr);
+        if (jobUpdateTs.isAfter(metricCollectionStartTs)) {
+            LOG.info("Job updated. Clearing metrics.");
+            autoscalerInfo.clearMetricHistory();
             cleanup(cr);
+            metricHistory.clear();
+            metricCollectionStartTs = now;
         }
 
-        var topology = getJobTopology(flinkService, cr, conf, scalingInformation);
+        // Trim metrics outside the metric window from metrics history
+        var metricWindowSize = getMetricWindowSize(conf);
+        metricHistory.headMap(now.minus(metricWindowSize)).clear();
 
-        var stabilizationDuration = conf.get(AutoScalerOptions.STABILIZATION_INTERVAL);
-        var stableTime = currentJobUpdateTs.plus(stabilizationDuration);
+        var stableTime = jobUpdateTs.plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
         if (now.isBefore(stableTime)) {
             // As long as we are stabilizing, collect no metrics at all
             LOG.info("Skipping metric collection during stabilization period until {}", stableTime);
-            return new CollectedMetrics(topology, Collections.emptySortedMap());
+            return new CollectedMetricHistory(topology, Collections.emptySortedMap());
         }
-
-        // Adjust the window size until it reaches the max size
-        var metricsWindowSize =
-                Duration.ofMillis(
-                        Math.min(
-                                now.toEpochMilli() - stableTime.toEpochMilli(),
-                                conf.get(AutoScalerOptions.METRICS_WINDOW).toMillis()));
-
-        // Extract metrics history for metric window size
-        var scalingMetricHistory =
-                histories.compute(
-                        resourceID,
-                        (k, h) -> {
-                            if (h == null) {
-                                h = scalingInformation.getMetricHistory();
-                            }
-                            return new TreeMap<>(h.tailMap(now.minus(metricsWindowSize)));
-                        });
 
         // The filtered list of metrics we want to query for each vertex
         var filteredVertexMetricNames = queryFilteredMetricNames(flinkService, cr, conf, topology);
@@ -132,20 +123,28 @@ public abstract class ScalingMetricCollector {
                 convertToScalingMetrics(resourceID, collectedVertexMetrics, topology, conf);
 
         // Add scaling metrics to history if they were computed successfully
-        scalingMetricHistory.put(clock.instant(), scalingMetrics);
-        scalingInformation.updateMetricHistory(currentJobUpdateTs, scalingMetricHistory);
+        metricHistory.put(now, scalingMetrics);
+        autoscalerInfo.updateMetricHistory(metricHistory);
 
-        var windowFullTime = stableTime.plus(conf.get(AutoScalerOptions.METRICS_WINDOW));
+        var windowFullTime = metricCollectionStartTs.plus(metricWindowSize);
         if (now.isBefore(windowFullTime)) {
             // As long as we haven't had time to collect a full window,
             // collect metrics but do not return any metrics
             LOG.info(
                     "Waiting until {} so the initial metric window is full before starting scaling",
                     windowFullTime);
-            return new CollectedMetrics(topology, Collections.emptySortedMap());
+            return new CollectedMetricHistory(topology, Collections.emptySortedMap());
         }
 
-        return new CollectedMetrics(topology, scalingMetricHistory);
+        return new CollectedMetricHistory(topology, metricHistory);
+    }
+
+    protected Duration getMetricWindowSize(Configuration conf) {
+        return conf.get(AutoScalerOptions.METRICS_WINDOW);
+    }
+
+    private static Instant getJobUpdateTs(AbstractFlinkResource<?, ?> cr) {
+        return Instant.ofEpochMilli(Long.parseLong(cr.getStatus().getJobStatus().getUpdateTime()));
     }
 
     protected JobTopology getJobTopology(
@@ -225,7 +224,7 @@ public abstract class ScalingMetricCollector {
      * @param collectedMetrics Collected metrics for all job vertices.
      * @return Computed scaling metrics for all job vertices.
      */
-    private Map<JobVertexID, Map<ScalingMetric, Double>> convertToScalingMetrics(
+    private CollectedMetrics convertToScalingMetrics(
             ResourceID resourceID,
             Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> collectedMetrics,
             JobTopology jobTopology,
@@ -268,7 +267,9 @@ public abstract class ScalingMetricCollector {
                             "Vertex scaling metrics for {}: {}", jobVertexID, vertexScalingMetrics);
                 });
 
-        return out;
+        var outputRatios = ScalingMetrics.computeOutputRatios(collectedMetrics, jobTopology);
+        LOG.debug("Output ratios: {}", outputRatios);
+        return new CollectedMetrics(out, outputRatios);
     }
 
     private double computeLagGrowthRate(
@@ -280,7 +281,8 @@ public abstract class ScalingMetricCollector {
         }
 
         var lastCollectionTime = metricHistory.lastKey();
-        var lastCollectedMetrics = metricHistory.get(lastCollectionTime).get(jobVertexID);
+        var lastCollectedMetrics =
+                metricHistory.get(lastCollectionTime).getVertexMetrics().get(jobVertexID);
 
         if (lastCollectedMetrics == null) {
             return Double.NaN;
@@ -328,7 +330,7 @@ public abstract class ScalingMetricCollector {
                                             v -> v,
                                             v ->
                                                     getFilteredVertexMetricNames(
-                                                            restClient, jobId, v, topology, conf)));
+                                                            restClient, jobId, v, topology)));
             availableVertexMetricNames.put(
                     ResourceID.fromResource(cr), Tuple2.of(deployedGeneration, names));
             return names;
@@ -357,8 +359,7 @@ public abstract class ScalingMetricCollector {
             RestClusterClient<?> restClient,
             JobID jobID,
             JobVertexID jobVertexID,
-            JobTopology topology,
-            Configuration conf) {
+            JobTopology topology) {
 
         var allMetricNames = queryAggregatedMetricNames(restClient, jobID, jobVertexID);
 
@@ -405,10 +406,7 @@ public abstract class ScalingMetricCollector {
                 filteredMetrics.put(flinkMetricName.get(), flinkMetric);
             } else {
                 throw new RuntimeException(
-                        "Could not find required metric "
-                                + flinkMetric.name()
-                                + " for "
-                                + jobVertexID);
+                        "Could not find required metric " + flinkMetric + " for " + jobVertexID);
             }
         }
 
@@ -460,8 +458,7 @@ public abstract class ScalingMetricCollector {
     }
 
     @VisibleForTesting
-    protected Map<ResourceID, SortedMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>>>
-            getHistories() {
+    protected Map<ResourceID, SortedMap<Instant, CollectedMetrics>> getHistories() {
         return histories;
     }
 

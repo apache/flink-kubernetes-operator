@@ -15,31 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.api.status;
+package org.apache.flink.kubernetes.operator.autoscaler.metrics;
 
-import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import lombok.ToString;
-import lombok.experimental.SuperBuilder;
 
-/** Last observed status of the Flink Session job. */
-@Experimental
+/** Collected scaling metrics. */
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-@ToString(callSuper = true)
-@SuperBuilder
-@JsonIgnoreProperties(ignoreUnknown = true)
-public class FlinkSessionJobStatus extends CommonStatus<FlinkSessionJobSpec> {
-
-    /** Status of the last reconcile operation. */
-    private FlinkSessionJobReconciliationStatus reconciliationStatus =
-            new FlinkSessionJobReconciliationStatus();
+@AllArgsConstructor
+public class Edge {
+    private JobVertexID from;
+    private JobVertexID to;
 }

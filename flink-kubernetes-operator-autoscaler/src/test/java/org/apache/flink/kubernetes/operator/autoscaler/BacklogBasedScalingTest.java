@@ -52,6 +52,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for scaling metrics collection logic. */
 @EnableKubernetesMockClient(crud = true)
@@ -67,6 +68,8 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
     private JobVertexID source1, sink;
 
     private JobAutoScalerImpl autoscaler;
+
+    private EventCollector eventCollector = new EventCollector();
 
     @BeforeEach
     public void setup() {
@@ -108,15 +111,26 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
 
         autoscaler =
                 new JobAutoScalerImpl(
-                        kubernetesClient, metricsCollector, evaluator, scalingExecutor);
+                        kubernetesClient,
+                        metricsCollector,
+                        evaluator,
+                        scalingExecutor,
+                        new EventRecorder(kubernetesClient, eventCollector));
+
+        // Reset custom window size to default
+        metricsCollector.setTestMetricWindowSize(null);
     }
 
     @Test
     public void test() throws Exception {
         var ctx = createAutoscalerTestContext();
+
+        /* Test scaling up. */
         var now = Instant.ofEpochMilli(0);
         setClocksTo(now);
         redeployJob(now);
+        // Adjust metric window size, so we can fill the metric window with two metrics
+        metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(1));
         metricsCollector.setCurrentMetrics(
                 Map.of(
                         source1,
@@ -139,16 +153,22 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));
 
         autoscaler.scale(getResourceContext(app, ctx));
-        assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
+        assertEquals(
+                1, AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().size());
 
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
+        assertEquals(
+                2, AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().size());
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(4, scaledParallelism.get(source1));
         assertEquals(4, scaledParallelism.get(sink));
 
+        /* Test stability while processing pending records. */
+
+        // Update topology to reflect updated parallelisms
         metricsCollector.setJobTopology(
                 new JobTopology(
                         new VertexInfo(source1, Set.of(), 4, 24),
@@ -173,12 +193,16 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 1800.))));
-
-        now = now.plus(Duration.ofSeconds(1));
+        now = now.plusSeconds(1);
         setClocksTo(now);
+        // Redeploying which erases metric history
         redeployJob(now);
+        // Adjust metric window size, so we can fill the metric window with three metrics
+        metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(2));
+
         autoscaler.scale(getResourceContext(app, ctx));
-        assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
+        assertEquals(
+                1, AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().size());
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(4, scaledParallelism.get(source1));
         assertEquals(4, scaledParallelism.get(sink));
@@ -207,10 +231,13 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
-        assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
+        assertEquals(
+                2, AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().size());
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(4, scaledParallelism.get(source1));
         assertEquals(4, scaledParallelism.get(sink));
+
+        /* Test scaling down. */
 
         // We have finally caught up to our original lag, time to scale down
         metricsCollector.setCurrentMetrics(
@@ -235,14 +262,19 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
+        assertEquals(
+                3, AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().size());
 
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
+
         metricsCollector.setJobTopology(
                 new JobTopology(
                         new VertexInfo(source1, Set.of(), 2, 24),
                         new VertexInfo(sink, Set.of(source1), 2, 720)));
+
+        /* Test stability while processing backlog. */
 
         metricsCollector.setCurrentMetrics(
                 Map.of(
@@ -348,14 +380,22 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         assertFalse(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
     }
 
+    @Test
+    public void testEventOnError() {
+        // Invalid config
+        app.getSpec()
+                .getFlinkConfiguration()
+                .put("kubernetes.operator.job.autoscaler.enabled", "3");
+        autoscaler.scale(getResourceContext(app, createAutoscalerTestContext()));
+
+        var event = eventCollector.events.poll();
+        assertTrue(eventCollector.events.isEmpty());
+        assertEquals(EventRecorder.Reason.AutoscalerError.toString(), event.getReason());
+        assertTrue(event.getMessage().startsWith("Could not parse"));
+    }
+
     private void redeployJob(Instant now) {
-        // Offset the update time by one metrics window to simulate collecting one entire window
-        app.getStatus()
-                .getJobStatus()
-                .setUpdateTime(
-                        String.valueOf(
-                                now.minus(AutoScalerOptions.METRICS_WINDOW.defaultValue())
-                                        .toEpochMilli()));
+        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
     }
 
     private void setClocksTo(Instant time) {

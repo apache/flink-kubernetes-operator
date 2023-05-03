@@ -19,15 +19,18 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +41,7 @@ import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for AutoScalerInfo. */
@@ -112,8 +116,11 @@ public class AutoScalerInfoTest {
         var jobUpdateTs = Instant.now();
         var v1 = new JobVertexID();
 
-        var metricHistory = new TreeMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>>();
-        metricHistory.put(jobUpdateTs, Map.of(v1, Map.of(ScalingMetric.TRUE_PROCESSING_RATE, 1.)));
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+        metricHistory.put(
+                jobUpdateTs,
+                new CollectedMetrics(
+                        Map.of(v1, Map.of(ScalingMetric.TRUE_PROCESSING_RATE, 1.)), Map.of()));
 
         var scalingHistory = new HashMap<JobVertexID, SortedMap<Instant, ScalingSummary>>();
         scalingHistory.put(v1, new TreeMap<>());
@@ -129,7 +136,6 @@ public class AutoScalerInfoTest {
         data.put(
                 AutoScalerInfo.COLLECTED_METRICS_KEY,
                 AutoScalerInfo.YAML_MAPPER.writeValueAsString(metricHistory));
-        data.put(AutoScalerInfo.JOB_UPDATE_TS_KEY, jobUpdateTs.toString());
         data.put(
                 AutoScalerInfo.SCALING_HISTORY_KEY,
                 AutoScalerInfo.YAML_MAPPER.writeValueAsString(scalingHistory));
@@ -140,7 +146,7 @@ public class AutoScalerInfoTest {
 
         // Override with compressed data
         var newTs = Instant.now();
-        info.updateMetricHistory(newTs, metricHistory);
+        info.updateMetricHistory(metricHistory);
         info.addToScalingHistory(newTs, Map.of(), new Configuration());
 
         // Make sure we can still access everything
@@ -153,7 +159,7 @@ public class AutoScalerInfoTest {
         var v1 = new JobVertexID();
         Random rnd = new Random();
 
-        var metricHistory = new TreeMap<Instant, Map<JobVertexID, Map<ScalingMetric, Double>>>();
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
         for (int i = 0; i < 50; i++) {
             var m = new HashMap<JobVertexID, Map<ScalingMetric, Double>>();
             for (int j = 0; j < 500; j++) {
@@ -161,7 +167,7 @@ public class AutoScalerInfoTest {
                         new JobVertexID(),
                         Map.of(ScalingMetric.TRUE_PROCESSING_RATE, rnd.nextDouble()));
             }
-            metricHistory.put(Instant.now(), m);
+            metricHistory.put(Instant.now(), new CollectedMetrics(m, Collections.emptyMap()));
         }
 
         var scalingHistory = new HashMap<JobVertexID, SortedMap<Instant, ScalingSummary>>();
@@ -184,7 +190,7 @@ public class AutoScalerInfoTest {
                                 1, 2, Map.of(ScalingMetric.LAG, EvaluatedScalingMetric.of(2.)))),
                 new Configuration());
 
-        info.updateMetricHistory(Instant.now(), metricHistory);
+        info.updateMetricHistory(metricHistory);
 
         assertFalse(
                 data.get(AutoScalerInfo.COLLECTED_METRICS_KEY).length()
@@ -196,5 +202,26 @@ public class AutoScalerInfoTest {
                 data.get(AutoScalerInfo.COLLECTED_METRICS_KEY).length()
                                 + data.get(AutoScalerInfo.SCALING_HISTORY_KEY).length()
                         < AutoScalerInfo.MAX_CM_BYTES);
+    }
+
+    @Test
+    public void testDiscardInvalidHistory() {
+        ConfigMap configMap = new ConfigMap();
+        configMap.setData(
+                new HashMap<>(
+                        Map.of(
+                                AutoScalerInfo.COLLECTED_METRICS_KEY,
+                                "invalid",
+                                AutoScalerInfo.SCALING_HISTORY_KEY,
+                                "invalid2")));
+
+        var info = new AutoScalerInfo(configMap);
+        assertEquals(2, configMap.getData().size());
+
+        assertEquals(new TreeMap<>(), info.getMetricHistory());
+        assertNull(configMap.getData().get(AutoScalerInfo.COLLECTED_METRICS_KEY));
+
+        assertEquals(new TreeMap<>(), info.getScalingHistory());
+        assertNull(configMap.getData().get(AutoScalerInfo.SCALING_HISTORY_KEY));
     }
 }

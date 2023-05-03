@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.api.spec;
 
 import org.apache.flink.annotation.Experimental;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -28,10 +29,14 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Resource {
     /** Amount of CPU allocated to the pod. */
     private Double cpu;
 
     /** Amount of memory allocated to the pod. Example: 1024m, 1g */
     private String memory;
+
+    /** Amount of ephemeral storage allocated to the pod. Example: 1024m, 2G */
+    private String ephemeralStorage;
 }

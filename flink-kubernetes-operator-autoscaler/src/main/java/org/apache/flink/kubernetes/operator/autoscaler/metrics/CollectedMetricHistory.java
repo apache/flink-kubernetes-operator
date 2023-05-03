@@ -15,16 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.api;
+package org.apache.flink.kubernetes.operator.autoscaler.metrics;
 
-/** Constants used by the CRD. */
-public class CrdConstants {
-    public static final String API_GROUP = "flink.apache.org";
-    public static final String API_VERSION = "v1beta1";
-    public static final String KIND_SESSION_JOB = "FlinkSessionJob";
-    public static final String KIND_FLINK_DEPLOYMENT = "FlinkDeployment";
+import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 
-    public static final String LABEL_TARGET_SESSION = "target.session";
+import lombok.Value;
 
-    public static final String EPHEMERAL_STORAGE = "ephemeral-storage";
+import java.time.Instant;
+import java.util.SortedMap;
+
+/** Topology and collected metric history. */
+@Value
+public class CollectedMetricHistory {
+    JobTopology jobTopology;
+    SortedMap<Instant, CollectedMetrics> metricHistory;
 }

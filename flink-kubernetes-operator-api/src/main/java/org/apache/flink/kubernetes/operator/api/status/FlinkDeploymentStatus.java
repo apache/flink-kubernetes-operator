@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.api.status;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -38,6 +39,7 @@ import java.util.Map;
 @EqualsAndHashCode(callSuper = true)
 @ToString(callSuper = true)
 @SuperBuilder
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class FlinkDeploymentStatus extends CommonStatus<FlinkDeploymentSpec> {
 
     /** Information from running clusters. */

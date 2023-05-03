@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -63,8 +64,7 @@ public class ScalingMetrics {
             double lagGrowthRate,
             Configuration conf) {
 
-        var isSource = topology.getInputs().get(jobVertexID).isEmpty();
-        var isSink = topology.getOutputs().get(jobVertexID).isEmpty();
+        var isSource = topology.isSource(jobVertexID);
 
         double busyTimeMsPerSecond = getBusyTimeMsPerSecond(flinkMetrics, conf, jobVertexID);
         double numRecordsInPerSecond =
@@ -83,24 +83,42 @@ public class ScalingMetrics {
             scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
         } else {
             LOG.error("Cannot compute true processing rate without numRecordsInPerSecond");
+            scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, Double.NaN);
+            scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, Double.NaN);
         }
+    }
 
-        if (!isSink) {
-            double numRecordsOutPerSecond =
-                    getNumRecordsOutPerSecond(
-                            flinkMetrics, jobVertexID, isSource, numRecordsInPerSecond);
-            if (!Double.isNaN(numRecordsOutPerSecond)) {
-                double outputRatio =
-                        computeOutputRatio(numRecordsInPerSecond, numRecordsOutPerSecond);
-                scalingMetrics.put(ScalingMetric.OUTPUT_RATIO, outputRatio);
-                scalingMetrics.put(
-                        ScalingMetric.TRUE_OUTPUT_RATE,
-                        computeTrueRate(numRecordsOutPerSecond, busyTimeMsPerSecond));
-            } else {
-                LOG.error(
-                        "Cannot compute processing and input rate without numRecordsOutPerSecond");
+    public static Map<Edge, Double> computeOutputRatios(
+            Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> flinkMetrics,
+            JobTopology topology) {
+
+        var out = new HashMap<Edge, Double>();
+        for (JobVertexID from : flinkMetrics.keySet()) {
+            var outputs = topology.getOutputs().get(from);
+            if (outputs.isEmpty()) {
+                continue;
+            }
+
+            double numRecordsInPerSecond =
+                    getNumRecordsInPerSecond(flinkMetrics.get(from), from, topology.isSource(from));
+
+            for (JobVertexID to : outputs) {
+                double outputRatio = 0;
+                // If the input rate is zero, we also need to flatten the output rate.
+                // Otherwise, the OUTPUT_RATIO would be outrageously large, leading to
+                // a rapid scale up.
+                if (numRecordsInPerSecond > 0) {
+                    double edgeOutPerSecond =
+                            computeEdgeOutPerSecond(topology, flinkMetrics, from, to);
+                    if (edgeOutPerSecond > 0) {
+                        outputRatio = edgeOutPerSecond / numRecordsInPerSecond;
+                    }
+                }
+                out.put(new Edge(from, to), outputRatio);
             }
         }
+
+        return out;
     }
 
     public static void computeLagMetrics(
@@ -128,8 +146,6 @@ public class ScalingMetrics {
             excludeVertexFromScaling(conf, jobVertexId);
             // Pretend that the load is balanced because we don't know any better
             busyTimeMsPerSecond = conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
-        } else {
-            includeVertexForScaling(conf, jobVertexId);
         }
         return busyTimeMsPerSecond;
     }
@@ -155,37 +171,66 @@ public class ScalingMetrics {
     }
 
     private static double getNumRecordsOutPerSecond(
-            Map<FlinkMetric, AggregatedMetric> flinkMetrics,
-            JobVertexID jobVertexID,
-            boolean isSource,
-            double numRecordsInPerSecond) {
-        if (numRecordsInPerSecond <= 0) {
-            // If the input rate is zero, we also need to flatten the output rate.
-            // Otherwise, the OUTPUT_RATIO would be outrageously large, leading to
-            // a rapid scale up.
-            return 0;
-        }
+            Map<FlinkMetric, AggregatedMetric> flinkMetrics, JobVertexID jobVertexID) {
+
         AggregatedMetric numRecordsOutPerSecond =
                 flinkMetrics.get(FlinkMetric.NUM_RECORDS_OUT_PER_SEC);
+
         if (numRecordsOutPerSecond == null) {
-            if (isSource) {
-                numRecordsOutPerSecond =
-                        flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC);
-            }
-            if (numRecordsOutPerSecond == null) {
-                LOG.warn("Received null output rate for {}. Returning NaN.", jobVertexID);
-                return Double.NaN;
-            }
+            LOG.warn("Received null output rate for {}. Returning NaN.", jobVertexID);
+            return Double.NaN;
         }
         return numRecordsOutPerSecond.getSum();
     }
 
-    private static double computeOutputRatio(
-            double numRecordsInPerSecond, double numRecordsOutPerSecond) {
-        if (numRecordsInPerSecond <= 0) {
-            return 0;
+    private static double computeEdgeOutPerSecond(
+            JobTopology topology,
+            Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> flinkMetrics,
+            JobVertexID from,
+            JobVertexID to) {
+        var toMetrics = flinkMetrics.get(to);
+
+        var toVertexInputs = topology.getInputs().get(to);
+        // Case 1: Downstream vertex has a single input (from) so we can use the most reliable num
+        // records in
+        if (toVertexInputs.size() == 1) {
+            LOG.debug(
+                    "Computing edge ({}, {}) data rate for single input downstream task", from, to);
+            return getNumRecordsInPerSecond(toMetrics, to, false);
         }
-        return numRecordsOutPerSecond / numRecordsInPerSecond;
+
+        // Case 2: Downstream vertex has only inputs from upstream vertices which don't have other
+        // outputs
+        double numRecordsOutFromUpstreamInputs = 0;
+        for (JobVertexID input : toVertexInputs) {
+            if (input.equals(from)) {
+                // Exclude source edge because we only want to consider other input edges
+                continue;
+            }
+            if (topology.getOutputs().get(input).size() == 1) {
+                numRecordsOutFromUpstreamInputs +=
+                        getNumRecordsOutPerSecond(flinkMetrics.get(input), input);
+            } else {
+                // Output vertex has multiple outputs, cannot use this information...
+                numRecordsOutFromUpstreamInputs = Double.NaN;
+                break;
+            }
+        }
+        if (!Double.isNaN(numRecordsOutFromUpstreamInputs)) {
+            LOG.debug(
+                    "Computing edge ({}, {}) data rate by subtracting upstream input rates",
+                    from,
+                    to);
+            return getNumRecordsInPerSecond(toMetrics, to, false) - numRecordsOutFromUpstreamInputs;
+        }
+        var fromMetrics = flinkMetrics.get(from);
+
+        // Case 3: We fall back simply to num records out, this is the least reliable
+        LOG.debug(
+                "Computing edge ({}, {}) data rate by falling back to from num records out",
+                from,
+                to);
+        return getNumRecordsOutPerSecond(fromMetrics, from);
     }
 
     private static double computeTrueRate(double rate, double busyTimeMsPerSecond) {
@@ -197,15 +242,10 @@ public class ScalingMetrics {
         return rate / (busyTimeMsPerSecond / 1000);
     }
 
+    /** Temporarily exclude vertex from scaling for this run. This does not update the spec. */
     private static void excludeVertexFromScaling(Configuration conf, JobVertexID jobVertexId) {
         Set<String> excludedIds = new HashSet<>(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS));
         excludedIds.add(jobVertexId.toHexString());
-        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
-    }
-
-    private static void includeVertexForScaling(Configuration conf, JobVertexID jobVertexId) {
-        Set<String> excludedIds = new HashSet<>(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS));
-        excludedIds.remove(jobVertexId.toHexString());
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
     }
 
