@@ -62,7 +62,7 @@ public class FlinkOperatorConfiguration {
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
     RetryConfiguration retryConfiguration;
-    Boolean exceptionStackTraceEnabled;
+    boolean exceptionStackTraceEnabled;
     int exceptionStackTraceLengthThreshold;
     int exceptionFieldLengthThreshold;
     int exceptionThrowableCountThreshold;

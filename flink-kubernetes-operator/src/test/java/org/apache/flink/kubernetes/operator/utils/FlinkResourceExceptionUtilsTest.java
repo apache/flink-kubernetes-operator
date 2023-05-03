@@ -58,7 +58,7 @@ public class FlinkResourceExceptionUtilsTest {
         assertEquals(
                 KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_STACK_TRACE_ENABLED
                         .defaultValue(),
-                configManager.getOperatorConfiguration().getExceptionStackTraceEnabled());
+                configManager.getOperatorConfiguration().isExceptionStackTraceEnabled());
         assertEquals(
                 KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_STACK_TRACE_MAX_LENGTH
                         .defaultValue(),
@@ -172,7 +172,7 @@ public class FlinkResourceExceptionUtilsTest {
                                                         .getExceptionFieldLengthThreshold());
                             });
 
-            if (!configManager.getOperatorConfiguration().getExceptionStackTraceEnabled()) {
+            if (!configManager.getOperatorConfiguration().isExceptionStackTraceEnabled()) {
                 assertNull(flinkResourceException.getStackTrace());
             } else {
                 assertTrue(

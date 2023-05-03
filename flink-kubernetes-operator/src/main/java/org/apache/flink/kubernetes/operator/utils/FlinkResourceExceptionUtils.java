@@ -41,7 +41,7 @@ public final class FlinkResourceExceptionUtils {
     public static <R extends AbstractFlinkResource> void updateFlinkResourceException(
             Throwable throwable, R resource, FlinkOperatorConfiguration conf) {
 
-        boolean stackTraceEnabled = conf.getExceptionStackTraceEnabled();
+        boolean stackTraceEnabled = conf.isExceptionStackTraceEnabled();
         int stackTraceLengthThreshold = conf.getExceptionStackTraceLengthThreshold();
         int lengthThreshold = conf.getExceptionFieldLengthThreshold();
         int throwableCountThreshold = conf.getExceptionThrowableCountThreshold();

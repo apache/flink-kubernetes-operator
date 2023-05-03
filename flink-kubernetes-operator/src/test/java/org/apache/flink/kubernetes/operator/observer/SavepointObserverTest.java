@@ -39,6 +39,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -136,6 +137,43 @@ public class SavepointObserverTest extends OperatorTestBase {
                 Collections.singletonList(sp1.getLocation()), flinkService.getDisposedSavepoints());
 
         configManager.updateDefaultConfig(new Configuration());
+    }
+
+    @Test
+    public void testDisabledDispose() {
+        Configuration conf = new Configuration();
+        conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED, false);
+        conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1000);
+        conf.set(
+                KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                Duration.ofDays(100L));
+
+        configManager.updateDefaultConfig(conf);
+
+        SavepointInfo spInfo = new SavepointInfo();
+
+        Savepoint sp1 =
+                new Savepoint(
+                        9999999999999998L,
+                        "sp1",
+                        SavepointTriggerType.MANUAL,
+                        SavepointFormatType.CANONICAL,
+                        123L);
+        spInfo.updateLastSavepoint(sp1);
+        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
+
+        Savepoint sp2 =
+                new Savepoint(
+                        9999999999999999L,
+                        "sp2",
+                        SavepointTriggerType.MANUAL,
+                        SavepointFormatType.CANONICAL,
+                        123L);
+        spInfo.updateLastSavepoint(sp2);
+        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
+        Assertions.assertIterableEquals(List.of(sp1, sp2), spInfo.getSavepointHistory());
+        Assertions.assertIterableEquals(
+                Collections.emptyList(), flinkService.getDisposedSavepoints());
     }
 
     @Test
