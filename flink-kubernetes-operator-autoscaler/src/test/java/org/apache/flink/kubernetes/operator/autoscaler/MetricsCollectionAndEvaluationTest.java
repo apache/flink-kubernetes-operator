@@ -119,6 +119,7 @@ public class MetricsCollectionAndEvaluationTest {
         conf.set(AutoScalerOptions.RESTART_TIME, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
+        conf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, Double.MAX_VALUE);
         ReconciliationUtils.updateStatusForDeployedSpec(app, conf);
         clock = Clock.fixed(Instant.ofEpochSecond(0), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
