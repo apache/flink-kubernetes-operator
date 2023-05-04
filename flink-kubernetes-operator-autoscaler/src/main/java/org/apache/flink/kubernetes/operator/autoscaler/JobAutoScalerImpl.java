@@ -22,9 +22,10 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
-import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScaler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -55,6 +56,8 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             lastEvaluatedMetrics = new ConcurrentHashMap<>();
     private final Map<ResourceID, Set<JobVertexID>> registeredMetrics = new ConcurrentHashMap<>();
 
+    final Map<ResourceID, Counter> errorCounters = new ConcurrentHashMap<>();
+
     public JobAutoScalerImpl(
             KubernetesClient kubernetesClient,
             ScalingMetricCollector metricsCollector,
@@ -82,8 +85,11 @@ public class JobAutoScalerImpl implements JobAutoScaler {
 
         var conf = ctx.getObserveConfig();
         var resource = ctx.getResource();
+        var resouceId = ResourceID.fromResource(resource);
+        var autoscalerMetricGroup = ctx.getResourceMetricGroup().addGroup("AutoScaler");
 
         try {
+
             if (resource.getSpec().getJob() == null || !conf.getBoolean(AUTOSCALER_ENABLED)) {
                 LOG.info("Job autoscaler is disabled");
                 return false;
@@ -108,8 +114,8 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             LOG.debug("Evaluating scaling metrics for {}", collectedMetrics);
             var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
             LOG.debug("Scaling metrics evaluated: {}", evaluatedMetrics);
-            lastEvaluatedMetrics.put(ResourceID.fromResource(resource), evaluatedMetrics);
-            registerResourceScalingMetrics(resource, ctx.getResourceMetricGroup());
+            lastEvaluatedMetrics.put(resouceId, evaluatedMetrics);
+            registerResourceScalingMetrics(resource, autoscalerMetricGroup);
 
             var specAdjusted =
                     scalingExecutor.scaleResource(resource, autoScalerInfo, conf, evaluatedMetrics);
@@ -117,6 +123,9 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             return specAdjusted;
         } catch (Throwable e) {
             LOG.error("Error while scaling resource", e);
+            errorCounters
+                    .computeIfAbsent(resouceId, _id -> autoscalerMetricGroup.counter("errors"))
+                    .inc();
             eventRecorder.triggerEvent(
                     resource,
                     EventRecorder.Type.Warning,
@@ -128,10 +137,8 @@ public class JobAutoScalerImpl implements JobAutoScaler {
     }
 
     private void registerResourceScalingMetrics(
-            AbstractFlinkResource<?, ?> resource,
-            KubernetesResourceMetricGroup resourceMetricGroup) {
+            AbstractFlinkResource<?, ?> resource, MetricGroup scalerGroup) {
         var resourceId = ResourceID.fromResource(resource);
-        var scalerGroup = resourceMetricGroup.addGroup("AutoScaler");
 
         lastEvaluatedMetrics
                 .get(resourceId)
