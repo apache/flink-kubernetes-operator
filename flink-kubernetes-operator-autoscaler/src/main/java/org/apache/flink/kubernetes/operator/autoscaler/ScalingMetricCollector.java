@@ -127,13 +127,21 @@ public abstract class ScalingMetricCollector {
         autoscalerInfo.updateMetricHistory(metricHistory);
 
         var windowFullTime = metricCollectionStartTs.plus(metricWindowSize);
+        var minNumberOfObservations = conf.get(AutoScalerOptions.METRICS_WINDOW_MIN_OBSERVATIONS);
         if (now.isBefore(windowFullTime)) {
             // As long as we haven't had time to collect a full window,
             // collect metrics but do not return any metrics
             LOG.info(
-                    "Waiting until {} so the initial metric window is full before starting scaling",
-                    windowFullTime);
+                    "Still collecting metrics until {} and until the required {} observations have been collected (already collected: {}).",
+                    windowFullTime,
+                    minNumberOfObservations,
+                    metricHistory.size());
             return new CollectedMetricHistory(topology, Collections.emptySortedMap());
+        } else if (metricHistory.size() < minNumberOfObservations) {
+            throw new Exception(
+                    String.format(
+                            "Only %s out of the %s required number of observations have been collected within the metric window of %s. If this happens consistently, increase the window size or decrease the number of observations to collect.",
+                            minNumberOfObservations, metricHistory.size(), metricWindowSize));
         }
 
         return new CollectedMetricHistory(topology, metricHistory);

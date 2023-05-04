@@ -52,6 +52,13 @@ public class AutoScalerOptions {
                     .defaultValue(Duration.ofMinutes(5))
                     .withDescription("Scaling metrics aggregation window size.");
 
+    public static final ConfigOption<Integer> METRICS_WINDOW_MIN_OBSERVATIONS =
+            autoScalerConfig("metrics.window.min-observations")
+                    .intType()
+                    .defaultValue(10)
+                    .withDescription(
+                            "The minimum number of observations to collect during a metric window");
+
     public static final ConfigOption<Duration> STABILIZATION_INTERVAL =
             autoScalerConfig("stabilization.interval")
                     .durationType()

@@ -44,6 +44,7 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMap
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -116,6 +117,7 @@ public class MetricsCollectionAndEvaluationTest {
         conf = confManager.getDeployConfig(app.getMetadata(), app.getSpec());
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofSeconds(10));
         conf.set(AutoScalerOptions.METRICS_WINDOW, Duration.ofSeconds(100));
+        conf.set(AutoScalerOptions.METRICS_WINDOW_MIN_OBSERVATIONS, 1);
         conf.set(AutoScalerOptions.RESTART_TIME, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
@@ -344,6 +346,60 @@ public class MetricsCollectionAndEvaluationTest {
                         String.valueOf(clock.instant().plus(Duration.ofDays(10)).toEpochMilli()));
         metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
         assertEquals(0, metricsHistory.getMetricHistory().size());
+    }
+
+    @Test
+    public void testMinimumNumberOfObservationsInWindow() throws Exception {
+        // We require a minimum of 3 observations
+        conf.set(AutoScalerOptions.METRICS_WINDOW_MIN_OBSERVATIONS, 3);
+
+        setDefaultMetrics(metricsCollector);
+        var metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(0, metricsHistory.getMetricHistory().size());
+
+        // Update clock to stable time
+        clock = Clock.offset(clock, conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
+        metricsCollector.setClock(clock);
+
+        // Collect once to start the metric window
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(0, metricsHistory.getMetricHistory().size());
+
+        try {
+            // Window size reached but not enough observations collected (2 out of 3)
+            metricsCollector.setClock(
+                    Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW)));
+            metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+            Assertions.fail("Not enough observations were captured");
+        } catch (Exception e) {
+            assertTrue(
+                    e.getMessage()
+                            .contains(
+                                    "Only 3 out of the 2 required number of observations have been collected"));
+            assertEquals(0, metricsHistory.getMetricHistory().size());
+        }
+
+        // Add another observation into the window
+        metricsCollector.setClock(
+                Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW).minusSeconds(1)));
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(0, metricsHistory.getMetricHistory().size());
+
+        // Required number of observations reached
+        metricsCollector.setClock(Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW)));
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(3, metricsHistory.getMetricHistory().size());
+
+        // More observations may be collected
+        metricsCollector.setClock(
+                Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW).minusSeconds(2)));
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(0, metricsHistory.getMetricHistory().size());
+
+        metricsCollector.setClock(
+                Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW).plusSeconds(1)));
+        metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+        assertEquals(4, metricsHistory.getMetricHistory().size());
     }
 
     @Test

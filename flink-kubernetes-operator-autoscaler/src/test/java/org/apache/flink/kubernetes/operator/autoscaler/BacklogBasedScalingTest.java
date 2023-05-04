@@ -99,6 +99,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         defaultConf.set(AutoScalerOptions.RESTART_TIME, Duration.ofSeconds(1));
         defaultConf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ofSeconds(2));
         defaultConf.set(AutoScalerOptions.SCALING_ENABLED, true);
+        defaultConf.set(AutoScalerOptions.METRICS_WINDOW_MIN_OBSERVATIONS, 2);
         defaultConf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
         defaultConf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.8);
         defaultConf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.1);
