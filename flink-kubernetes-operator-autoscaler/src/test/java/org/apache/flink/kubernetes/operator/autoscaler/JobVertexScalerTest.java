@@ -66,7 +66,7 @@ public class JobVertexScalerTest {
         vertexScaler = new JobVertexScaler(new EventRecorder(kubernetesClient, eventCollector));
         conf = new Configuration();
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
-        conf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, Double.MAX_VALUE);
+        conf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, (double) Integer.MAX_VALUE);
         conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ZERO);
     }
 
