@@ -49,7 +49,7 @@ public class AutoScalerOptions {
     public static final ConfigOption<Duration> METRICS_WINDOW =
             autoScalerConfig("metrics.window")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(5))
+                    .defaultValue(Duration.ofMinutes(10))
                     .withDescription("Scaling metrics aggregation window size.");
 
     public static final ConfigOption<Duration> STABILIZATION_INTERVAL =
@@ -68,15 +68,16 @@ public class AutoScalerOptions {
     public static final ConfigOption<Double> TARGET_UTILIZATION_BOUNDARY =
             autoScalerConfig("target.utilization.boundary")
                     .doubleType()
-                    .defaultValue(0.1)
+                    .defaultValue(0.4)
                     .withDescription(
                             "Target vertex utilization boundary. Scaling won't be performed if utilization is within (target - boundary, target + boundary)");
 
     public static final ConfigOption<Duration> SCALE_UP_GRACE_PERIOD =
             autoScalerConfig("scale-up.grace-period")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(10))
-                    .withDescription("Period in which no scale down is allowed after a scale up");
+                    .defaultValue(Duration.ofHours(1))
+                    .withDescription(
+                            "Duration in which no scale down of a vertex is allowed after it has been scaled up.");
 
     public static final ConfigOption<Integer> VERTEX_MIN_PARALLELISM =
             autoScalerConfig("vertex.min-parallelism")
@@ -87,28 +88,28 @@ public class AutoScalerOptions {
     public static final ConfigOption<Integer> VERTEX_MAX_PARALLELISM =
             autoScalerConfig("vertex.max-parallelism")
                     .intType()
-                    .defaultValue(Integer.MAX_VALUE)
+                    .defaultValue(200)
                     .withDescription(
                             "The maximum parallelism the autoscaler can use. Note that this limit will be ignored if it is higher than the max parallelism configured in the Flink config or directly on each operator.");
 
     public static final ConfigOption<Double> MAX_SCALE_DOWN_FACTOR =
             autoScalerConfig("scale-down.max-factor")
                     .doubleType()
-                    .defaultValue(0.6)
+                    .defaultValue(1.0)
                     .withDescription(
                             "Max scale down factor. 1 means no limit on scale down, 0.6 means job can only be scaled down with 60% of the original parallelism.");
 
     public static final ConfigOption<Duration> CATCH_UP_DURATION =
             autoScalerConfig("catch-up.duration")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(10))
+                    .defaultValue(Duration.ofMinutes(5))
                     .withDescription(
                             "The target duration for fully processing any backlog after a scaling operation. Set to 0 to disable backlog based scaling.");
 
     public static final ConfigOption<Duration> RESTART_TIME =
             autoScalerConfig("restart.time")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(5))
+                    .defaultValue(Duration.ofMinutes(3))
                     .withDescription(
                             "Expected restart time to be used until the operator can determine it reliably from history.");
 
@@ -136,7 +137,7 @@ public class AutoScalerOptions {
     public static final ConfigOption<Integer> VERTEX_SCALING_HISTORY_COUNT =
             autoScalerConfig("history.max.count")
                     .intType()
-                    .defaultValue(1)
+                    .defaultValue(3)
                     .withDescription(
                             "Maximum number of past scaling decisions to retain per vertex.");
 

@@ -200,7 +200,7 @@ public class ScalingExecutorTest {
                         source,
                         evaluated(10, 80, 100),
                         filterOperator,
-                        evaluated(10, 60, 100),
+                        evaluated(10, 30, 100),
                         sink,
                         evaluated(10, 80, 100));
         // filter operator should not scale
