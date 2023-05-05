@@ -26,6 +26,7 @@ import io.javaoperatorsdk.operator.RegisteredController;
 import io.javaoperatorsdk.operator.api.config.ConfigurationServiceProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.ThreadPoolExecutor;
@@ -39,6 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *     ample comments.
  */
 public class FlinkOperatorTest {
+    @BeforeAll
+    public static void setAutoTryKubeConfig() {
+        System.setProperty(Config.KUBERNETES_AUTH_TRYKUBECONFIG_SYSTEM_PROPERTY, "false");
+    }
 
     @Test
     public void testConfigurationPassedToJOSDK() {
