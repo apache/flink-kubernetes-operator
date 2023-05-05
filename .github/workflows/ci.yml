@@ -53,27 +53,6 @@ jobs:
       - name: Validate helm chart linting
         run: |
           helm lint helm/flink-kubernetes-operator
-      - name: Start minikube
-        run: |
-          source e2e-tests/utils.sh
-          start_minikube
-      - name: Install cert-manager
-        run: |
-          kubectl get pods -A
-          kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.2/cert-manager.yaml
-          kubectl -n cert-manager wait --all=true --for=condition=Available --timeout=300s deploy
-      - name: Build image
-        run: |
-          export SHELL=/bin/bash
-          export DOCKER_BUILDKIT=1
-          eval $(minikube -p minikube docker-env)
-          docker build --progress=plain  --build-arg SKIP_TESTS=false --build-arg SKIP_OS_UPDATE=false --no-cache -f ./Dockerfile -t flink-kubernetes-operator:ci-latest .
-          docker images
-      - name: Start the operator
-        run: |
-          helm --debug install flink-kubernetes-operator helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest
-          kubectl wait --for=condition=Available --timeout=120s deploy/flink-kubernetes-operator
-          kubectl get pods
       - name: Tests in flink-kubernetes-operator
         run: |
           cd flink-kubernetes-operator
@@ -84,13 +63,6 @@ jobs:
           cd flink-kubernetes-webhook
           mvn verify -Dit.skip=false
           cd ..
-      - name: Stop the operator
-        run: |
-          helm uninstall flink-kubernetes-operator
-      - name: Stop minikube
-        run: |
-          source e2e-tests/utils.sh
-          stop_minikube
   e2e_ci:
     runs-on: ubuntu-latest
     strategy:
