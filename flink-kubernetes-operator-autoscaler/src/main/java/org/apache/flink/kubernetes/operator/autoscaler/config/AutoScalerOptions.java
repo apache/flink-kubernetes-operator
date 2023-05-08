@@ -95,9 +95,9 @@ public class AutoScalerOptions {
     public static final ConfigOption<Double> MAX_SCALE_DOWN_FACTOR =
             autoScalerConfig("scale-down.max-factor")
                     .doubleType()
-                    .defaultValue(0.5)
+                    .defaultValue(0.6)
                     .withDescription(
-                            "Max scale down factor. 1 means no limit on scale down, 0.5 means job can only be scaled down with 50% of the original parallelism.");
+                            "Max scale down factor. 1 means no limit on scale down, 0.6 means job can only be scaled down with 60% of the original parallelism.");
 
     public static final ConfigOption<Duration> CATCH_UP_DURATION =
             autoScalerConfig("catch-up.duration")
