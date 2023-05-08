@@ -16,7 +16,7 @@
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.autoscaler.catch-up.duration</h5></td>
-            <td style="word-wrap: break-word;">10 min</td>
+            <td style="word-wrap: break-word;">5 min</td>
             <td>Duration</td>
             <td>The target duration for fully processing any backlog after a scaling operation. Set to 0 to disable backlog based scaling.</td>
         </tr>
@@ -34,7 +34,7 @@
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.autoscaler.history.max.count</h5></td>
-            <td style="word-wrap: break-word;">1</td>
+            <td style="word-wrap: break-word;">3</td>
             <td>Integer</td>
             <td>Maximum number of past scaling decisions to retain per vertex.</td>
         </tr>
@@ -46,27 +46,27 @@
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.autoscaler.metrics.window</h5></td>
-            <td style="word-wrap: break-word;">5 min</td>
+            <td style="word-wrap: break-word;">10 min</td>
             <td>Duration</td>
             <td>Scaling metrics aggregation window size.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.autoscaler.restart.time</h5></td>
-            <td style="word-wrap: break-word;">5 min</td>
+            <td style="word-wrap: break-word;">3 min</td>
             <td>Duration</td>
             <td>Expected restart time to be used until the operator can determine it reliably from history.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.autoscaler.scale-down.max-factor</h5></td>
-            <td style="word-wrap: break-word;">0.6</td>
+            <td style="word-wrap: break-word;">0.5</td>
             <td>Double</td>
-            <td>Max scale down factor. 1 means no limit on scale down, 0.6 means job can only be scaled down with 60% of the original parallelism.</td>
+            <td>Max scale down factor. 1 means no limit on scale down, 0.5 means job can only be scaled down with 50% of the original parallelism.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.autoscaler.scale-up.grace-period</h5></td>
-            <td style="word-wrap: break-word;">10 min</td>
+            <td style="word-wrap: break-word;">1 h</td>
             <td>Duration</td>
-            <td>Period in which no scale down is allowed after a scale up</td>
+            <td>Duration in which no scale down of a vertex is allowed after it has been scaled up.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.autoscaler.scaling.effectiveness.detection.enabled</h5></td>
@@ -100,7 +100,7 @@
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.autoscaler.target.utilization.boundary</h5></td>
-            <td style="word-wrap: break-word;">0.1</td>
+            <td style="word-wrap: break-word;">0.4</td>
             <td>Double</td>
             <td>Target vertex utilization boundary. Scaling won't be performed if utilization is within (target - boundary, target + boundary)</td>
         </tr>
@@ -112,7 +112,7 @@
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.autoscaler.vertex.max-parallelism</h5></td>
-            <td style="word-wrap: break-word;">2147483647</td>
+            <td style="word-wrap: break-word;">200</td>
             <td>Integer</td>
             <td>The maximum parallelism the autoscaler can use. Note that this limit will be ignored if it is higher than the max parallelism configured in the Flink config or directly on each operator.</td>
         </tr>
