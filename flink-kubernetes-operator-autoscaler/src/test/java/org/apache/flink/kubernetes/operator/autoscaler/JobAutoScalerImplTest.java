@@ -35,6 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Tests for JobAutoScalerImpl. */
 @EnableKubernetesMockClient(crud = true)
@@ -65,9 +66,11 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
         ResourceID resourceId = ResourceID.fromResource(app);
 
         autoscaler.scale(resourceContext);
-        Assertions.assertEquals(1, autoscaler.errorCounters.get(resourceId).getCount());
+        Assertions.assertEquals(1, autoscaler.flinkMetrics.get(resourceId).numErrors.getCount());
 
         autoscaler.scale(resourceContext);
-        Assertions.assertEquals(2, autoscaler.errorCounters.get(resourceId).getCount());
+        Assertions.assertEquals(2, autoscaler.flinkMetrics.get(resourceId).numErrors.getCount());
+
+        assertEquals(0, autoscaler.flinkMetrics.get(resourceId).numScalings.getCount());
     }
 }

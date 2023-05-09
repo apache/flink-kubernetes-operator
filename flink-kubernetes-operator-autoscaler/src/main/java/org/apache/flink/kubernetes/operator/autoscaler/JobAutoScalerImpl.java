@@ -24,8 +24,6 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScaler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.metrics.Counter;
-import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -33,10 +31,7 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
@@ -54,9 +49,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
 
     private final Map<ResourceID, Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
             lastEvaluatedMetrics = new ConcurrentHashMap<>();
-    private final Map<ResourceID, Set<JobVertexID>> registeredMetrics = new ConcurrentHashMap<>();
-
-    final Map<ResourceID, Counter> errorCounters = new ConcurrentHashMap<>();
+    final Map<ResourceID, AutoscalerFlinkMetrics> flinkMetrics = new ConcurrentHashMap<>();
 
     public JobAutoScalerImpl(
             KubernetesClient kubernetesClient,
@@ -77,7 +70,9 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         metricsCollector.cleanup(cr);
         var resourceId = ResourceID.fromResource(cr);
         lastEvaluatedMetrics.remove(resourceId);
-        registeredMetrics.remove(resourceId);
+        // We are not removing the metrics registered with Flink (flinkMetrics)
+        // because Flink metrics can only be registered once! When the deployment
+        // comes back we would not be able to register and report metrics.
     }
 
     @Override
@@ -85,8 +80,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
 
         var conf = ctx.getObserveConfig();
         var resource = ctx.getResource();
-        var resouceId = ResourceID.fromResource(resource);
-        var autoscalerMetricGroup = ctx.getResourceMetricGroup().addGroup("AutoScaler");
+        var resourceId = ResourceID.fromResource(resource);
 
         try {
 
@@ -94,6 +88,9 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                 LOG.info("Job autoscaler is disabled");
                 return false;
             }
+
+            // Initialize metrics only if autoscaler is enabled
+            var flinkMetrics = getOrInitAutoscalerFlinkMetrics(ctx, resourceId);
 
             if (!resource.getStatus().getJobStatus().getState().equals(JobStatus.RUNNING.name())) {
                 LOG.info("Job autoscaler is waiting for RUNNING job state");
@@ -114,18 +111,21 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             LOG.debug("Evaluating scaling metrics for {}", collectedMetrics);
             var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
             LOG.debug("Scaling metrics evaluated: {}", evaluatedMetrics);
-            lastEvaluatedMetrics.put(resouceId, evaluatedMetrics);
-            registerResourceScalingMetrics(resource, autoscalerMetricGroup);
+            lastEvaluatedMetrics.put(resourceId, evaluatedMetrics);
+            flinkMetrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceId));
 
             var specAdjusted =
                     scalingExecutor.scaleResource(resource, autoScalerInfo, conf, evaluatedMetrics);
+            if (specAdjusted) {
+                flinkMetrics.numScalings.inc();
+            } else {
+                flinkMetrics.numBalanced.inc();
+            }
             autoScalerInfo.replaceInKubernetes(kubernetesClient);
             return specAdjusted;
         } catch (Throwable e) {
             LOG.error("Error while scaling resource", e);
-            errorCounters
-                    .computeIfAbsent(resouceId, _id -> autoscalerMetricGroup.counter("errors"))
-                    .inc();
+            getOrInitAutoscalerFlinkMetrics(ctx, resourceId).numErrors.inc();
             eventRecorder.triggerEvent(
                     resource,
                     EventRecorder.Type.Warning,
@@ -136,56 +136,12 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         }
     }
 
-    private void registerResourceScalingMetrics(
-            AbstractFlinkResource<?, ?> resource, MetricGroup scalerGroup) {
-        var resourceId = ResourceID.fromResource(resource);
-
-        lastEvaluatedMetrics
-                .get(resourceId)
-                .forEach(
-                        (jobVertexID, evaluated) -> {
-                            if (!registeredMetrics
-                                    .computeIfAbsent(resourceId, r -> new HashSet<>())
-                                    .add(jobVertexID)) {
-                                return;
-                            }
-                            LOG.info("Registering scaling metrics for job vertex {}", jobVertexID);
-                            var jobVertexMg =
-                                    scalerGroup.addGroup("jobVertexID", jobVertexID.toHexString());
-
-                            evaluated.forEach(
-                                    (sm, esm) -> {
-                                        var smGroup = jobVertexMg.addGroup(sm.name());
-
-                                        smGroup.gauge(
-                                                "Current",
-                                                () ->
-                                                        Optional.ofNullable(
-                                                                        lastEvaluatedMetrics.get(
-                                                                                resourceId))
-                                                                .map(m -> m.get(jobVertexID))
-                                                                .map(
-                                                                        metrics ->
-                                                                                metrics.get(sm)
-                                                                                        .getCurrent())
-                                                                .orElse(null));
-
-                                        if (sm.isCalculateAverage()) {
-                                            smGroup.gauge(
-                                                    "Average",
-                                                    () ->
-                                                            Optional.ofNullable(
-                                                                            lastEvaluatedMetrics
-                                                                                    .get(
-                                                                                            resourceId))
-                                                                    .map(m -> m.get(jobVertexID))
-                                                                    .map(
-                                                                            metrics ->
-                                                                                    metrics.get(sm)
-                                                                                            .getAverage())
-                                                                    .orElse(null));
-                                        }
-                                    });
-                        });
+    private AutoscalerFlinkMetrics getOrInitAutoscalerFlinkMetrics(
+            FlinkResourceContext<? extends AbstractFlinkResource<?, ?>> ctx, ResourceID resouceId) {
+        return this.flinkMetrics.computeIfAbsent(
+                resouceId,
+                id ->
+                        new AutoscalerFlinkMetrics(
+                                ctx.getResourceMetricGroup().addGroup("AutoScaler")));
     }
 }
