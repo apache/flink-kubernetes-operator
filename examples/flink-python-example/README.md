@@ -42,7 +42,7 @@ method of PythonDriver and parse arguments declared in the `args` field of the j
 
 Note, in `args` field, users must either specify `-py` option or `-pym` option. 
 Besides, order of elements in `args` field matters: due to current parsing process, Flink specific options(e.g -pyfs, -py) must be placed at first and 
-user-defined arguments should be placed in the end. Check the [doc](https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/cli/#submitting-pyflink-jobs) for more details about PyFlink arguments.
+user-defined arguments should be placed in the end. Check the [doc](https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/deployment/cli/#submitting-pyflink-jobs) for more details about PyFlink arguments.
 
 A working example would be:
 ```yaml
@@ -63,7 +63,7 @@ Dockerfile
 
 **Step 2**: Build docker image
 
-Check this [doc](https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/resource-providers/standalone/docker/#using-flink-python-on-docker) for more details about building Pyflink image. Note, Pyflink 1.15.3 is only supported on x86 arch.  
+Check this [doc](https://nightlies.apache.org/flink/flink-docs-release-1.16/docs/deployment/resource-providers/standalone/docker/#using-flink-python-on-docker) for more details about building Pyflink image. Note, Pyflink 1.15.3 is only supported on x86 arch.  
 ```bash
 # Uncomment when building for local minikube env:
 # eval $(minikube docker-env)
