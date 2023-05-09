@@ -387,10 +387,10 @@ public class MetricsCollectionAndEvaluationTest {
                 5000.,
                 evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getCurrent());
         assertEquals(
-                833.,
+                1667.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD).getCurrent());
         assertEquals(
-                625.,
+                500.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
 
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
