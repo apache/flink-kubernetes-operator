@@ -100,12 +100,19 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
 
                     // Trigger rollback by delaying the recovery
+                    if (upgradeMode == UpgradeMode.SAVEPOINT) {
+                        flinkService.setHaDataAvailable(false);
+                    }
                     offsetReconcilerClock(dep, Duration.ofSeconds(15));
                     testController.reconcile(dep, context);
                 },
                 () -> {
                     assertEquals("RUNNING", dep.getStatus().getJobStatus().getState());
-                    assertEquals(1, flinkService.listJobs().size());
+                    var jobs = flinkService.listJobs();
+                    assertEquals(1, jobs.size());
+                    if (upgradeMode == UpgradeMode.SAVEPOINT) {
+                        assertEquals("savepoint_0", jobs.get(0).f0);
+                    }
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
                 },

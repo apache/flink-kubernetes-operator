@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
@@ -338,6 +339,10 @@ public abstract class AbstractFlinkService implements FlinkService {
                     } else if (ReconciliationUtils.isJobInTerminalState(deploymentStatus)) {
                         LOG.info(
                                 "Job is already in terminal state skipping cancel-with-savepoint operation.");
+                    } else if (deployment.getStatus().getReconciliationStatus().getState()
+                            == ReconciliationState.ROLLING_BACK) {
+                        LOG.info(
+                                "Job reconciliation status is in rolling back state. Job is expecting to not be in running or terminal state");
                     } else {
                         throw new RuntimeException(
                                 "Unexpected non-terminal status: " + deploymentStatus);

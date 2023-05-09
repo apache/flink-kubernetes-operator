@@ -270,17 +270,13 @@ public abstract class AbstractJobReconciler<
 
         UpgradeMode upgradeMode = resource.getSpec().getJob().getUpgradeMode();
 
-        cancelJob(
-                ctx,
-                upgradeMode == UpgradeMode.STATELESS
-                        ? UpgradeMode.STATELESS
-                        : UpgradeMode.LAST_STATE);
+        cancelJob(ctx, upgradeMode);
 
         restoreJob(
                 ctx,
                 rollbackSpec,
                 ctx.getDeployConfig(rollbackSpec),
-                upgradeMode != UpgradeMode.STATELESS);
+                upgradeMode == UpgradeMode.LAST_STATE);
 
         reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
     }

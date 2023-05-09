@@ -384,6 +384,12 @@ public abstract class AbstractFlinkResourceReconciler<
             return false;
         }
 
+        if (resource.getSpec().getJob() != null
+                && resource.getSpec().getJob().getUpgradeMode() == UpgradeMode.SAVEPOINT) {
+            // HA data is not available during rollback for savepoint upgrade mode
+            return true;
+        }
+
         var haDataAvailable = flinkService.isHaMetadataAvailable(configuration);
         if (!haDataAvailable) {
             LOG.warn("Rollback is not possible due to missing HA metadata");
