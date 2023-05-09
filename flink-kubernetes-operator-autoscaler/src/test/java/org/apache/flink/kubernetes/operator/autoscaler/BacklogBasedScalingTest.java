@@ -37,6 +37,7 @@ import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Getter;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeEach;
@@ -156,6 +157,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         autoscaler.scale(getResourceContext(app, ctx));
         assertEquals(
                 1, AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().size());
+        assertFlinkMetricsCount(0, 0, ctx);
 
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
@@ -166,6 +168,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(4, scaledParallelism.get(source1));
         assertEquals(4, scaledParallelism.get(sink));
+        assertFlinkMetricsCount(1, 0, ctx);
 
         /* Test stability while processing pending records. */
 
@@ -202,6 +205,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(2));
 
         autoscaler.scale(getResourceContext(app, ctx));
+        assertFlinkMetricsCount(1, 0, ctx);
         assertEquals(
                 1, AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().size());
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
@@ -232,6 +236,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
+        assertFlinkMetricsCount(1, 0, ctx);
         assertEquals(
                 2, AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().size());
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
@@ -263,6 +268,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
+        assertFlinkMetricsCount(2, 0, ctx);
         assertEquals(
                 3, AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().size());
 
@@ -300,6 +306,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         setClocksTo(now);
         app.getStatus().getJobStatus().setStartTime(String.valueOf(now.toEpochMilli()));
         autoscaler.scale(getResourceContext(app, ctx));
+        assertFlinkMetricsCount(2, 1, ctx);
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
@@ -326,6 +333,8 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
+        assertFlinkMetricsCount(2, 2, ctx);
+
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
@@ -352,6 +361,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
+        assertFlinkMetricsCount(2, 3, ctx);
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
@@ -414,5 +424,14 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                                 .collect(Collectors.toSet());
             }
         };
+    }
+
+    private void assertFlinkMetricsCount(
+            int scalingCount, int balancedCount, TestUtils.TestingContext<HasMetadata> ctx) {
+        AutoscalerFlinkMetrics autoscalerFlinkMetrics =
+                autoscaler.flinkMetrics.get(
+                        ResourceID.fromResource(getResourceContext(app, ctx).getResource()));
+        assertEquals(scalingCount, autoscalerFlinkMetrics.numScalings.getCount());
+        assertEquals(balancedCount, autoscalerFlinkMetrics.numBalanced.getCount());
     }
 }
