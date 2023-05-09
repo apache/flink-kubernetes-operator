@@ -102,7 +102,7 @@
             <td><h5>kubernetes.operator.job.autoscaler.target.utilization.boundary</h5></td>
             <td style="word-wrap: break-word;">0.4</td>
             <td>Double</td>
-            <td>Target vertex utilization boundary. Scaling won't be performed if utilization is within (target - boundary, target + boundary)</td>
+            <td>Target vertex utilization boundary. Scaling won't be performed if the current processing rate is within [target_rate / (target_utilization - boundary), (target_rate / (target_utilization + boundary)]</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.job.autoscaler.vertex.exclude.ids</h5></td>
