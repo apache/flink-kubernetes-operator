@@ -102,5 +102,5 @@ spec:
 
 {{< hint info >}}
 When using the operator with Flink native Kubernetes integration, please refer to [pod template field precedence](
-https://nightlies.apache.org/flink/flink-docs-release-1.15/docs/deployment/resource-providers/native_kubernetes/#fields-overwritten-by-flink).
+https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#fields-overwritten-by-flink).
 {{< /hint >}}

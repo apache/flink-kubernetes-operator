@@ -29,8 +29,8 @@ metadata:
               "name":"basic-example"
           },
           "spec":{
-              "image":"flink:1.15",
-              "flinkVersion":"v1_15",
+              "image":"flink:1.16",
+              "flinkVersion":"v1_16",
               "flinkConfiguration":{
                   "taskmanager.numberOfTaskSlots":"2"
               },
@@ -63,7 +63,7 @@ metadata:
           "spec":{
             "deploymentName":"basic-session-cluster",
             "job":{
-                "jarURI":"https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.15.0/flink-examples-streaming_2.12-1.15.0.jar",
+                "jarURI":"https://repo1.maven.org/maven2/org/apache/flink/flink-examples-streaming_2.12/1.16.1/flink-examples-streaming_2.12-1.16.1.jar",
                 "parallelism":2,
                 "upgradeMode":"stateless",
                 "entryClass":"org.apache.flink.streaming.examples.statemachine.StateMachineExample"
