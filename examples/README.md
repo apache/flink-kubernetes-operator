@@ -48,7 +48,7 @@ kubectl apply -f basic.yaml
 ### Checkpointing & High Availability
 
 Basic example to configure Flink Deployments in
-[HA mode](https://nightlies.apache.org/flink/flink-docs-flink-docs-master/docs/deployment/ha/overview/).
+[HA mode](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/overview/).
 The example shows how to set savepoint directory, checkpoint directory and HA. To try out this run the following command:
 ```bash
 kubectl apply -f basic-checkpoint-ha.yaml
