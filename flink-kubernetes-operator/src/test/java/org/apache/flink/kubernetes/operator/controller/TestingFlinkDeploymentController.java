@@ -67,6 +67,9 @@ public class TestingFlinkDeploymentController
     private EventCollector eventCollector = new EventCollector();
 
     private EventRecorder eventRecorder;
+
+    @Getter private TestingFlinkResourceContextFactory contextFactory;
+
     private StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
     @Getter private CanaryResourceManager<FlinkDeployment> canaryResourceManager;
 
@@ -74,7 +77,8 @@ public class TestingFlinkDeploymentController
             FlinkConfigManager configManager,
             KubernetesClient kubernetesClient,
             TestingFlinkService flinkService) {
-        var ctxFactory =
+
+        contextFactory =
                 new TestingFlinkResourceContextFactory(
                         kubernetesClient,
                         configManager,
@@ -96,7 +100,7 @@ public class TestingFlinkDeploymentController
                 new FlinkDeploymentController(
                         configManager,
                         ValidatorUtils.discoverValidators(configManager),
-                        ctxFactory,
+                        contextFactory,
                         reconcilerFactory,
                         new FlinkDeploymentObserverFactory(configManager, eventRecorder),
                         statusRecorder,

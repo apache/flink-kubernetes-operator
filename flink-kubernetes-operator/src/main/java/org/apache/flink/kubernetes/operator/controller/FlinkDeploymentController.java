@@ -113,6 +113,7 @@ public class FlinkDeploymentController
             // ignore during cleanup
         }
         statusRecorder.removeCachedStatus(flinkApp);
+        ctxFactory.cleanup(flinkApp);
         return reconcilerFactory.getOrCreate(flinkApp).cleanup(ctx);
     }
 
