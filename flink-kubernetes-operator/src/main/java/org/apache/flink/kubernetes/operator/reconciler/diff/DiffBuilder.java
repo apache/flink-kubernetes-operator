@@ -53,25 +53,6 @@ public class DiffBuilder<T> implements Builder<DiffResult<?>> {
         this.triviallyEqual = before == after || before.equals(after);
     }
 
-    public DiffBuilder<T> testTriviallyEqual(boolean testTriviallyEqual) {
-        this.triviallyEqual = this.triviallyEqual && testTriviallyEqual;
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName,
-            final boolean left,
-            final boolean right,
-            DiffType type) {
-        if (triviallyEqual) {
-            return this;
-        }
-        if (left != right) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
     public DiffBuilder<T> append(
             @NonNull final String fieldName,
             final boolean[] left,
@@ -81,17 +62,6 @@ public class DiffBuilder<T> implements Builder<DiffResult<?>> {
             return this;
         }
         if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName, final byte left, final byte right, DiffType type) {
-        if (triviallyEqual) {
-            return this;
-        }
-        if (left != right) {
             diffs.add(new Diff<>(fieldName, left, right, type));
         }
         return this;
@@ -110,36 +80,12 @@ public class DiffBuilder<T> implements Builder<DiffResult<?>> {
     }
 
     public DiffBuilder<T> append(
-            @NonNull final String fieldName, final char left, final char right, DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (left != right) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
             @NonNull final String fieldName, final char[] left, final char[] right, DiffType type) {
 
         if (triviallyEqual) {
             return this;
         }
         if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName, final double left, final double right, DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (Double.doubleToLongBits(left) != Double.doubleToLongBits(right)) {
             diffs.add(new Diff<>(fieldName, left, right, type));
         }
         return this;
@@ -161,18 +107,6 @@ public class DiffBuilder<T> implements Builder<DiffResult<?>> {
     }
 
     public DiffBuilder<T> append(
-            @NonNull final String fieldName, final float left, final float right, DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (Float.floatToIntBits(left) != Float.floatToIntBits(right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
             @NonNull final String fieldName,
             final float[] left,
             final float[] right,
@@ -182,18 +116,6 @@ public class DiffBuilder<T> implements Builder<DiffResult<?>> {
             return this;
         }
         if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName, final int left, final int right, DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (left != right) {
             diffs.add(new Diff<>(fieldName, left, right, type));
         }
         return this;
@@ -212,36 +134,12 @@ public class DiffBuilder<T> implements Builder<DiffResult<?>> {
     }
 
     public DiffBuilder<T> append(
-            @NonNull final String fieldName, final long left, final long right, DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (left != right) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
             @NonNull final String fieldName, final long[] left, final long[] right, DiffType type) {
 
         if (triviallyEqual) {
             return this;
         }
         if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName, final short left, final short right, DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (left != right) {
             diffs.add(new Diff<>(fieldName, left, right, type));
         }
         return this;
