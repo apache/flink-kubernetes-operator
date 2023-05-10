@@ -50,7 +50,7 @@ public class FlinkResourceContextFactory {
     private final KubernetesOperatorMetricGroup operatorMetricGroup;
     private final Map<KubernetesDeploymentMode, FlinkService> serviceMap;
 
-    private final Map<Tuple2<Class<?>, ResourceID>, KubernetesResourceMetricGroup>
+    protected final Map<Tuple2<Class<?>, ResourceID>, KubernetesResourceMetricGroup>
             resourceMetricGroups = new ConcurrentHashMap<>();
 
     public FlinkResourceContextFactory(
@@ -117,5 +117,16 @@ public class FlinkResourceContextFactory {
 
     private KubernetesDeploymentMode getDeploymentMode(FlinkDeployment deployment) {
         return KubernetesDeploymentMode.getDeploymentMode(deployment);
+    }
+
+    public <CR extends AbstractFlinkResource<?, ?>> void cleanup(CR flinkApp) {
+        var resourceMetricGroup =
+                resourceMetricGroups.remove(
+                        Tuple2.of(flinkApp.getClass(), ResourceID.fromResource(flinkApp)));
+        if (resourceMetricGroup != null) {
+            resourceMetricGroup.close();
+        } else {
+            LOG.warn("Unknown resource metric group for {}", flinkApp);
+        }
     }
 }

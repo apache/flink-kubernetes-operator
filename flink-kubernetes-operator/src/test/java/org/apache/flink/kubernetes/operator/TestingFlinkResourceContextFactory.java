@@ -17,13 +17,18 @@
 
 package org.apache.flink.kubernetes.operator;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
+import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
+
+import java.util.Map;
 
 /** Flink service factory mock for tests. */
 public class TestingFlinkResourceContextFactory extends FlinkResourceContextFactory {
@@ -41,5 +46,9 @@ public class TestingFlinkResourceContextFactory extends FlinkResourceContextFact
     @Override
     protected FlinkService getOrCreateFlinkService(FlinkDeployment deployment) {
         return flinkService;
+    }
+
+    public Map<Tuple2<Class<?>, ResourceID>, KubernetesResourceMetricGroup> getMetricGroups() {
+        return resourceMetricGroups;
     }
 }

@@ -70,9 +70,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         metricsCollector.cleanup(cr);
         var resourceId = ResourceID.fromResource(cr);
         lastEvaluatedMetrics.remove(resourceId);
-        // We are not removing the metrics registered with Flink (flinkMetrics)
-        // because Flink metrics can only be registered once! When the deployment
-        // comes back we would not be able to register and report metrics.
+        flinkMetrics.remove(resourceId);
     }
 
     @Override

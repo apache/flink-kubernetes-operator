@@ -991,8 +991,15 @@ public class FlinkDeploymentControllerTest {
     @Test
     public void cleanUpNewDeployment() {
         FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        var resourceMetricGroup =
+                testController
+                        .getContextFactory()
+                        .getResourceContext(flinkDeployment, context)
+                        .getResourceMetricGroup();
         var deleteControl = testController.cleanup(flinkDeployment, context);
         assertNotNull(deleteControl);
+        assertTrue(resourceMetricGroup.isClosed());
+        assertTrue(testController.getContextFactory().getMetricGroups().isEmpty());
     }
 
     @Test
