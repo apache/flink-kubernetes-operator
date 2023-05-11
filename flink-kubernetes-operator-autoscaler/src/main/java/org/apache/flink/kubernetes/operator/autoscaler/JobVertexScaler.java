@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.SortedMap;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.MAX_SCALE_DOWN_FACTOR;
+import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.MAX_SCALE_UP_FACTOR;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SCALE_UP_GRACE_PERIOD;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.VERTEX_MAX_PARALLELISM;
@@ -93,6 +94,7 @@ public class JobVertexScaler {
         LOG.debug("Target processing capacity for {} is {}", vertex, targetCapacity);
         double scaleFactor = targetCapacity / averageTrueProcessingRate;
         double minScaleFactor = 1 - conf.get(MAX_SCALE_DOWN_FACTOR);
+        double maxScaleFactor = 1 + conf.get(MAX_SCALE_UP_FACTOR);
         if (scaleFactor < minScaleFactor) {
             LOG.debug(
                     "Computed scale factor of {} for {} is capped by maximum scale down factor to {}",
@@ -100,7 +102,18 @@ public class JobVertexScaler {
                     vertex,
                     minScaleFactor);
             scaleFactor = minScaleFactor;
+        } else if (scaleFactor > maxScaleFactor) {
+            LOG.debug(
+                    "Computed scale factor of {} for {} is capped by maximum scale up factor to {}",
+                    scaleFactor,
+                    vertex,
+                    maxScaleFactor);
+            scaleFactor = maxScaleFactor;
         }
+
+        // Cap target capacity according to the capped scale factor
+        double cappedTargetCapacity = averageTrueProcessingRate * scaleFactor;
+        LOG.debug("Capped target processing capacity for {} is {}", vertex, cappedTargetCapacity);
 
         int newParallelism =
                 scale(
@@ -124,7 +137,8 @@ public class JobVertexScaler {
 
         // We record our expectations for this scaling operation
         evaluatedMetrics.put(
-                ScalingMetric.EXPECTED_PROCESSING_RATE, EvaluatedScalingMetric.of(targetCapacity));
+                ScalingMetric.EXPECTED_PROCESSING_RATE,
+                EvaluatedScalingMetric.of(cappedTargetCapacity));
         return newParallelism;
     }
 

@@ -99,6 +99,13 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Max scale down factor. 1 means no limit on scale down, 0.6 means job can only be scaled down with 60% of the original parallelism.");
 
+    public static final ConfigOption<Double> MAX_SCALE_UP_FACTOR =
+            autoScalerConfig("scale-up.max-factor")
+                    .doubleType()
+                    .defaultValue((double) Integer.MAX_VALUE)
+                    .withDescription(
+                            "Max scale up factor. 2.0 means job can only be scaled up with 200% of the current parallelism.");
+
     public static final ConfigOption<Duration> CATCH_UP_DURATION =
             autoScalerConfig("catch-up.duration")
                     .durationType()

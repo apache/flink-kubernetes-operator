@@ -66,6 +66,7 @@ public class JobVertexScalerTest {
         vertexScaler = new JobVertexScaler(new EventRecorder(kubernetesClient, eventCollector));
         conf = new Configuration();
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
+        conf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, (double) Integer.MAX_VALUE);
         conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ZERO);
     }
 
@@ -125,6 +126,19 @@ public class JobVertexScalerTest {
                 4,
                 vertexScaler.computeScaleTargetParallelism(
                         flinkDep, conf, op, evaluated(10, 10, 100), Collections.emptySortedMap()));
+
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+        conf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.5);
+        assertEquals(
+                15,
+                vertexScaler.computeScaleTargetParallelism(
+                        flinkDep, conf, op, evaluated(10, 200, 10), Collections.emptySortedMap()));
+
+        conf.set(AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.6);
+        assertEquals(
+                16,
+                vertexScaler.computeScaleTargetParallelism(
+                        flinkDep, conf, op, evaluated(10, 200, 10), Collections.emptySortedMap()));
     }
 
     @Test
