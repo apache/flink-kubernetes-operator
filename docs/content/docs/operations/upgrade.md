@@ -114,7 +114,7 @@ Here is a reference example of upgrading a `basic-checkpoint-ha-example` deploym
     ```sh
     kubectl patch flinkdeployment/basic-checkpoint-ha-example --type=merge -p '{"spec": {"job": {"state": "suspended", "upgradeMode": "savepoint"}}}'
     ```
-    Verify `deploy/basic-checkpoint-ha-example` has terminated and `flinkdeployment/basic-checkpoint-ha-example` has the Last Savepoint Location similar to `file:/flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata`. This file will used to restore the job. See [stateful and stateless application upgrade]({{< ref "docs/custom-resource/job-management/#stateful-and-stateless-application-upgrades" >}})  for more detail.
+    Verify `deploy/basic-checkpoint-ha-example` has terminated and `flinkdeployment/basic-checkpoint-ha-example` has the Last Savepoint Location similar to `file:/flink-data/savepoints/savepoint-000000-aec3dd08e76d/_metadata`. This file will used to restore the job. See [stateful and stateless application upgrade]({{< ref "docs/custom-resource/job-management" >}})  for more detail.
 
 2. Delete the job:
    ```sh
