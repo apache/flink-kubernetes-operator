@@ -102,7 +102,7 @@ public class AutoScalerOptions {
     public static final ConfigOption<Double> MAX_SCALE_UP_FACTOR =
             autoScalerConfig("scale-up.max-factor")
                     .doubleType()
-                    .defaultValue((double) Integer.MAX_VALUE)
+                    .defaultValue(100000.)
                     .withDescription(
                             "Max scale up factor. 2.0 means job can only be scaled up with 200% of the current parallelism.");
 
@@ -130,7 +130,7 @@ public class AutoScalerOptions {
     public static final ConfigOption<Boolean> SCALING_EFFECTIVENESS_DETECTION_ENABLED =
             autoScalerConfig("scaling.effectiveness.detection.enabled")
                     .booleanType()
-                    .defaultValue(true)
+                    .defaultValue(false)
                     .withDescription(
                             "Whether to enable detection of ineffective scaling operations and allowing the autoscaler to block further scale ups.");
 
