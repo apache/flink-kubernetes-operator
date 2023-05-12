@@ -415,6 +415,7 @@ public class FlinkConfigBuilder {
                         ? KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE
                         : KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE;
 
+        Pod podTemplate;
         if (basicPod != null || appendPod != null) {
             Pod mergedPodTemplate =
                     mergePodTemplates(
@@ -422,11 +423,12 @@ public class FlinkConfigBuilder {
                             appendPod,
                             effectiveConfig.get(
                                     KubernetesOperatorConfigOptions.POD_TEMPLATE_MERGE_BY_NAME));
-            Pod newPodTemplate = applyResourceToPodTemplate(mergedPodTemplate, resource);
-            effectiveConfig.setString(podConfigOption, createTempFile(newPodTemplate));
+            podTemplate = applyResourceToPodTemplate(mergedPodTemplate, resource);
         } else {
-            Pod newPodTemplate = applyResourceToPodTemplate(null, resource);
-            effectiveConfig.setString(podConfigOption, createTempFile(newPodTemplate));
+            podTemplate = applyResourceToPodTemplate(null, resource);
+        }
+        if (podTemplate != null) {
+            effectiveConfig.setString(podConfigOption, createTempFile(podTemplate));
         }
     }
 
