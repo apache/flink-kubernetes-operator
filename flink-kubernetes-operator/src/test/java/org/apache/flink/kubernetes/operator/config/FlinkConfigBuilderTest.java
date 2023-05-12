@@ -37,6 +37,7 @@ import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
+import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
@@ -53,7 +54,7 @@ import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -82,8 +83,8 @@ public class FlinkConfigBuilderTest {
     private static FlinkDeployment flinkDeployment;
     private static final String CUSTOM_LOG_CONFIG = "rootLogger.level = INFO";
 
-    @BeforeAll
-    public static void prepareFlinkDeployment() {
+    @BeforeEach
+    public void prepareFlinkDeployment() {
         flinkDeployment = TestUtils.buildApplicationCluster();
         final Container container0 = new Container();
         container0.setName("container0");
@@ -222,6 +223,37 @@ public class FlinkConfigBuilderTest {
                         Pod.class);
         Assertions.assertEquals("container0", jmPod.getSpec().getContainers().get(0).getName());
         Assertions.assertEquals("container0", tmPod.getSpec().getContainers().get(0).getName());
+
+        flinkDeployment.getSpec().setPodTemplate(null);
+        flinkDeployment.getSpec().setTaskManager(null);
+        flinkDeployment.getSpec().setJobManager(null);
+        configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyCommonPodTemplate()
+                        .applyTaskManagerSpec()
+                        .applyJobManagerSpec()
+                        .build();
+        Assertions.assertFalse(
+                configuration.contains(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE));
+        Assertions.assertFalse(
+                configuration.contains(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE));
+        Assertions.assertFalse(
+                configuration.contains(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE));
+
+        flinkDeployment.getSpec().setTaskManager(new TaskManagerSpec());
+        flinkDeployment.getSpec().setJobManager(new JobManagerSpec());
+        configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyCommonPodTemplate()
+                        .applyTaskManagerSpec()
+                        .applyJobManagerSpec()
+                        .build();
+        Assertions.assertFalse(
+                configuration.contains(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE));
+        Assertions.assertFalse(
+                configuration.contains(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE));
+        Assertions.assertFalse(
+                configuration.contains(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE));
     }
 
     @Test
