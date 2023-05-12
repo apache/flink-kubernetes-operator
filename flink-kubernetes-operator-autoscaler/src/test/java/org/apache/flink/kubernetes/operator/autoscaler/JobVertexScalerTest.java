@@ -245,6 +245,7 @@ public class JobVertexScalerTest {
     @Test
     public void testIneffectiveScalingDetection() {
         var op = new JobVertexID();
+        conf.set(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED, true);
         conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
         conf.set(AutoScalerOptions.SCALE_UP_GRACE_PERIOD, Duration.ZERO);
 
@@ -312,6 +313,7 @@ public class JobVertexScalerTest {
     @Test
     public void testSendingIneffectiveScalingEvents() {
         var jobVertexID = new JobVertexID();
+        conf.set(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED, true);
         conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.0);
         conf.set(AutoScalerOptions.SCALE_UP_GRACE_PERIOD, Duration.ZERO);
 
