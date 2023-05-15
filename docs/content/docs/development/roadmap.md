@@ -31,6 +31,6 @@ It's not a comprehensive list and might be slightly outdated at any given time. 
 
 ## What’s Next?
 
-- Standalone deployment mode support [FLIP-225](https://cwiki.apache.org/confluence/display/FLINK/FLIP-225%3A+Implement+standalone+mode+support+in+the+kubernetes+operator)
-- Improved scaling and autoscaling support
 - Improved rollback mechanism and stability conditions
+- Autoscaler hardening and improvements
+- Support for in-place job rescaling with Flink 1.18

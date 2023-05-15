@@ -104,3 +104,33 @@ spec:
 When using the operator with Flink native Kubernetes integration, please refer to [pod template field precedence](
 https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/#fields-overwritten-by-flink).
 {{< /hint >}}
+
+## Array Merging Behaviour
+
+When layering pod templates (defining both a top level and jobmanager specific podtemplate for example) the corresponding yamls are merged together.
+
+The default behaviour of the pod template mechanism is to merge array arrays by merging the objects in the respective array positions.
+This requires that containers in the podTemplates are defined in the same order otherwise the results may be undefined.
+
+Default behaviour (merge by position):
+
+```
+arr1: [{name: a, p1: v1}, {name: b, p1: v1}]
+arr1: [{name: a, p2: v2}, {name: c, p2: v2}]
+
+merged: [{name: a, p1: v1, p2: v2}, {name: c, p1: v1, p2: v2}]
+```
+
+The operator supports an alternative array merging mechanism that can be enabled by the `kubernetes.operator.pod-template.merge-arrays-by-name` flag.
+When true, instead of the default positional merging, object array elements that have a `name` property defined will be merged by their name and the resulting array will be a union of the two input arrays.
+
+Merge by name:
+
+```
+arr1: [{name: a, p1: v1}, {name: b, p1: v1}]
+arr1: [{name: a, p2: v2}, {name: c, p2: v2}]
+
+merged: [{name: a, p1: v1, p2: v2}, {name: b, p1: v1}, {name: c, p2: v2}]
+```
+
+Merging by name can we be very convenient when merging container specs or when the base and override templates are not defined together.

@@ -87,7 +87,7 @@ Most deployments will define at least the following fields:
  - `image` : Docker used to run Flink job and task manager processes
  - `flinkVersion` : Flink version used in the image (`v1_13`, `v1_14`, `v1_15`, `v1_16` ...)
  - `serviceAccount` : Kubernetes service account used by the Flink pods
- - `taskManager, jobManager` : Job and Task manager pod resource specs (cpu, memory, etc.)
+ - `taskManager, jobManager` : Job and Task manager pod resource specs (cpu, memory, ephemeralStorage)
  - `flinkConfiguration` : Map of Flink configuration overrides such as HA and checkpointing configs
  - `job` : Job Spec for Application deployments
 
@@ -158,7 +158,7 @@ For standard Operator use running your own Flink Jobs Native mode is recommended
 
 Standalone cluster deployment simply uses Kubernetes as an orchestration platform that the Flink cluster is running on. Flink is unaware that it is running on Kubernetes and therefore all Kubernetes resources need to be managed externally, by the Kubernetes Operator.
 
-In Standalone mode the Flink cluster doesn't have access to the Kubernetes cluster so this can increase security. If unknown or external code is being ran on the Flink cluster then Standalone mode adds another layer of security. 
+In Standalone mode the Flink cluster doesn't have access to the Kubernetes cluster so this can increase security. If unknown or external code is being ran on the Flink cluster then Standalone mode adds another layer of security.
 
 The deployment mode can be set using the `mode` field in the deployment spec.
 
@@ -169,7 +169,7 @@ kind: FlinkDeployment
 spec:
   ...
   mode: standalone
-    
+
 
 ```
 
@@ -212,7 +212,7 @@ COPY flink-hadoop-fs-1.15-SNAPSHOT.jar $FLINK_PLUGINS_DIR/hadoop-fs/
 
 ### Limitations
 
-- The LastState UpgradeMode have not been supported.
+- Last-state upgradeMode is currently not supported for FlinkSessionJobs
 
 ## Further information
 
@@ -220,4 +220,3 @@ COPY flink-hadoop-fs-1.15-SNAPSHOT.jar $FLINK_PLUGINS_DIR/hadoop-fs/
  - [Deployment customization and pod templates]({{< ref "docs/custom-resource/pod-template" >}})
  - [Full Reference]({{< ref "docs/custom-resource/reference" >}})
  - [Examples](https://github.com/apache/flink-kubernetes-operator/tree/main/examples)
-
