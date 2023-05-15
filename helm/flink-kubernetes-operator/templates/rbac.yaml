@@ -59,6 +59,7 @@ rules:
     resources:
       - flinkdeployments
       - flinkdeployments/status
+      - flinkdeployments/finalizers
       - flinksessionjobs
       - flinksessionjobs/status
     verbs:
