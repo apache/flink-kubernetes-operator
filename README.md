@@ -17,6 +17,7 @@ Check our [quick-start](https://nightlies.apache.org/flink/flink-kubernetes-oper
  - Upgrade, suspend and delete deployments
  - Full logging and metrics integration
  - Flexible deployments and native integration with Kubernetes tooling
+ - Flink Job Autoscaler
 
 For the complete feature-set please refer to our [documentation](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/concepts/overview/).
 
