@@ -53,6 +53,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -376,14 +377,13 @@ public abstract class ScalingMetricCollector {
             // the first record. If this is a fresh topic or no new data has been read since
             // the last checkpoint, the pendingRecords metrics won't be available. Also, legacy
             // sources do not have this metric.
-            Optional<String> pendingRecordsMetric =
-                    FlinkMetric.PENDING_RECORDS.findAny(allMetricNames);
-            pendingRecordsMetric.ifPresentOrElse(
-                    m -> filteredMetrics.put(m, FlinkMetric.PENDING_RECORDS),
-                    () ->
-                            LOG.warn(
-                                    "pendingRecords metric for {} could not be found. Either a legacy source or an idle source. Assuming no pending records.",
-                                    jobVertexID));
+            List<String> pendingRecordsMetric = FlinkMetric.PENDING_RECORDS.findAll(allMetricNames);
+            if (pendingRecordsMetric.isEmpty()) {
+                LOG.warn(
+                        "pendingRecords metric for {} could not be found. Either a legacy source or an idle source. Assuming no pending records.",
+                        jobVertexID);
+            }
+            pendingRecordsMetric.forEach(m -> filteredMetrics.put(m, FlinkMetric.PENDING_RECORDS));
             FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC
                     .findAny(allMetricNames)
                     .ifPresent(

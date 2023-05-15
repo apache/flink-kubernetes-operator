@@ -60,6 +60,9 @@ import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetricsResponseBody;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsHeaders;
 import org.apache.flink.util.SerializedThrowable;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
@@ -75,6 +78,7 @@ import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -124,6 +128,9 @@ public class TestingFlinkService extends AbstractFlinkService {
             checkpointInfo;
 
     private Map<String, String> metricsValues = new HashMap<>();
+
+    @Setter
+    private Collection<AggregatedMetric> aggregatedMetricsResponse = Collections.emptyList();
 
     public TestingFlinkService() {
         super(null, new FlinkConfigManager(new Configuration()));
@@ -334,6 +341,8 @@ public class TestingFlinkService extends AbstractFlinkService {
                 (messageHeaders, messageParameters, requestBody) -> {
                     if (messageHeaders instanceof JobsOverviewHeaders) {
                         return CompletableFuture.completedFuture(getMultipleJobsDetails());
+                    } else if (messageHeaders instanceof AggregatedSubtaskMetricsHeaders) {
+                        return CompletableFuture.completedFuture(getSubtaskMetrics());
                     }
                     return CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
                 });
@@ -346,6 +355,10 @@ public class TestingFlinkService extends AbstractFlinkService {
                         .map(tuple -> tuple.f1)
                         .map(TestingFlinkService::toJobDetails)
                         .collect(Collectors.toList()));
+    }
+
+    private AggregatedMetricsResponseBody getSubtaskMetrics() {
+        return new AggregatedMetricsResponseBody(aggregatedMetricsResponse);
     }
 
     private static JobDetails toJobDetails(JobStatusMessage jobStatus) {
