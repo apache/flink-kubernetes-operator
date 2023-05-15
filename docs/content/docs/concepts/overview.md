@@ -36,7 +36,7 @@ Flink Kubernetes Operator aims to capture the responsibilities of a human operat
   - Stateful and stateless application upgrades
   - Triggering and managing savepoints
   - Handling errors, rolling-back broken upgrades
-- Multiple Flink version support: v1.13, v1.14, v1.15, v1.16
+- Multiple Flink version support: v1.13, v1.14, v1.15, v1.16, v1.17
 - [Deployment Modes]({{< ref "docs/custom-resource/overview#application-deployments" >}}):
   - Application cluster
   - Session cluster
@@ -52,6 +52,10 @@ Flink Kubernetes Operator aims to capture the responsibilities of a human operat
 - POD augmentation via [Pod Templates]({{< ref "docs/custom-resource/pod-template" >}})
   - Native Kubernetes POD definitions
   - Layering (Base/JobManager/TaskManager overrides)
+- [Job Autoscaler]({{< ref "docs/custom-resource/autoscaler" >}})
+  - Collect lag and utilization metrics
+  - Scale job vertices to the ideal parallelism
+  - Scale up and down as the load changes
 ### Operations
 - Operator [Metrics]({{< ref "docs/operations/metrics-logging#metrics" >}})
   - Utilizes the well-established [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics)
@@ -101,5 +105,5 @@ drwxr-xr-x 2 9999 9999 60 May 11 15:11 b6fb2a9c-d1cd-4e65-a9a1-e825c4b47543
 ```
 
 ### AuditUtils can log sensitive information present in the custom resources
-As reported in [FLINK-30306](https://issues.apache.org/jira/browse/FLINK-30306) when Flink custom resources change the operator logs the change, which could include sensitive information. We suggest ingesting secrets to Flink containers during runtime to mitigate this. 
+As reported in [FLINK-30306](https://issues.apache.org/jira/browse/FLINK-30306) when Flink custom resources change the operator logs the change, which could include sensitive information. We suggest ingesting secrets to Flink containers during runtime to mitigate this.
 Also note that anyone who has access to the custom resources already had access to the potentially sensitive information in question, but folks who only have access to the logs could also see them now. We are planning to introduce redaction rules to AuditUtils to improve this in a later release.
