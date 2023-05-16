@@ -68,7 +68,7 @@ The defaults might work reasonably well for many applications, but some tuning m
 When computing the scaled parallelism, the autoscaler always considers the max-parallelism settings for each job vertex to ensure that it doesn't introduce unnecessary data skew.
 The computed parallelism will always be a divisor of the max-parallelism number.
 
-To ensure flexible scaling it is therefore recommended to chose max-parallelism settings that have a [lot of divisors](https://en.wikipedia.org/wiki/Highly_composite_number) instead of relying on the Flink provided defaults.
+To ensure flexible scaling it is therefore recommended to choose max-parallelism settings that have a [lot of divisors](https://en.wikipedia.org/wiki/Highly_composite_number) instead of relying on the Flink provided defaults.
 You can then use the `pipeline.max-parallelism` to configure this for your pipeline.
 
 Some good numbers for max-parallelism are: 120, 180, 240, 360, 720 etc.
