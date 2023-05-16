@@ -58,6 +58,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /** Metric collector using flink rest api. */
@@ -192,28 +193,22 @@ public abstract class ScalingMetricCollector {
     private void updateKafkaSourceMaxParallelisms(
             RestClusterClient<String> restClient, JobID jobId, JobTopology topology)
             throws Exception {
+        var partitionRegex = Pattern.compile("^.*\\.partition\\.\\d+\\.currentOffset$");
         for (Map.Entry<JobVertexID, Set<JobVertexID>> entry : topology.getInputs().entrySet()) {
             if (entry.getValue().isEmpty()) {
                 var sourceVertex = entry.getKey();
-                queryAggregatedMetricNames(restClient, jobId, sourceVertex).stream()
-                        .map(AggregatedMetric::getId)
-                        .filter(s -> s.endsWith(".currentOffset"))
-                        .mapToInt(
-                                s -> {
-                                    // We extract the partition from the pattern:
-                                    // ...topic.[topic].partition.3.currentOffset
-                                    var split = s.split("\\.");
-                                    return Integer.parseInt(split[split.length - 2]);
-                                })
-                        .max()
-                        .ifPresent(
-                                p -> {
-                                    LOG.debug(
-                                            "Updating source {} max parallelism based on available partitions to {}",
-                                            sourceVertex,
-                                            p + 1);
-                                    topology.updateMaxParallelism(sourceVertex, p + 1);
-                                });
+                var numPartitions =
+                        queryAggregatedMetricNames(restClient, jobId, sourceVertex).stream()
+                                .map(AggregatedMetric::getId)
+                                .filter(partitionRegex.asMatchPredicate())
+                                .count();
+                if (numPartitions > 0) {
+                    LOG.debug(
+                            "Updating source {} max parallelism based on available partitions to {}",
+                            sourceVertex,
+                            numPartitions);
+                    topology.updateMaxParallelism(sourceVertex, (int) numPartitions);
+                }
             }
         }
     }

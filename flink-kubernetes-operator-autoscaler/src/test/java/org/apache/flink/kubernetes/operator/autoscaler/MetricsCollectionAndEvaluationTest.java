@@ -271,6 +271,10 @@ public class MetricsCollectionAndEvaluationTest {
                         source1,
                         List.of(
                                 new AggregatedMetric(
+                                        "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.0.anotherMetric"),
+                                new AggregatedMetric(
+                                        "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.anotherTopic.partition.0.currentOffset"),
+                                new AggregatedMetric(
                                         "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.0.currentOffset"),
                                 new AggregatedMetric(
                                         "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.1.currentOffset"),
@@ -280,7 +284,7 @@ public class MetricsCollectionAndEvaluationTest {
                                         "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.3.currentOffset"))));
 
         collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
-        assertEquals(4, collectedMetrics.getJobTopology().getMaxParallelisms().get(source1));
+        assertEquals(5, collectedMetrics.getJobTopology().getMaxParallelisms().get(source1));
         assertEquals(720, collectedMetrics.getJobTopology().getMaxParallelisms().get(source2));
     }
 
