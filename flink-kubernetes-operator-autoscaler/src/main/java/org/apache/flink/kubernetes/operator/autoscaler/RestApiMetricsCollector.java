@@ -53,7 +53,7 @@ public class RestApiMetricsCollector extends ScalingMetricCollector {
         return filteredVertexMetricNames.entrySet().stream()
                 .collect(
                         Collectors.toMap(
-                                e -> e.getKey(),
+                                Map.Entry::getKey,
                                 e ->
                                         queryAggregatedVertexMetrics(
                                                 flinkService, cr, conf, e.getKey(), e.getValue())));
@@ -94,7 +94,18 @@ public class RestApiMetricsCollector extends ScalingMetricCollector {
                             .get();
 
             return responseBody.getMetrics().stream()
-                    .collect(Collectors.toMap(m -> metrics.get(m.getId()), m -> m));
+                    .collect(
+                            Collectors.toMap(
+                                    m -> metrics.get(m.getId()),
+                                    m -> m,
+                                    (m1, m2) ->
+                                            new AggregatedMetric(
+                                                    m1.getId() + " merged with " + m2.getId(),
+                                                    Math.min(m1.getMin(), m2.getMin()),
+                                                    Math.max(m1.getMax(), m2.getMax()),
+                                                    // Average can't be computed
+                                                    Double.NaN,
+                                                    m1.getSum() + m2.getSum())));
         }
     }
 }

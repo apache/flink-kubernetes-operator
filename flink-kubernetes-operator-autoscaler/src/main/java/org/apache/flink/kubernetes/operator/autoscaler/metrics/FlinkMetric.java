@@ -20,8 +20,10 @@ package org.apache.flink.kubernetes.operator.autoscaler.metrics;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * Enum representing the collected Flink metrics for autoscaling. The actual metric names depend on
@@ -45,5 +47,12 @@ public enum FlinkMetric {
 
     public Optional<String> findAny(Collection<AggregatedMetric> metrics) {
         return metrics.stream().map(AggregatedMetric::getId).filter(predicate).findAny();
+    }
+
+    public List<String> findAll(Collection<AggregatedMetric> metrics) {
+        return metrics.stream()
+                .map(AggregatedMetric::getId)
+                .filter(predicate)
+                .collect(Collectors.toList());
     }
 }
