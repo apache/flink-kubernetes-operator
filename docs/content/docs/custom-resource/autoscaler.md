@@ -55,20 +55,20 @@ To disable scaling actions, set: `kubernetes.operator.job.autoscaler.scaling.ena
 
 Depending on your environment and job characteristics there are a few very important configurations that will affect how well the autoscaler works.
 
-Key configuration areas
- - Job and per operator max parallelism
+Key configuration areas:
+ - Job and per operator max-parallelism
  - Stabilization and metrics collection intervals
  - Target utilization and flexible boundaries
  - Target catch-up duration and restart time
 
 The defaults might work reasonably well for many applications, but some tuning may be required in this early stage of the autoscaler module.
 
-### Job and per operator max parallelism
+### Job and per operator max-parallelism
 
-When computing the scaled parallelism, the autoscaler always considers the max parallelism settings for each job vertex to ensure that it doesn't introduce unnecessary data skew.
-The computed parallelism will always be a divisor of the max_parallelism number.
+When computing the scaled parallelism, the autoscaler always considers the max-parallelism settings for each job vertex to ensure that it doesn't introduce unnecessary data skew.
+The computed parallelism will always be a divisor of the max-parallelism number.
 
-To ensure flexible scaling it is therefore recommended to chose max parallelism settings that have a [lot of divisors](https://en.wikipedia.org/wiki/Highly_composite_number) instead of relying on the Flink provided defaults.
+To ensure flexible scaling it is therefore recommended to chose max-parallelism settings that have a [lot of divisors](https://en.wikipedia.org/wiki/Highly_composite_number) instead of relying on the Flink provided defaults.
 You can then use the `pipeline.max-parallelism` to configure this for your pipeline.
 
 Some good numbers for max-parallelism are: 120, 180, 240, 360, 720 etc.
@@ -119,7 +119,6 @@ flinkConfiguration:
     kubernetes.operator.job.autoscaler.target.utilization.boundary: "0.2"
     kubernetes.operator.job.autoscaler.restart.time: 2m
     kubernetes.operator.job.autoscaler.catch-up.duration: 5m
-
     pipeline.max-parallelism: "720"
 ```
 
