@@ -62,6 +62,7 @@ rules:
       - flinkdeployments/finalizers
       - flinksessionjobs
       - flinksessionjobs/status
+      - flinksessionjobs/finalizers
     verbs:
       - "*"
   - apiGroups:
