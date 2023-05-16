@@ -66,11 +66,13 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -305,6 +307,27 @@ public class NativeFlinkServiceTest {
 
         objectMapper.readValue(flink14Response, CheckpointHistoryWrapper.class);
         objectMapper.readValue(flink15Response, CheckpointHistoryWrapper.class);
+    }
+
+    @Test
+    public void testGetInProgressCheckpointsFromResponseWithoutHistoryDetails()
+            throws JsonProcessingException {
+        ObjectMapper objectMapper = RestMapperUtils.getStrictObjectMapper();
+        String response =
+                "{\"counts\":{\"restored\":0,\"total\":2,\"in_progress\":0,\"completed\":2,\"failed\":0}}";
+        var checkpointHistoryWrapper =
+                objectMapper.readValue(response, CheckpointHistoryWrapper.class);
+        Optional<CheckpointHistoryWrapper.PendingCheckpointInfo> optionalPendingCheckpointInfo =
+                assertDoesNotThrow(checkpointHistoryWrapper::getInProgressCheckpoint);
+        assertTrue(optionalPendingCheckpointInfo.isEmpty());
+    }
+
+    @Test
+    public void testGetInProgressCheckpointsWithoutHistory() {
+        CheckpointHistoryWrapper checkpointHistoryWrapper = new CheckpointHistoryWrapper();
+        Optional<CheckpointHistoryWrapper.PendingCheckpointInfo> optionalPendingCheckpointInfo =
+                assertDoesNotThrow(checkpointHistoryWrapper::getInProgressCheckpoint);
+        assertTrue(optionalPendingCheckpointInfo.isEmpty());
     }
 
     @Test
