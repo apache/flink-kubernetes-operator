@@ -23,6 +23,8 @@ import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 
+import javax.annotation.Nullable;
+
 import java.time.Instant;
 import java.util.function.Consumer;
 
@@ -57,8 +59,13 @@ public class EventUtils {
             String reason,
             String message,
             EventRecorder.Component component,
-            Consumer<Event> eventListener) {
-        var eventName = generateEventName(target, type, reason, message, component);
+            Consumer<Event> eventListener,
+            @Nullable String messageKey) {
+
+        if (messageKey == null) {
+            messageKey = message;
+        }
+        var eventName = generateEventName(target, type, reason, messageKey, component);
 
         var existing =
                 client.v1()
