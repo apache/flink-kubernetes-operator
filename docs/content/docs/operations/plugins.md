@@ -107,7 +107,7 @@ Similar to custom validator implementations, resource listeners are loaded via t
 In order to enable your custom `FlinkResourceListener` you need to:
 
  1. Implement the interface
- 2. Add your listener class to `org.apache.flink.kubernetes.operator.listener.FlinkResourceListener` in `META-INF/services`
+ 2. Add your listener class to `org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener` in `META-INF/services`
  3. Package your JAR and add it to the plugins directory of your operator image (`/opt/flink/plugins`)
 
 

@@ -57,7 +57,7 @@ public class CheckpointHistoryWrapper implements ResponseBody {
     private ArrayNode history;
 
     public Optional<PendingCheckpointInfo> getInProgressCheckpoint() {
-        if (history.isEmpty()) {
+        if (history == null || history.isEmpty()) {
             return Optional.empty();
         }
 
