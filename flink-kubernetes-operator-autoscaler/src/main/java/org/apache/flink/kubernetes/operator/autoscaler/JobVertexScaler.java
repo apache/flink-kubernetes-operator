@@ -120,8 +120,8 @@ public class JobVertexScaler {
                         currentParallelism,
                         (int) evaluatedMetrics.get(MAX_PARALLELISM).getCurrent(),
                         scaleFactor,
-                        conf.getInteger(VERTEX_MIN_PARALLELISM),
-                        conf.getInteger(VERTEX_MAX_PARALLELISM));
+                        Math.min(currentParallelism, conf.getInteger(VERTEX_MIN_PARALLELISM)),
+                        Math.max(currentParallelism, conf.getInteger(VERTEX_MAX_PARALLELISM)));
 
         if (newParallelism == currentParallelism
                 || blockScalingBasedOnPastActions(
