@@ -83,7 +83,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         try {
 
             if (resource.getSpec().getJob() == null || !conf.getBoolean(AUTOSCALER_ENABLED)) {
-                LOG.info("Job autoscaler is disabled");
+                LOG.debug("Job autoscaler is disabled");
                 return false;
             }
 

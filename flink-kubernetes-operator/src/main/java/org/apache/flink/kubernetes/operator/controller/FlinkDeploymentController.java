@@ -125,7 +125,7 @@ public class FlinkDeploymentController
             return UpdateControl.noUpdate();
         }
 
-        LOG.info("Starting reconciliation");
+        LOG.debug("Starting reconciliation");
 
         statusRecorder.updateStatusFromCache(flinkApp);
         FlinkDeployment previousDeployment = ReconciliationUtils.clone(flinkApp);
@@ -156,7 +156,7 @@ public class FlinkDeploymentController
             throw new ReconciliationException(e);
         }
 
-        LOG.info("End of reconciliation");
+        LOG.debug("End of reconciliation");
         statusRecorder.patchAndCacheStatus(flinkApp);
         return ReconciliationUtils.toUpdateControl(
                 configManager.getOperatorConfiguration(), flinkApp, previousDeployment, true);

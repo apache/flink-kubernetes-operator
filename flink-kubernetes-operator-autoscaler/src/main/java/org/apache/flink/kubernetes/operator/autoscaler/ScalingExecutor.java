@@ -228,7 +228,7 @@ public class ScalingExecutor {
         evaluatedMetrics.forEach(
                 (v, metrics) -> {
                     if (excludeVertexIdList.contains(v.toHexString())) {
-                        LOG.info(
+                        LOG.debug(
                                 "Vertex {} is part of `vertex.exclude.ids` config, Ignoring it for scaling",
                                 v);
                     } else {

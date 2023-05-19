@@ -219,7 +219,7 @@ public class FlinkConfigManager {
 
     private Configuration generateConfig(Key key) {
         try {
-            LOG.info("Generating new config");
+            LOG.debug("Generating new config");
             return FlinkConfigBuilder.buildFrom(
                     key.namespace,
                     key.name,

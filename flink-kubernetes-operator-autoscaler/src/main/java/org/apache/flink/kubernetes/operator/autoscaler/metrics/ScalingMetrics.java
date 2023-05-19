@@ -72,7 +72,7 @@ public class ScalingMetrics {
 
         if (isSource) {
             double sourceDataRate = Math.max(0, numRecordsInPerSecond + lagGrowthRate);
-            LOG.info("Using computed source data rate {} for {}", sourceDataRate, jobVertexID);
+            LOG.debug("Using computed source data rate {} for {}", sourceDataRate, jobVertexID);
             scalingMetrics.put(ScalingMetric.SOURCE_DATA_RATE, sourceDataRate);
             scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
         }
@@ -82,7 +82,7 @@ public class ScalingMetrics {
             scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, trueProcessingRate);
             scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
         } else {
-            LOG.error("Cannot compute true processing rate without numRecordsInPerSecond");
+            LOG.warn("Cannot compute true processing rate without numRecordsInPerSecond");
             scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, Double.NaN);
             scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, Double.NaN);
         }
@@ -140,7 +140,7 @@ public class ScalingMetrics {
         var busyTimeMsPerSecond =
                 busyTimeAggregator.get(flinkMetrics.get(FlinkMetric.BUSY_TIME_PER_SEC));
         if (!Double.isFinite(busyTimeMsPerSecond)) {
-            LOG.error(
+            LOG.warn(
                     "No busyTimeMsPerSecond metric available for {}. No scaling will be performed for this vertex.",
                     jobVertexId);
             excludeVertexFromScaling(conf, jobVertexId);
