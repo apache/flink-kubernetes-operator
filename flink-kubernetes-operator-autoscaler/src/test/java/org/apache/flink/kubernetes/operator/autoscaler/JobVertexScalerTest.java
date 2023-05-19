@@ -187,6 +187,16 @@ public class JobVertexScalerTest {
                         new JobVertexID(),
                         evaluated(10, 100, 500),
                         Collections.emptySortedMap()));
+
+        // Make sure we respect current parallelism in case it's lower
+        assertEquals(
+                4,
+                vertexScaler.computeScaleTargetParallelism(
+                        flinkDep,
+                        conf,
+                        new JobVertexID(),
+                        evaluated(4, 100, 500),
+                        Collections.emptySortedMap()));
     }
 
     @Test
@@ -200,6 +210,16 @@ public class JobVertexScalerTest {
                         conf,
                         new JobVertexID(),
                         evaluated(10, 500, 100),
+                        Collections.emptySortedMap()));
+
+        // Make sure we respect current parallelism in case it's higher
+        assertEquals(
+                12,
+                vertexScaler.computeScaleTargetParallelism(
+                        flinkDep,
+                        conf,
+                        new JobVertexID(),
+                        evaluated(12, 500, 100),
                         Collections.emptySortedMap()));
     }
 
