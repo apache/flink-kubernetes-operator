@@ -63,7 +63,8 @@ public class EventUtilsTest {
                         reason,
                         message,
                         EventRecorder.Component.Operator,
-                        consumer));
+                        consumer,
+                        null));
         var event =
                 kubernetesClient
                         .v1()
@@ -85,7 +86,8 @@ public class EventUtilsTest {
                         reason,
                         message,
                         EventRecorder.Component.Operator,
-                        consumer));
+                        consumer,
+                        null));
         event =
                 kubernetesClient
                         .v1()
@@ -105,7 +107,71 @@ public class EventUtilsTest {
                         reason,
                         null,
                         EventRecorder.Component.Operator,
-                        consumer));
+                        consumer,
+                        null));
+    }
+
+    @Test
+    public void testCreateWithMessageKey() {
+        var consumer =
+                new Consumer<Event>() {
+                    @Override
+                    public void accept(Event event) {
+                        eventConsumed = event;
+                    }
+                };
+        var flinkApp = TestUtils.buildApplicationCluster();
+        var reason = "Cleanup";
+        var eventName =
+                EventUtils.generateEventName(
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        "mk",
+                        EventRecorder.Component.Operator);
+
+        Assertions.assertTrue(
+                EventUtils.createOrUpdateEvent(
+                        kubernetesClient,
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        "message1",
+                        EventRecorder.Component.Operator,
+                        consumer,
+                        "mk"));
+        var event =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(flinkApp.getMetadata().getNamespace())
+                        .withName(eventName)
+                        .get();
+        Assertions.assertNotNull(event);
+        Assertions.assertEquals("message1", event.getMessage());
+        Assertions.assertEquals(1, event.getCount());
+
+        Assertions.assertFalse(
+                EventUtils.createOrUpdateEvent(
+                        kubernetesClient,
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        "message2",
+                        EventRecorder.Component.Operator,
+                        consumer,
+                        "mk"));
+
+        event =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(flinkApp.getMetadata().getNamespace())
+                        .withName(eventName)
+                        .get();
+        Assertions.assertNotNull(event);
+        Assertions.assertEquals("message2", event.getMessage());
+        Assertions.assertEquals(2, event.getCount());
     }
 
     @Test

@@ -242,6 +242,14 @@ public class ScalingExecutorTest {
                                         ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
                                         : SCALING_SUMMARY_HEADER_SCALING_DISABLED));
         assertEquals(EventRecorder.Reason.ScalingReport.name(), event.getReason());
+
+        metrics = Map.of(jobVertexID, evaluated(1, 110, 101));
+        assertEquals(
+                scalingEnabled,
+                scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        var event2 = eventCollector.events.poll();
+        assertEquals(event.getMetadata().getUid(), event2.getMetadata().getUid());
+        assertEquals(2, event2.getCount());
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(

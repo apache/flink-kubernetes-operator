@@ -26,6 +26,8 @@ import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
 
+import javax.annotation.Nullable;
+
 import java.util.Collection;
 import java.util.function.BiConsumer;
 
@@ -47,7 +49,35 @@ public class EventRecorder {
             Reason reason,
             Component component,
             String message) {
-        return triggerEvent(resource, type, reason.toString(), message, component);
+        return triggerEvent(resource, type, reason, component, message, null);
+    }
+
+    public boolean triggerEvent(
+            AbstractFlinkResource<?, ?> resource,
+            Type type,
+            Reason reason,
+            Component component,
+            String message,
+            @Nullable String messageKey) {
+        return triggerEvent(resource, type, reason.toString(), message, component, messageKey);
+    }
+
+    public boolean triggerEvent(
+            AbstractFlinkResource<?, ?> resource,
+            Type type,
+            String reason,
+            String message,
+            Component component,
+            String messageKey) {
+        return EventUtils.createOrUpdateEvent(
+                client,
+                resource,
+                type,
+                reason,
+                message,
+                component,
+                e -> eventListener.accept(resource, e),
+                messageKey);
     }
 
     public boolean triggerEvent(
@@ -56,14 +86,7 @@ public class EventRecorder {
             String reason,
             String message,
             Component component) {
-        return EventUtils.createOrUpdateEvent(
-                client,
-                resource,
-                type,
-                reason,
-                message,
-                component,
-                e -> eventListener.accept(resource, e));
+        return triggerEvent(resource, type, reason, message, component, null);
     }
 
     public static EventRecorder create(

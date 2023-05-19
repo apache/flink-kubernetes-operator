@@ -119,7 +119,8 @@ public class ScalingExecutor {
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.ScalingReport,
                 EventRecorder.Component.Operator,
-                scalingReport);
+                scalingReport,
+                "ScalingExecutor");
 
         if (!scalingEnabled) {
             return false;
