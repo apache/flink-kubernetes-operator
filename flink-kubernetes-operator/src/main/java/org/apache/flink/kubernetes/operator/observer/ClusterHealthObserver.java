@@ -49,7 +49,7 @@ public class ClusterHealthObserver {
     public void observe(FlinkResourceContext<FlinkDeployment> ctx) {
         var flinkApp = ctx.getResource();
         try {
-            LOG.info("Observing cluster health");
+            LOG.debug("Observing cluster health");
             var deploymentStatus = flinkApp.getStatus();
             var jobStatus = deploymentStatus.getJobStatus();
             var jobId = jobStatus.getJobId();

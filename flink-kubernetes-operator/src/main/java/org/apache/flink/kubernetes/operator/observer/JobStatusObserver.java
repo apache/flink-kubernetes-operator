@@ -60,7 +60,7 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     public boolean observe(FlinkResourceContext<R> ctx) {
         var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
-        LOG.info("Observing job status");
+        LOG.debug("Observing job status");
         var previousJobStatus = jobStatus.getState();
 
         List<JobStatusMessage> clusterJobStatuses;
@@ -168,7 +168,7 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
         if (jobStatus.getJobId().equals(previousJobId)
                 && jobStatus.getState().equals(previousJobStatus)) {
-            LOG.info("Job status ({}) unchanged", previousJobStatus);
+            LOG.debug("Job status ({}) unchanged", previousJobStatus);
         } else {
             jobStatus.setUpdateTime(String.valueOf(System.currentTimeMillis()));
             var message =
@@ -177,7 +177,6 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                             : String.format(
                                     "Job status changed from %s to %s",
                                     previousJobStatus, jobStatus.getState());
-            LOG.info(message);
 
             setErrorIfPresent(ctx, clusterJobStatus);
             eventRecorder.triggerEvent(
