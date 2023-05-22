@@ -113,9 +113,22 @@ public abstract class AbstractJobReconciler<
                     EventRecorder.Reason.Suspended,
                     EventRecorder.Component.JobManagerDeployment,
                     MSG_SUSPENDED);
+
+            UpgradeMode upgradeMode = availableUpgradeMode.getUpgradeMode().get();
+
             // We must record the upgrade mode used to the status later
-            currentDeploySpec.getJob().setUpgradeMode(availableUpgradeMode.getUpgradeMode().get());
-            cancelJob(ctx, availableUpgradeMode.getUpgradeMode().get());
+            currentDeploySpec.getJob().setUpgradeMode(upgradeMode);
+
+            // We must use LAST_STATE mode when rolling back from
+            // SAVEPOINT. But we don't want to set upgrade mode to LAST_STATE
+            // as we will rely on SAVEPOINT restoreJob mechanism
+            if (upgradeMode == UpgradeMode.SAVEPOINT
+                    && status.getReconciliationStatus().getState()
+                            == ReconciliationState.ROLLING_BACK) {
+                upgradeMode = UpgradeMode.LAST_STATE;
+            }
+
+            cancelJob(ctx, upgradeMode);
             if (desiredJobState == JobState.RUNNING) {
                 ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
                         resource, deployConfig, clock);
@@ -259,30 +272,6 @@ public abstract class AbstractJobReconciler<
         }
 
         deploy(ctx, spec, deployConfig, savepointOpt, requireHaMetadata);
-    }
-
-    @Override
-    protected void rollback(FlinkResourceContext<CR> ctx) throws Exception {
-        var resource = ctx.getResource();
-        var reconciliationStatus = resource.getStatus().getReconciliationStatus();
-        var rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
-        rollbackSpec.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-
-        UpgradeMode upgradeMode = resource.getSpec().getJob().getUpgradeMode();
-
-        cancelJob(
-                ctx,
-                upgradeMode == UpgradeMode.STATELESS
-                        ? UpgradeMode.STATELESS
-                        : UpgradeMode.LAST_STATE);
-
-        restoreJob(
-                ctx,
-                rollbackSpec,
-                ctx.getDeployConfig(rollbackSpec),
-                upgradeMode != UpgradeMode.STATELESS);
-
-        reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
     }
 
     @Override

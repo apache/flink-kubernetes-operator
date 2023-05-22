@@ -189,6 +189,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | reconciliationTimestamp | long | Epoch timestamp of the last successful reconcile operation. |
 | lastReconciledSpec | java.lang.String | Last reconciled deployment spec. Used to decide whether further reconciliation steps are necessary. |
 | lastStableSpec | java.lang.String | Last stable deployment spec according to the specified stability condition. If a rollback strategy is defined this will be the target to roll back to. |
+| lastRollbackSpec | java.lang.String | Last rollback deployment spec. Used to decide whether further reconciliation steps are necessary. If a rollback happens this will be the spec used to know if there was some update in the current spec |
 | state | org.apache.flink.kubernetes.operator.api.status.ReconciliationState | Deployment state of the last reconciled spec. |
 
 ### FlinkDeploymentStatus
@@ -216,6 +217,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | reconciliationTimestamp | long | Epoch timestamp of the last successful reconcile operation. |
 | lastReconciledSpec | java.lang.String | Last reconciled deployment spec. Used to decide whether further reconciliation steps are necessary. |
 | lastStableSpec | java.lang.String | Last stable deployment spec according to the specified stability condition. If a rollback strategy is defined this will be the target to roll back to. |
+| lastRollbackSpec | java.lang.String | Last rollback deployment spec. Used to decide whether further reconciliation steps are necessary. If a rollback happens this will be the spec used to know if there was some update in the current spec |
 | state | org.apache.flink.kubernetes.operator.api.status.ReconciliationState | Deployment state of the last reconciled spec. |
 
 ### FlinkSessionJobStatus

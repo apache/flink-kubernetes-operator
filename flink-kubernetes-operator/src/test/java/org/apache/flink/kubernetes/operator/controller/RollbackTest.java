@@ -109,7 +109,8 @@ public class RollbackTest {
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
                 },
-                true);
+                true,
+                UpgradeMode.LAST_STATE);
     }
 
     @Test
@@ -161,7 +162,8 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
                     flinkService.setPortReady(true);
                 },
-                false);
+                false,
+                UpgradeMode.LAST_STATE);
     }
 
     @Test
@@ -214,7 +216,8 @@ public class RollbackTest {
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
                 },
-                true);
+                true,
+                UpgradeMode.STATELESS);
     }
 
     @Test
@@ -236,14 +239,16 @@ public class RollbackTest {
                             dep.getStatus().getJobManagerDeploymentStatus());
                     dep.getSpec().setRestartNonce(10L);
                 },
-                false);
+                false,
+                null);
     }
 
     public void testRollback(
             FlinkDeployment deployment,
             ThrowingRunnable<Exception> triggerRollback,
             ThrowingRunnable<Exception> validateAndRecover,
-            boolean injectValidationError)
+            boolean injectValidationError,
+            UpgradeMode expectedUpgradeMode)
             throws Exception {
 
         var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
@@ -277,9 +282,11 @@ public class RollbackTest {
         }
 
         testController.reconcile(deployment, context);
+        testController.reconcile(deployment, context);
         assertEquals(
                 ReconciliationState.ROLLED_BACK,
                 deployment.getStatus().getReconciliationStatus().getState());
+
         deployment.getSpec().setLogConfiguration(null);
 
         testController.reconcile(deployment, context);
@@ -306,21 +313,28 @@ public class RollbackTest {
 
         deployment.getSpec().setRestartNonce(456L);
         triggerRollback.run();
+
+        testController.reconcile(deployment, context);
         testController.reconcile(deployment, context);
         assertEquals(
                 ReconciliationState.ROLLED_BACK,
                 deployment.getStatus().getReconciliationStatus().getState());
-        assertNotEquals(
-                deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec(),
-                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
+        var lastStable =
+                deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec();
+        var lastReconcile =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        if (lastStable.getJob() != null) {
+            lastStable.getJob().setUpgradeMode(expectedUpgradeMode);
+        }
+        assertEquals(lastStable, lastReconcile);
 
-        deployment.setSpec(
-                deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec());
+        deployment.getSpec().getFlinkConfiguration().put("random2", "config");
+        testController.reconcile(deployment, context);
         testController.reconcile(deployment, context);
         assertEquals(
                 ReconciliationState.DEPLOYED,
                 deployment.getStatus().getReconciliationStatus().getState());
-        assertEquals(
+        assertNotEquals(
                 deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec(),
                 deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
 
@@ -351,6 +365,7 @@ public class RollbackTest {
 
             // Verify suspending a rolled back job
             triggerRollback.run();
+            testController.reconcile(deployment, context);
             testController.reconcile(deployment, context);
             assertEquals(
                     ReconciliationState.ROLLED_BACK,

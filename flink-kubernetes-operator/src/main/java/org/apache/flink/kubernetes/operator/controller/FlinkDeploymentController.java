@@ -21,6 +21,7 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -139,6 +140,12 @@ public class FlinkDeploymentController
                         flinkApp,
                         previousDeployment,
                         false);
+            }
+            // Rely on the last stable spec if under a roll back
+            if (flinkApp.getStatus().getReconciliationStatus().getState()
+                    == ReconciliationState.ROLLING_BACK) {
+                flinkApp.setSpec(
+                        flinkApp.getStatus().getReconciliationStatus().deserializeLastStableSpec());
             }
             statusRecorder.patchAndCacheStatus(flinkApp);
             reconcilerFactory.getOrCreate(flinkApp).reconcile(ctx);
