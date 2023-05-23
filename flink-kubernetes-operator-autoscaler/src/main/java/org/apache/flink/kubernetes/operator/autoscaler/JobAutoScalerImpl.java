@@ -101,16 +101,17 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                     metricsCollector.updateMetrics(
                             resource, autoScalerInfo, ctx.getFlinkService(), conf);
 
-            if (collectedMetrics.getMetricHistory().isEmpty()) {
-                autoScalerInfo.replaceInKubernetes(kubernetesClient);
-                return false;
-            }
-
             LOG.debug("Evaluating scaling metrics for {}", collectedMetrics);
             var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
             LOG.debug("Scaling metrics evaluated: {}", evaluatedMetrics);
             lastEvaluatedMetrics.put(resourceId, evaluatedMetrics);
             flinkMetrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceId));
+
+            if (!collectedMetrics.isFullyCollected()) {
+                // We have done an upfront evaluation, but we are not ready for scaling.
+                autoScalerInfo.replaceInKubernetes(kubernetesClient);
+                return false;
+            }
 
             var specAdjusted =
                     scalingExecutor.scaleResource(resource, autoScalerInfo, conf, evaluatedMetrics);

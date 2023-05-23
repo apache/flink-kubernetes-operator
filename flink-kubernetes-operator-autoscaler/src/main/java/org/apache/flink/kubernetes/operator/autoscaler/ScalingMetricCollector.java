@@ -128,17 +128,16 @@ public abstract class ScalingMetricCollector {
         metricHistory.put(now, scalingMetrics);
         autoscalerInfo.updateMetricHistory(metricHistory);
 
+        var collectedMetrics = new CollectedMetricHistory(topology, metricHistory);
+
         var windowFullTime = metricCollectionStartTs.plus(metricWindowSize);
-        if (now.isBefore(windowFullTime)) {
-            // As long as we haven't had time to collect a full window,
-            // collect metrics but do not return any metrics
-            LOG.info(
-                    "Waiting until {} so the initial metric window is full before starting scaling",
-                    windowFullTime);
-            return new CollectedMetricHistory(topology, Collections.emptySortedMap());
+        collectedMetrics.setFullyCollected(!now.isBefore(windowFullTime));
+
+        if (!collectedMetrics.isFullyCollected()) {
+            LOG.info("Metric window not full until {}", windowFullTime);
         }
 
-        return new CollectedMetricHistory(topology, metricHistory);
+        return collectedMetrics;
     }
 
     protected Duration getMetricWindowSize(Configuration conf) {
