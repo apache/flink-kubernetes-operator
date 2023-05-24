@@ -19,14 +19,16 @@ package org.apache.flink.kubernetes.operator.autoscaler.metrics;
 
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 
-import lombok.Value;
+import lombok.Data;
+import lombok.Setter;
 
 import java.time.Instant;
 import java.util.SortedMap;
 
 /** Topology and collected metric history. */
-@Value
+@Data
 public class CollectedMetricHistory {
-    JobTopology jobTopology;
-    SortedMap<Instant, CollectedMetrics> metricHistory;
+    final JobTopology jobTopology;
+    final SortedMap<Instant, CollectedMetrics> metricHistory;
+    @Setter private boolean fullyCollected;
 }

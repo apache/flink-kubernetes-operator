@@ -146,14 +146,16 @@ public class MetricsCollectionAndEvaluationTest {
         clock = Clock.offset(clock, conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
         metricsCollector.setClock(clock);
         collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
-        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+        assertEquals(1, collectedMetrics.getMetricHistory().size());
+        assertFalse(collectedMetrics.isFullyCollected());
 
         // We haven't collected a full window yet
         // => no metrics should be reported but metrics should still get collected.
         clock = Clock.offset(clock, Duration.ofSeconds(1));
         metricsCollector.setClock(clock);
         collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
-        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+        assertEquals(2, collectedMetrics.getMetricHistory().size());
+        assertFalse(collectedMetrics.isFullyCollected());
 
         // Advance time to stabilization period + full window => metrics should be present
         clock =
@@ -165,6 +167,7 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.setClock(clock);
         collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
         assertEquals(3, collectedMetrics.getMetricHistory().size());
+        assertTrue(collectedMetrics.isFullyCollected());
 
         // Test resetting the collector and make sure we can deserialize the scalingInfo correctly
         metricsCollector = new TestingMetricsCollector(topology);
@@ -172,6 +175,7 @@ public class MetricsCollectionAndEvaluationTest {
         setDefaultMetrics(metricsCollector);
         collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
         assertEquals(3, collectedMetrics.getMetricHistory().size());
+        assertTrue(collectedMetrics.isFullyCollected());
 
         var evaluation = evaluator.evaluate(conf, collectedMetrics);
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
@@ -318,17 +322,20 @@ public class MetricsCollectionAndEvaluationTest {
         // This call will lead to metric collection but we haven't reached the window size yet
         // which will hold back metrics
         metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
-        assertEquals(0, metricsHistory.getMetricHistory().size());
+        assertEquals(1, metricsHistory.getMetricHistory().size());
+        assertFalse(metricsHistory.isFullyCollected());
 
         // Collect more values in window
         metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(1)));
         metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
-        assertEquals(0, metricsHistory.getMetricHistory().size());
+        assertEquals(2, metricsHistory.getMetricHistory().size());
+        assertFalse(metricsHistory.isFullyCollected());
 
         // Window size reached
         metricsCollector.setClock(Clock.offset(clock, conf.get(AutoScalerOptions.METRICS_WINDOW)));
         metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
         assertEquals(3, metricsHistory.getMetricHistory().size());
+        assertTrue(metricsHistory.isFullyCollected());
 
         // Window size + 1 will invalidate the first metric
         metricsCollector.setClock(
@@ -447,12 +454,14 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.setClock(clock);
 
         var collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
-        assertTrue(collectedMetrics.getMetricHistory().isEmpty());
+        assertEquals(1, collectedMetrics.getMetricHistory().size());
+        assertFalse(collectedMetrics.isFullyCollected());
 
         metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(2)));
 
         collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
-        assertFalse(collectedMetrics.getMetricHistory().isEmpty());
+        assertEquals(2, collectedMetrics.getMetricHistory().size());
+        assertTrue(collectedMetrics.isFullyCollected());
 
         return collectedMetrics;
     }
