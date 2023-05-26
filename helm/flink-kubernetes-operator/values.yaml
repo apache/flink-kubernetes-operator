@@ -183,3 +183,7 @@ operatorHealth:
   startupProbe:
     failureThreshold: 30
     periodSeconds: 10
+
+# Set exec command for the postStart hook of the main container
+postStart:
+  execCommand: []

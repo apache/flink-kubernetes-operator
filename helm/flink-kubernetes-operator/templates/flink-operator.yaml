@@ -140,6 +140,13 @@ spec:
               path: /
               port: health-port
           {{- end }}
+          {{- if .Values.postStart.execCommand }}
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  {{- toYaml .Values.postStart.execCommand | nindent 18 }}
+          {{- end }}
         {{- if eq (include "flink-operator.webhook-enabled" .) "true" }}
         - name: flink-webhook
           image: {{ include "flink-operator.imagePath" . }}
