@@ -121,10 +121,11 @@ spec:
           volumeMounts:
             - name: flink-operator-config-volume
               mountPath: /opt/flink/conf
-            - name: flink-artifacts-volume
-              mountPath: /opt/flink/artifacts
             {{- if .Values.operatorVolumeMounts.create }}
                 {{- toYaml .Values.operatorVolumeMounts.data | nindent 12 }}
+            {{- else }}
+            - name: flink-artifacts-volume
+              mountPath: /opt/flink/artifacts
             {{- end }}
           {{- if and (index .Values "operatorHealth") (index .Values.operatorHealth "livenessProbe") }}
           livenessProbe:
@@ -208,6 +209,9 @@ spec:
                 path: log4j-console.properties
         {{- if .Values.operatorVolumes.create }}
               {{- toYaml .Values.operatorVolumes.data | nindent 8 }}
+        {{- else }}
+        - name: flink-artifacts-volume
+          emptyDir: {}            
         {{- end }}
         {{- if eq (include "flink-operator.webhook-enabled" .) "true" }}
         - name: keystore
@@ -217,8 +221,6 @@ spec:
             - key: keystore.p12
               path: keystore.p12
         {{- end }}
-        - name: flink-artifacts-volume
-          emptyDir: {}
 ---
 {{- if .Values.defaultConfiguration.create }}
 apiVersion: v1
