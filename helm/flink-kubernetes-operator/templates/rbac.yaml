@@ -71,17 +71,12 @@ rules:
       - ingresses
     verbs:
       - "*"
-{{/*
-watchNamespaces doesn't need this since the operator handles it
-*/}}
-{{- if not .Values.watchNamespaces }}
   - apiGroups:
       - coordination.k8s.io
     resources:
       - leases
     verbs:
       - "*"
-{{- end }}
 {{- end }}
 
 {{/*
@@ -179,7 +174,7 @@ subjects:
 {{/*
 Give operator the ability to operate on leases in the release namespace
 */}}
-{{- if .Values.rbac.operatorRole.create }}
+{{- if and .Values.rbac.operatorRole.create (not (has .Release.Namespace .Values.watchNamespaces)) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -196,7 +191,7 @@ rules:
       - "*"
 {{- end }}
 ---
-{{- if .Values.rbac.operatorRoleBinding.create }}
+{{- if and .Values.rbac.operatorRole.create (not (has .Release.Namespace .Values.watchNamespaces)) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
