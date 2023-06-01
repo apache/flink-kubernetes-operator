@@ -171,6 +171,43 @@ subjects:
 {{- end }}
 ---
 {{- end }}
+{{/*
+Give operator the ability to operate on leases in the release namespace
+*/}}
+{{- if and .Values.rbac.operatorRole.create (not (has .Release.Namespace .Values.watchNamespaces)) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "flink-operator.roleName" $ }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flink-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - "*"
+{{- end }}
+---
+{{- if and .Values.rbac.operatorRole.create (not (has .Release.Namespace .Values.watchNamespaces)) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "flink-operator.roleBindingName" $ }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "flink-operator.labels" $ | nindent 4 }}
+roleRef:
+  kind: Role
+  name: {{ include "flink-operator.roleName" $ }}
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "flink-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}
 {{ else }}
 {{/*
 Cluster scoped RBAC.
