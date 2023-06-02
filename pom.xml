@@ -92,7 +92,7 @@ under the License.
 
         <hamcrest.version>1.3</hamcrest.version>
 
-        <okhttp.version>4.10.0</okhttp.version>
+        <okhttp.version>4.11.0</okhttp.version>
         <curator-test.version>5.2.0</curator-test.version>
     </properties>
 
