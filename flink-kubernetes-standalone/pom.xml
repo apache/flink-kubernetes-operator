@@ -34,27 +34,16 @@ under the License.
     <packaging>jar</packaging>
 
     <dependencies>
-
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-kubernetes</artifactId>
             <version>${flink.version}</version>
         </dependency>
 
-        <!-- FLINK-29384, Since the transitive snakeyaml that we are filtering out from
-            flink-kubernetes was relocated we have to bundle a relocated new version -->
-        <dependency>
-            <groupId>org.yaml</groupId>
-            <artifactId>snakeyaml</artifactId>
-            <!-- Cannot upgrade to 2.0 due to flink incompatibility -->
-            <version>1.33</version>
-        </dependency>
-
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-clients</artifactId>
             <version>${flink.version}</version>
-            <scope>provided</scope>
         </dependency>
 
         <!-- Test -->
@@ -85,52 +74,4 @@ under the License.
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.3.0</version>
-                <executions>
-                    <execution>
-                        <id>shade-flink-operator</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <shadedArtifactAttached>true</shadedArtifactAttached>
-                            <shadedClassifierName>shaded</shadedClassifierName>
-                            <artifactSet>
-                                <includes combine.children="append">
-                                    <include>org.apache.flink:flink-kubernetes</include>
-                                    <include>org.yaml:snakeyaml</include>
-                                </includes>
-                            </artifactSet>
-                            <relocations>
-                                <!-- FLINK-29384, Since the transitive snakeyaml that we are filtering out from
-                                    flink-kubernetes was relocated we have to bundle a relocated new version -->
-                                <relocation>
-                                    <pattern>org.yaml.snakeyaml</pattern>
-                                    <shadedPattern>org.apache.flink.kubernetes.shaded.org.yaml.snakeyaml</shadedPattern>
-                                </relocation>
-                            </relocations>
-                            <filters>
-                                <filter>
-                                    <artifact>*:*</artifact>
-                                    <excludes>
-                                        <exclude>META-INF/DEPENDENCIES</exclude>
-                                        <exclude>META-INF/LICENSE</exclude>
-                                        <exclude>META-INF/MANIFEST.MF</exclude>
-                                        <exclude>org/apache/flink/kubernetes/shaded/org/yaml/snakeyaml/**</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 </project>
