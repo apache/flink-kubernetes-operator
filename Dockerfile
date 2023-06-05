@@ -29,7 +29,7 @@ RUN cd /app/tools/license; mkdir jars; cd jars; \
     cp /app/flink-kubernetes-operator/target/flink-kubernetes-operator-*-shaded.jar . && \
     cp /app/flink-kubernetes-operator-autoscaler/target/flink-kubernetes-operator-autoscaler-*.jar . && \
     cp /app/flink-kubernetes-webhook/target/flink-kubernetes-webhook-*-shaded.jar . && \
-    cp /app/flink-kubernetes-standalone/target/flink-kubernetes-standalone-*-shaded.jar . && \
+    cp /app/flink-kubernetes-standalone/target/flink-kubernetes-standalone-*.jar . && \
     cp -r /app/flink-kubernetes-operator/target/plugins ./plugins && \
     cd ../ && ./collect_license_files.sh ./jars ./licenses-output
 
@@ -41,7 +41,7 @@ ENV OPERATOR_VERSION=1.6-SNAPSHOT
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
 ENV AUTOSCALER_JAR=flink-kubernetes-operator-autoscaler-$OPERATOR_VERSION.jar
 ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION-shaded.jar
-ENV FLINK_KUBERNETES_SHADED_JAR=flink-kubernetes-standalone-$OPERATOR_VERSION-shaded.jar
+ENV KUBERNETES_STANDALONE_JAR=flink-kubernetes-standalone-$OPERATOR_VERSION.jar
 
 ENV OPERATOR_LIB=$FLINK_HOME/operator-lib
 RUN mkdir -p $OPERATOR_LIB
@@ -53,7 +53,7 @@ RUN groupadd --system --gid=9999 flink && \
 COPY --from=build /app/flink-kubernetes-operator/target/$OPERATOR_JAR .
 COPY --from=build /app/flink-kubernetes-operator-autoscaler/target/$AUTOSCALER_JAR .
 COPY --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR .
-COPY --from=build /app/flink-kubernetes-standalone/target/$FLINK_KUBERNETES_SHADED_JAR .
+COPY --from=build /app/flink-kubernetes-standalone/target/$KUBERNETES_STANDALONE_JAR .
 COPY --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
 COPY --from=build /app/tools/license/licenses-output/NOTICE .
 COPY --from=build /app/tools/license/licenses-output/licenses ./licenses
@@ -63,7 +63,7 @@ RUN chown -R flink:flink $FLINK_HOME && \
     chown flink:flink $OPERATOR_JAR && \
     chown flink:flink $AUTOSCALER_JAR && \
     chown flink:flink $WEBHOOK_JAR && \
-    chown flink:flink $FLINK_KUBERNETES_SHADED_JAR && \
+    chown flink:flink $KUBERNETES_STANDALONE_JAR && \
     chown flink:flink /docker-entrypoint.sh
 
 ARG SKIP_OS_UPDATE=true
