@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingClusterClient;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -48,6 +49,8 @@ import org.apache.flink.runtime.rest.messages.TriggerId;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 import org.apache.flink.runtime.rest.util.RestMapperUtils;
+import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
+import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
@@ -510,6 +513,57 @@ public class NativeFlinkServiceTest {
         flinkService.deleteClusterDeployment(
                 new ObjectMeta(), new FlinkDeploymentStatus(), configuration, true);
         assertEquals(DeletionPropagation.BACKGROUND, propagation.get(1));
+    }
+
+    @Test
+    public void testSendConfigOnRunJar() throws Exception {
+        var jarRuns = new ArrayList<JarRunRequestBody>();
+        var flinkService =
+                new NativeFlinkService(client, configManager) {
+                    @Override
+                    public ClusterClient<String> getClusterClient(Configuration conf)
+                            throws Exception {
+                        var client = new TestingClusterClient<String>(conf);
+                        client.setRequestProcessor(
+                                (h, p, b) -> {
+                                    jarRuns.add((JarRunRequestBody) b);
+                                    return CompletableFuture.completedFuture(null);
+                                });
+                        return client;
+                    }
+
+                    @Override
+                    protected JarUploadResponseBody uploadJar(
+                            ObjectMeta objectMeta, FlinkSessionJobSpec spec, Configuration conf) {
+                        return new JarUploadResponseBody("test");
+                    }
+
+                    @Override
+                    protected void deleteJar(Configuration conf, String jarId) {}
+                };
+
+        var session = TestUtils.buildSessionCluster();
+        session.getSpec().setFlinkVersion(FlinkVersion.v1_17);
+        session.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+
+        var job = TestUtils.buildSessionJob();
+        var deployConf = configManager.getSessionJobConfig(session, job.getSpec());
+        flinkService.submitJobToSessionCluster(job.getMetadata(), job.getSpec(), deployConf, null);
+
+        // Make sure that deploy conf was passed to jar run
+        assertEquals(deployConf.toMap(), jarRuns.get(0).getFlinkConfiguration().toMap());
+
+        session.getSpec().setFlinkVersion(FlinkVersion.v1_16);
+        session.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+
+        deployConf = configManager.getSessionJobConfig(session, job.getSpec());
+        flinkService.submitJobToSessionCluster(job.getMetadata(), job.getSpec(), deployConf, null);
+
+        assertTrue(jarRuns.get(1).getFlinkConfiguration().toMap().isEmpty());
     }
 
     class TestingNativeFlinkService extends NativeFlinkService {

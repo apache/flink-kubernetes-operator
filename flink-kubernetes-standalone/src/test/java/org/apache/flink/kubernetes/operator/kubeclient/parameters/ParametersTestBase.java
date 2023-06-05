@@ -22,16 +22,15 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.FlinkPod;
 import org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.Container;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.ContainerBuilder;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.ContainerPortBuilder;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.EnvVar;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.EnvVarBuilder;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.LocalObjectReference;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.PodBuilder;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.ResourceRequirements;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
-
-import io.fabric8.kubernetes.api.model.Container;
-import io.fabric8.kubernetes.api.model.ContainerBuilder;
-import io.fabric8.kubernetes.api.model.ContainerPortBuilder;
-import io.fabric8.kubernetes.api.model.EnvVar;
-import io.fabric8.kubernetes.api.model.EnvVarBuilder;
-import io.fabric8.kubernetes.api.model.LocalObjectReference;
-import io.fabric8.kubernetes.api.model.PodBuilder;
-import io.fabric8.kubernetes.api.model.ResourceRequirements;
 
 import java.util.ArrayList;
 import java.util.Arrays;

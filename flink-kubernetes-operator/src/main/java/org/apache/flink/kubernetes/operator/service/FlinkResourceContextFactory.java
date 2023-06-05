@@ -97,10 +97,10 @@ public class FlinkResourceContextFactory {
                 mode -> {
                     switch (mode) {
                         case NATIVE:
-                            LOG.info("Using NativeFlinkService");
+                            LOG.debug("Using NativeFlinkService");
                             return new NativeFlinkService(kubernetesClient, configManager);
                         case STANDALONE:
-                            LOG.info("Using StandaloneFlinkService");
+                            LOG.debug("Using StandaloneFlinkService");
                             return new StandaloneFlinkService(kubernetesClient, configManager);
                         default:
                             throw new UnsupportedOperationException(
@@ -111,7 +111,6 @@ public class FlinkResourceContextFactory {
 
     @VisibleForTesting
     protected FlinkService getOrCreateFlinkService(FlinkDeployment deployment) {
-        LOG.info("Getting service for {}", deployment.getMetadata().getName());
         return getOrCreateFlinkService(getDeploymentMode(deployment));
     }
 

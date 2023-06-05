@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: ["v1_16","v1_15","v1_14","v1_13"]
+        version: ["v1_17","v1_16","v1_15","v1_14","v1_13"]
         namespace: ["default","flink"]
         mode: ["native", "standalone"]
         test:
@@ -79,6 +79,8 @@ jobs:
         include:
           - namespace: flink
             extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
+          - version: v1_17
+            image: flink:1.17
           - version: v1_16
             image: flink:1.16
           - version: v1_15

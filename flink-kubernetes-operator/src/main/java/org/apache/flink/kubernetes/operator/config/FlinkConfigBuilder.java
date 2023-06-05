@@ -27,7 +27,6 @@ import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
-import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -118,7 +117,13 @@ public class FlinkConfigBuilder {
 
     protected FlinkConfigBuilder applyImage() {
         if (!StringUtils.isNullOrWhitespaceOnly(spec.getImage())) {
-            effectiveConfig.set(KubernetesConfigOptions.CONTAINER_IMAGE, spec.getImage());
+            String configKey;
+            if (spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_16)) {
+                configKey = KubernetesConfigOptions.CONTAINER_IMAGE.key();
+            } else {
+                configKey = "kubernetes.container.image";
+            }
+            effectiveConfig.setString(configKey, spec.getImage());
         }
         return this;
     }
@@ -187,9 +192,8 @@ public class FlinkConfigBuilder {
 
     protected FlinkConfigBuilder applyCommonPodTemplate() throws IOException {
         if (spec.getPodTemplate() != null) {
-            effectiveConfig.set(
-                    KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE,
-                    createTempFile(spec.getPodTemplate()));
+            effectiveConfig.setString(
+                    "kubernetes.pod-template-file", createTempFile(spec.getPodTemplate()));
         }
         return this;
     }
@@ -379,24 +383,41 @@ public class FlinkConfigBuilder {
         }
     }
 
-    private static void setResource(
-            Resource resource, Configuration effectiveConfig, boolean isJM) {
+    private void setResource(Resource resource, Configuration effectiveConfig, boolean isJM) {
         if (resource != null) {
-            final ConfigOption<MemorySize> memoryConfigOption =
+            var memoryConfigOption =
                     isJM
                             ? JobManagerOptions.TOTAL_PROCESS_MEMORY
                             : TaskManagerOptions.TOTAL_PROCESS_MEMORY;
-            final ConfigOption<Double> cpuConfigOption =
-                    isJM
-                            ? KubernetesConfigOptions.JOB_MANAGER_CPU
-                            : KubernetesConfigOptions.TASK_MANAGER_CPU;
             if (resource.getMemory() != null) {
                 effectiveConfig.setString(memoryConfigOption.key(), resource.getMemory());
             }
-            if (resource.getCpu() != null) {
-                effectiveConfig.setDouble(cpuConfigOption.key(), resource.getCpu());
+
+            configureCpu(resource, effectiveConfig, isJM);
+        }
+    }
+
+    private void configureCpu(Resource resource, Configuration conf, boolean isJM) {
+        if (resource.getCpu() == null) {
+            return;
+        }
+
+        boolean newConfKeys = spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_16);
+        String configKey;
+        if (isJM) {
+            if (newConfKeys) {
+                configKey = KubernetesConfigOptions.JOB_MANAGER_CPU.key();
+            } else {
+                configKey = "kubernetes.jobmanager.cpu";
+            }
+        } else {
+            if (newConfKeys) {
+                configKey = KubernetesConfigOptions.TASK_MANAGER_CPU.key();
+            } else {
+                configKey = "kubernetes.taskmanager.cpu";
             }
         }
+        conf.setDouble(configKey, resource.getCpu());
     }
 
     private static void setPodTemplate(

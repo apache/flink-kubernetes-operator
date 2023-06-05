@@ -61,7 +61,6 @@ under the License.
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>${junit.jupiter.version}</version>
             <scope>test</scope>
         </dependency>
 
@@ -76,6 +75,13 @@ under the License.
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-server-mock</artifactId>
             <version>${fabric8.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>${log4j.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -103,10 +109,6 @@ under the License.
                                 </includes>
                             </artifactSet>
                             <relocations>
-                                <relocation>
-                                    <pattern>io.fabric8</pattern>
-                                    <shadedPattern>org.apache.flink.kubernetes.shaded.io.fabric8</shadedPattern>
-                                </relocation>
                                 <!-- FLINK-29384, Since the transitive snakeyaml that we are filtering out from
                                     flink-kubernetes was relocated we have to bundle a relocated new version -->
                                 <relocation>

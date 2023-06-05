@@ -44,7 +44,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.PARALLELISM_OVERRIDES;
+import static org.apache.flink.configuration.PipelineOptions.PARALLELISM_OVERRIDES;
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_ENTRY;
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_DISABLED;
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_ENABLED;
