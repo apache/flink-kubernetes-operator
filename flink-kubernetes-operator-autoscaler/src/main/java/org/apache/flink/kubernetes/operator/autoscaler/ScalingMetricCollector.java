@@ -80,10 +80,10 @@ public abstract class ScalingMetricCollector {
             AbstractFlinkResource<?, ?> cr,
             AutoScalerInfo autoscalerInfo,
             FlinkService flinkService,
-            Configuration conf)
+            Configuration conf,
+            Map<ResourceID, Map<JobVertexID, Integer>> recommendedParallelisms)
             throws Exception {
 
-        var topology = getJobTopology(flinkService, cr, conf, autoscalerInfo);
         var resourceID = ResourceID.fromResource(cr);
         var now = clock.instant();
 
@@ -100,7 +100,9 @@ public abstract class ScalingMetricCollector {
             cleanup(cr);
             metricHistory.clear();
             metricCollectionStartTs = now;
+            cleanupRecommendedParallelisms(recommendedParallelisms, resourceID);
         }
+        var topology = getJobTopology(flinkService, cr, conf, autoscalerInfo);
 
         // Trim metrics outside the metric window from metrics history
         var metricWindowSize = getMetricWindowSize(conf);
@@ -439,6 +441,17 @@ public abstract class ScalingMetricCollector {
         histories.remove(resourceId);
         availableVertexMetricNames.remove(resourceId);
         topologies.remove(resourceId);
+    }
+
+    private void cleanupRecommendedParallelisms(
+            Map<ResourceID, Map<JobVertexID, Integer>> recommendedParallelisms,
+            ResourceID resourceID) {
+        if (recommendedParallelisms.containsKey(resourceID)) {
+            LOG.debug("Removing recommended parallelisms for resource {}", resourceID);
+            recommendedParallelisms.remove(resourceID);
+        } else {
+            LOG.debug("Recommended parallelisms not available yet for {}", resourceID);
+        }
     }
 
     @VisibleForTesting

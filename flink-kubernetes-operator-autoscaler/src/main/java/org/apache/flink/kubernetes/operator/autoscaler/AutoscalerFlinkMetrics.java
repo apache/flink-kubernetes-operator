@@ -17,25 +17,23 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.metrics.Counter;
+import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.RECOMMENDED_PARALLELISM;
 
 /** Autoscaler metrics for observability. */
 public class AutoscalerFlinkMetrics {
-
-    private static final Logger LOG = LoggerFactory.getLogger(AutoscalerFlinkMetrics.class);
 
     final Counter numScalings;
 
@@ -45,7 +43,13 @@ public class AutoscalerFlinkMetrics {
 
     private final MetricGroup metricGroup;
 
-    private final Set<JobVertexID> vertexMetrics = new HashSet<>();
+    private final Map<JobVertexID, MetricGroup> vertexMetricGroups = new ConcurrentHashMap<>();
+    private final Map<Tuple2<JobVertexID, ScalingMetric>, MetricGroup> scalingMetricGroups =
+            new ConcurrentHashMap<>();
+    private final Map<Tuple2<JobVertexID, ScalingMetric>, Gauge<Double>> currentScalingMetrics =
+            new ConcurrentHashMap<>();
+    private final Map<Tuple2<JobVertexID, ScalingMetric>, Gauge<Double>> averageScalingMetrics =
+            new ConcurrentHashMap<>();
 
     public AutoscalerFlinkMetrics(MetricGroup metricGroup) {
         this.numScalings = metricGroup.counter("scalings");
@@ -54,51 +58,122 @@ public class AutoscalerFlinkMetrics {
         this.metricGroup = metricGroup;
     }
 
-    public void registerScalingMetrics(
+    public void registerEvaluatedScalingMetrics(
             Supplier<Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
                     currentVertexMetrics) {
         currentVertexMetrics
                 .get()
                 .forEach(
-                        (jobVertexID, evaluated) -> {
-                            if (!vertexMetrics.add(jobVertexID)) {
-                                return;
-                            }
-                            LOG.info("Registering scaling metrics for job vertex {}", jobVertexID);
-                            var jobVertexMg =
-                                    metricGroup.addGroup("jobVertexID", jobVertexID.toHexString());
-
-                            evaluated.forEach(
-                                    (sm, esm) -> {
-                                        var smGroup = jobVertexMg.addGroup(sm.name());
-
-                                        smGroup.gauge(
-                                                "Current",
-                                                () ->
-                                                        Optional.ofNullable(
-                                                                        currentVertexMetrics.get())
-                                                                .map(m -> m.get(jobVertexID))
-                                                                .map(
-                                                                        metrics ->
-                                                                                metrics.get(sm)
-                                                                                        .getCurrent())
-                                                                .orElse(null));
-
-                                        if (sm.isCalculateAverage()) {
-                                            smGroup.gauge(
-                                                    "Average",
-                                                    () ->
-                                                            Optional.ofNullable(
-                                                                            currentVertexMetrics
-                                                                                    .get())
-                                                                    .map(m -> m.get(jobVertexID))
-                                                                    .map(
-                                                                            metrics ->
-                                                                                    metrics.get(sm)
-                                                                                            .getAverage())
-                                                                    .orElse(null));
-                                        }
+                        (jobVertexID, evaluatedScalingMetrics) -> {
+                            var jobVertexMg = getJobVertexMetricGroup(jobVertexID);
+                            evaluatedScalingMetrics.forEach(
+                                    (scalingMetric, esm) -> {
+                                        var smg =
+                                                getScalingMetricGroup(
+                                                        jobVertexID, jobVertexMg, scalingMetric);
+                                        registerScalingMetric(
+                                                currentVertexMetrics,
+                                                jobVertexID,
+                                                scalingMetric,
+                                                smg);
                                     });
                         });
+    }
+
+    public void registerRecommendedParallelismMetrics(
+            Supplier<Map<JobVertexID, Integer>> recommendedParallelisms) {
+
+        if (recommendedParallelisms == null || recommendedParallelisms.get() == null) {
+            return;
+        }
+        recommendedParallelisms
+                .get()
+                .forEach(
+                        (jobVertexID, parallelism) -> {
+                            var jobVertexMg = getJobVertexMetricGroup(jobVertexID);
+                            var smg =
+                                    getScalingMetricGroup(
+                                            jobVertexID, jobVertexMg, RECOMMENDED_PARALLELISM);
+
+                            currentScalingMetrics.computeIfAbsent(
+                                    Tuple2.of(jobVertexID, RECOMMENDED_PARALLELISM),
+                                    key ->
+                                            smg.gauge(
+                                                    "Current",
+                                                    () ->
+                                                            getCurrentValue(
+                                                                    recommendedParallelisms,
+                                                                    jobVertexID)));
+                        });
+    }
+
+    private MetricGroup getJobVertexMetricGroup(JobVertexID jobVertexID) {
+        return vertexMetricGroups.computeIfAbsent(
+                jobVertexID, key -> metricGroup.addGroup("jobVertexID", jobVertexID.toHexString()));
+    }
+
+    private MetricGroup getScalingMetricGroup(
+            JobVertexID jobVertexID, MetricGroup jobVertexMg, ScalingMetric scalingMetric) {
+        return scalingMetricGroups.computeIfAbsent(
+                Tuple2.of(jobVertexID, scalingMetric),
+                key -> jobVertexMg.addGroup(scalingMetric.name()));
+    }
+
+    private void registerScalingMetric(
+            Supplier<Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
+                    currentVertexMetrics,
+            JobVertexID jobVertexID,
+            ScalingMetric scalingMetric,
+            MetricGroup smg) {
+
+        currentScalingMetrics.computeIfAbsent(
+                Tuple2.of(jobVertexID, scalingMetric),
+                key ->
+                        smg.gauge(
+                                "Current",
+                                () ->
+                                        getCurrentValue(
+                                                currentVertexMetrics, jobVertexID, scalingMetric)));
+        if (scalingMetric.isCalculateAverage()) {
+            averageScalingMetrics.computeIfAbsent(
+                    Tuple2.of(jobVertexID, scalingMetric),
+                    key ->
+                            smg.gauge(
+                                    "Average",
+                                    () ->
+                                            getAverageValue(
+                                                    currentVertexMetrics,
+                                                    jobVertexID,
+                                                    scalingMetric)));
+        }
+    }
+
+    private static Double getCurrentValue(
+            Supplier<Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
+                    currentVertexMetrics,
+            JobVertexID jobVertexID,
+            ScalingMetric scalingMetric) {
+        return Optional.ofNullable(currentVertexMetrics.get())
+                .map(m -> m.get(jobVertexID))
+                .map(metrics -> metrics.get(scalingMetric).getCurrent())
+                .orElse(null);
+    }
+
+    private static Double getAverageValue(
+            Supplier<Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
+                    currentVertexMetrics,
+            JobVertexID jobVertexID,
+            ScalingMetric scalingMetric) {
+        return Optional.ofNullable(currentVertexMetrics.get())
+                .map(m -> m.get(jobVertexID))
+                .map(metrics -> metrics.get(scalingMetric).getAverage())
+                .orElse(null);
+    }
+
+    private static Double getCurrentValue(
+            Supplier<Map<JobVertexID, Integer>> recommendedParallelisms, JobVertexID jobVertexID) {
+        return Optional.ofNullable(recommendedParallelisms.get())
+                .map(m -> Double.valueOf(m.get(jobVertexID)))
+                .orElse(null);
     }
 }

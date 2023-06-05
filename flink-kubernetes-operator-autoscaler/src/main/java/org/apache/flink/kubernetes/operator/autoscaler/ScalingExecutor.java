@@ -30,6 +30,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,7 +82,8 @@ public class ScalingExecutor {
             AbstractFlinkResource<?, ?> resource,
             AutoScalerInfo scalingInformation,
             Configuration conf,
-            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
+            Map<ResourceID, Map<JobVertexID, Integer>> recommendedParallelisms) {
 
         if (!stabilizationPeriodPassed(resource, conf)) {
             return false;
@@ -91,7 +93,6 @@ public class ScalingExecutor {
         var scalingHistory = scalingInformation.getScalingHistory(now, conf);
         var scalingSummaries =
                 computeScalingSummary(resource, conf, evaluatedMetrics, scalingHistory);
-
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
             return false;
@@ -100,6 +101,9 @@ public class ScalingExecutor {
         if (allVerticesWithinUtilizationTarget(evaluatedMetrics, scalingSummaries)) {
             return false;
         }
+
+        updateRecommendedParallelisms(
+                resource, evaluatedMetrics, scalingSummaries, recommendedParallelisms);
 
         var scalingEnabled = conf.get(SCALING_ENABLED);
 
@@ -267,6 +271,25 @@ public class ScalingExecutor {
         flinkConf.set(PARALLELISM_OVERRIDES, overrides);
 
         resource.getSpec().setFlinkConfiguration(flinkConf.toMap());
+    }
+
+    private void updateRecommendedParallelisms(
+            AbstractFlinkResource<?, ?> resource,
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
+            Map<JobVertexID, ScalingSummary> summaries,
+            Map<ResourceID, Map<JobVertexID, Integer>> recommendedParallelisms) {
+        var parallelisms = new HashMap<JobVertexID, Integer>();
+        evaluatedMetrics.forEach(
+                (id, metrics) -> {
+                    if (summaries.containsKey(id)) {
+                        parallelisms.put(id, summaries.get(id).getNewParallelism());
+                    } else {
+                        parallelisms.put(
+                                id, (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent());
+                    }
+                });
+        recommendedParallelisms.put(ResourceID.fromResource(resource), parallelisms);
+        LOG.debug("Recommended parallelisms are updated {}", parallelisms);
     }
 
     @VisibleForTesting

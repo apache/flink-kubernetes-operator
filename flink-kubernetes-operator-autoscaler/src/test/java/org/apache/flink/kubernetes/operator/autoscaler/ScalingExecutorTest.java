@@ -31,6 +31,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,6 +44,7 @@ import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.flink.configuration.PipelineOptions.PARALLELISM_OVERRIDES;
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_ENTRY;
@@ -63,6 +65,9 @@ public class ScalingExecutorTest {
     private Configuration conf;
     private KubernetesClient kubernetesClient;
     private FlinkDeployment flinkDep;
+
+    private final Map<ResourceID, Map<JobVertexID, Integer>> recommendedParallelisms =
+            new ConcurrentHashMap<>();
 
     @BeforeEach
     public void setup() {
@@ -98,35 +103,51 @@ public class ScalingExecutorTest {
         jobStatus.setUpdateTime(String.valueOf(clock.instant().toEpochMilli()));
 
         scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
 
         clock = Clock.offset(clock, Duration.ofSeconds(30));
         scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
 
         clock = Clock.offset(clock, Duration.ofSeconds(20));
         scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
 
         clock = Clock.offset(clock, Duration.ofSeconds(20));
         scalingDecisionExecutor.setClock(clock);
-        assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertTrue(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
 
         // A job should not be considered stable in a non-RUNNING state
         jobStatus.setState(JobStatus.FAILING.name());
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
 
         jobStatus.setState(JobStatus.RUNNING.name());
         jobStatus.setUpdateTime(String.valueOf(clock.instant().toEpochMilli()));
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
 
         clock = Clock.offset(clock, Duration.ofSeconds(59));
         scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
 
         clock = Clock.offset(clock, Duration.ofSeconds(2));
         scalingDecisionExecutor.setClock(clock);
-        assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertTrue(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
     }
 
     @Test
@@ -206,10 +227,14 @@ public class ScalingExecutorTest {
                         evaluated(10, 80, 100));
         // filter operator should not scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of(filterOperatorHexString));
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
         // filter operator should scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of());
-        assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertTrue(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
     }
 
     @ParameterizedTest
@@ -221,7 +246,8 @@ public class ScalingExecutorTest {
         var scalingInfo = new AutoScalerInfo(new HashMap<>());
         assertEquals(
                 scalingEnabled,
-                scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
         assertEquals(1, eventCollector.events.size());
         var event = eventCollector.events.poll();
         assertTrue(
@@ -246,10 +272,58 @@ public class ScalingExecutorTest {
         metrics = Map.of(jobVertexID, evaluated(1, 110, 101));
         assertEquals(
                 scalingEnabled,
-                scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
         var event2 = eventCollector.events.poll();
         assertEquals(event.getMetadata().getUid(), event2.getMetadata().getUid());
         assertEquals(2, event2.getCount());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testRecommendedParallelism(boolean scalingEnabled) {
+        var jobVertexID = new JobVertexID();
+
+        conf.set(AutoScalerOptions.SCALING_ENABLED, scalingEnabled);
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
+
+        // within boundaries, no change in recommended parallelisms
+        recommendedParallelisms.put(ResourceID.fromResource(flinkDep), Map.of(jobVertexID, 2));
+        var metrics = Map.of(jobVertexID, evaluated(2, 100, 100));
+        var scalingInfo = new AutoScalerInfo(new HashMap<>());
+        assertEquals(
+                false,
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
+        assertEquals(
+                2, recommendedParallelisms.get(ResourceID.fromResource(flinkDep)).get(jobVertexID));
+
+        // outside boundaries, recommended parallelisms have changed
+        metrics = Map.of(jobVertexID, evaluated(2, 200, 100));
+        assertEquals(
+                scalingEnabled,
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
+        assertEquals(
+                4, recommendedParallelisms.get(ResourceID.fromResource(flinkDep)).get(jobVertexID));
+
+        // outside boundaries, recommended parallelisms have changed
+        metrics = Map.of(jobVertexID, evaluated(2, 50, 100));
+        assertEquals(
+                scalingEnabled,
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
+        assertEquals(
+                1, recommendedParallelisms.get(ResourceID.fromResource(flinkDep)).get(jobVertexID));
+
+        // within boundaries, no change in recommended parallelisms
+        metrics = Map.of(jobVertexID, evaluated(2, 100, 100));
+        assertEquals(
+                false,
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, recommendedParallelisms));
+        assertEquals(
+                1, recommendedParallelisms.get(ResourceID.fromResource(flinkDep)).get(jobVertexID));
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(

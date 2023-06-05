@@ -31,6 +31,7 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -49,6 +50,9 @@ public class JobAutoScalerImpl implements JobAutoScaler {
 
     private final Map<ResourceID, Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
             lastEvaluatedMetrics = new ConcurrentHashMap<>();
+
+    final Map<ResourceID, Map<JobVertexID, Integer>> recommendedParallelisms =
+            new ConcurrentHashMap<>();
     final Map<ResourceID, AutoscalerFlinkMetrics> flinkMetrics = new ConcurrentHashMap<>();
 
     public JobAutoScalerImpl(
@@ -71,6 +75,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         var resourceId = ResourceID.fromResource(cr);
         lastEvaluatedMetrics.remove(resourceId);
         flinkMetrics.remove(resourceId);
+        recommendedParallelisms.remove(resourceId);
     }
 
     @Override
@@ -99,22 +104,37 @@ public class JobAutoScalerImpl implements JobAutoScaler {
 
             var collectedMetrics =
                     metricsCollector.updateMetrics(
-                            resource, autoScalerInfo, ctx.getFlinkService(), conf);
+                            resource,
+                            autoScalerInfo,
+                            ctx.getFlinkService(),
+                            conf,
+                            recommendedParallelisms);
 
             LOG.debug("Evaluating scaling metrics for {}", collectedMetrics);
             var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
             LOG.debug("Scaling metrics evaluated: {}", evaluatedMetrics);
             lastEvaluatedMetrics.put(resourceId, evaluatedMetrics);
-            flinkMetrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceId));
+
+            flinkMetrics.registerEvaluatedScalingMetrics(
+                    () -> lastEvaluatedMetrics.get(resourceId));
+            flinkMetrics.registerRecommendedParallelismMetrics(
+                    () -> recommendedParallelisms.get(resourceId));
 
             if (!collectedMetrics.isFullyCollected()) {
                 // We have done an upfront evaluation, but we are not ready for scaling.
+                resetRecommendedParallelisms(recommendedParallelisms, evaluatedMetrics, resourceId);
                 autoScalerInfo.replaceInKubernetes(kubernetesClient);
                 return false;
             }
 
             var specAdjusted =
-                    scalingExecutor.scaleResource(resource, autoScalerInfo, conf, evaluatedMetrics);
+                    scalingExecutor.scaleResource(
+                            resource,
+                            autoScalerInfo,
+                            conf,
+                            evaluatedMetrics,
+                            recommendedParallelisms);
+
             if (specAdjusted) {
                 flinkMetrics.numScalings.inc();
             } else {
@@ -142,5 +162,19 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                 id ->
                         new AutoscalerFlinkMetrics(
                                 ctx.getResourceMetricGroup().addGroup("AutoScaler")));
+    }
+
+    private void resetRecommendedParallelisms(
+            Map<ResourceID, Map<JobVertexID, Integer>> recommendedParallelisms,
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> lastEvaluatedMetrics,
+            ResourceID resourceID) {
+        var parallelisms = new HashMap<JobVertexID, Integer>();
+        lastEvaluatedMetrics.forEach(
+                (jobVertexID, map) -> {
+                    parallelisms.put(
+                            jobVertexID, (int) map.get(ScalingMetric.PARALLELISM).getCurrent());
+                });
+        recommendedParallelisms.put(resourceID, parallelisms);
+        LOG.debug("Recommended parallelisms are reset to current {}", parallelisms);
     }
 }
