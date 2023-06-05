@@ -22,8 +22,8 @@ metadata:
   namespace: default
   name: session-cluster-1
 spec:
-  image: flink:1.16
-  flinkVersion: v1_16
+  image: flink:1.17
+  flinkVersion: v1_17
   ingress:
     template: "/{{namespace}}/{{name}}(/|$)(.*)"
     className: "nginx"
@@ -74,8 +74,8 @@ metadata:
   namespace: flink
   name: session-cluster-1
 spec:
-  image: flink:1.16
-  flinkVersion: v1_16
+  image: flink:1.17
+  flinkVersion: v1_17
   ingress:
     template: "/{{namespace}}/{{name}}(/|$)(.*)"
     className: "nginx"

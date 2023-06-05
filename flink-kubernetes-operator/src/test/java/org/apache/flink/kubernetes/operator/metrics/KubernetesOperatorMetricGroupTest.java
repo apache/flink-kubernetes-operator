@@ -63,7 +63,7 @@ public class KubernetesOperatorMetricGroupTest {
                         "flink-kubernetes-operator"),
                 group.getAllVariables());
 
-        registry.shutdown().get();
+        registry.close();
     }
 
     @Test
@@ -96,7 +96,7 @@ public class KubernetesOperatorMetricGroupTest {
                         "flink-kubernetes-operator"),
                 group.getAllVariables());
 
-        registry.shutdown().get();
+        registry.close();
     }
 
     @Test
@@ -145,7 +145,7 @@ public class KubernetesOperatorMetricGroupTest {
                         "<resourcetype>",
                         "FlinkSessionJob"),
                 resourceGroup.getAllVariables());
-        registry.shutdown().get();
+        registry.close();
     }
 
     private static MetricRegistryConfiguration fromConfiguration(Configuration configuration) {

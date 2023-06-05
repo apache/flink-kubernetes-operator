@@ -722,6 +722,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                             savepoint,
                             conf.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_14)
                                     ? RestoreMode.DEFAULT
+                                    : null,
+                            conf.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_16)
+                                    ? conf.toMap()
                                     : null);
             LOG.info("Submitting job: {} to session cluster.", jobID.toHexString());
             return clusterClient
@@ -740,7 +743,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    private JarUploadResponseBody uploadJar(
+    @VisibleForTesting
+    protected JarUploadResponseBody uploadJar(
             ObjectMeta objectMeta, FlinkSessionJobSpec spec, Configuration conf) throws Exception {
         String targetDir = artifactManager.generateJarDir(objectMeta, spec);
         File jarFile = artifactManager.fetch(findJarURI(spec.getJob()), conf, targetDir);
@@ -788,7 +792,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    private void deleteJar(Configuration conf, String jarId) {
+    @VisibleForTesting
+    protected void deleteJar(Configuration conf, String jarId) {
         LOG.debug("Deleting the jar: {}", jarId);
         try (RestClusterClient<String> clusterClient =
                 (RestClusterClient<String>) getClusterClient(conf)) {

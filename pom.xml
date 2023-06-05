@@ -73,19 +73,19 @@ under the License.
         <maven-javadoc-plugin.version>3.3.2</maven-javadoc-plugin.version>
         <git-commit-id-maven-plugin.version>5.0.0</git-commit-id-maven-plugin.version>
 
-        <operator.sdk.version>4.3.0</operator.sdk.version>
+        <operator.sdk.version>4.3.5</operator.sdk.version>
         <operator.sdk.admission-controller.version>0.2.0</operator.sdk.admission-controller.version>
+        <operator.sdk.jenvtest.version>0.9.1</operator.sdk.jenvtest.version>
 
-        <fabric8.version>6.5.1</fabric8.version>
+        <fabric8.version>6.7.0</fabric8.version>
 
         <lombok.version>1.18.22</lombok.version>
         <commons-lang3.version>3.12.0</commons-lang3.version>
         <commons-io.version>2.11.0</commons-io.version>
-        <flink.version>1.16.1</flink.version>
+        <flink.version>1.17.1</flink.version>
 
         <slf4j.version>1.7.36</slf4j.version>
         <log4j.version>2.17.1</log4j.version>
-        <junit.jupiter.version>5.8.2</junit.jupiter.version>
 
         <spotless.version>2.4.2</spotless.version>
         <it.skip>true</it.skip>
@@ -104,6 +104,13 @@ under the License.
                 <type>pom</type>
                 <scope>import</scope>
                 <version>2.15.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>5.9.3</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>

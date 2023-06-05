@@ -59,7 +59,7 @@ public class BaseTestUtils {
     public static final String SAMPLE_JAR = "local:///tmp/sample.jar";
 
     public static FlinkDeployment buildSessionCluster() {
-        return buildSessionCluster(FlinkVersion.v1_15);
+        return buildSessionCluster(FlinkVersion.v1_17);
     }
 
     public static FlinkDeployment buildSessionCluster(FlinkVersion version) {
@@ -83,11 +83,11 @@ public class BaseTestUtils {
     }
 
     public static FlinkDeployment buildApplicationCluster() {
-        return buildApplicationCluster(FlinkVersion.v1_15);
+        return buildApplicationCluster(FlinkVersion.v1_17);
     }
 
     public static FlinkDeployment buildApplicationCluster(String name, String namespace) {
-        return buildApplicationCluster(name, namespace, FlinkVersion.v1_15);
+        return buildApplicationCluster(name, namespace, FlinkVersion.v1_17);
     }
 
     public static FlinkDeployment buildApplicationCluster(FlinkVersion version) {

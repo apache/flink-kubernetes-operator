@@ -21,8 +21,8 @@ kind: FlinkDeployment
 metadata:
   name: basic-session-deployment-example
 spec:
-  image: flink:1.16
-  flinkVersion: v1_16
+  image: flink:1.17
+  flinkVersion: v1_17
   jobManager:
     resource:
       memory: "2048m"

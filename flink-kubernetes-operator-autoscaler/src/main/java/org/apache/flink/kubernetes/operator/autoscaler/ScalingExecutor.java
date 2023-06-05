@@ -19,8 +19,6 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.configuration.ConfigOption;
-import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
@@ -43,6 +41,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedMap;
 
+import static org.apache.flink.configuration.PipelineOptions.PARALLELISM_OVERRIDES;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.STABILIZATION_INTERVAL;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
@@ -53,15 +52,6 @@ import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMet
 
 /** Class responsible for executing scaling decisions. */
 public class ScalingExecutor {
-
-    public static final ConfigOption<Map<String, String>> PARALLELISM_OVERRIDES =
-            ConfigOptions.key("pipeline.jobvertex-parallelism-overrides")
-                    .mapType()
-                    .defaultValue(Collections.emptyMap())
-                    .withDescription(
-                            "A parallelism override map (jobVertexId -> parallelism) which will be used to update"
-                                    + " the parallelism of the corresponding job vertices of submitted JobGraphs.");
-
     public static final String SCALING_SUMMARY_ENTRY =
             " Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f";
     public static final String SCALING_SUMMARY_HEADER_SCALING_DISABLED =
