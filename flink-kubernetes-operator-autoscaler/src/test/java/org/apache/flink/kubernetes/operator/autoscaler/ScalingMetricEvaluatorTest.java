@@ -46,6 +46,7 @@ import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerO
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CURRENT_PROCESSING_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.LAG;
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.LOAD;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SOURCE_DATA_RATE;
@@ -77,9 +78,17 @@ public class ScalingMetricEvaluatorTest {
                 new CollectedMetrics(
                         Map.of(
                                 source,
-                                Map.of(SOURCE_DATA_RATE, 100., LAG, 0., TRUE_PROCESSING_RATE, 200.),
+                                Map.of(
+                                        SOURCE_DATA_RATE,
+                                        100.,
+                                        LAG,
+                                        0.,
+                                        TRUE_PROCESSING_RATE,
+                                        200.,
+                                        LOAD,
+                                        .8),
                                 sink,
-                                Map.of(TRUE_PROCESSING_RATE, 2000.)),
+                                Map.of(TRUE_PROCESSING_RATE, 2000., LOAD, .4)),
                         Map.of(new Edge(source, sink), 2.)));
 
         metricHistory.put(
@@ -88,19 +97,29 @@ public class ScalingMetricEvaluatorTest {
                         Map.of(
                                 source,
                                 Map.of(
-                                        SOURCE_DATA_RATE, 200.,
-                                        LAG, 1000.,
-                                        TRUE_PROCESSING_RATE, 200.),
+                                        SOURCE_DATA_RATE,
+                                        200.,
+                                        LAG,
+                                        1000.,
+                                        TRUE_PROCESSING_RATE,
+                                        200.,
+                                        LOAD,
+                                        .6),
                                 sink,
-                                Map.of(TRUE_PROCESSING_RATE, 2000.)),
+                                Map.of(TRUE_PROCESSING_RATE, 2000., LOAD, .3)),
                         Map.of(new Edge(source, sink), 2.)));
 
         var conf = new Configuration();
 
-        conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ofSeconds(2));
-        conf.set(AutoScalerOptions.RESTART_TIME, Duration.ZERO);
+        conf.set(CATCH_UP_DURATION, Duration.ofSeconds(2));
+        conf.set(RESTART_TIME, Duration.ZERO);
         var evaluatedMetrics =
                 evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
+
+        assertEquals(new EvaluatedScalingMetric(.6, .7), evaluatedMetrics.get(source).get(LOAD));
+
+        assertEquals(new EvaluatedScalingMetric(.3, .35), evaluatedMetrics.get(sink).get(LOAD));
+
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -114,7 +133,7 @@ public class ScalingMetricEvaluatorTest {
                 EvaluatedScalingMetric.of(1000),
                 evaluatedMetrics.get(sink).get(CATCH_UP_DATA_RATE));
 
-        conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ofSeconds(1));
+        conf.set(CATCH_UP_DURATION, Duration.ofSeconds(1));
         evaluatedMetrics =
                 evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
         assertEquals(
@@ -131,7 +150,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluatedMetrics.get(sink).get(CATCH_UP_DATA_RATE));
 
         // Restart time should not affect evaluated metrics
-        conf.set(AutoScalerOptions.RESTART_TIME, Duration.ofSeconds(2));
+        conf.set(RESTART_TIME, Duration.ofSeconds(2));
 
         evaluatedMetrics =
                 evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
@@ -149,7 +168,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluatedMetrics.get(sink).get(CATCH_UP_DATA_RATE));
 
         // Turn off lag based scaling
-        conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ZERO);
+        conf.set(CATCH_UP_DURATION, Duration.ZERO);
         evaluatedMetrics =
                 evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
         assertEquals(
@@ -170,12 +189,20 @@ public class ScalingMetricEvaluatorTest {
                 new CollectedMetrics(
                         Map.of(
                                 source,
-                                Map.of(SOURCE_DATA_RATE, 100., LAG, 0., TRUE_PROCESSING_RATE, 200.),
+                                Map.of(
+                                        SOURCE_DATA_RATE,
+                                        100.,
+                                        LAG,
+                                        0.,
+                                        TRUE_PROCESSING_RATE,
+                                        200.,
+                                        LOAD,
+                                        .85),
                                 sink,
-                                Map.of(TRUE_PROCESSING_RATE, 2000.)),
+                                Map.of(TRUE_PROCESSING_RATE, 2000., LOAD, .85)),
                         Map.of(new Edge(source, sink), 2.)));
 
-        conf.set(AutoScalerOptions.CATCH_UP_DURATION, Duration.ofMinutes(1));
+        conf.set(CATCH_UP_DURATION, Duration.ofMinutes(1));
         evaluatedMetrics =
                 evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
         assertEquals(

@@ -377,12 +377,16 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                 Map.of(
                         source1,
                         Map.of(
+                                FlinkMetric.BUSY_TIME_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.)),
                         sink,
                         Map.of(
+                                FlinkMetric.BUSY_TIME_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
                                 FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                                 new AggregatedMetric(
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));

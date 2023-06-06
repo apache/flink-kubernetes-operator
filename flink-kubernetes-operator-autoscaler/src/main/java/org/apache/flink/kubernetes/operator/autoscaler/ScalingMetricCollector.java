@@ -239,7 +239,9 @@ public abstract class ScalingMetricCollector {
                     if (jobTopology.isSource(jobVertexID)) {
                         ScalingMetrics.computeLagMetrics(vertexFlinkMetrics, vertexScalingMetrics);
                     }
-                    ScalingMetrics.computeLoadMetrics(vertexFlinkMetrics, vertexScalingMetrics);
+
+                    ScalingMetrics.computeLoadMetrics(
+                            jobVertexID, vertexFlinkMetrics, vertexScalingMetrics, conf);
 
                     double lagGrowthRate =
                             computeLagGrowthRate(

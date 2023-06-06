@@ -23,11 +23,8 @@ package org.apache.flink.kubernetes.operator.autoscaler.metrics;
  */
 public enum ScalingMetric {
 
-    /** Max subtask load (busy time ratio 0 (idle) to 1 (fully utilized)). */
-    LOAD_MAX(true),
-
-    /** Average subtask load (busy time ratio 0 (idle) to 1 (fully utilized)). */
-    LOAD_AVG(true),
+    /** Subtask load (busy time ratio 0 (idle) to 1 (fully utilized)). */
+    LOAD(true),
 
     /** Processing rate at full capacity (records/sec). */
     TRUE_PROCESSING_RATE(true),

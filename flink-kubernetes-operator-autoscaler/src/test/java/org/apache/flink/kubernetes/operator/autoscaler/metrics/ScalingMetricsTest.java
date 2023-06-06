@@ -194,15 +194,39 @@ public class ScalingMetricsTest {
 
     @Test
     public void testLoadMetrics() {
+        var source = new JobVertexID();
         Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
+        var conf = new Configuration();
+
+        conf.set(AutoScalerOptions.BUSY_TIME_AGGREGATOR, MetricAggregator.MAX);
         ScalingMetrics.computeLoadMetrics(
+                source,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, 200., 100., Double.NaN)),
-                scalingMetrics);
+                        new AggregatedMetric("", 100., 200., 150., Double.NaN)),
+                scalingMetrics,
+                conf);
+        assertEquals(.2, scalingMetrics.get(ScalingMetric.LOAD));
 
-        assertEquals(0.2, scalingMetrics.get(ScalingMetric.LOAD_MAX));
-        assertEquals(0.1, scalingMetrics.get(ScalingMetric.LOAD_AVG));
+        conf.set(AutoScalerOptions.BUSY_TIME_AGGREGATOR, MetricAggregator.MIN);
+        ScalingMetrics.computeLoadMetrics(
+                source,
+                Map.of(
+                        FlinkMetric.BUSY_TIME_PER_SEC,
+                        new AggregatedMetric("", 100., 200., 150., Double.NaN)),
+                scalingMetrics,
+                conf);
+        assertEquals(.1, scalingMetrics.get(ScalingMetric.LOAD));
+
+        conf.set(AutoScalerOptions.BUSY_TIME_AGGREGATOR, MetricAggregator.AVG);
+        ScalingMetrics.computeLoadMetrics(
+                source,
+                Map.of(
+                        FlinkMetric.BUSY_TIME_PER_SEC,
+                        new AggregatedMetric("", 100., 200., 150., Double.NaN)),
+                scalingMetrics,
+                conf);
+        assertEquals(.15, scalingMetrics.get(ScalingMetric.LOAD));
     }
 
     @Test
