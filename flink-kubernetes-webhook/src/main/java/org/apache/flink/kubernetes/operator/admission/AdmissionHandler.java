@@ -41,9 +41,9 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.QueryStringDec
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
-import io.javaoperatorsdk.admissioncontroller.AdmissionController;
-import io.javaoperatorsdk.admissioncontroller.mutation.Mutator;
-import io.javaoperatorsdk.admissioncontroller.validation.Validator;
+import io.javaoperatorsdk.webhook.admission.AdmissionController;
+import io.javaoperatorsdk.webhook.admission.mutation.Mutator;
+import io.javaoperatorsdk.webhook.admission.validation.Validator;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

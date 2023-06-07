@@ -47,7 +47,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.Base64;
 
-import static io.javaoperatorsdk.admissioncontroller.Operation.CREATE;
+import static io.javaoperatorsdk.webhook.admission.Operation.CREATE;
 import static org.apache.flink.kubernetes.operator.admission.AdmissionHandler.MUTATOR_REQUEST_PATH;
 import static org.apache.flink.kubernetes.operator.admission.AdmissionHandler.VALIDATE_REQUEST_PATH;
 import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpMethod.GET;

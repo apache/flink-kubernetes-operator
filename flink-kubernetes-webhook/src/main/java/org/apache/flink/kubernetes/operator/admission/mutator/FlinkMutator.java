@@ -22,9 +22,9 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.HasMetadata;
-import io.javaoperatorsdk.admissioncontroller.NotAllowedException;
-import io.javaoperatorsdk.admissioncontroller.Operation;
-import io.javaoperatorsdk.admissioncontroller.mutation.Mutator;
+import io.javaoperatorsdk.webhook.admission.NotAllowedException;
+import io.javaoperatorsdk.webhook.admission.Operation;
+import io.javaoperatorsdk.webhook.admission.mutation.Mutator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

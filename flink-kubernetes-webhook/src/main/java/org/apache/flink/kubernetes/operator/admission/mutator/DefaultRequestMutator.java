@@ -24,25 +24,25 @@ import io.fabric8.kubernetes.api.model.KubernetesResource;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionRequest;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionResponse;
 import io.fabric8.zjsonpatch.JsonDiff;
-import io.javaoperatorsdk.admissioncontroller.AdmissionUtils;
-import io.javaoperatorsdk.admissioncontroller.NotAllowedException;
-import io.javaoperatorsdk.admissioncontroller.Operation;
-import io.javaoperatorsdk.admissioncontroller.RequestHandler;
-import io.javaoperatorsdk.admissioncontroller.clone.Cloner;
-import io.javaoperatorsdk.admissioncontroller.clone.ObjectMapperCloner;
-import io.javaoperatorsdk.admissioncontroller.mutation.Mutator;
+import io.javaoperatorsdk.webhook.admission.AdmissionRequestHandler;
+import io.javaoperatorsdk.webhook.admission.AdmissionUtils;
+import io.javaoperatorsdk.webhook.admission.NotAllowedException;
+import io.javaoperatorsdk.webhook.admission.Operation;
+import io.javaoperatorsdk.webhook.admission.mutation.Mutator;
+import io.javaoperatorsdk.webhook.clone.Cloner;
+import io.javaoperatorsdk.webhook.clone.ObjectMapperCloner;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
- * The default request mutator. It's copied from the {@link
- * io.javaoperatorsdk.admissioncontroller.mutation.DefaultRequestMutator} with a modified path diff
- * util to serialize out include non-null.
+ * The default request mutator. It's copied from the {@link DefaultRequestMutator} with a modified
+ * path diff util to serialize out include non-null.
  *
  * @param <T> Resource type.
  */
-public class DefaultRequestMutator<T extends KubernetesResource> implements RequestHandler {
+public class DefaultRequestMutator<T extends KubernetesResource>
+        implements AdmissionRequestHandler {
     private static final ObjectMapper mapper =
             new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL);
     private final Mutator<T> mutator;

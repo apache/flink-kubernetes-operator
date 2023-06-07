@@ -74,8 +74,7 @@ under the License.
         <git-commit-id-maven-plugin.version>5.0.0</git-commit-id-maven-plugin.version>
 
         <operator.sdk.version>4.3.5</operator.sdk.version>
-        <operator.sdk.admission-controller.version>0.2.0</operator.sdk.admission-controller.version>
-        <operator.sdk.jenvtest.version>0.9.1</operator.sdk.jenvtest.version>
+        <operator.sdk.webhook-framework.version>1.1.1</operator.sdk.webhook-framework.version>
 
         <fabric8.version>6.7.0</fabric8.version>
 

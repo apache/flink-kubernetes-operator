@@ -41,8 +41,8 @@ under the License.
 
         <dependency>
             <groupId>io.javaoperatorsdk</groupId>
-            <artifactId>operator-framework-framework-core</artifactId>
-            <version>${operator.sdk.admission-controller.version}</version>
+            <artifactId>kubernetes-webhooks-framework-core</artifactId>
+            <version>${operator.sdk.webhook-framework.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>*</groupId>
@@ -114,7 +114,7 @@ under the License.
                             <shadedArtifactAttached>true</shadedArtifactAttached>
                             <artifactSet>
                                 <includes combine.children="append">
-                                    <include>io.javaoperatorsdk:operator-framework-framework-core</include>
+                                    <include>io.javaoperatorsdk:kubernetes-webhooks-framework-core</include>
                                 </includes>
                             </artifactSet>
                             <transformers combine.children="append">

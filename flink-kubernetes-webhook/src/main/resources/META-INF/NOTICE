@@ -6,4 +6,4 @@ The Apache Software Foundation (http://www.apache.org/).
 
 This project bundles the following dependencies under the Apache Software License 2.0 (http://www.apache.org/licenses/LICENSE-2.0.txt)
 
-- io.javaoperatorsdk:operator-framework-framework-core:jar:0.2.0
+- io.javaoperatorsdk:kubernetes-webhooks-framework-core:jar:1.1.1
