@@ -28,9 +28,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.KubernetesResource;
 import io.fabric8.kubernetes.client.informers.cache.Cache;
-import io.javaoperatorsdk.admissioncontroller.NotAllowedException;
-import io.javaoperatorsdk.admissioncontroller.Operation;
-import io.javaoperatorsdk.admissioncontroller.validation.Validator;
+import io.javaoperatorsdk.webhook.admission.NotAllowedException;
+import io.javaoperatorsdk.webhook.admission.Operation;
+import io.javaoperatorsdk.webhook.admission.validation.Validator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
