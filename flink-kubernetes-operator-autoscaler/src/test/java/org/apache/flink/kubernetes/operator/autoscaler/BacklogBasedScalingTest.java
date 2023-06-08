@@ -405,6 +405,21 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         assertTrue(event.getMessage().startsWith("Could not parse"));
     }
 
+    @Test
+    public void testNoEvaluationDuringStabilization() {
+        var conf = configManager.getDefaultConfig();
+        conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofMinutes(1));
+        configManager.updateDefaultConfig(conf);
+
+        var ctx = createAutoscalerTestContext();
+        var now = Instant.ofEpochMilli(0);
+        setClocksTo(now);
+        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
+        assertFalse(autoscaler.scale(getResourceContext(app, ctx)));
+        assertTrue(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
+        assertTrue(eventCollector.events.isEmpty());
+    }
+
     private void redeployJob(Instant now) {
         app.getStatus().getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
     }
