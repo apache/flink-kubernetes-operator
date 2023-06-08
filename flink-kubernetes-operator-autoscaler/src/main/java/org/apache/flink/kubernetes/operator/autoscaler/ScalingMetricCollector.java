@@ -184,7 +184,13 @@ public abstract class ScalingMetricCollector {
                                             JobDetailsInfo.JobVertexDetailsInfo
                                                     ::getMaxParallelism));
 
-            return JobTopology.fromJsonPlan(jobDetailsInfo.getJsonPlan(), maxParallelismMap);
+            // Flink 1.17 introduced a strange behaviour where the JobDetailsInfo#getJsonPlan()
+            // doesn't return the jsonPlan correctly but it wraps with RawJson{json='plan'}
+            var rawPlan = jobDetailsInfo.getJsonPlan();
+            var json =
+                    rawPlan.substring("RawJson{json='".length(), rawPlan.length() - "'}".length());
+
+            return JobTopology.fromJsonPlan(json, maxParallelismMap);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
