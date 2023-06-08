@@ -101,6 +101,11 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                     metricsCollector.updateMetrics(
                             resource, autoScalerInfo, ctx.getFlinkService(), conf);
 
+            if (collectedMetrics.getMetricHistory().isEmpty()) {
+                autoScalerInfo.replaceInKubernetes(kubernetesClient);
+                return false;
+            }
+
             LOG.debug("Evaluating scaling metrics for {}", collectedMetrics);
             var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
             LOG.debug("Scaling metrics evaluated: {}", evaluatedMetrics);
