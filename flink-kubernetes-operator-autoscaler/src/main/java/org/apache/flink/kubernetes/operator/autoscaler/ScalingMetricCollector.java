@@ -83,7 +83,6 @@ public abstract class ScalingMetricCollector {
             Configuration conf)
             throws Exception {
 
-        var topology = getJobTopology(flinkService, cr, conf, autoscalerInfo);
         var resourceID = ResourceID.fromResource(cr);
         var now = clock.instant();
 
@@ -101,6 +100,7 @@ public abstract class ScalingMetricCollector {
             metricHistory.clear();
             metricCollectionStartTs = now;
         }
+        var topology = getJobTopology(flinkService, cr, conf, autoscalerInfo);
 
         // Trim metrics outside the metric window from metrics history
         var metricWindowSize = getMetricWindowSize(conf);
