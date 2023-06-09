@@ -165,6 +165,7 @@ spec:
     repoURL: https://github.com/apache/flink-kubernetes-operator
     targetRevision: main
     path: helm/flink-kubernetes-operator/crds
+  syncPolicy:
     syncOptions:
     - Replace=true
 ...
