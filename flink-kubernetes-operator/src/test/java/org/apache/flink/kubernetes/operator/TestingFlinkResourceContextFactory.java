@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGrou
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
@@ -38,8 +39,9 @@ public class TestingFlinkResourceContextFactory extends FlinkResourceContextFact
             KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
             KubernetesOperatorMetricGroup operatorMetricGroup,
-            FlinkService flinkService) {
-        super(kubernetesClient, configManager, operatorMetricGroup);
+            FlinkService flinkService,
+            EventRecorder eventRecorder) {
+        super(kubernetesClient, configManager, operatorMetricGroup, eventRecorder);
         this.flinkService = flinkService;
     }
 

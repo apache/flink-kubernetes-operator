@@ -28,10 +28,9 @@ import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
 import org.apache.flink.client.program.rest.RestClusterClient;
-import org.apache.flink.configuration.ConfigOption;
-import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -41,6 +40,7 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobgraph.JobResourceRequirements;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -59,7 +59,6 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -73,18 +72,15 @@ import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLI
  */
 public class NativeFlinkService extends AbstractFlinkService {
 
-    public static final ConfigOption<Map<String, String>> PARALLELISM_OVERRIDES =
-            ConfigOptions.key("pipeline.jobvertex-parallelism-overrides")
-                    .mapType()
-                    .defaultValue(Collections.emptyMap())
-                    .withDescription(
-                            "A parallelism override map (jobVertexId -> parallelism) which will be used to update"
-                                    + " the parallelism of the corresponding job vertices of submitted JobGraphs.");
-
     private static final Logger LOG = LoggerFactory.getLogger(NativeFlinkService.class);
+    private final EventRecorder eventRecorder;
 
-    public NativeFlinkService(KubernetesClient kubernetesClient, FlinkConfigManager configManager) {
+    public NativeFlinkService(
+            KubernetesClient kubernetesClient,
+            FlinkConfigManager configManager,
+            EventRecorder eventRecorder) {
         super(kubernetesClient, configManager);
+        this.eventRecorder = eventRecorder;
     }
 
     @Override
@@ -205,7 +201,7 @@ public class NativeFlinkService extends AbstractFlinkService {
         }
 
         var deployConfig = ctx.getDeployConfig(spec);
-        var newOverrides = deployConfig.get(NativeFlinkService.PARALLELISM_OVERRIDES);
+        var newOverrides = deployConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
 
         try (var client = getClusterClient(observeConfig)) {
             var currentReqs = getVertexResources(client, resource);
@@ -223,6 +219,12 @@ public class NativeFlinkService extends AbstractFlinkService {
                 LOG.info("Vertex resources requirements already match target, nothing to do...");
             } else {
                 updateVertexResources(client, resource, newReqs);
+                eventRecorder.triggerEvent(
+                        resource,
+                        EventRecorder.Type.Normal,
+                        EventRecorder.Reason.Scaling,
+                        EventRecorder.Component.Job,
+                        "In-place scaling triggered");
             }
 
             return true;
@@ -292,7 +294,7 @@ public class NativeFlinkService extends AbstractFlinkService {
                                             JobDetailsInfo.JobVertexDetailsInfo::getParallelism));
 
             Map<String, String> parallelismOverrides =
-                    conf.get(NativeFlinkService.PARALLELISM_OVERRIDES);
+                    conf.get(PipelineOptions.PARALLELISM_OVERRIDES);
             for (Map.Entry<String, String> entry : parallelismOverrides.entrySet()) {
                 Integer currentP =
                         currentParallelisms.get(JobVertexID.fromHexString(entry.getKey()));

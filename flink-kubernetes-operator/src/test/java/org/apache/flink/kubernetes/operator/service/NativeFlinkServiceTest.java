@@ -25,6 +25,7 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -45,6 +46,8 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EventCollector;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
@@ -103,11 +106,16 @@ public class NativeFlinkServiceTest {
     private final Configuration configuration = new Configuration();
     private final FlinkConfigManager configManager = new FlinkConfigManager(configuration);
 
+    private final EventCollector eventCollector = new EventCollector();
+
+    private EventRecorder eventRecorder;
+
     @BeforeEach
     public void setup() {
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
         configuration.set(FLINK_VERSION, FlinkVersion.v1_15);
+        eventRecorder = new EventRecorder(client, eventCollector);
     }
 
     @Test
@@ -504,7 +512,7 @@ public class NativeFlinkServiceTest {
     public void testDeletionPropagation() {
         var propagation = new ArrayList<DeletionPropagation>();
         var flinkService =
-                new NativeFlinkService(client, configManager) {
+                new NativeFlinkService(client, configManager, eventRecorder) {
                     @Override
                     protected void deleteClusterInternal(
                             ObjectMeta meta,
@@ -532,7 +540,7 @@ public class NativeFlinkServiceTest {
     public void testSendConfigOnRunJar() throws Exception {
         var jarRuns = new ArrayList<JarRunRequestBody>();
         var flinkService =
-                new NativeFlinkService(client, configManager) {
+                new NativeFlinkService(client, configManager, eventRecorder) {
                     @Override
                     public RestClusterClient<String> getClusterClient(Configuration conf)
                             throws Exception {
@@ -589,7 +597,7 @@ public class NativeFlinkServiceTest {
         var updated = new ArrayList<Map<JobVertexID, JobVertexResourceRequirements>>();
         updated.add(null);
         var service =
-                new NativeFlinkService(client, configManager) {
+                new NativeFlinkService(client, configManager, eventRecorder) {
                     @Override
                     protected Map<JobVertexID, JobVertexResourceRequirements> getVertexResources(
                             RestClusterClient<String> client,
@@ -617,7 +625,7 @@ public class NativeFlinkServiceTest {
         var reconStatus = flinkDep.getStatus().getReconciliationStatus();
         reconStatus.serializeAndSetLastReconciledSpec(spec, flinkDep);
 
-        appConfig.set(NativeFlinkService.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "4"));
+        appConfig.set(PipelineOptions.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "4"));
         spec.setFlinkConfiguration(appConfig.toMap());
 
         flinkDep.getStatus().getJobStatus().setState("RUNNING");
@@ -739,7 +747,7 @@ public class NativeFlinkServiceTest {
 
         var appConfig = Configuration.fromMap(spec.getFlinkConfiguration());
         appConfig.set(
-                NativeFlinkService.PARALLELISM_OVERRIDES,
+                PipelineOptions.PARALLELISM_OVERRIDES,
                 Map.of(v1.toHexString(), "4", v2.toHexString(), "1"));
         var reconStatus = flinkDep.getStatus().getReconciliationStatus();
         spec.setFlinkConfiguration(appConfig.toMap());
@@ -842,7 +850,10 @@ public class NativeFlinkServiceTest {
         private Configuration runtimeConfig;
 
         public TestingNativeFlinkService(NativeFlinkService nativeFlinkService) {
-            super(nativeFlinkService.kubernetesClient, nativeFlinkService.configManager);
+            super(
+                    nativeFlinkService.kubernetesClient,
+                    nativeFlinkService.configManager,
+                    eventRecorder);
         }
 
         @Override
@@ -881,7 +892,8 @@ public class NativeFlinkServiceTest {
     }
 
     private FlinkService createFlinkService(RestClusterClient<String> clusterClient) {
-        return new NativeFlinkService(client, new FlinkConfigManager(configuration)) {
+        return new NativeFlinkService(
+                client, new FlinkConfigManager(configuration), eventRecorder) {
             @Override
             public RestClusterClient<String> getClusterClient(Configuration config) {
                 return clusterClient;
