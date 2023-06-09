@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
@@ -35,6 +36,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.PARALLELISM;
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.RECOMMENDED_PARALLELISM;
 
 /** Application and SessionJob autoscaler. */
 public class JobAutoScalerImpl implements JobAutoScaler {
@@ -47,8 +50,11 @@ public class JobAutoScalerImpl implements JobAutoScaler {
     private final ScalingExecutor scalingExecutor;
     private final EventRecorder eventRecorder;
 
-    private final Map<ResourceID, Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
+    @VisibleForTesting
+    final Map<ResourceID, Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
             lastEvaluatedMetrics = new ConcurrentHashMap<>();
+
+    @VisibleForTesting
     final Map<ResourceID, AutoscalerFlinkMetrics> flinkMetrics = new ConcurrentHashMap<>();
 
     public JobAutoScalerImpl(
@@ -79,6 +85,8 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         var conf = ctx.getObserveConfig();
         var resource = ctx.getResource();
         var resourceId = ResourceID.fromResource(resource);
+        var flinkMetrics = getOrInitAutoscalerFlinkMetrics(ctx, resourceId);
+        Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics = null;
 
         try {
 
@@ -88,10 +96,10 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             }
 
             // Initialize metrics only if autoscaler is enabled
-            var flinkMetrics = getOrInitAutoscalerFlinkMetrics(ctx, resourceId);
 
             if (!resource.getStatus().getJobStatus().getState().equals(JobStatus.RUNNING.name())) {
                 LOG.info("Job autoscaler is waiting for RUNNING job state");
+                lastEvaluatedMetrics.remove(resourceId);
                 return false;
             }
 
@@ -107,13 +115,13 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             }
 
             LOG.debug("Evaluating scaling metrics for {}", collectedMetrics);
-            var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
+            evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
+            initRecommendedParallelism(evaluatedMetrics);
             LOG.debug("Scaling metrics evaluated: {}", evaluatedMetrics);
-            lastEvaluatedMetrics.put(resourceId, evaluatedMetrics);
-            flinkMetrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceId));
 
             if (!collectedMetrics.isFullyCollected()) {
                 // We have done an upfront evaluation, but we are not ready for scaling.
+                resetRecommendedParallelism(evaluatedMetrics);
                 autoScalerInfo.replaceInKubernetes(kubernetesClient);
                 return false;
             }
@@ -129,7 +137,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             return specAdjusted;
         } catch (Throwable e) {
             LOG.error("Error while scaling resource", e);
-            getOrInitAutoscalerFlinkMetrics(ctx, resourceId).numErrors.inc();
+            flinkMetrics.numErrors.inc();
             eventRecorder.triggerEvent(
                     resource,
                     EventRecorder.Type.Warning,
@@ -137,6 +145,12 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                     EventRecorder.Component.Operator,
                     e.getMessage());
             return false;
+        } finally {
+            if (evaluatedMetrics != null) {
+                LOG.debug("Storing evaluated metrics {}", evaluatedMetrics);
+                lastEvaluatedMetrics.put(resourceId, evaluatedMetrics);
+                flinkMetrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceId));
+            }
         }
     }
 
@@ -147,5 +161,21 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                 id ->
                         new AutoscalerFlinkMetrics(
                                 ctx.getResourceMetricGroup().addGroup("AutoScaler")));
+    }
+
+    private void initRecommendedParallelism(
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
+        evaluatedMetrics.forEach(
+                (jobVertexID, evaluatedScalingMetricMap) ->
+                        evaluatedScalingMetricMap.put(
+                                RECOMMENDED_PARALLELISM,
+                                evaluatedScalingMetricMap.get(PARALLELISM)));
+    }
+
+    private void resetRecommendedParallelism(
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
+        evaluatedMetrics.forEach(
+                (jobVertexID, evaluatedScalingMetricMap) ->
+                        evaluatedScalingMetricMap.put(RECOMMENDED_PARALLELISM, null));
     }
 }

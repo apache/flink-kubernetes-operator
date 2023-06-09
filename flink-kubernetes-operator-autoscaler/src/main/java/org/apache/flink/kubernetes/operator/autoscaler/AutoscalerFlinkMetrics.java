@@ -78,10 +78,10 @@ public class AutoscalerFlinkMetrics {
                                                         Optional.ofNullable(
                                                                         currentVertexMetrics.get())
                                                                 .map(m -> m.get(jobVertexID))
+                                                                .map(metrics -> metrics.get(sm))
                                                                 .map(
-                                                                        metrics ->
-                                                                                metrics.get(sm)
-                                                                                        .getCurrent())
+                                                                        EvaluatedScalingMetric
+                                                                                ::getCurrent)
                                                                 .orElse(null));
 
                                         if (sm.isCalculateAverage()) {
@@ -92,10 +92,10 @@ public class AutoscalerFlinkMetrics {
                                                                             currentVertexMetrics
                                                                                     .get())
                                                                     .map(m -> m.get(jobVertexID))
+                                                                    .map(metrics -> metrics.get(sm))
                                                                     .map(
-                                                                            metrics ->
-                                                                                    metrics.get(sm)
-                                                                                            .getAverage())
+                                                                            EvaluatedScalingMetric
+                                                                                    ::getAverage)
                                                                     .orElse(null));
                                         }
                                     });

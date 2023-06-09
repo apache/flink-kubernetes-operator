@@ -101,6 +101,8 @@ public class ScalingExecutor {
             return false;
         }
 
+        updateRecommendedParallelism(evaluatedMetrics, scalingSummaries);
+
         var scalingEnabled = conf.get(SCALING_ENABLED);
 
         var scalingReport = scalingReport(scalingSummaries, scalingEnabled);
@@ -127,6 +129,19 @@ public class ScalingExecutor {
         scalingInformation.addToScalingHistory(clock.instant(), scalingSummaries, conf);
 
         return true;
+    }
+
+    private void updateRecommendedParallelism(
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
+            Map<JobVertexID, ScalingSummary> scalingSummaries) {
+        scalingSummaries.forEach(
+                (jobVertexID, scalingSummary) -> {
+                    evaluatedMetrics
+                            .get(jobVertexID)
+                            .put(
+                                    ScalingMetric.RECOMMENDED_PARALLELISM,
+                                    EvaluatedScalingMetric.of(scalingSummary.getNewParallelism()));
+                });
     }
 
     private static String scalingReport(

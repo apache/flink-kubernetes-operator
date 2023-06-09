@@ -49,8 +49,13 @@ public enum ScalingMetric {
 
     /** Total number of pending records. */
     LAG(false),
+
     /** Job vertex parallelism. */
     PARALLELISM(false),
+
+    /** Recommended job vertex parallelism. */
+    RECOMMENDED_PARALLELISM(false),
+
     /** Job vertex max parallelism. */
     MAX_PARALLELISM(false),
     /** Upper boundary of the target data rate range. */

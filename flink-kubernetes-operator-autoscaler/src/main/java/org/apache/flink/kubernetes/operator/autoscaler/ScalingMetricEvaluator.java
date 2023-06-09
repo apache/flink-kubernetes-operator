@@ -139,10 +139,10 @@ public class ScalingMetricEvaluator {
 
         evaluatedMetrics.put(
                 PARALLELISM, EvaluatedScalingMetric.of(topology.getParallelisms().get(vertex)));
+
         evaluatedMetrics.put(
                 MAX_PARALLELISM,
                 EvaluatedScalingMetric.of(topology.getMaxParallelisms().get(vertex)));
-
         computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog);
         return evaluatedMetrics;
     }
