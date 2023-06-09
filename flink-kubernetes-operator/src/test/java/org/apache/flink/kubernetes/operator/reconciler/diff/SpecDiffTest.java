@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler.diff;
 
 import org.apache.flink.configuration.CoreOptions;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
@@ -30,7 +31,6 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.service.NativeFlinkService;
 
 import io.fabric8.kubernetes.api.model.HostAlias;
 import org.junit.jupiter.api.Test;
@@ -155,7 +155,7 @@ public class SpecDiffTest {
         // verify parallelism override handling for native/standalone
         left = TestUtils.buildApplicationCluster().getSpec();
         right = TestUtils.buildApplicationCluster().getSpec();
-        left.getFlinkConfiguration().put(NativeFlinkService.PARALLELISM_OVERRIDES.key(), "new");
+        left.getFlinkConfiguration().put(PipelineOptions.PARALLELISM_OVERRIDES.key(), "new");
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.SCALE, diff.getType());

@@ -66,7 +66,11 @@ public abstract class OperatorTestBase {
             CR cr, Context josdkContext) {
         var ctxFactory =
                 new TestingFlinkResourceContextFactory(
-                        getKubernetesClient(), configManager, operatorMetricGroup, flinkService);
+                        getKubernetesClient(),
+                        configManager,
+                        operatorMetricGroup,
+                        flinkService,
+                        eventRecorder);
         return ctxFactory.getResourceContext(cr, josdkContext);
     }
 }

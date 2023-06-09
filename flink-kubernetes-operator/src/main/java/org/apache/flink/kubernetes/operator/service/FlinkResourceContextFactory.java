@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -48,6 +49,8 @@ public class FlinkResourceContextFactory {
     private final KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager;
     private final KubernetesOperatorMetricGroup operatorMetricGroup;
+
+    private final EventRecorder eventRecorder;
     private final Map<KubernetesDeploymentMode, FlinkService> serviceMap;
 
     protected final Map<Tuple2<Class<?>, ResourceID>, KubernetesResourceMetricGroup>
@@ -56,10 +59,12 @@ public class FlinkResourceContextFactory {
     public FlinkResourceContextFactory(
             KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
-            KubernetesOperatorMetricGroup operatorMetricGroup) {
+            KubernetesOperatorMetricGroup operatorMetricGroup,
+            EventRecorder eventRecorder) {
         this.kubernetesClient = kubernetesClient;
         this.configManager = configManager;
         this.operatorMetricGroup = operatorMetricGroup;
+        this.eventRecorder = eventRecorder;
         this.serviceMap = new ConcurrentHashMap<>();
     }
 
@@ -98,7 +103,8 @@ public class FlinkResourceContextFactory {
                     switch (mode) {
                         case NATIVE:
                             LOG.debug("Using NativeFlinkService");
-                            return new NativeFlinkService(kubernetesClient, configManager);
+                            return new NativeFlinkService(
+                                    kubernetesClient, configManager, eventRecorder);
                         case STANDALONE:
                             LOG.debug("Using StandaloneFlinkService");
                             return new StandaloneFlinkService(kubernetesClient, configManager);

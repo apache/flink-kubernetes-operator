@@ -89,7 +89,8 @@ public class TestingFlinkDeploymentController
                         kubernetesClient,
                         configManager,
                         TestUtils.createTestMetricGroup(new Configuration()),
-                        flinkService);
+                        flinkService,
+                        eventRecorder);
 
         eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
         statusRecorder =

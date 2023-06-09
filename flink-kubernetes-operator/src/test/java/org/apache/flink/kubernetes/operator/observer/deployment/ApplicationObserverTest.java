@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
@@ -35,7 +36,6 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.NativeFlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -714,7 +714,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
         var conf = new Configuration();
         var v1 = new JobVertexID();
-        conf.set(NativeFlinkService.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "2"));
+        conf.set(PipelineOptions.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "2"));
         deployment.getSpec().setFlinkConfiguration(conf.toMap());
 
         // Update status after triggering scale operation

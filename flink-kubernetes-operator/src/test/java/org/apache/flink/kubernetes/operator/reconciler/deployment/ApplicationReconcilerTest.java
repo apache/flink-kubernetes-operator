@@ -24,6 +24,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.configuration.SchedulerExecutionMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -609,7 +610,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         // We create a service mocking out some methods we don't want to call explicitly
         var nativeService =
-                new NativeFlinkService(kubernetesClient, configManager) {
+                new NativeFlinkService(kubernetesClient, configManager, eventRecorder) {
 
                     Map<JobVertexID, JobVertexResourceRequirements> submitted = Map.of();
 
@@ -637,7 +638,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         var ctxFactory =
                 new TestingFlinkResourceContextFactory(
-                        getKubernetesClient(), configManager, operatorMetricGroup, nativeService);
+                        getKubernetesClient(),
+                        configManager,
+                        operatorMetricGroup,
+                        nativeService,
+                        eventRecorder);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         // Set all the properties required by the rescale api
@@ -649,6 +654,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 .put(
                         JobManagerOptions.SCHEDULER.key(),
                         JobManagerOptions.SchedulerType.Adaptive.name());
+        deployment.getMetadata().setGeneration(1L);
 
         // Deploy the job and update the status accordingly so we can proceed to rescaling it
         reconciler.reconcile(deployment, context);
@@ -659,9 +665,14 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
-                .put(NativeFlinkService.PARALLELISM_OVERRIDES.key(), v1.toHexString() + ":2");
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1.toHexString() + ":2");
+        deployment.getMetadata().setGeneration(2L);
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
         assertEquals(1, rescaleCounter.get());
+        assertEquals(
+                EventRecorder.Reason.Scaling.toString(),
+                eventCollector.events.getLast().getReason());
+        assertEquals(3, eventCollector.events.size());
 
         // Job should not be stopped, we simply call the rescale api
         assertEquals(
@@ -680,7 +691,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         .getReconciliationStatus()
                         .deserializeLastReconciledSpec()
                         .getFlinkConfiguration()
-                        .get(NativeFlinkService.PARALLELISM_OVERRIDES.key()));
+                        .get(PipelineOptions.PARALLELISM_OVERRIDES.key()));
 
         // Reconciler should not do anything while waiting for scaling completion
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
@@ -700,13 +711,15 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         .getReconciliationStatus()
                         .deserializeLastReconciledSpec()
                         .getFlinkConfiguration()
-                        .get(NativeFlinkService.PARALLELISM_OVERRIDES.key()));
+                        .get(PipelineOptions.PARALLELISM_OVERRIDES.key()));
         assertEquals(1, rescaleCounter.get());
+        assertEquals(3, eventCollector.events.size());
 
         var deploymentClone = ReconciliationUtils.clone(deployment);
 
         // Make sure to trigger regular upgrade on other spec changes
         deployment.getSpec().setRestartNonce(5L);
+        deployment.getMetadata().setGeneration(3L);
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
         assertEquals(
                 JobState.SUSPENDED,

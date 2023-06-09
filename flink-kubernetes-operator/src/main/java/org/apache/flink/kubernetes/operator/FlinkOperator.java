@@ -81,6 +81,8 @@ public class FlinkOperator {
     private final Collection<FlinkResourceListener> listeners;
     private final OperatorHealthService operatorHealthService;
 
+    private final EventRecorder eventRecorder;
+
     public FlinkOperator(@Nullable Configuration conf) {
         this.configManager =
                 conf != null
@@ -93,9 +95,11 @@ public class FlinkOperator {
                 KubernetesClientUtils.getKubernetesClient(
                         configManager.getOperatorConfiguration(), this.metricGroup);
         this.operator = createOperator();
-        this.ctxFactory = new FlinkResourceContextFactory(client, configManager, metricGroup);
         this.validators = ValidatorUtils.discoverValidators(configManager);
         this.listeners = ListenerUtils.discoverListeners(configManager);
+        this.eventRecorder = EventRecorder.create(client, listeners);
+        this.ctxFactory =
+                new FlinkResourceContextFactory(client, configManager, metricGroup, eventRecorder);
         PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(defaultConfig);
         FileSystem.initialize(defaultConfig, pluginManager);
         this.operatorHealthService = OperatorHealthService.fromConfig(configManager);
@@ -157,7 +161,6 @@ public class FlinkOperator {
         var metricManager =
                 MetricManager.createFlinkDeploymentMetricManager(configManager, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
-        var eventRecorder = EventRecorder.create(client, listeners);
         var autoscalerFactory = AutoscalerLoader.loadJobAutoscalerFactory();
         var reconcilerFactory =
                 new ReconcilerFactory(

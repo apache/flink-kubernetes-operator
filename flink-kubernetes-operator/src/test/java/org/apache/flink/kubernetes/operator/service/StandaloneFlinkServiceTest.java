@@ -143,7 +143,8 @@ public class StandaloneFlinkServiceTest {
                 new FlinkResourceContextFactory(
                                 kubernetesClient,
                                 configManager,
-                                TestUtils.createTestMetricGroup(new Configuration()))
+                                TestUtils.createTestMetricGroup(new Configuration()),
+                                null)
                         .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
         assertTrue(flinkStandaloneService.scale(ctx));
         assertEquals(
@@ -184,7 +185,8 @@ public class StandaloneFlinkServiceTest {
                 new FlinkResourceContextFactory(
                                 kubernetesClient,
                                 configManager,
-                                TestUtils.createTestMetricGroup(new Configuration()))
+                                TestUtils.createTestMetricGroup(new Configuration()),
+                                null)
                         .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
         assertTrue(flinkStandaloneService.scale(ctx));
 
