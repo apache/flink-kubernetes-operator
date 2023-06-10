@@ -39,21 +39,13 @@ public class ScalingMetrics {
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetrics.class);
 
     public static void computeLoadMetrics(
+            JobVertexID jobVertexID,
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
-            Map<ScalingMetric, Double> scalingMetrics) {
+            Map<ScalingMetric, Double> scalingMetrics,
+            Configuration conf) {
 
-        var busyTime = flinkMetrics.get(FlinkMetric.BUSY_TIME_PER_SEC);
-        if (busyTime == null) {
-            return;
-        }
-
-        if (!busyTime.getAvg().isNaN()) {
-            scalingMetrics.put(ScalingMetric.LOAD_AVG, busyTime.getAvg() / 1000);
-        }
-
-        if (!busyTime.getMax().isNaN()) {
-            scalingMetrics.put(ScalingMetric.LOAD_MAX, busyTime.getMax() / 1000);
-        }
+        double busyTimeMsPerSecond = getBusyTimeMsPerSecond(flinkMetrics, conf, jobVertexID);
+        scalingMetrics.put(ScalingMetric.LOAD, busyTimeMsPerSecond / 1000);
     }
 
     public static void computeDataRateMetrics(

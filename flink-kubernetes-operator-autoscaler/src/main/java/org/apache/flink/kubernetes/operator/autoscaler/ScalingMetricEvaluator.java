@@ -45,6 +45,7 @@ import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerO
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CURRENT_PROCESSING_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.LAG;
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.LOAD;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
@@ -136,6 +137,11 @@ public class ScalingMetricEvaluator {
                 new EvaluatedScalingMetric(
                         latestVertexMetrics.get(TRUE_PROCESSING_RATE),
                         getAverage(TRUE_PROCESSING_RATE, vertex, metricsHistory)));
+
+        evaluatedMetrics.put(
+                LOAD,
+                new EvaluatedScalingMetric(
+                        latestVertexMetrics.get(LOAD), getAverage(LOAD, vertex, metricsHistory)));
 
         evaluatedMetrics.put(
                 PARALLELISM, EvaluatedScalingMetric.of(topology.getParallelisms().get(vertex)));
