@@ -151,43 +151,23 @@ Check out this [document](https://kubernetes.io/docs/reference/access-authn-auth
 
 ## Working with Argo CD
 
-If you are using [Argo CD](https://argoproj.github.io) to manage the operator, you will encounter the issue which complains the CRDs too long. Same with [this issue](https://github.com/prometheus-operator/prometheus-operator/issues/4439).
-The recommended solution is to split the operator into two Argo apps, such as:
-
-* The first app just for installing the CRDs with `Replace=true` directly, snippet:
+If you are using [Argo CD](https://argoproj.github.io) to manage the operator,
+the simplest example could look like this.
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: flink-kubernetes-operator-crds
-spec:
-  source:
-    repoURL: https://github.com/apache/flink-kubernetes-operator
-    targetRevision: main
-    path: helm/flink-kubernetes-operator/crds
-  syncPolicy:
-    syncOptions:
-    - Replace=true
-...
-```
-
-* The second app that installs the Helm chart with `skipCrds=true` (new feature in Argo CD 2.3.0), snippet:
-
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: flink-kubernetes-operator-skip-crds
+  name: flink-kubernetes-operator
 spec:
   source:
     repoURL: https://github.com/apache/flink-kubernetes-operator
     targetRevision: main
     path: helm/flink-kubernetes-operator
-    helm:
-      skipCrds: true
 ...
 ```
+
+Check out [Argo CD documents](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/) for more details.
 
 ## Advanced customization techniques
 The Helm chart does not aim to provide configuration options for all the possible deployment scenarios of the Operator. There are use cases for injecting common tools and/or sidecars in most enterprise environments that cannot be covered by public Helm charts.
