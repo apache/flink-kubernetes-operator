@@ -183,3 +183,6 @@ operatorHealth:
   startupProbe:
     failureThreshold: 30
     periodSeconds: 10
+
+# Set postStart hook of the main container
+postStart: {}
