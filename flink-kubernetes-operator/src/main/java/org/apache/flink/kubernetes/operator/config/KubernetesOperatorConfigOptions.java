@@ -150,6 +150,14 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(false)
                     .withDescription("Whether to ignore pending savepoint during job upgrade.");
 
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> JOB_UPGRADE_INPLACE_SCALING_ENABLED =
+            operatorConfig("job.upgrade.inplace-scaling.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Whether to enable inplace scaling for Flink 1.18+ using the resource requirements API. On failure or earlier Flink versions it falls back to regular full redeployment.");
+
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Boolean> OPERATOR_DYNAMIC_CONFIG_ENABLED =
             operatorConfig("dynamic.config.enabled")
