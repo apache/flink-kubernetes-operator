@@ -159,6 +159,12 @@
             <td>Whether to ignore pending savepoint during job upgrade.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.job.upgrade.inplace-scaling.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Whether to enable inplace scaling for Flink 1.18+ using the resource requirements API. On failure or earlier Flink versions it falls back to regular full redeployment.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.job.upgrade.last-state-fallback.enabled</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>

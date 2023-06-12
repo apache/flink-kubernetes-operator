@@ -38,6 +38,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -176,11 +177,14 @@ public class NativeFlinkService extends AbstractFlinkService {
         var resource = ctx.getResource();
         var spec = resource.getSpec();
 
-        if (spec.getJob() == null) {
+        var observeConfig = ctx.getObserveConfig();
+
+        if (spec.getJob() == null
+                || !observeConfig.get(
+                        KubernetesOperatorConfigOptions.JOB_UPGRADE_INPLACE_SCALING_ENABLED)) {
             return false;
         }
 
-        var observeConfig = ctx.getObserveConfig();
         if (!observeConfig.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_17)) {
             LOG.debug("In-place rescaling is only available starting from Flink 1.18");
             return false;

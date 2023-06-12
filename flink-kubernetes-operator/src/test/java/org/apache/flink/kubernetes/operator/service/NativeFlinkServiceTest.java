@@ -661,6 +661,20 @@ public class NativeFlinkServiceTest {
         testScaleConditionDep(flinkDep, service, d -> {}, true);
         testScaleConditionLastSpec(flinkDep, service, d -> {}, true);
 
+        // Do not scale if config disabled
+        testScaleConditionDep(
+                flinkDep,
+                service,
+                d ->
+                        d.getSpec()
+                                .getFlinkConfiguration()
+                                .put(
+                                        KubernetesOperatorConfigOptions
+                                                .JOB_UPGRADE_INPLACE_SCALING_ENABLED
+                                                .key(),
+                                        "false"),
+                false);
+
         // Do not scale without adaptive scheduler deployed
         testScaleConditionLastSpec(
                 flinkDep,
