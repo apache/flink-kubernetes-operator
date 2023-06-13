@@ -76,6 +76,7 @@ jobs:
           - test_sessionjob_kubernetes_ha.sh
           - test_sessionjob_operations.sh
           - test_multi_sessionjob.sh
+          - test_autoscaler.sh
         include:
           - namespace: flink
             extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
@@ -94,6 +95,18 @@ jobs:
         exclude:
           - namespace: default
             test: test_multi_sessionjob.sh
+          - namespace: default
+            test: test_autoscaler.sh
+          - mode: standalone
+            test: test_autoscaler.sh
+          - version: v1_13
+            test: test_autoscaler.sh
+          - version: v1_14
+            test: test_autoscaler.sh
+          - version: v1_15
+            test: test_autoscaler.sh
+          - version: v1_16
+            test: test_autoscaler.sh
     name: e2e_ci
     steps:
       - uses: actions/checkout@v2
