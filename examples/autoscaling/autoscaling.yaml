@@ -31,7 +31,7 @@ spec:
     taskmanager.numberOfTaskSlots: "4"
     state.savepoints.dir: file:///flink-data/savepoints
     state.checkpoints.dir: file:///flink-data/checkpoints
-    high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
+    high-availability.type: kubernetes
     high-availability.storageDir: file:///flink-data/ha
     execution.checkpointing.interval: "1m"
     jobmanager.scheduler: adaptive

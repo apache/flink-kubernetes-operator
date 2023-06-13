@@ -57,6 +57,26 @@ function wait_for_status {
   exit 1
 }
 
+function wait_for_event {
+  local kind=$1
+  local resource=$2
+  local event_filter=$3
+  local timeout=$4
+
+  echo "Waiting for $resource event matching $event_filter..."
+  for i in $(seq 1 ${timeout}); do
+    test=$(kubectl get events --field-selector involvedObject.kind=$kind,involvedObject.name=$resource -oyaml | yq ".items.[] | select($event_filter)")
+    if [ "$test" ]; then
+      echo "Successfully verified that $resource event exists."
+      return 0
+    fi
+
+    sleep 1
+  done
+  echo "Event verification for $resource failed with timeout of ${timeout}."
+  exit 1
+}
+
 function assert_available_slots() {
   expected=$1
   CLUSTER_ID=$2
@@ -129,6 +149,13 @@ function retry_times() {
     echo "Command: ${command} failed ${retriesNumber} times."
     return 1
 }
+
+function get_flink_version() {
+  local resource=$1
+
+  kubectl get -oyaml $resource | yq ".spec.flinkVersion"
+}
+
 
 function check_operator_log_for_errors {
   local ignore=$1
