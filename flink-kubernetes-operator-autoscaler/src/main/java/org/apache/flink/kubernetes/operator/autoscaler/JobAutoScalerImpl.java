@@ -36,9 +36,9 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFlinkMetrics.initRecommendedParallelism;
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFlinkMetrics.resetRecommendedParallelism;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
-import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.PARALLELISM;
-import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.RECOMMENDED_PARALLELISM;
 
 /** Application and SessionJob autoscaler. */
 public class JobAutoScalerImpl implements JobAutoScaler {
@@ -190,21 +190,5 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                 id ->
                         new AutoscalerFlinkMetrics(
                                 ctx.getResourceMetricGroup().addGroup("AutoScaler")));
-    }
-
-    private void initRecommendedParallelism(
-            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
-        evaluatedMetrics.forEach(
-                (jobVertexID, evaluatedScalingMetricMap) ->
-                        evaluatedScalingMetricMap.put(
-                                RECOMMENDED_PARALLELISM,
-                                evaluatedScalingMetricMap.get(PARALLELISM)));
-    }
-
-    private void resetRecommendedParallelism(
-            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
-        evaluatedMetrics.forEach(
-                (jobVertexID, evaluatedScalingMetricMap) ->
-                        evaluatedScalingMetricMap.put(RECOMMENDED_PARALLELISM, null));
     }
 }

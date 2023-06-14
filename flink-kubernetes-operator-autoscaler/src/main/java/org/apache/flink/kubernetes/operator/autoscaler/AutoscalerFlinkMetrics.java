@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.metrics.Counter;
@@ -32,10 +33,16 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
 
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.PARALLELISM;
+import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.RECOMMENDED_PARALLELISM;
+
 /** Autoscaler metrics for observability. */
 public class AutoscalerFlinkMetrics {
 
     private static final Logger LOG = LoggerFactory.getLogger(AutoscalerFlinkMetrics.class);
+    @VisibleForTesting static final String CURRENT = "Current";
+    @VisibleForTesting static final String AVERAGE = "Average";
+    @VisibleForTesting static final String JOB_VERTEX_ID = "jobVertexID";
 
     final Counter numScalings;
 
@@ -66,14 +73,14 @@ public class AutoscalerFlinkMetrics {
                             }
                             LOG.info("Registering scaling metrics for job vertex {}", jobVertexID);
                             var jobVertexMg =
-                                    metricGroup.addGroup("jobVertexID", jobVertexID.toHexString());
+                                    metricGroup.addGroup(JOB_VERTEX_ID, jobVertexID.toHexString());
 
                             evaluated.forEach(
                                     (sm, esm) -> {
                                         var smGroup = jobVertexMg.addGroup(sm.name());
 
                                         smGroup.gauge(
-                                                "Current",
+                                                CURRENT,
                                                 () ->
                                                         Optional.ofNullable(
                                                                         currentVertexMetrics.get())
@@ -82,11 +89,11 @@ public class AutoscalerFlinkMetrics {
                                                                 .map(
                                                                         EvaluatedScalingMetric
                                                                                 ::getCurrent)
-                                                                .orElse(null));
+                                                                .orElse(Double.NaN));
 
                                         if (sm.isCalculateAverage()) {
                                             smGroup.gauge(
-                                                    "Average",
+                                                    AVERAGE,
                                                     () ->
                                                             Optional.ofNullable(
                                                                             currentVertexMetrics
@@ -96,9 +103,27 @@ public class AutoscalerFlinkMetrics {
                                                                     .map(
                                                                             EvaluatedScalingMetric
                                                                                     ::getAverage)
-                                                                    .orElse(null));
+                                                                    .orElse(Double.NaN));
                                         }
                                     });
                         });
+    }
+
+    @VisibleForTesting
+    static void initRecommendedParallelism(
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
+        evaluatedMetrics.forEach(
+                (jobVertexID, evaluatedScalingMetricMap) ->
+                        evaluatedScalingMetricMap.put(
+                                RECOMMENDED_PARALLELISM,
+                                evaluatedScalingMetricMap.get(PARALLELISM)));
+    }
+
+    @VisibleForTesting
+    static void resetRecommendedParallelism(
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
+        evaluatedMetrics.forEach(
+                (jobVertexID, evaluatedScalingMetricMap) ->
+                        evaluatedScalingMetricMap.put(RECOMMENDED_PARALLELISM, null));
     }
 }
