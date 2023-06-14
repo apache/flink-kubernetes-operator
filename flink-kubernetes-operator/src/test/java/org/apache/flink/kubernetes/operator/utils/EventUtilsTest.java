@@ -197,4 +197,69 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator);
         Assertions.assertNotEquals(name1, name2);
     }
+
+    @Test
+    public void testCreateIfNotExists() {
+        var consumer =
+                new Consumer<Event>() {
+                    @Override
+                    public void accept(Event event) {
+                        eventConsumed = event;
+                    }
+                };
+        var flinkApp = TestUtils.buildApplicationCluster();
+        var reason = "test";
+        var message = "mk";
+        var eventName =
+                EventUtils.generateEventName(
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        "mk",
+                        EventRecorder.Component.Operator);
+        Assertions.assertTrue(
+                EventUtils.createIfNotExists(
+                        kubernetesClient,
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        message,
+                        EventRecorder.Component.Operator,
+                        consumer,
+                        "mk"));
+        var event =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(flinkApp.getMetadata().getNamespace())
+                        .withName(eventName)
+                        .get();
+        Assertions.assertNotNull(event);
+        Assertions.assertEquals(eventConsumed, event);
+        Assertions.assertEquals(1, event.getCount());
+        Assertions.assertEquals(reason, event.getReason());
+
+        // Make sure we didn't bump the count
+        eventConsumed = null;
+        Assertions.assertFalse(
+                EventUtils.createIfNotExists(
+                        kubernetesClient,
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        message,
+                        EventRecorder.Component.Operator,
+                        consumer,
+                        "mk"));
+
+        event =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(flinkApp.getMetadata().getNamespace())
+                        .withName(eventName)
+                        .get();
+        Assertions.assertEquals(1, event.getCount());
+        Assertions.assertNull(eventConsumed);
+    }
 }

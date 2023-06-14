@@ -52,6 +52,16 @@ public class EventRecorder {
         return triggerEvent(resource, type, reason, component, message, null);
     }
 
+    public boolean triggerEventOnce(
+            AbstractFlinkResource<?, ?> resource,
+            Type type,
+            Reason reason,
+            Component component,
+            String message,
+            String messageKey) {
+        return triggerEventOnce(resource, type, reason.toString(), message, component, messageKey);
+    }
+
     public boolean triggerEvent(
             AbstractFlinkResource<?, ?> resource,
             Type type,
@@ -70,6 +80,24 @@ public class EventRecorder {
             Component component,
             String messageKey) {
         return EventUtils.createOrUpdateEvent(
+                client,
+                resource,
+                type,
+                reason,
+                message,
+                component,
+                e -> eventListener.accept(resource, e),
+                messageKey);
+    }
+
+    public boolean triggerEventOnce(
+            AbstractFlinkResource<?, ?> resource,
+            Type type,
+            String reason,
+            String message,
+            Component component,
+            String messageKey) {
+        return EventUtils.createIfNotExists(
                 client,
                 resource,
                 type,

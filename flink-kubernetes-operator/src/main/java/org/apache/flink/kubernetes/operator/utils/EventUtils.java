@@ -62,23 +62,12 @@ public class EventUtils {
             Consumer<Event> eventListener,
             @Nullable String messageKey) {
 
-        if (messageKey == null) {
-            messageKey = message;
-        }
-        var eventName = generateEventName(target, type, reason, messageKey, component);
+        String eventName =
+                generateEventName(
+                        target, type, reason, messageKey != null ? messageKey : message, component);
+        Event existing = findExistingEvent(client, target, eventName);
 
-        var existing =
-                client.v1()
-                        .events()
-                        .inNamespace(target.getMetadata().getNamespace())
-                        .withName(eventName)
-                        .get();
-
-        if (existing != null
-                && existing.getType().equals(type.name())
-                && existing.getReason().equals(reason)
-                && existing.getInvolvedObject().getName().equals(target.getMetadata().getName())
-                && existing.getInvolvedObject().getKind().equals(target.getKind())) {
+        if (existing != null) {
             // update
             existing.setLastTimestamp(Instant.now().toString());
             existing.setCount(existing.getCount() + 1);
@@ -86,32 +75,74 @@ public class EventUtils {
             eventListener.accept(client.resource(existing).createOrReplace());
             return false;
         } else {
-            var event =
-                    new EventBuilder()
-                            .withApiVersion("v1")
-                            .withInvolvedObject(
-                                    new ObjectReferenceBuilder()
-                                            .withKind(target.getKind())
-                                            .withUid(target.getMetadata().getUid())
-                                            .withName(target.getMetadata().getName())
-                                            .withNamespace(target.getMetadata().getNamespace())
-                                            .build())
-                            .withType(type.name())
-                            .withReason(reason)
-                            .withFirstTimestamp(Instant.now().toString())
-                            .withLastTimestamp(Instant.now().toString())
-                            .withNewSource()
-                            .withComponent(component.name())
-                            .endSource()
-                            .withCount(1)
-                            .withMessage(message)
-                            .withNewMetadata()
-                            .withName(eventName)
-                            .withNamespace(target.getMetadata().getNamespace())
-                            .endMetadata()
-                            .build();
+            Event event = buildEvent(target, type, reason, message, component, eventName);
             eventListener.accept(client.resource(event).createOrReplace());
             return true;
         }
+    }
+
+    private static Event findExistingEvent(
+            KubernetesClient client, HasMetadata target, String eventName) {
+        return client.v1()
+                .events()
+                .inNamespace(target.getMetadata().getNamespace())
+                .withName(eventName)
+                .get();
+    }
+
+    public static boolean createIfNotExists(
+            KubernetesClient client,
+            HasMetadata target,
+            EventRecorder.Type type,
+            String reason,
+            String message,
+            EventRecorder.Component component,
+            Consumer<Event> eventListener,
+            @Nullable String messageKey) {
+
+        String eventName =
+                generateEventName(
+                        target, type, reason, messageKey != null ? messageKey : message, component);
+        Event existing = findExistingEvent(client, target, eventName);
+
+        if (existing != null) {
+            return false;
+        } else {
+            Event event = buildEvent(target, type, reason, message, component, eventName);
+            eventListener.accept(client.resource(event).createOrReplace());
+            return true;
+        }
+    }
+
+    private static Event buildEvent(
+            HasMetadata target,
+            EventRecorder.Type type,
+            String reason,
+            String message,
+            EventRecorder.Component component,
+            String eventName) {
+        return new EventBuilder()
+                .withApiVersion("v1")
+                .withInvolvedObject(
+                        new ObjectReferenceBuilder()
+                                .withKind(target.getKind())
+                                .withUid(target.getMetadata().getUid())
+                                .withName(target.getMetadata().getName())
+                                .withNamespace(target.getMetadata().getNamespace())
+                                .build())
+                .withType(type.name())
+                .withReason(reason)
+                .withFirstTimestamp(Instant.now().toString())
+                .withLastTimestamp(Instant.now().toString())
+                .withNewSource()
+                .withComponent(component.name())
+                .endSource()
+                .withCount(1)
+                .withMessage(message)
+                .withNewMetadata()
+                .withName(eventName)
+                .withNamespace(target.getMetadata().getNamespace())
+                .endMetadata()
+                .build();
     }
 }
