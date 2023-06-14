@@ -233,42 +233,44 @@ public abstract class AbstractFlinkDeploymentObserver
     }
 
     @Override
-    protected void updateStatusToDeployedIfAlreadyUpgraded(
-            FlinkResourceContext<FlinkDeployment> ctx) {
+    protected boolean checkIfAlreadyUpgraded(FlinkResourceContext<FlinkDeployment> ctx) {
         var flinkDep = ctx.getResource();
         var status = flinkDep.getStatus();
+
+        // We are performing a full upgrade
         Optional<Deployment> depOpt = ctx.getJosdkContext().getSecondaryResource(Deployment.class);
-        depOpt.ifPresent(
-                deployment -> {
-                    Map<String, String> annotations = deployment.getMetadata().getAnnotations();
-                    if (annotations == null) {
-                        return;
-                    }
-                    Long deployedGeneration =
-                            Optional.ofNullable(annotations.get(FlinkUtils.CR_GENERATION_LABEL))
-                                    .map(Long::valueOf)
-                                    .orElse(-1L);
 
-                    Long upgradeTargetGeneration =
-                            ReconciliationUtils.getUpgradeTargetGeneration(flinkDep);
+        if (!depOpt.isPresent()) {
+            // Nothing is deployed, so definitely not upgraded
+            return false;
+        }
 
-                    if (deployedGeneration.equals(upgradeTargetGeneration)) {
-                        logger.info("Pending upgrade is already deployed, updating status.");
-                        ReconciliationUtils.updateStatusForAlreadyUpgraded(flinkDep);
-                        if (flinkDep.getSpec().getJob() != null) {
-                            status.getJobStatus()
-                                    .setState(
-                                            org.apache.flink.api.common.JobStatus.RECONCILING
-                                                    .name());
-                        }
-                        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-                    } else {
-                        logger.warn(
-                                "Running deployment generation {} doesn't match upgrade target generation {}.",
-                                deployedGeneration,
-                                upgradeTargetGeneration);
-                    }
-                });
+        var deployment = depOpt.get();
+
+        Map<String, String> annotations = deployment.getMetadata().getAnnotations();
+        if (annotations == null) {
+            logger.warn(
+                    "Running deployment doesn't have any annotations. This could indicate a deployment error.");
+            return false;
+        }
+        Long deployedGeneration =
+                Optional.ofNullable(annotations.get(FlinkUtils.CR_GENERATION_LABEL))
+                        .map(Long::valueOf)
+                        .orElse(-1L);
+
+        Long upgradeTargetGeneration = ReconciliationUtils.getUpgradeTargetGeneration(flinkDep);
+
+        if (deployedGeneration.equals(upgradeTargetGeneration)) {
+            logger.info("Pending upgrade is already deployed, updating status.");
+            status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
+            return true;
+        } else {
+            logger.warn(
+                    "Running deployment generation {} doesn't match upgrade target generation {}.",
+                    deployedGeneration,
+                    upgradeTargetGeneration);
+            return false;
+        }
     }
 
     /**

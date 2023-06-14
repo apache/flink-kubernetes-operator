@@ -47,7 +47,7 @@ public class JobSpec implements Diffable<JobSpec> {
     private String jarURI;
 
     /** Parallelism of the Flink job. */
-    @SpecDiff(DiffType.SCALE)
+    @SpecDiff(value = DiffType.SCALE, mode = KubernetesDeploymentMode.STANDALONE)
     private int parallelism;
 
     /** Fully qualified main class name of the Flink job. */

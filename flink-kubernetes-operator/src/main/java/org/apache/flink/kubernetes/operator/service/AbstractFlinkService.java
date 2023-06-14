@@ -480,8 +480,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             Configuration conf)
             throws Exception {
         LOG.info("Triggering new savepoint");
-        try (RestClusterClient<String> clusterClient =
-                (RestClusterClient<String>) getClusterClient(conf)) {
+        try (var clusterClient = getClusterClient(conf)) {
             var savepointTriggerHeaders = SavepointTriggerHeaders.getInstance();
             var savepointTriggerMessageParameters =
                     savepointTriggerHeaders.getUnresolvedMessageParameters();
@@ -543,8 +542,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                     Optional<CheckpointHistoryWrapper.CompletedCheckpointInfo>,
                     Optional<CheckpointHistoryWrapper.PendingCheckpointInfo>>
             getCheckpointInfo(JobID jobId, Configuration conf) throws Exception {
-        try (RestClusterClient<String> clusterClient =
-                (RestClusterClient<String>) getClusterClient(conf)) {
+        try (var clusterClient = getClusterClient(conf)) {
 
             var headers = CustomCheckpointingStatisticsHeaders.getInstance();
             var params = headers.getUnresolvedMessageParameters();
@@ -569,8 +567,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public void disposeSavepoint(String savepointPath, Configuration conf) throws Exception {
-        try (RestClusterClient<String> clusterClient =
-                (RestClusterClient<String>) getClusterClient(conf)) {
+        try (var clusterClient = getClusterClient(conf)) {
             clusterClient
                     .sendRequest(
                             SavepointDisposalTriggerHeaders.getInstance(),
@@ -631,8 +628,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     public Map<String, String> getClusterInfo(Configuration conf) throws Exception {
         Map<String, String> clusterInfo = new HashMap<>();
 
-        try (RestClusterClient<String> clusterClient =
-                (RestClusterClient<String>) getClusterClient(conf)) {
+        try (var clusterClient = getClusterClient(conf)) {
 
             CustomDashboardConfiguration dashboardConfiguration =
                     clusterClient
@@ -685,7 +681,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public ClusterClient<String> getClusterClient(Configuration conf) throws Exception {
+    public RestClusterClient<String> getClusterClient(Configuration conf) throws Exception {
         final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
         final int port = conf.getInteger(RestOptions.PORT);
@@ -708,8 +704,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             String savepoint) {
         String jarId =
                 response.getFilename().substring(response.getFilename().lastIndexOf("/") + 1);
-        try (RestClusterClient<String> clusterClient =
-                (RestClusterClient<String>) getClusterClient(conf)) {
+        try (var clusterClient = getClusterClient(conf)) {
             JarRunHeaders headers = JarRunHeaders.getInstance();
             JarRunMessageParameters parameters = headers.getUnresolvedMessageParameters();
             parameters.jarIdPathParameter.resolve(jarId);
@@ -797,8 +792,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     @VisibleForTesting
     protected void deleteJar(Configuration conf, String jarId) {
         LOG.debug("Deleting the jar: {}", jarId);
-        try (RestClusterClient<String> clusterClient =
-                (RestClusterClient<String>) getClusterClient(conf)) {
+        try (var clusterClient = getClusterClient(conf)) {
             JarDeleteHeaders headers = JarDeleteHeaders.getInstance();
             JarDeleteMessageParameters parameters = headers.getUnresolvedMessageParameters();
             parameters.jarIdPathParameter.resolve(jarId);
@@ -937,7 +931,7 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     public Map<String, String> getMetrics(
             Configuration conf, String jobId, List<String> metricNames) throws Exception {
-        try (var clusterClient = (RestClusterClient<String>) getClusterClient(conf)) {
+        try (var clusterClient = getClusterClient(conf)) {
             var jobMetricsMessageParameters =
                     JobMetricsHeaders.getInstance().getUnresolvedMessageParameters();
             jobMetricsMessageParameters.jobPathParameter.resolve(JobID.fromHexString(jobId));
@@ -961,7 +955,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     public TaskManagersInfo getTaskManagersInfo(Configuration conf) throws Exception {
-        try (var clusterClient = (RestClusterClient<String>) getClusterClient(conf)) {
+        try (var clusterClient = getClusterClient(conf)) {
             return clusterClient
                     .sendRequest(
                             TaskManagersHeaders.getInstance(),

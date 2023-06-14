@@ -42,7 +42,7 @@ public class TaskManagerSpec implements Diffable<TaskManagerSpec> {
     private Resource resource;
 
     /** Number of TaskManager replicas. If defined, takes precedence over parallelism */
-    @SpecDiff(DiffType.SCALE)
+    @SpecDiff(value = DiffType.SCALE, mode = KubernetesDeploymentMode.STANDALONE)
     @SpecReplicas
     private Integer replicas;
 

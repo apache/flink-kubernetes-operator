@@ -79,8 +79,14 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
         // We are in the middle or possibly right after an upgrade
         if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
             // We must check if the upgrade went through without the status upgrade for some reason
-            updateStatusToDeployedIfAlreadyUpgraded(ctx);
-            if (reconciliationStatus.getState() == ReconciliationState.UPGRADING) {
+
+            if (reconciliationStatus.scalingInProgress()) {
+                if (ctx.getFlinkService().scalingCompleted(ctx)) {
+                    reconciliationStatus.setState(ReconciliationState.DEPLOYED);
+                }
+            } else if (checkIfAlreadyUpgraded(ctx)) {
+                ReconciliationUtils.updateStatusForAlreadyUpgraded(resource);
+            } else {
                 ReconciliationUtils.clearLastReconciledSpecIfFirstDeploy(resource);
                 logger.debug("Skipping observe before resource is deployed during upgrade");
                 return false;
@@ -105,5 +111,5 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
      *
      * @param ctx Context for resource.
      */
-    protected abstract void updateStatusToDeployedIfAlreadyUpgraded(FlinkResourceContext<CR> ctx);
+    protected abstract boolean checkIfAlreadyUpgraded(FlinkResourceContext<CR> ctx);
 }

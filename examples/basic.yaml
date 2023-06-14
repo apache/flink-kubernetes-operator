@@ -22,7 +22,6 @@ metadata:
   name: basic-example
 spec:
   image: flink:1.17
-  mode: standalone
   flinkVersion: v1_17
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "2"

@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.kubeclient.Fabric8FlinkStandaloneKubeClient;
 import org.apache.flink.kubernetes.operator.kubeclient.FlinkStandaloneKubeClient;
 import org.apache.flink.kubernetes.operator.standalone.KubernetesStandaloneClusterDescriptor;
@@ -169,7 +170,10 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public boolean scale(ObjectMeta meta, JobSpec jobSpec, Configuration conf) {
+    public boolean scale(FlinkResourceContext<?> ctx) {
+        var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
+        var jobSpec = ctx.getResource().getSpec();
+        var meta = ctx.getResource().getMetadata();
         if (conf.get(JobManagerOptions.SCHEDULER_MODE) != SchedulerExecutionMode.REACTIVE
                 && jobSpec != null) {
             LOG.info("Reactive scaling is not enabled");
@@ -196,12 +200,19 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                     actualReplicas,
                     desiredReplicas);
             deployment.scale(desiredReplicas);
+            return true;
         } else {
             LOG.info(
                     "Not scaling TM replicas: actual({}) == desired({})",
                     actualReplicas,
                     desiredReplicas);
+            return false;
         }
+    }
+
+    @Override
+    public boolean scalingCompleted(FlinkResourceContext<?> resourceContext) {
+        // Currently there is no good way of checking whether reactive scaling has completed or not.
         return true;
     }
 }

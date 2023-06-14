@@ -22,6 +22,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
+import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
@@ -76,5 +77,11 @@ public class FlinkSessionJobContext extends FlinkResourceContext<FlinkSessionJob
     @Override
     protected Configuration createObserveConfig() {
         return getDeployConfig(getResource().getSpec());
+    }
+
+    @Override
+    public KubernetesDeploymentMode getDeploymentMode() {
+        return KubernetesDeploymentMode.getDeploymentMode(
+                getJosdkContext().getSecondaryResource(FlinkDeployment.class).get());
     }
 }

@@ -111,11 +111,7 @@ public class FlinkResourceContextFactory {
 
     @VisibleForTesting
     protected FlinkService getOrCreateFlinkService(FlinkDeployment deployment) {
-        return getOrCreateFlinkService(getDeploymentMode(deployment));
-    }
-
-    private KubernetesDeploymentMode getDeploymentMode(FlinkDeployment deployment) {
-        return KubernetesDeploymentMode.getDeploymentMode(deployment);
+        return getOrCreateFlinkService(KubernetesDeploymentMode.getDeploymentMode(deployment));
     }
 
     public <CR extends AbstractFlinkResource<?, ?>> void cleanup(CR flinkApp) {

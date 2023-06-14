@@ -17,6 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.service;
 
+import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.cli.ApplicationDeployer;
 import org.apache.flink.client.deployment.ClusterClientFactory;
 import org.apache.flink.client.deployment.ClusterClientServiceLoader;
@@ -24,13 +27,30 @@ import org.apache.flink.client.deployment.ClusterDescriptor;
 import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
+import org.apache.flink.client.program.rest.RestClusterClient;
+import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
+import org.apache.flink.runtime.jobgraph.JobResourceRequirements;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
+import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
+import org.apache.flink.runtime.rest.messages.JobMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
+import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsBody;
+import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobResourcesRequirementsUpdateHeaders;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -39,11 +59,27 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
+
 /**
  * Implementation of {@link FlinkService} submitting and interacting with Native Kubernetes Flink
  * clusters and jobs.
  */
 public class NativeFlinkService extends AbstractFlinkService {
+
+    public static final ConfigOption<Map<String, String>> PARALLELISM_OVERRIDES =
+            ConfigOptions.key("pipeline.jobvertex-parallelism-overrides")
+                    .mapType()
+                    .defaultValue(Collections.emptyMap())
+                    .withDescription(
+                            "A parallelism override map (jobVertexId -> parallelism) which will be used to update"
+                                    + " the parallelism of the corresponding job vertices of submitted JobGraphs.");
 
     private static final Logger LOG = LoggerFactory.getLogger(NativeFlinkService.class);
 
@@ -136,6 +172,145 @@ public class NativeFlinkService extends AbstractFlinkService {
 
         if (deleteHaData) {
             deleteHAData(namespace, clusterId, conf);
+        }
+    }
+
+    @Override
+    public boolean scale(FlinkResourceContext<?> ctx) throws Exception {
+        var resource = ctx.getResource();
+        var spec = resource.getSpec();
+
+        if (spec.getJob() == null) {
+            return false;
+        }
+
+        var observeConfig = ctx.getObserveConfig();
+        if (!observeConfig.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_17)) {
+            LOG.debug("In-place rescaling is only available starting from Flink 1.18");
+            return false;
+        }
+
+        if (!observeConfig
+                .get(JobManagerOptions.SCHEDULER)
+                .equals(JobManagerOptions.SchedulerType.Adaptive)) {
+            LOG.debug("In-place rescaling is only available with the adaptive scheduler");
+            return false;
+        }
+
+        var status = resource.getStatus();
+        if (ReconciliationUtils.isJobInTerminalState(status)
+                || JobStatus.RECONCILING.name().equals(status.getJobStatus().getState())) {
+            LOG.info("Job in terminal or reconciling state cannot be scaled in-place");
+            return false;
+        }
+
+        var deployConfig = ctx.getDeployConfig(spec);
+        var newOverrides = deployConfig.get(NativeFlinkService.PARALLELISM_OVERRIDES);
+
+        try (var client = getClusterClient(observeConfig)) {
+            var currentReqs = getVertexResources(client, resource);
+            var newReqs = new HashMap<>(currentReqs);
+            newOverrides.forEach(
+                    (vs, ps) -> {
+                        int p = Integer.parseInt(ps);
+                        newReqs.put(
+                                JobVertexID.fromHexString(vs),
+                                new JobVertexResourceRequirements(
+                                        new JobVertexResourceRequirements.Parallelism(p, p)));
+                    });
+
+            if (currentReqs.equals(newReqs)) {
+                LOG.info("Vertex resources requirements already match target, nothing to do...");
+            } else {
+                updateVertexResources(client, resource, newReqs);
+            }
+
+            return true;
+        } catch (Throwable t) {
+            LOG.error("Error while rescaling, falling back to regular upgrade", t);
+            return false;
+        }
+    }
+
+    @VisibleForTesting
+    protected void updateVertexResources(
+            RestClusterClient<String> client,
+            AbstractFlinkResource<?, ?> resource,
+            Map<JobVertexID, JobVertexResourceRequirements> newReqs)
+            throws Exception {
+        var jobParameters = new JobMessageParameters();
+        jobParameters.jobPathParameter.resolve(
+                JobID.fromHexString(resource.getStatus().getJobStatus().getJobId()));
+
+        var requestBody = new JobResourceRequirementsBody(new JobResourceRequirements(newReqs));
+
+        client.sendRequest(new JobResourcesRequirementsUpdateHeaders(), jobParameters, requestBody)
+                .get(
+                        configManager
+                                .getOperatorConfiguration()
+                                .getFlinkClientTimeout()
+                                .toSeconds(),
+                        TimeUnit.SECONDS);
+    }
+
+    @VisibleForTesting
+    protected Map<JobVertexID, JobVertexResourceRequirements> getVertexResources(
+            RestClusterClient<String> client, AbstractFlinkResource<?, ?> resource)
+            throws Exception {
+        var jobParameters = new JobMessageParameters();
+        jobParameters.jobPathParameter.resolve(
+                JobID.fromHexString(resource.getStatus().getJobStatus().getJobId()));
+
+        var currentRequirements =
+                client.sendRequest(
+                                new JobResourceRequirementsHeaders(),
+                                jobParameters,
+                                EmptyRequestBody.getInstance())
+                        .get(
+                                configManager
+                                        .getOperatorConfiguration()
+                                        .getFlinkClientTimeout()
+                                        .toSeconds(),
+                                TimeUnit.SECONDS);
+
+        return currentRequirements.asJobResourceRequirements().get().getJobVertexParallelisms();
+    }
+
+    @Override
+    public boolean scalingCompleted(FlinkResourceContext<?> ctx) {
+        var conf = ctx.getObserveConfig();
+        var status = ctx.getResource().getStatus();
+        try (var client = ctx.getFlinkService().getClusterClient(conf)) {
+            var jobId = JobID.fromHexString(status.getJobStatus().getJobId());
+            var jobDetailsInfo = client.getJobDetails(jobId).get();
+
+            Map<JobVertexID, Integer> currentParallelisms =
+                    jobDetailsInfo.getJobVertexInfos().stream()
+                            .collect(
+                                    Collectors.toMap(
+                                            JobDetailsInfo.JobVertexDetailsInfo::getJobVertexID,
+                                            JobDetailsInfo.JobVertexDetailsInfo::getParallelism));
+
+            Map<String, String> parallelismOverrides =
+                    conf.get(NativeFlinkService.PARALLELISM_OVERRIDES);
+            for (Map.Entry<String, String> entry : parallelismOverrides.entrySet()) {
+                Integer currentP =
+                        currentParallelisms.get(JobVertexID.fromHexString(entry.getKey()));
+                Integer expectedP = Integer.valueOf(entry.getValue());
+                if (!expectedP.equals(currentP)) {
+                    LOG.info(
+                            "Scaling still in progress for vertex {}, {} -> {}",
+                            entry.getKey(),
+                            currentP,
+                            expectedP);
+                    return false;
+                }
+            }
+            LOG.info("All vertexes have successfully scaled");
+            status.getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+            return true;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 }

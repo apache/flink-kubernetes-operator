@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
+import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
@@ -72,4 +73,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
      * @return Deployed config.
      */
     protected abstract Configuration createObserveConfig();
+
+    /** @return Cluster deployment mode. */
+    public abstract KubernetesDeploymentMode getDeploymentMode();
 }
