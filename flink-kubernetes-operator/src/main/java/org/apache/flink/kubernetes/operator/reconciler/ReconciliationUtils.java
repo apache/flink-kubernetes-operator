@@ -40,7 +40,6 @@ import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
@@ -62,7 +61,6 @@ public class ReconciliationUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReconciliationUtils.class);
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
     /**
      * Update status after successful deployment of a new resource spec. Existing reconciliation
      * errors will be cleared, lastReconciled spec will be updated and for suspended jobs it will
@@ -155,6 +153,12 @@ public class ReconciliationUtils {
         } else {
             reconciliationStatus.serializeAndSetLastReconciledSpec(spec, target);
         }
+    }
+
+    public static <SPEC extends AbstractFlinkSpec> void updateAfterScaleUp(
+            AbstractFlinkResource<SPEC, ?> target, Configuration deployConfig, Clock clock) {
+        ReconciliationUtils.updateStatusForSpecReconciliation(
+                target, JobState.RUNNING, deployConfig, true, clock);
     }
 
     public static <SPEC extends AbstractFlinkSpec> void updateLastReconciledSavepointTriggerNonce(
@@ -474,15 +478,16 @@ public class ReconciliationUtils {
      * DEPLOYED while keeping the metadata.
      *
      * @param resource Flink resource to be updated.
-     * @param <SPEC> Spec type.
      */
-    public static <SPEC extends AbstractFlinkSpec> void updateStatusForAlreadyUpgraded(
-            AbstractFlinkResource<SPEC, ?> resource) {
-        var reconciliationStatus = resource.getStatus().getReconciliationStatus();
+    public static void updateStatusForAlreadyUpgraded(AbstractFlinkResource<?, ?> resource) {
+        var status = resource.getStatus();
+        var reconciliationStatus = status.getReconciliationStatus();
         var lastSpecWithMeta = reconciliationStatus.deserializeLastReconciledSpecWithMeta();
         var lastJobSpec = lastSpecWithMeta.getSpec().getJob();
         if (lastJobSpec != null) {
             lastJobSpec.setState(JobState.RUNNING);
+            status.getJobStatus()
+                    .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
         }
         reconciliationStatus.setState(ReconciliationState.DEPLOYED);
         reconciliationStatus.setLastReconciledSpec(

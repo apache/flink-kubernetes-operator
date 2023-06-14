@@ -22,7 +22,7 @@ metadata:
   name: autoscaling-example
 spec:
   image: autoscaling-example
-  flinkVersion: v1_17
+  flinkVersion: v1_18
   flinkConfiguration:
     kubernetes.operator.job.autoscaler.enabled: "true"
     kubernetes.operator.job.autoscaler.stabilization.interval: "1m"
@@ -34,6 +34,8 @@ spec:
     high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
     high-availability.storageDir: file:///flink-data/ha
     execution.checkpointing.interval: "1m"
+    jobmanager.scheduler: adaptive
+    kubernetes.operator.job.autoscaler.target.utilization.boundary: "0.1"
   serviceAccount: flink
   jobManager:
     resource:

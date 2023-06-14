@@ -71,8 +71,7 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
     }
 
     @Override
-    protected void updateStatusToDeployedIfAlreadyUpgraded(
-            FlinkResourceContext<FlinkSessionJob> ctx) {
+    protected boolean checkIfAlreadyUpgraded(FlinkResourceContext<FlinkSessionJob> ctx) {
         var flinkSessionJob = ctx.getResource();
         var uid = flinkSessionJob.getMetadata().getUid();
         Collection<JobStatusMessage> jobStatusMessages;
@@ -91,7 +90,7 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
         }
 
         if (matchedJobs.isEmpty()) {
-            return;
+            return false;
         } else if (matchedJobs.size() > 1) {
             // this indicates a bug, which means we have more than one running job for a single
             // SessionJob CR.
@@ -111,12 +110,8 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
                         "Pending upgrade is already deployed, updating status. Old jobID:{}, new jobID:{}",
                         oldJobID,
                         matchedJobID.toHexString());
-                ReconciliationUtils.updateStatusForAlreadyUpgraded(flinkSessionJob);
-                flinkSessionJob
-                        .getStatus()
-                        .getJobStatus()
-                        .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
                 flinkSessionJob.getStatus().getJobStatus().setJobId(matchedJobID.toHexString());
+                return true;
             } else {
                 var msg =
                         String.format(

@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
@@ -28,6 +29,8 @@ import org.apache.flink.configuration.SchedulerExecutionMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.TestingFlinkResourceContextFactory;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -46,10 +49,14 @@ import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
+import org.apache.flink.kubernetes.operator.service.NativeFlinkService;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SavepointStatus;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -69,6 +76,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler.MSG_SUBMIT;
@@ -89,17 +97,17 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
             reconciler;
 
     @Getter private KubernetesClient kubernetesClient;
+    private ApplicationReconciler appReconciler;
 
     @Override
     public void setup() {
-        reconciler =
-                new TestReconcilerAdapter<>(
-                        this,
-                        new ApplicationReconciler(
-                                kubernetesClient,
-                                eventRecorder,
-                                statusRecorder,
-                                new NoopJobAutoscalerFactory()));
+        appReconciler =
+                new ApplicationReconciler(
+                        kubernetesClient,
+                        eventRecorder,
+                        statusRecorder,
+                        new NoopJobAutoscalerFactory());
+        reconciler = new TestReconcilerAdapter<>(this, appReconciler);
     }
 
     @ParameterizedTest
@@ -533,10 +541,12 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         .deserializeLastReconciledSpec()
                         .getJob()
                         .getState());
+        assertFalse(deployment.getStatus().getReconciliationStatus().scalingInProgress());
     }
 
     @Test
     public void testScaleWithReactiveModeEnabled() throws Exception {
+
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getSpec().setMode(KubernetesDeploymentMode.STANDALONE);
         deployment
@@ -554,6 +564,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 .getSpec()
                 .getFlinkConfiguration()
                 .put(CoreOptions.DEFAULT_PARALLELISM.key(), "100");
+
+        assertFalse(deployment.getStatus().getReconciliationStatus().scalingInProgress());
         reconciler.reconcile(deployment, context);
         assertEquals(
                 JobState.RUNNING,
@@ -576,6 +588,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         .getJob()
                         .getState());
         assertEquals(2, flinkService.getDesiredReplicas());
+        assertTrue(deployment.getStatus().getReconciliationStatus().scalingInProgress());
 
         deployment.getSpec().getJob().setParallelism(8);
         reconciler.reconcile(deployment, context);
@@ -588,6 +601,142 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         .getJob()
                         .getState());
         assertEquals(4, flinkService.getDesiredReplicas());
+    }
+
+    @Test
+    public void testScaleWithRescaleApi() throws Exception {
+        var rescaleCounter = new AtomicInteger(0);
+
+        // We create a service mocking out some methods we don't want to call explicitly
+        var nativeService =
+                new NativeFlinkService(kubernetesClient, configManager) {
+
+                    Map<JobVertexID, JobVertexResourceRequirements> submitted = Map.of();
+
+                    @Override
+                    protected Map<JobVertexID, JobVertexResourceRequirements> getVertexResources(
+                            RestClusterClient<String> c, AbstractFlinkResource<?, ?> r) {
+                        return submitted;
+                    }
+
+                    @Override
+                    protected void updateVertexResources(
+                            RestClusterClient<String> c,
+                            AbstractFlinkResource<?, ?> r,
+                            Map<JobVertexID, JobVertexResourceRequirements> req) {
+                        submitted = req;
+                        rescaleCounter.incrementAndGet();
+                    }
+
+                    @Override
+                    public void cancelJob(
+                            FlinkDeployment deployment,
+                            UpgradeMode upgradeMode,
+                            Configuration conf) {}
+                };
+
+        var ctxFactory =
+                new TestingFlinkResourceContextFactory(
+                        getKubernetesClient(), configManager, operatorMetricGroup, nativeService);
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+
+        // Set all the properties required by the rescale api
+        deployment.getSpec().setFlinkVersion(FlinkVersion.v1_18);
+        deployment.getSpec().setMode(KubernetesDeploymentMode.NATIVE);
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        JobManagerOptions.SCHEDULER.key(),
+                        JobManagerOptions.SchedulerType.Adaptive.name());
+
+        // Deploy the job and update the status accordingly so we can proceed to rescaling it
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        // Override parallelism for a vertex and trigger rescaling
+        var v1 = new JobVertexID();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(NativeFlinkService.PARALLELISM_OVERRIDES.key(), v1.toHexString() + ":2");
+        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        assertEquals(1, rescaleCounter.get());
+
+        // Job should not be stopped, we simply call the rescale api
+        assertEquals(
+                JobState.RUNNING,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState());
+        assertTrue(deployment.getStatus().getReconciliationStatus().scalingInProgress());
+        assertEquals(
+                v1.toHexString() + ":2",
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getFlinkConfiguration()
+                        .get(NativeFlinkService.PARALLELISM_OVERRIDES.key()));
+
+        // Reconciler should not do anything while waiting for scaling completion
+        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        assertEquals(
+                JobState.RUNNING,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState());
+        assertTrue(deployment.getStatus().getReconciliationStatus().scalingInProgress());
+        assertEquals(
+                v1.toHexString() + ":2",
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getFlinkConfiguration()
+                        .get(NativeFlinkService.PARALLELISM_OVERRIDES.key()));
+        assertEquals(1, rescaleCounter.get());
+
+        var deploymentClone = ReconciliationUtils.clone(deployment);
+
+        // Make sure to trigger regular upgrade on other spec changes
+        deployment.getSpec().setRestartNonce(5L);
+        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        assertEquals(
+                JobState.SUSPENDED,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState());
+        assertEquals(1, rescaleCounter.get());
+        assertEquals(
+                EventRecorder.Reason.SpecChanged.toString(),
+                eventCollector.events.get(eventCollector.events.size() - 2).getReason());
+
+        // If the job failed while rescaling we fall back to the regular upgrade mechanism
+        deployment = deploymentClone;
+        deployment
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.FAILED.name());
+        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
+        assertEquals(
+                JobState.SUSPENDED,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState());
+        assertEquals(1, rescaleCounter.get());
     }
 
     @ParameterizedTest

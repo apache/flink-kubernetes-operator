@@ -50,6 +50,10 @@ public abstract class AbstractFlinkSpec implements Diffable<AbstractFlinkSpec> {
     @SpecDiff.Config({
         @SpecDiff.Entry(prefix = "parallelism.default", type = DiffType.IGNORE),
         @SpecDiff.Entry(prefix = "kubernetes.operator", type = DiffType.IGNORE),
+        @SpecDiff.Entry(
+                prefix = "pipeline.jobvertex-parallelism-overrides",
+                type = DiffType.SCALE,
+                mode = KubernetesDeploymentMode.NATIVE)
     })
     private Map<String, String> flinkConfiguration;
 }

@@ -21,6 +21,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
@@ -54,5 +55,10 @@ public class FlinkDeploymentContext extends FlinkResourceContext<FlinkDeployment
     @Override
     protected Configuration createObserveConfig() {
         return configManager.getObserveConfig(getResource());
+    }
+
+    @Override
+    public KubernetesDeploymentMode getDeploymentMode() {
+        return KubernetesDeploymentMode.getDeploymentMode(getResource());
     }
 }

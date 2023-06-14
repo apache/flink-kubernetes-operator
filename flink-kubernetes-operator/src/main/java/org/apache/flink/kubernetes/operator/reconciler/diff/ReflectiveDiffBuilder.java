@@ -21,6 +21,7 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
+import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 
 import lombok.NonNull;
 import org.apache.commons.lang3.ClassUtils;
@@ -30,6 +31,7 @@ import org.apache.commons.lang3.reflect.FieldUtils;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -46,11 +48,16 @@ import static org.apache.flink.kubernetes.operator.api.diff.DiffType.UPGRADE;
 @Experimental
 public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
 
+    private final KubernetesDeploymentMode deploymentMode;
     private final Object before;
     private final Object after;
     private final DiffBuilder<T> diffBuilder;
 
-    public ReflectiveDiffBuilder(@NonNull final T before, @NonNull final T after) {
+    public ReflectiveDiffBuilder(
+            KubernetesDeploymentMode deploymentMode,
+            @NonNull final T before,
+            @NonNull final T after) {
+        this.deploymentMode = deploymentMode;
         this.before = before;
         this.after = after;
         diffBuilder = new DiffBuilder<>(before, after);
@@ -86,14 +93,20 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
                                                 : new HashMap<>()));
                     } else if (field.isAnnotationPresent(SpecDiff.class)) {
                         var annotation = field.getAnnotation(SpecDiff.class);
-                        diffBuilder.append(
-                                field.getName(), leftField, rightField, annotation.value());
-                    } else if (Diffable.class.isAssignableFrom(field.getType())
-                            && ObjectUtils.allNotNull(leftField, rightField)) {
-
+                        var modes = annotation.mode();
+                        boolean modeApplies =
+                                modes.length == 0 || Arrays.asList(modes).contains(deploymentMode);
                         diffBuilder.append(
                                 field.getName(),
-                                new ReflectiveDiffBuilder<T>((T) leftField, (T) rightField)
+                                leftField,
+                                rightField,
+                                modeApplies ? annotation.value() : UPGRADE);
+                    } else if (Diffable.class.isAssignableFrom(field.getType())
+                            && ObjectUtils.allNotNull(leftField, rightField)) {
+                        diffBuilder.append(
+                                field.getName(),
+                                new ReflectiveDiffBuilder<T>(
+                                                deploymentMode, (T) leftField, (T) rightField)
                                         .build());
 
                     } else {
@@ -122,7 +135,7 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
         return !Modifier.isStatic(field.getModifiers());
     }
 
-    private static DiffResult<Map<String, String>> configDiff(
+    private DiffResult<Map<String, String>> configDiff(
             Field field, Map<String, String> left, Map<String, String> right) {
         var keys = new HashSet<String>();
         keys.addAll(left.keySet());
@@ -143,9 +156,14 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
         return diffBuilder.build();
     }
 
-    private static DiffType getType(SpecDiff.Config annotation, String key) {
+    private DiffType getType(SpecDiff.Config annotation, String key) {
         DiffType diffType = UPGRADE;
         for (var entry : annotation.value()) {
+            if (entry.mode().length > 0 && !Arrays.asList(entry.mode()).contains(deploymentMode)) {
+                // This annotation does not apply to the current deploy mode
+                continue;
+            }
+
             if (key.startsWith(entry.prefix())) {
                 return entry.type();
             }

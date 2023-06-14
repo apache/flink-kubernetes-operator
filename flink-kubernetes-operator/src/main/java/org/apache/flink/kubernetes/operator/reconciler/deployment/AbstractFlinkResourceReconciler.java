@@ -128,10 +128,14 @@ public abstract class AbstractFlinkResourceReconciler<
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();
 
-        var specDiff = new ReflectiveDiffBuilder<>(lastReconciledSpec, currentDeploySpec).build();
+        var specDiff =
+                new ReflectiveDiffBuilder<>(
+                                ctx.getDeploymentMode(), lastReconciledSpec, currentDeploySpec)
+                        .build();
+        var diffType = specDiff.getType();
 
         boolean specChanged =
-                DiffType.IGNORE != specDiff.getType()
+                DiffType.IGNORE != diffType
                         || reconciliationStatus.getState() == ReconciliationState.UPGRADING;
 
         var observeConfig = ctx.getObserveConfig();
@@ -139,14 +143,14 @@ public abstract class AbstractFlinkResourceReconciler<
             if (checkNewSpecAlreadyDeployed(cr, deployConfig)) {
                 return;
             }
+
             triggerSpecChangeEvent(cr, specDiff);
 
             boolean reconciled =
-                    scaleCluster(cr, ctx.getFlinkService(), deployConfig, specDiff.getType())
-                            || reconcileSpecChange(ctx, deployConfig);
+                    scale(ctx, deployConfig, diffType) || reconcileSpecChange(ctx, deployConfig);
             if (reconciled) {
-                // If we executed a scale or spec upgrade action we return, otherwise we continue to
-                // reconcile other changes
+                // If we executed a scale or spec upgrade action we return, otherwise we
+                // continue to reconcile other changes
                 return;
             }
         } else {
@@ -309,26 +313,25 @@ public abstract class AbstractFlinkResourceReconciler<
     }
 
     /**
-     * Scale the cluster whenever there is a scaling change, based on the task manager replica
-     * update or the parallelism in case of scheduler mode.
+     * Scale the cluster in-place if possible, either through reactive scaling or declarative
+     * resources.
      *
-     * @param cr Resource being reconciled.
-     * @param flinkService Flink service.
+     * @param ctx Resource context.
      * @param deployConfig Configuration to be deployed.
      * @param diffType Spec change type.
      * @return True if the scaling is successful
      * @throws Exception
      */
-    private boolean scaleCluster(
-            CR cr, FlinkService flinkService, Configuration deployConfig, DiffType diffType)
+    private boolean scale(
+            FlinkResourceContext<CR> ctx, Configuration deployConfig, DiffType diffType)
             throws Exception {
-        if (diffType != DiffType.SCALE) {
+
+        if (diffType == DiffType.UPGRADE) {
             return false;
         }
-        boolean scaled = flinkService.scale(cr.getMetadata(), cr.getSpec().getJob(), deployConfig);
-        if (scaled) {
-            LOG.info("Scaling succeeded");
-            ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig, clock);
+
+        if (ctx.getFlinkService().scale(ctx)) {
+            ReconciliationUtils.updateAfterScaleUp(ctx.getResource(), deployConfig, clock);
             return true;
         }
         return false;

@@ -21,14 +21,17 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.tuple.Tuple4;
-import org.apache.flink.client.program.ClusterClient;
+import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingClusterClient;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
@@ -39,13 +42,21 @@ import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.execution.ExecutionState;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.webmonitor.JobDetails;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
+import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
+import org.apache.flink.runtime.rest.messages.JobPlanInfo;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
+import org.apache.flink.runtime.rest.messages.job.metrics.IOMetricsInfo;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerRequestBody;
 import org.apache.flink.runtime.rest.util.RestMapperUtils;
@@ -68,9 +79,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
@@ -521,7 +534,7 @@ public class NativeFlinkServiceTest {
         var flinkService =
                 new NativeFlinkService(client, configManager) {
                     @Override
-                    public ClusterClient<String> getClusterClient(Configuration conf)
+                    public RestClusterClient<String> getClusterClient(Configuration conf)
                             throws Exception {
                         var client = new TestingClusterClient<String>(conf);
                         client.setRequestProcessor(
@@ -566,6 +579,265 @@ public class NativeFlinkServiceTest {
         assertTrue(jarRuns.get(1).getFlinkConfiguration().toMap().isEmpty());
     }
 
+    @Test
+    public void testScaling() throws Exception {
+        var v1 = new JobVertexID();
+        var v2 = new JobVertexID();
+
+        var current = new ArrayList<Map<JobVertexID, JobVertexResourceRequirements>>();
+        current.add(null);
+        var updated = new ArrayList<Map<JobVertexID, JobVertexResourceRequirements>>();
+        updated.add(null);
+        var service =
+                new NativeFlinkService(client, configManager) {
+                    @Override
+                    protected Map<JobVertexID, JobVertexResourceRequirements> getVertexResources(
+                            RestClusterClient<String> client,
+                            AbstractFlinkResource<?, ?> resource) {
+                        return current.get(0);
+                    }
+
+                    @Override
+                    protected void updateVertexResources(
+                            RestClusterClient<String> client,
+                            AbstractFlinkResource<?, ?> resource,
+                            Map<JobVertexID, JobVertexResourceRequirements> newReqs) {
+                        updated.set(0, newReqs);
+                    }
+                };
+
+        var flinkDep = TestUtils.buildApplicationCluster();
+        var spec = flinkDep.getSpec();
+        spec.setFlinkVersion(FlinkVersion.v1_18);
+
+        var appConfig = Configuration.fromMap(spec.getFlinkConfiguration());
+        appConfig.set(JobManagerOptions.SCHEDULER, JobManagerOptions.SchedulerType.Adaptive);
+
+        spec.setFlinkConfiguration(appConfig.toMap());
+        var reconStatus = flinkDep.getStatus().getReconciliationStatus();
+        reconStatus.serializeAndSetLastReconciledSpec(spec, flinkDep);
+
+        appConfig.set(NativeFlinkService.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "4"));
+        spec.setFlinkConfiguration(appConfig.toMap());
+
+        flinkDep.getStatus().getJobStatus().setState("RUNNING");
+
+        current.set(
+                0,
+                Map.of(
+                        v1,
+                                new JobVertexResourceRequirements(
+                                        new JobVertexResourceRequirements.Parallelism(1, 1)),
+                        v2,
+                                new JobVertexResourceRequirements(
+                                        new JobVertexResourceRequirements.Parallelism(2, 2))));
+        assertTrue(
+                service.scale(
+                        new FlinkDeploymentContext(
+                                flinkDep,
+                                TestUtils.createEmptyContext(),
+                                null,
+                                service,
+                                configManager)));
+        assertEquals(
+                Map.of(
+                        v1,
+                                new JobVertexResourceRequirements(
+                                        new JobVertexResourceRequirements.Parallelism(4, 4)),
+                        v2,
+                                new JobVertexResourceRequirements(
+                                        new JobVertexResourceRequirements.Parallelism(2, 2))),
+                updated.get(0));
+
+        // Baseline
+        testScaleConditionDep(flinkDep, service, d -> {}, true);
+        testScaleConditionLastSpec(flinkDep, service, d -> {}, true);
+
+        // Do not scale without adaptive scheduler deployed
+        testScaleConditionLastSpec(
+                flinkDep,
+                service,
+                ls ->
+                        ls.getFlinkConfiguration()
+                                .put(
+                                        JobManagerOptions.SCHEDULER.key(),
+                                        JobManagerOptions.SchedulerType.Default.name()),
+                false);
+
+        // Do not scale without adaptive scheduler deployed
+        testScaleConditionLastSpec(
+                flinkDep, service, ls -> ls.setFlinkVersion(FlinkVersion.v1_17), false);
+
+        testScaleConditionLastSpec(
+                flinkDep, service, ls -> ls.setFlinkVersion(FlinkVersion.v1_18), true);
+
+        // Make sure we only try to rescale non-terminal
+        testScaleConditionDep(
+                flinkDep, service, d -> d.getStatus().getJobStatus().setState("FAILED"), false);
+
+        testScaleConditionDep(
+                flinkDep,
+                service,
+                d -> d.getStatus().getJobStatus().setState("RECONCILING"),
+                false);
+
+        testScaleConditionDep(
+                flinkDep, service, d -> d.getStatus().getJobStatus().setState("RUNNING"), true);
+
+        testScaleConditionDep(flinkDep, service, d -> d.getSpec().setJob(null), false);
+    }
+
+    private void testScaleConditionDep(
+            FlinkDeployment dep,
+            NativeFlinkService service,
+            Consumer<FlinkDeployment> f,
+            boolean shouldScale)
+            throws Exception {
+        var depCopy = ReconciliationUtils.clone(dep);
+        f.accept(depCopy);
+        assertEquals(
+                shouldScale,
+                service.scale(
+                        new FlinkDeploymentContext(
+                                depCopy,
+                                TestUtils.createEmptyContext(),
+                                null,
+                                service,
+                                configManager)));
+    }
+
+    private void testScaleConditionLastSpec(
+            FlinkDeployment dep,
+            NativeFlinkService service,
+            Consumer<FlinkDeploymentSpec> f,
+            boolean shouldScale)
+            throws Exception {
+        testScaleConditionDep(
+                dep,
+                service,
+                (FlinkDeployment fd) -> {
+                    var reconStatus = fd.getStatus().getReconciliationStatus();
+                    var lastReconciledSpec = reconStatus.deserializeLastReconciledSpec();
+                    f.accept(lastReconciledSpec);
+                    reconStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec, fd);
+                },
+                shouldScale);
+    }
+
+    @Test
+    public void testScalingCompleted() throws Exception {
+        var v1 = new JobVertexID();
+        var v2 = new JobVertexID();
+
+        var testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        var service = (NativeFlinkService) createFlinkService(testingClusterClient);
+
+        var flinkDep = TestUtils.buildApplicationCluster();
+        var spec = flinkDep.getSpec();
+        spec.setFlinkVersion(FlinkVersion.v1_18);
+
+        var appConfig = Configuration.fromMap(spec.getFlinkConfiguration());
+        appConfig.set(
+                NativeFlinkService.PARALLELISM_OVERRIDES,
+                Map.of(v1.toHexString(), "4", v2.toHexString(), "1"));
+        var reconStatus = flinkDep.getStatus().getReconciliationStatus();
+        spec.setFlinkConfiguration(appConfig.toMap());
+        reconStatus.serializeAndSetLastReconciledSpec(spec, flinkDep);
+        var jobStatus = flinkDep.getStatus().getJobStatus();
+        jobStatus.setJobId(new JobID().toHexString());
+        var ctx =
+                new FlinkDeploymentContext(
+                        flinkDep, TestUtils.createEmptyContext(), null, service, configManager);
+
+        var currentJobDetails = new ArrayList<JobDetailsInfo>();
+        currentJobDetails.add(null);
+
+        testingClusterClient.setRequestProcessor(
+                (headers, parameters, requestBody) -> {
+                    if (headers instanceof JobDetailsHeaders) {
+                        return CompletableFuture.completedFuture(currentJobDetails.get(0));
+                    }
+                    return CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
+                });
+
+        currentJobDetails.set(0, createJobDetailsFor(List.of()));
+        assertFalse(service.scalingCompleted(ctx));
+
+        var ioMetricsInfo = new IOMetricsInfo(0, false, 0, false, 0, false, 0, false, 0L, 0L, 0.);
+        var vertexInfos =
+                List.of(
+                        new JobDetailsInfo.JobVertexDetailsInfo(
+                                v1,
+                                "",
+                                900,
+                                1,
+                                ExecutionState.RUNNING,
+                                0,
+                                0,
+                                0,
+                                Map.of(),
+                                ioMetricsInfo),
+                        new JobDetailsInfo.JobVertexDetailsInfo(
+                                v2,
+                                "",
+                                900,
+                                1,
+                                ExecutionState.RUNNING,
+                                0,
+                                0,
+                                0,
+                                Map.of(),
+                                ioMetricsInfo));
+        currentJobDetails.set(0, createJobDetailsFor(vertexInfos));
+        assertFalse(service.scalingCompleted(ctx));
+
+        vertexInfos =
+                List.of(
+                        new JobDetailsInfo.JobVertexDetailsInfo(
+                                v1,
+                                "",
+                                900,
+                                4,
+                                ExecutionState.RUNNING,
+                                0,
+                                0,
+                                0,
+                                Map.of(),
+                                ioMetricsInfo),
+                        new JobDetailsInfo.JobVertexDetailsInfo(
+                                v2,
+                                "",
+                                900,
+                                1,
+                                ExecutionState.RUNNING,
+                                0,
+                                0,
+                                0,
+                                Map.of(),
+                                ioMetricsInfo));
+        currentJobDetails.set(0, createJobDetailsFor(vertexInfos));
+        assertTrue(service.scalingCompleted(ctx));
+    }
+
+    public static JobDetailsInfo createJobDetailsFor(
+            List<JobDetailsInfo.JobVertexDetailsInfo> vertexInfos) {
+        return new JobDetailsInfo(
+                new JobID(),
+                "",
+                false,
+                org.apache.flink.api.common.JobStatus.RUNNING,
+                0,
+                0,
+                0,
+                0,
+                0,
+                Map.of(),
+                vertexInfos,
+                Map.of(),
+                new JobPlanInfo.RawJson(""));
+    }
+
     class TestingNativeFlinkService extends NativeFlinkService {
         private Configuration runtimeConfig;
 
@@ -608,10 +880,10 @@ public class NativeFlinkServiceTest {
                 numTasks);
     }
 
-    private FlinkService createFlinkService(ClusterClient<String> clusterClient) {
+    private FlinkService createFlinkService(RestClusterClient<String> clusterClient) {
         return new NativeFlinkService(client, new FlinkConfigManager(configuration)) {
             @Override
-            public ClusterClient<String> getClusterClient(Configuration config) {
+            public RestClusterClient<String> getClusterClient(Configuration config) {
                 return clusterClient;
             }
         };

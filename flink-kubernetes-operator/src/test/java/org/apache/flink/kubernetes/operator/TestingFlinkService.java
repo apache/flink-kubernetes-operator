@@ -21,7 +21,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.client.program.ClusterClient;
+import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.JobManagerOptions;
@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
+import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
@@ -40,6 +41,7 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
@@ -131,6 +133,8 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Setter
     private Collection<AggregatedMetric> aggregatedMetricsResponse = Collections.emptyList();
+
+    @Setter private boolean scalingCompleted;
 
     public TestingFlinkService() {
         super(null, new FlinkConfigManager(new Configuration()));
@@ -291,7 +295,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public ClusterClient<String> getClusterClient(Configuration config) throws Exception {
+    public RestClusterClient<String> getClusterClient(Configuration config) throws Exception {
         TestingClusterClient<String> clusterClient = new TestingClusterClient<>(config);
         FlinkVersion flinkVersion = config.get(FlinkConfigBuilder.FLINK_VERSION);
         clusterClient.setListJobsFunction(
@@ -552,14 +556,30 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public boolean scale(ObjectMeta meta, JobSpec jobSpec, Configuration conf) {
-        if (conf.get(JobManagerOptions.SCHEDULER_MODE) != SchedulerExecutionMode.REACTIVE
-                && jobSpec != null) {
+    public boolean scale(FlinkResourceContext<?> ctx) {
+        boolean standalone = ctx.getDeploymentMode() == KubernetesDeploymentMode.STANDALONE;
+        boolean session = ctx.getResource().getSpec().getJob() == null;
+        if (!standalone) {
             return false;
         }
-        desiredReplicas =
-                conf.get(StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS);
-        return true;
+
+        if (session
+                || ctx.getObserveConfig().get(JobManagerOptions.SCHEDULER_MODE)
+                        == SchedulerExecutionMode.REACTIVE) {
+            desiredReplicas =
+                    ctx.getDeployConfig(ctx.getResource().getSpec())
+                            .get(
+                                    StandaloneKubernetesConfigOptionsInternal
+                                            .KUBERNETES_TASKMANAGER_REPLICAS);
+            return true;
+        }
+
+        return false;
+    }
+
+    @Override
+    public boolean scalingCompleted(FlinkResourceContext<?> resourceContext) {
+        return scalingCompleted;
     }
 
     public void setMetricValue(String name, String value) {

@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.api.diff;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -30,6 +31,8 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface SpecDiff {
     DiffType value() default DiffType.UPGRADE;
+
+    KubernetesDeploymentMode[] mode() default {};
 
     /** Spec diff config annotation. */
     @Target(ElementType.FIELD)
@@ -45,5 +48,7 @@ public @interface SpecDiff {
         String prefix();
 
         DiffType type();
+
+        KubernetesDeploymentMode[] mode() default {};
     }
 }

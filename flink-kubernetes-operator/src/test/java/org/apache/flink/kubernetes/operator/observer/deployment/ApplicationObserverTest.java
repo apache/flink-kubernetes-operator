@@ -35,9 +35,11 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.service.NativeFlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -46,6 +48,7 @@ import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -693,6 +696,47 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertEquals(321L, specWithMeta.getMeta().getMetadata().getGeneration());
         assertEquals(JobState.RUNNING, specWithMeta.getSpec().getJob().getState());
         assertEquals(5, specWithMeta.getSpec().getJob().getParallelism());
+    }
+
+    @Test
+    public void observeAlreadyScaled() {
+        var deployment = TestUtils.buildApplicationCluster();
+
+        // Update status for for running job
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
+                deployment,
+                new FlinkConfigManager(new Configuration())
+                        .getDeployConfig(deployment.getMetadata(), deployment.getSpec()));
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
+
+        var conf = new Configuration();
+        var v1 = new JobVertexID();
+        conf.set(NativeFlinkService.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "2"));
+        deployment.getSpec().setFlinkConfiguration(conf.toMap());
+
+        // Update status after triggering scale operation
+        ReconciliationUtils.updateAfterScaleUp(
+                deployment, new Configuration(), Clock.systemDefaultZone());
+        assertEquals(
+                ReconciliationState.UPGRADING,
+                deployment.getStatus().getReconciliationStatus().getState());
+
+        // Assert that we remain in upgrading until scaling completes
+        flinkService.setScalingCompleted(false);
+        observer.observe(deployment, context);
+        assertEquals(
+                ReconciliationState.UPGRADING,
+                deployment.getStatus().getReconciliationStatus().getState());
+
+        // Assert that we move to deployed when scaling completes
+        flinkService.setScalingCompleted(true);
+        observer.observe(deployment, context);
+        assertEquals(
+                ReconciliationState.DEPLOYED,
+                deployment.getStatus().getReconciliationStatus().getState());
     }
 
     @Test
