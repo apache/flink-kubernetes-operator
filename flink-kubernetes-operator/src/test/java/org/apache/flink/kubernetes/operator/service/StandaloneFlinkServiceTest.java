@@ -99,8 +99,11 @@ public class StandaloneFlinkServiceTest {
         List<Deployment> deployments = kubernetesClient.apps().deployments().list().getItems();
         assertEquals(2, deployments.size());
 
+        var requestsBeforeDelete = mockServer.getRequestCount();
         flinkStandaloneService.deleteClusterDeployment(
                 flinkDeployment.getMetadata(), flinkDeployment.getStatus(), configuration, true);
+
+        assertEquals(6, mockServer.getRequestCount() - requestsBeforeDelete);
 
         deployments = kubernetesClient.apps().deployments().list().getItems();
 

@@ -510,6 +510,11 @@ public class TestingFlinkService extends AbstractFlinkService {
         return podList;
     }
 
+    @Override
+    protected PodList getTmPodList(String namespace, String clusterId) {
+        return new PodList();
+    }
+
     public void markApplicationJobFailedWithError(JobID jobID, String error) throws Exception {
         var job = jobs.stream().filter(tuple -> tuple.f1.getJobId().equals(jobID)).findFirst();
         if (job.isEmpty()) {
