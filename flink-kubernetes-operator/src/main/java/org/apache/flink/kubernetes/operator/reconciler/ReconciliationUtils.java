@@ -340,18 +340,23 @@ public class ReconciliationUtils {
                     deployment, new ValidationException(validationError), conf);
         }
 
-        var lastReconciledSpec = status.getReconciliationStatus().deserializeLastReconciledSpec();
-        if (lastReconciledSpec == null) {
+        var lastReconciledSpecWithMeta =
+                status.getReconciliationStatus().deserializeLastReconciledSpecWithMeta();
+        if (lastReconciledSpecWithMeta == null) {
             // Validation failed before anything was deployed, nothing to do
             return false;
         } else {
             // We need to observe/reconcile using the last version of the deployment spec
-            deployment.setSpec(lastReconciledSpec);
+            deployment.setSpec(lastReconciledSpecWithMeta.getSpec());
             if (status.getReconciliationStatus().getState() == ReconciliationState.UPGRADING) {
                 // We were in the middle of an application upgrade, must set desired state to
                 // running
                 deployment.getSpec().getJob().setState(JobState.RUNNING);
             }
+            deployment
+                    .getMetadata()
+                    .setGeneration(
+                            lastReconciledSpecWithMeta.getMeta().getMetadata().getGeneration());
             return true;
         }
     }

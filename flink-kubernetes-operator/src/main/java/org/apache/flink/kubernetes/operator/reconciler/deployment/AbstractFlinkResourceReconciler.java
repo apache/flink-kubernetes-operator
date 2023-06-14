@@ -37,6 +37,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.diff.DiffResult;
 import org.apache.flink.kubernetes.operator.reconciler.diff.ReflectiveDiffBuilder;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -138,17 +139,8 @@ public abstract class AbstractFlinkResourceReconciler<
             if (checkNewSpecAlreadyDeployed(cr, deployConfig)) {
                 return;
             }
+            triggerSpecChangeEvent(cr, specDiff);
 
-            var specChangeMessage = String.format(MSG_SPEC_CHANGED, specDiff.getType(), specDiff);
-            LOG.info(specChangeMessage);
-            if (reconciliationStatus.getState() != ReconciliationState.UPGRADING) {
-                eventRecorder.triggerEvent(
-                        cr,
-                        EventRecorder.Type.Normal,
-                        EventRecorder.Reason.SpecChanged,
-                        EventRecorder.Component.JobManagerDeployment,
-                        specChangeMessage);
-            }
             boolean reconciled =
                     scaleCluster(cr, ctx.getFlinkService(), deployConfig, specDiff.getType())
                             || reconcileSpecChange(ctx, deployConfig);
@@ -179,6 +171,16 @@ public abstract class AbstractFlinkResourceReconciler<
                 LOG.info("Resource fully reconciled, nothing to do...");
             }
         }
+    }
+
+    private void triggerSpecChangeEvent(CR cr, DiffResult<SPEC> specDiff) {
+        eventRecorder.triggerEventOnce(
+                cr,
+                EventRecorder.Type.Normal,
+                EventRecorder.Reason.SpecChanged,
+                EventRecorder.Component.JobManagerDeployment,
+                String.format(MSG_SPEC_CHANGED, specDiff.getType(), specDiff),
+                "SpecChange: " + cr.getMetadata().getGeneration());
     }
 
     /**
