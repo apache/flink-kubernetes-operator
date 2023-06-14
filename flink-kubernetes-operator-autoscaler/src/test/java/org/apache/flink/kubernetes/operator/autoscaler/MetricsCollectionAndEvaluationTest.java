@@ -124,8 +124,7 @@ public class MetricsCollectionAndEvaluationTest {
         clock = Clock.fixed(Instant.ofEpochSecond(0), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
         startTime = clock.instant();
-        app.getStatus().getJobStatus().setStartTime(String.valueOf(startTime.toEpochMilli()));
-        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(startTime.toEpochMilli()));
+        metricsCollector.setJobUpdateTs(startTime);
         app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
     }
 
@@ -171,6 +170,7 @@ public class MetricsCollectionAndEvaluationTest {
 
         // Test resetting the collector and make sure we can deserialize the scalingInfo correctly
         metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector.setJobUpdateTs(startTime);
         metricsCollector.setClock(clock);
         setDefaultMetrics(metricsCollector);
         collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
@@ -350,10 +350,7 @@ public class MetricsCollectionAndEvaluationTest {
         assertEquals(1, metricsHistory.getMetricHistory().size());
 
         // Existing metrics should be cleared on job updates
-        app.getStatus()
-                .getJobStatus()
-                .setUpdateTime(
-                        String.valueOf(clock.instant().plus(Duration.ofDays(10)).toEpochMilli()));
+        metricsCollector.setJobUpdateTs(clock.instant().plus(Duration.ofDays(10)));
         metricsHistory = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
         assertEquals(0, metricsHistory.getMetricHistory().size());
     }
@@ -376,6 +373,7 @@ public class MetricsCollectionAndEvaluationTest {
         var topology = new JobTopology(new VertexInfo(source1, Set.of(), 5, 720));
 
         metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector.setJobUpdateTs(startTime);
         metricsCollector.setCurrentMetrics(
                 Map.of(
                         // Set source1 metrics without the PENDING_RECORDS metric
@@ -415,6 +413,7 @@ public class MetricsCollectionAndEvaluationTest {
         var topology = new JobTopology(new VertexInfo(source1, Set.of(), 10, 720));
 
         metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector.setJobUpdateTs(startTime);
         metricsCollector.setCurrentMetrics(
                 Map.of(
                         // Set source1 metrics without the PENDING_RECORDS metric

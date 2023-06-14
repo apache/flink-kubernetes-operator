@@ -18,15 +18,19 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.TestingClusterClient;
+import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.runtime.rest.messages.JobPlanInfo;
 import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.CompletableFuture;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Tests for {@link ScalingMetricCollector}. */
 public class ScalingMetricCollectorTest {
@@ -38,8 +42,27 @@ public class ScalingMetricCollectorTest {
         JobDetailsInfo jobDetailsInfo = new ObjectMapper().readValue(s, JobDetailsInfo.class);
 
         var metricsCollector = new RestApiMetricsCollector();
-        var client = new TestingClusterClient<>(new Configuration(), "test");
-        client.setRequestProcessor((h, p, b) -> CompletableFuture.completedFuture(jobDetailsInfo));
-        metricsCollector.queryJobTopology(client, new JobID());
+        metricsCollector.getJobTopology(jobDetailsInfo);
+    }
+
+    @Test
+    public void testJobUpdateTsLogic() {
+        var details =
+                new JobDetailsInfo(
+                        new JobID(),
+                        "",
+                        false,
+                        org.apache.flink.api.common.JobStatus.RUNNING,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        Map.of(JobStatus.RUNNING, 3L, JobStatus.CREATED, 2L),
+                        List.of(),
+                        Map.of(),
+                        new JobPlanInfo.RawJson(""));
+        var metricsCollector = new RestApiMetricsCollector();
+        assertEquals(Instant.ofEpochMilli(3L), metricsCollector.getJobUpdateTs(details));
     }
 }

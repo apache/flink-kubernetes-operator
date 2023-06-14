@@ -84,6 +84,8 @@ public abstract class ScalingMetricCollector {
             throws Exception {
 
         var resourceID = ResourceID.fromResource(cr);
+        var jobId = JobID.fromHexString(cr.getStatus().getJobStatus().getJobId());
+
         var now = clock.instant();
 
         var metricHistory =
@@ -92,15 +94,18 @@ public abstract class ScalingMetricCollector {
         // The timestamp of the first metric observation marks the start
         // If we haven't collected any metrics, we are starting now
         var metricCollectionStartTs = metricHistory.isEmpty() ? now : metricHistory.firstKey();
-        var jobUpdateTs = getJobUpdateTs(cr);
+
+        var jobDetailsInfo = flinkService.getJobDetailsInfo(jobId, conf);
+        var jobUpdateTs = getJobUpdateTs(jobDetailsInfo);
         if (jobUpdateTs.isAfter(metricCollectionStartTs)) {
-            LOG.info("Job updated. Clearing metrics.");
+            LOG.info("Job updated at {}. Clearing metrics.", jobUpdateTs);
             autoscalerInfo.clearMetricHistory();
             cleanup(cr);
             metricHistory.clear();
             metricCollectionStartTs = now;
         }
-        var topology = getJobTopology(flinkService, cr, conf, autoscalerInfo);
+        var topology =
+                getJobTopology(flinkService, resourceID, conf, autoscalerInfo, jobDetailsInfo);
 
         // Trim metrics outside the metric window from metrics history
         var metricWindowSize = getMetricWindowSize(conf);
@@ -144,76 +149,71 @@ public abstract class ScalingMetricCollector {
         return conf.get(AutoScalerOptions.METRICS_WINDOW);
     }
 
-    private static Instant getJobUpdateTs(AbstractFlinkResource<?, ?> cr) {
-        return Instant.ofEpochMilli(Long.parseLong(cr.getStatus().getJobStatus().getUpdateTime()));
+    @VisibleForTesting
+    protected Instant getJobUpdateTs(JobDetailsInfo jobDetailsInfo) {
+        return Instant.ofEpochMilli(
+                jobDetailsInfo.getTimestamps().values().stream().max(Long::compare).get());
     }
 
     protected JobTopology getJobTopology(
             FlinkService flinkService,
-            AbstractFlinkResource<?, ?> cr,
+            ResourceID resourceID,
             Configuration conf,
-            AutoScalerInfo scalerInfo)
+            AutoScalerInfo scalerInfo,
+            JobDetailsInfo jobDetailsInfo)
             throws Exception {
 
-        try (var restClient = (RestClusterClient<String>) flinkService.getClusterClient(conf)) {
-            var jobId = JobID.fromHexString(cr.getStatus().getJobStatus().getJobId());
-            var topology =
-                    topologies.computeIfAbsent(
-                            ResourceID.fromResource(cr),
-                            r -> {
-                                var t = queryJobTopology(restClient, jobId);
-                                scalerInfo.updateVertexList(
-                                        t.getVerticesInTopologicalOrder(), clock.instant(), conf);
-                                return t;
-                            });
-            updateKafkaSourceMaxParallelisms(restClient, jobId, topology);
-            return topology;
-        }
+        var topology =
+                topologies.computeIfAbsent(
+                        resourceID,
+                        r -> {
+                            var t = getJobTopology(jobDetailsInfo);
+                            scalerInfo.updateVertexList(
+                                    t.getVerticesInTopologicalOrder(), clock.instant(), conf);
+                            return t;
+                        });
+        updateKafkaSourceMaxParallelisms(flinkService, conf, jobDetailsInfo.getJobId(), topology);
+        return topology;
     }
 
     @VisibleForTesting
-    protected JobTopology queryJobTopology(RestClusterClient<String> restClient, JobID jobId) {
-        try {
-            var jobDetailsInfo = restClient.getJobDetails(jobId).get();
+    @SneakyThrows
+    protected JobTopology getJobTopology(JobDetailsInfo jobDetailsInfo) {
+        Map<JobVertexID, Integer> maxParallelismMap =
+                jobDetailsInfo.getJobVertexInfos().stream()
+                        .collect(
+                                Collectors.toMap(
+                                        JobDetailsInfo.JobVertexDetailsInfo::getJobVertexID,
+                                        JobDetailsInfo.JobVertexDetailsInfo::getMaxParallelism));
 
-            Map<JobVertexID, Integer> maxParallelismMap =
-                    jobDetailsInfo.getJobVertexInfos().stream()
-                            .collect(
-                                    Collectors.toMap(
-                                            JobDetailsInfo.JobVertexDetailsInfo::getJobVertexID,
-                                            JobDetailsInfo.JobVertexDetailsInfo
-                                                    ::getMaxParallelism));
+        // Flink 1.17 introduced a strange behaviour where the JobDetailsInfo#getJsonPlan()
+        // doesn't return the jsonPlan correctly but it wraps with RawJson{json='plan'}
+        var rawPlan = jobDetailsInfo.getJsonPlan();
+        var json = rawPlan.substring("RawJson{json='".length(), rawPlan.length() - "'}".length());
 
-            // Flink 1.17 introduced a strange behaviour where the JobDetailsInfo#getJsonPlan()
-            // doesn't return the jsonPlan correctly but it wraps with RawJson{json='plan'}
-            var rawPlan = jobDetailsInfo.getJsonPlan();
-            var json =
-                    rawPlan.substring("RawJson{json='".length(), rawPlan.length() - "'}".length());
-
-            return JobTopology.fromJsonPlan(json, maxParallelismMap);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        return JobTopology.fromJsonPlan(json, maxParallelismMap);
     }
 
     private void updateKafkaSourceMaxParallelisms(
-            RestClusterClient<String> restClient, JobID jobId, JobTopology topology)
+            FlinkService flinkService, Configuration conf, JobID jobId, JobTopology topology)
             throws Exception {
-        var partitionRegex = Pattern.compile("^.*\\.partition\\.\\d+\\.currentOffset$");
-        for (Map.Entry<JobVertexID, Set<JobVertexID>> entry : topology.getInputs().entrySet()) {
-            if (entry.getValue().isEmpty()) {
-                var sourceVertex = entry.getKey();
-                var numPartitions =
-                        queryAggregatedMetricNames(restClient, jobId, sourceVertex).stream()
-                                .map(AggregatedMetric::getId)
-                                .filter(partitionRegex.asMatchPredicate())
-                                .count();
-                if (numPartitions > 0) {
-                    LOG.debug(
-                            "Updating source {} max parallelism based on available partitions to {}",
-                            sourceVertex,
-                            numPartitions);
-                    topology.updateMaxParallelism(sourceVertex, (int) numPartitions);
+        try (var restClient = (RestClusterClient<String>) flinkService.getClusterClient(conf)) {
+            var partitionRegex = Pattern.compile("^.*\\.partition\\.\\d+\\.currentOffset$");
+            for (Map.Entry<JobVertexID, Set<JobVertexID>> entry : topology.getInputs().entrySet()) {
+                if (entry.getValue().isEmpty()) {
+                    var sourceVertex = entry.getKey();
+                    var numPartitions =
+                            queryAggregatedMetricNames(restClient, jobId, sourceVertex).stream()
+                                    .map(AggregatedMetric::getId)
+                                    .filter(partitionRegex.asMatchPredicate())
+                                    .count();
+                    if (numPartitions > 0) {
+                        LOG.debug(
+                                "Updating source {} max parallelism based on available partitions to {}",
+                                sourceVertex,
+                                numPartitions);
+                        topology.updateMaxParallelism(sourceVertex, (int) numPartitions);
+                    }
                 }
             }
         }

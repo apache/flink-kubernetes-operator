@@ -112,6 +112,7 @@ public class RecommendedParallelismTest extends OperatorTestBase {
         ReconciliationUtils.updateStatusForDeployedSpec(
                 app, configManager.getDeployConfig(app.getMetadata(), app.getSpec()));
         app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
+        app.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
 
         autoscaler =
                 new JobAutoScalerImpl(
@@ -262,12 +263,12 @@ public class RecommendedParallelismTest extends OperatorTestBase {
     }
 
     private void restart(Instant now) {
-        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
+        metricsCollector.setJobUpdateTs(now);
         app.getStatus().getJobStatus().setState(JobStatus.CREATED.name());
     }
 
     private void running(Instant now) {
-        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
+        metricsCollector.setJobUpdateTs(now);
         app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
     }
 
