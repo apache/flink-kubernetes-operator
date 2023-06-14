@@ -36,10 +36,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.time.Clock;
 import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,50 +80,6 @@ public class ScalingExecutorTest {
         jobStatus.setStartTime(String.valueOf(System.currentTimeMillis()));
         jobStatus.setUpdateTime(String.valueOf(System.currentTimeMillis()));
         jobStatus.setState(JobStatus.RUNNING.name());
-    }
-
-    @Test
-    public void testStabilizationPeriod() throws Exception {
-        conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofMinutes(1));
-        conf.set(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED, false);
-
-        var metrics = Map.of(new JobVertexID(), evaluated(1, 110, 100));
-
-        var scalingInfo = new AutoScalerInfo(new HashMap<>());
-        var clock = Clock.fixed(Instant.now(), ZoneId.systemDefault());
-        var jobStatus = flinkDep.getStatus().getJobStatus();
-        jobStatus.setUpdateTime(String.valueOf(clock.instant().toEpochMilli()));
-
-        scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
-
-        clock = Clock.offset(clock, Duration.ofSeconds(30));
-        scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
-
-        clock = Clock.offset(clock, Duration.ofSeconds(20));
-        scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
-
-        clock = Clock.offset(clock, Duration.ofSeconds(20));
-        scalingDecisionExecutor.setClock(clock);
-        assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
-
-        // A job should not be considered stable in a non-RUNNING state
-        jobStatus.setState(JobStatus.FAILING.name());
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
-
-        jobStatus.setState(JobStatus.RUNNING.name());
-        jobStatus.setUpdateTime(String.valueOf(clock.instant().toEpochMilli()));
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
-
-        clock = Clock.offset(clock, Duration.ofSeconds(59));
-        scalingDecisionExecutor.setClock(clock);
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
-
-        clock = Clock.offset(clock, Duration.ofSeconds(2));
-        scalingDecisionExecutor.setClock(clock);
-        assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
     }
 
     @Test

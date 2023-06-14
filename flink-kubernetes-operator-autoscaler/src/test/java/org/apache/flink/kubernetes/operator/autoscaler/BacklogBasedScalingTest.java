@@ -110,6 +110,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         ReconciliationUtils.updateStatusForDeployedSpec(
                 app, configManager.getDeployConfig(app.getMetadata(), app.getSpec()));
         app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
+        app.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
 
         autoscaler =
                 new JobAutoScalerImpl(
@@ -130,7 +131,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         /* Test scaling up. */
         var now = Instant.ofEpochMilli(0);
         setClocksTo(now);
-        redeployJob(now);
+        metricsCollector.setJobUpdateTs(now);
         // Adjust metric window size, so we can fill the metric window with two metrics
         metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(1));
         metricsCollector.setCurrentMetrics(
@@ -200,7 +201,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         now = now.plusSeconds(1);
         setClocksTo(now);
         // Redeploying which erases metric history
-        redeployJob(now);
+        metricsCollector.setJobUpdateTs(now);
         // Adjust metric window size, so we can fill the metric window with three metrics
         metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(2));
 
@@ -276,6 +277,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
 
+        metricsCollector.setJobUpdateTs(now);
         metricsCollector.setJobTopology(
                 new JobTopology(
                         new VertexInfo(source1, Set.of(), 2, 24),
@@ -304,9 +306,8 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                                         "", Double.NaN, Double.NaN, Double.NaN, 900.))));
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
-        app.getStatus().getJobStatus().setStartTime(String.valueOf(now.toEpochMilli()));
         autoscaler.scale(getResourceContext(app, ctx));
-        assertFlinkMetricsCount(2, 1, ctx);
+        assertFlinkMetricsCount(2, 0, ctx);
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
@@ -333,7 +334,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
-        assertFlinkMetricsCount(2, 2, ctx);
+        assertFlinkMetricsCount(2, 0, ctx);
 
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
@@ -361,7 +362,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
-        assertFlinkMetricsCount(2, 3, ctx);
+        assertFlinkMetricsCount(2, 1, ctx);
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
@@ -372,7 +373,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         var ctx = createAutoscalerTestContext();
         var now = Instant.ofEpochMilli(0);
         setClocksTo(now);
-        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
+        metricsCollector.setJobUpdateTs(now);
         metricsCollector.setCurrentMetrics(
                 Map.of(
                         source1,
@@ -418,14 +419,10 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         var ctx = createAutoscalerTestContext();
         var now = Instant.ofEpochMilli(0);
         setClocksTo(now);
-        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
+        metricsCollector.setJobUpdateTs(now);
         assertFalse(autoscaler.scale(getResourceContext(app, ctx)));
         assertTrue(AutoScalerInfo.forResource(app, kubernetesClient).getMetricHistory().isEmpty());
         assertTrue(eventCollector.events.isEmpty());
-    }
-
-    private void redeployJob(Instant now) {
-        app.getStatus().getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
     }
 
     private void setClocksTo(Instant time) {

@@ -46,6 +46,7 @@ import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
+import org.apache.flink.kubernetes.operator.service.NativeFlinkServiceTest;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
@@ -62,6 +63,7 @@ import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetricsResponseBody;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsHeaders;
@@ -534,22 +536,6 @@ public class TestingFlinkService extends AbstractFlinkService {
         jobErrors.put(jobID, error);
     }
 
-    /** The information collector of a submitted job. */
-    public static class SubmittedJobInfo {
-        public final String savepointPath;
-        public final JobStatusMessage jobStatusMessage;
-        public final Configuration effectiveConfig;
-
-        public SubmittedJobInfo(
-                String savepointPath,
-                JobStatusMessage jobStatusMessage,
-                Configuration effectiveConfig) {
-            this.savepointPath = savepointPath;
-            this.jobStatusMessage = jobStatusMessage;
-            this.effectiveConfig = effectiveConfig;
-        }
-    }
-
     @Override
     public Map<String, String> getClusterInfo(Configuration conf) {
         return CLUSTER_INFO;
@@ -559,13 +545,11 @@ public class TestingFlinkService extends AbstractFlinkService {
     public boolean scale(FlinkResourceContext<?> ctx) {
         boolean standalone = ctx.getDeploymentMode() == KubernetesDeploymentMode.STANDALONE;
         boolean session = ctx.getResource().getSpec().getJob() == null;
-        if (!standalone) {
-            return false;
-        }
+        boolean reactive =
+                ctx.getObserveConfig().get(JobManagerOptions.SCHEDULER_MODE)
+                        == SchedulerExecutionMode.REACTIVE;
 
-        if (session
-                || ctx.getObserveConfig().get(JobManagerOptions.SCHEDULER_MODE)
-                        == SchedulerExecutionMode.REACTIVE) {
+        if (standalone && (session || reactive)) {
             desiredReplicas =
                     ctx.getDeployConfig(ctx.getResource().getSpec())
                             .get(
@@ -590,5 +574,10 @@ public class TestingFlinkService extends AbstractFlinkService {
     public Map<String, String> getMetrics(
             Configuration conf, String jobId, List<String> metricNames) {
         return metricsValues;
+    }
+
+    @Override
+    public JobDetailsInfo getJobDetailsInfo(JobID jobID, Configuration conf) {
+        return NativeFlinkServiceTest.createJobDetailsFor(List.of());
     }
 }

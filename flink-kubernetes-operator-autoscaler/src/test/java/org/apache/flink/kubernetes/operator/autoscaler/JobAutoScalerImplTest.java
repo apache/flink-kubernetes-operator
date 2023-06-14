@@ -57,6 +57,7 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
         configManager = new FlinkConfigManager(defaultConf);
         ReconciliationUtils.updateStatusForDeployedSpec(
                 app, configManager.getDeployConfig(app.getMetadata(), app.getSpec()));
+        app.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
     }
 
     @Test

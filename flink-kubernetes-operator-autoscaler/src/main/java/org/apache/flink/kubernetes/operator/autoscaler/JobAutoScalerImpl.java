@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -97,7 +98,9 @@ public class JobAutoScalerImpl implements JobAutoScaler {
 
             // Initialize metrics only if autoscaler is enabled
 
-            if (!resource.getStatus().getJobStatus().getState().equals(JobStatus.RUNNING.name())) {
+            var status = resource.getStatus();
+            if (status.getLifecycleState() != ResourceLifecycleState.STABLE
+                    || !status.getJobStatus().getState().equals(JobStatus.RUNNING.name())) {
                 LOG.info("Job autoscaler is waiting for RUNNING job state");
                 lastEvaluatedMetrics.remove(resourceId);
                 return false;
@@ -114,10 +117,10 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                 return false;
             }
 
-            LOG.debug("Evaluating scaling metrics for {}", collectedMetrics);
+            LOG.debug("Collected metrics: {}", collectedMetrics);
             evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
+            LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
             initRecommendedParallelism(evaluatedMetrics);
-            LOG.debug("Scaling metrics evaluated: {}", evaluatedMetrics);
 
             if (!collectedMetrics.isFullyCollected()) {
                 // We have done an upfront evaluation, but we are not ready for scaling.
@@ -128,11 +131,13 @@ public class JobAutoScalerImpl implements JobAutoScaler {
 
             var specAdjusted =
                     scalingExecutor.scaleResource(resource, autoScalerInfo, conf, evaluatedMetrics);
+
             if (specAdjusted) {
                 flinkMetrics.numScalings.inc();
             } else {
                 flinkMetrics.numBalanced.inc();
             }
+
             autoScalerInfo.replaceInKubernetes(kubernetesClient);
             return specAdjusted;
         } catch (Throwable e) {
@@ -147,7 +152,6 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             return false;
         } finally {
             if (evaluatedMetrics != null) {
-                LOG.debug("Storing evaluated metrics {}", evaluatedMetrics);
                 lastEvaluatedMetrics.put(resourceId, evaluatedMetrics);
                 flinkMetrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceId));
             }

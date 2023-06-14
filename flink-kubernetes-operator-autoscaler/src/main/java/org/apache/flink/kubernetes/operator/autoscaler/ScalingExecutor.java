@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
@@ -43,7 +42,6 @@ import java.util.SortedMap;
 
 import static org.apache.flink.configuration.PipelineOptions.PARALLELISM_OVERRIDES;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
-import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.STABILIZATION_INTERVAL;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
@@ -82,10 +80,6 @@ public class ScalingExecutor {
             AutoScalerInfo scalingInformation,
             Configuration conf,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
-
-        if (!stabilizationPeriodPassed(resource, conf)) {
-            return false;
-        }
 
         var now = Instant.now();
         var scalingHistory = scalingInformation.getScalingHistory(now, conf);
@@ -163,30 +157,6 @@ public class ScalingExecutor {
                                         s.getMetrics().get(EXPECTED_PROCESSING_RATE).getCurrent(),
                                         s.getMetrics().get(TARGET_DATA_RATE).getAverage())));
         return sb.toString();
-    }
-
-    private boolean stabilizationPeriodPassed(
-            AbstractFlinkResource<?, ?> resource, Configuration conf) {
-        var jobStatus = resource.getStatus().getJobStatus();
-
-        if (!JobStatus.RUNNING.name().equals(jobStatus.getState())) {
-            // Never consider a non-running job stable
-            return false;
-        }
-
-        var startTs =
-                Instant.ofEpochMilli(
-                        // Use the update time which will reflect the latest job state update
-                        // Do not use the start time because it doesn't tell when the job went to
-                        // RUNNING
-                        Long.parseLong(jobStatus.getUpdateTime()));
-        var stableTime = startTs.plus(conf.get(STABILIZATION_INTERVAL));
-
-        if (stableTime.isAfter(clock.instant())) {
-            LOG.info("Waiting until {} to stabilize before new scale operation.", stableTime);
-            return false;
-        }
-        return true;
     }
 
     protected static boolean allVerticesWithinUtilizationTarget(

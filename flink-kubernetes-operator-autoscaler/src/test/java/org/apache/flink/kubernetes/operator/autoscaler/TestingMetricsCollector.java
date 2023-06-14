@@ -25,11 +25,13 @@ import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import lombok.Setter;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -42,6 +44,8 @@ public class TestingMetricsCollector extends ScalingMetricCollector {
 
     @Setter private Duration testMetricWindowSize;
 
+    @Setter private Instant jobUpdateTs;
+
     @Setter
     private Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> currentMetrics = new HashMap<>();
 
@@ -52,7 +56,7 @@ public class TestingMetricsCollector extends ScalingMetricCollector {
     }
 
     @Override
-    protected JobTopology queryJobTopology(RestClusterClient<String> restClient, JobID jobId) {
+    protected JobTopology getJobTopology(JobDetailsInfo jobDetailsInfo) {
         return jobTopology;
     }
 
@@ -86,5 +90,10 @@ public class TestingMetricsCollector extends ScalingMetricCollector {
             return testMetricWindowSize;
         }
         return super.getMetricWindowSize(conf);
+    }
+
+    @Override
+    protected Instant getJobUpdateTs(JobDetailsInfo jobDetailsInfo) {
+        return jobUpdateTs;
     }
 }
