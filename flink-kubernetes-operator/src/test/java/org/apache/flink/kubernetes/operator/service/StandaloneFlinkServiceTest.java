@@ -31,6 +31,8 @@ import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
@@ -39,12 +41,18 @@ import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 /** @link StandaloneFlinkService unit tests */
 @EnableKubernetesMockClient(crud = true)
@@ -52,6 +60,7 @@ public class StandaloneFlinkServiceTest {
     KubernetesMockServer mockServer;
 
     private NamespacedKubernetesClient kubernetesClient;
+
     StandaloneFlinkService flinkStandaloneService;
     Configuration configuration = new Configuration();
 
@@ -99,11 +108,25 @@ public class StandaloneFlinkServiceTest {
         List<Deployment> deployments = kubernetesClient.apps().deployments().list().getItems();
         assertEquals(2, deployments.size());
 
-        var requestsBeforeDelete = mockServer.getRequestCount();
-        flinkStandaloneService.deleteClusterDeployment(
+        StandaloneFlinkService spyFlinkStandaloneService = spy(flinkStandaloneService);
+        Pod pod = new Pod();
+        PodList notEmpty = new PodList();
+        notEmpty.setItems(Arrays.asList(pod));
+        doReturn(notEmpty)
+                .doReturn(new PodList())
+                .when(spyFlinkStandaloneService)
+                .getJmPodList(anyString(), anyString());
+        doReturn(notEmpty)
+                .doReturn(notEmpty)
+                .doReturn(new PodList())
+                .when(spyFlinkStandaloneService)
+                .getTmPodList(anyString(), anyString());
+
+        spyFlinkStandaloneService.deleteClusterDeployment(
                 flinkDeployment.getMetadata(), flinkDeployment.getStatus(), configuration, true);
 
-        assertEquals(6, mockServer.getRequestCount() - requestsBeforeDelete);
+        verify(spyFlinkStandaloneService, times(2)).getJmPodList(anyString(), anyString());
+        verify(spyFlinkStandaloneService, times(3)).getTmPodList(anyString(), anyString());
 
         deployments = kubernetesClient.apps().deployments().list().getItems();
 
