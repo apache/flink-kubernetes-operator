@@ -835,7 +835,7 @@ public abstract class AbstractFlinkService implements FlinkService {
             if (taskManagerRunning) {
                 PodList tmPodList = getTmPodList(namespace, clusterId);
 
-                if (tmPodList == null || tmPodList.getItems().isEmpty()) {
+                if (tmPodList.getItems().isEmpty()) {
                     taskManagerRunning = false;
                 }
             }

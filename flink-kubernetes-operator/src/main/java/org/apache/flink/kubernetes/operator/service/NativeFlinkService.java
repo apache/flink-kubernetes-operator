@@ -96,7 +96,7 @@ public class NativeFlinkService extends AbstractFlinkService {
     @Override
     protected PodList getTmPodList(String namespace, String clusterId) {
         // Native mode does not manage TaskManager
-        return null;
+        return new PodList();
     }
 
     protected void submitClusterInternal(Configuration conf) throws Exception {
