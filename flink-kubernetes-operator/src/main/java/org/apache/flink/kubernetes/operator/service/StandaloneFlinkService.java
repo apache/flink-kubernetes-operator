@@ -90,6 +90,15 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                 .list();
     }
 
+    @Override
+    protected PodList getTmPodList(String namespace, String clusterId) {
+        return kubernetesClient
+                .pods()
+                .inNamespace(namespace)
+                .withLabels(StandaloneKubernetesUtils.getTaskManagerSelectors(clusterId))
+                .list();
+    }
+
     @VisibleForTesting
     protected FlinkStandaloneKubeClient createNamespacedKubeClient(Configuration configuration) {
         final int poolSize =

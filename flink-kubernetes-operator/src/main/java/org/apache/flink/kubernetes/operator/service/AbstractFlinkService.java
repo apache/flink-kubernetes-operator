@@ -157,6 +157,8 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     protected abstract PodList getJmPodList(String namespace, String clusterId);
 
+    protected abstract PodList getTmPodList(String namespace, String clusterId);
+
     protected abstract void deployApplicationCluster(JobSpec jobSpec, Configuration conf)
             throws Exception;
 
@@ -819,6 +821,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         LOG.info("Waiting for cluster shutdown...");
 
         boolean jobManagerRunning = true;
+        boolean taskManagerRunning = true;
         boolean serviceRunning = true;
 
         for (int i = 0; i < shutdownTimeout; i++) {
@@ -827,6 +830,13 @@ public abstract class AbstractFlinkService implements FlinkService {
 
                 if (jmPodList == null || jmPodList.getItems().isEmpty()) {
                     jobManagerRunning = false;
+                }
+            }
+            if (taskManagerRunning) {
+                PodList tmPodList = getTmPodList(namespace, clusterId);
+
+                if (tmPodList.getItems().isEmpty()) {
+                    taskManagerRunning = false;
                 }
             }
 
@@ -843,7 +853,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                 }
             }
 
-            if (!jobManagerRunning && !serviceRunning) {
+            if (!jobManagerRunning && !serviceRunning && !taskManagerRunning) {
                 break;
             }
             // log a message waiting to shutdown Flink cluster every 5 seconds.

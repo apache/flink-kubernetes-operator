@@ -31,8 +31,11 @@ import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
@@ -52,8 +55,29 @@ public class StandaloneFlinkServiceTest {
     KubernetesMockServer mockServer;
 
     private NamespacedKubernetesClient kubernetesClient;
-    StandaloneFlinkService flinkStandaloneService;
+
+    TestStandaloneFlinkService flinkStandaloneService;
     Configuration configuration = new Configuration();
+
+    class TestStandaloneFlinkService extends StandaloneFlinkService {
+        int nbCall = 0;
+
+        public TestStandaloneFlinkService(
+                KubernetesClient kubernetesClient, FlinkConfigManager configManager) {
+            super(kubernetesClient, configManager);
+        }
+
+        @Override
+        protected PodList getTmPodList(String namespace, String clusterId) {
+            nbCall++;
+            PodList podList = new PodList();
+            if (nbCall == 1) {
+                Pod pod = new Pod();
+                podList.setItems(List.of(pod));
+            }
+            return podList;
+        }
+    }
 
     @BeforeEach
     public void setup() {
@@ -63,7 +87,8 @@ public class StandaloneFlinkServiceTest {
 
         kubernetesClient = mockServer.createClient().inAnyNamespace();
         flinkStandaloneService =
-                new StandaloneFlinkService(kubernetesClient, new FlinkConfigManager(configuration));
+                new TestStandaloneFlinkService(
+                        kubernetesClient, new FlinkConfigManager(configuration));
     }
 
     @Test
@@ -101,6 +126,8 @@ public class StandaloneFlinkServiceTest {
 
         flinkStandaloneService.deleteClusterDeployment(
                 flinkDeployment.getMetadata(), flinkDeployment.getStatus(), configuration, true);
+
+        assertEquals(2, flinkStandaloneService.nbCall);
 
         deployments = kubernetesClient.apps().deployments().list().getItems();
 

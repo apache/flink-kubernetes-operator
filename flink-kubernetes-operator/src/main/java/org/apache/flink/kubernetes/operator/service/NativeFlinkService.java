@@ -93,6 +93,12 @@ public class NativeFlinkService extends AbstractFlinkService {
                 .list();
     }
 
+    @Override
+    protected PodList getTmPodList(String namespace, String clusterId) {
+        // Native mode does not manage TaskManager
+        return new PodList();
+    }
+
     protected void submitClusterInternal(Configuration conf) throws Exception {
         LOG.info("Deploying session cluster");
         final ClusterClientServiceLoader clusterClientServiceLoader =
