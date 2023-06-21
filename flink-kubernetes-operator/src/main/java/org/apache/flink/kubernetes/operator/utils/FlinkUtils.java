@@ -55,6 +55,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.apache.flink.kubernetes.utils.Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY;
 
@@ -363,7 +364,8 @@ public class FlinkUtils {
      */
     public static JobID generateSessionJobFixedJobID(String uid, Long generation) {
         return new JobID(
-                Preconditions.checkNotNull(uid).hashCode(), Preconditions.checkNotNull(generation));
+                UUID.fromString(Preconditions.checkNotNull(uid)).getMostSignificantBits(),
+                Preconditions.checkNotNull(generation));
     }
 
     /**
