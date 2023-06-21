@@ -43,6 +43,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.kubernetes.operator.utils.FlinkUtils.generateSessionJobFixedJobID;
+
 /** The observer of {@link FlinkSessionJob}. */
 public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<FlinkSessionJob> {
 
@@ -84,7 +86,9 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
         var matchedJobs = new ArrayList<JobID>();
         for (JobStatusMessage jobStatusMessage : jobStatusMessages) {
             var jobId = jobStatusMessage.getJobId();
-            if (jobId.getLowerPart() == uid.hashCode()
+            if (jobId.getLowerPart()
+                            == generateSessionJobFixedJobID(uid, jobId.getUpperPart() + 1L)
+                                    .getLowerPart()
                     && !jobStatusMessage.getJobState().isGloballyTerminalState()) {
                 matchedJobs.add(jobId);
             }
