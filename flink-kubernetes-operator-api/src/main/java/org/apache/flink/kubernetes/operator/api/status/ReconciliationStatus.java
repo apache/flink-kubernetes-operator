@@ -49,13 +49,6 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
      */
     private String lastStableSpec;
 
-    /**
-     * Last rollback deployment spec. Used to decide whether further reconciliation steps are
-     * necessary. If a rollback happens this will be the spec used to know if there was some update
-     * in the current spec
-     */
-    private String lastRollbackSpec;
-
     /** Deployment state of the last reconciled spec. */
     private ReconciliationState state = ReconciliationState.UPGRADING;
 
@@ -75,12 +68,6 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
     }
 
     @JsonIgnore
-    public SPEC deserializeLastRollbackSpec() {
-        var specWithMeta = deserializeLastRollbackSpecWithMeta();
-        return specWithMeta != null ? specWithMeta.getSpec() : null;
-    }
-
-    @JsonIgnore
     public SpecWithMeta<SPEC> deserializeLastReconciledSpecWithMeta() {
         return SpecUtils.deserializeSpecWithMeta(lastReconciledSpec, getSpecClass());
     }
@@ -91,20 +78,9 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
     }
 
     @JsonIgnore
-    public SpecWithMeta<SPEC> deserializeLastRollbackSpecWithMeta() {
-        return SpecUtils.deserializeSpecWithMeta(lastRollbackSpec, getSpecClass());
-    }
-
-    @JsonIgnore
     public void serializeAndSetLastReconciledSpec(
             SPEC spec, AbstractFlinkResource<SPEC, ?> resource) {
         setLastReconciledSpec(SpecUtils.writeSpecWithMeta(spec, resource));
-    }
-
-    @JsonIgnore
-    public void serializeAndSetLastRollbackSpec(
-            SPEC spec, AbstractFlinkResource<SPEC, ?> resource) {
-        setLastRollbackSpec(SpecUtils.writeSpecWithMeta(spec, resource));
     }
 
     public void markReconciledSpecAsStable() {

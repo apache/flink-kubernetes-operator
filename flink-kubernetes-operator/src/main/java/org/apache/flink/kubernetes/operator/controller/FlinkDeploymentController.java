@@ -141,7 +141,7 @@ public class FlinkDeploymentController
                         previousDeployment,
                         false);
             }
-            // Rely on the last stable spec if under a roll back
+            // Rely on the last stable spec if rolling back
             if (flinkApp.getStatus().getReconciliationStatus().getState()
                     == ReconciliationState.ROLLING_BACK) {
                 flinkApp.setSpec(

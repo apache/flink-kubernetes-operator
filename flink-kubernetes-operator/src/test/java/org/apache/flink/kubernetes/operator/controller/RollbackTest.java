@@ -109,8 +109,7 @@ public class RollbackTest {
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
                 },
-                true,
-                UpgradeMode.LAST_STATE);
+                true);
     }
 
     @Test
@@ -162,8 +161,7 @@ public class RollbackTest {
                     testController.reconcile(dep, context);
                     flinkService.setPortReady(true);
                 },
-                false,
-                UpgradeMode.LAST_STATE);
+                false);
     }
 
     @Test
@@ -216,8 +214,7 @@ public class RollbackTest {
                     dep.getSpec().setRestartNonce(10L);
                     testController.reconcile(dep, context);
                 },
-                true,
-                UpgradeMode.STATELESS);
+                true);
     }
 
     @Test
@@ -239,16 +236,14 @@ public class RollbackTest {
                             dep.getStatus().getJobManagerDeploymentStatus());
                     dep.getSpec().setRestartNonce(10L);
                 },
-                false,
-                null);
+                false);
     }
 
     public void testRollback(
             FlinkDeployment deployment,
             ThrowingRunnable<Exception> triggerRollback,
             ThrowingRunnable<Exception> validateAndRecover,
-            boolean injectValidationError,
-            UpgradeMode expectedUpgradeMode)
+            boolean injectValidationError)
             throws Exception {
 
         var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
@@ -286,7 +281,6 @@ public class RollbackTest {
         assertEquals(
                 ReconciliationState.ROLLED_BACK,
                 deployment.getStatus().getReconciliationStatus().getState());
-
         deployment.getSpec().setLogConfiguration(null);
 
         testController.reconcile(deployment, context);
@@ -316,25 +310,18 @@ public class RollbackTest {
 
         testController.reconcile(deployment, context);
         testController.reconcile(deployment, context);
-        assertEquals(
-                ReconciliationState.ROLLED_BACK,
-                deployment.getStatus().getReconciliationStatus().getState());
-        var lastStable =
-                deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec();
-        var lastReconcile =
-                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
-        if (lastStable.getJob() != null) {
-            lastStable.getJob().setUpgradeMode(expectedUpgradeMode);
-        }
-        assertEquals(lastStable, lastReconcile);
+        assertNotEquals(
+                deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec(),
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
 
-        deployment.getSpec().getFlinkConfiguration().put("random2", "config");
+        deployment.setSpec(
+                deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec());
         testController.reconcile(deployment, context);
         testController.reconcile(deployment, context);
         assertEquals(
                 ReconciliationState.DEPLOYED,
                 deployment.getStatus().getReconciliationStatus().getState());
-        assertNotEquals(
+        assertEquals(
                 deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec(),
                 deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
 
