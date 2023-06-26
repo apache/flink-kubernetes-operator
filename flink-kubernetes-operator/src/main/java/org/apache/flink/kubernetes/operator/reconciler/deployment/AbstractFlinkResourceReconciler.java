@@ -39,7 +39,6 @@ import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.diff.DiffResult;
 import org.apache.flink.kubernetes.operator.reconciler.diff.ReflectiveDiffBuilder;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -137,8 +136,27 @@ public abstract class AbstractFlinkResourceReconciler<
 
         boolean specChanged =
                 DiffType.IGNORE != diffType
-                        || reconciliationStatus.getState() == ReconciliationState.UPGRADING
-                        || reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK;
+                        || reconciliationStatus.getState() == ReconciliationState.UPGRADING;
+
+        if (!specChanged && reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
+            // Rely on the last stable spec if rolling back and no change in the spec
+            cr.setSpec(cr.getStatus().getReconciliationStatus().deserializeLastStableSpec());
+            specChanged = true;
+        } else if (specChanged
+                && reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
+            // Spec has changed while rolling back we should apply new spec and move to upgrading
+            // state
+            // Don't take in account changes on job.state as it could be overriden to running if the
+            // current spec is not valid
+            lastReconciledSpec.getJob().setState(currentDeploySpec.getJob().getState());
+            var specDiffRollingBack =
+                    new ReflectiveDiffBuilder<>(
+                                    ctx.getDeploymentMode(), lastReconciledSpec, currentDeploySpec)
+                            .build();
+            if (DiffType.IGNORE != specDiffRollingBack.getType()) {
+                reconciliationStatus.setState(ReconciliationState.UPGRADING);
+            }
+        }
 
         var observeConfig = ctx.getObserveConfig();
         if (specChanged) {

@@ -310,6 +310,9 @@ public class RollbackTest {
 
         testController.reconcile(deployment, context);
         testController.reconcile(deployment, context);
+        assertEquals(
+                ReconciliationState.ROLLED_BACK,
+                deployment.getStatus().getReconciliationStatus().getState());
         assertNotEquals(
                 deployment.getStatus().getReconciliationStatus().deserializeLastStableSpec(),
                 deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
