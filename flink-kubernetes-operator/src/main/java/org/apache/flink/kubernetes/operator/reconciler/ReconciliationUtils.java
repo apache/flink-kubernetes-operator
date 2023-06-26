@@ -123,16 +123,20 @@ public class ReconciliationUtils {
         // Clear errors
         status.setError(null);
         reconciliationStatus.setReconciliationTimestamp(clock.instant().toEpochMilli());
-        var state = upgrading ? ReconciliationState.UPGRADING : ReconciliationState.DEPLOYED;
+        ReconciliationState state;
         if (status.getReconciliationStatus().getState() == ReconciliationState.ROLLING_BACK) {
             state = upgrading ? ReconciliationState.ROLLING_BACK : ReconciliationState.ROLLED_BACK;
+        } else {
+            state = upgrading ? ReconciliationState.UPGRADING : ReconciliationState.DEPLOYED;
         }
         reconciliationStatus.setState(state);
 
-        var clonedSpec = ReconciliationUtils.clone(spec);
+        SPEC clonedSpec;
         if (status.getReconciliationStatus().getState() == ReconciliationState.ROLLING_BACK
                 || status.getReconciliationStatus().getState() == ReconciliationState.ROLLED_BACK) {
             clonedSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        } else {
+            clonedSpec = ReconciliationUtils.clone(spec);
         }
         if (spec.getJob() != null) {
             // For jobs we have to adjust the reconciled spec
