@@ -26,7 +26,6 @@ import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
-import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -118,15 +117,6 @@ public abstract class AbstractJobReconciler<
 
             // We must record the upgrade mode used to the status later
             currentDeploySpec.getJob().setUpgradeMode(upgradeMode);
-
-            // We must use LAST_STATE mode when rolling back from
-            // SAVEPOINT. But we don't want to set upgrade mode to LAST_STATE
-            // as we will rely on SAVEPOINT restoreJob mechanism
-            if (upgradeMode == UpgradeMode.SAVEPOINT
-                    && status.getReconciliationStatus().getState()
-                            == ReconciliationState.ROLLING_BACK) {
-                upgradeMode = UpgradeMode.LAST_STATE;
-            }
 
             cancelJob(ctx, upgradeMode);
             if (desiredJobState == JobState.RUNNING) {
