@@ -89,6 +89,7 @@ public class RollbackTest {
                 dep,
                 () -> {
                     dep.getSpec().getJob().setParallelism(9999);
+                    dep.getSpec().getFlinkConfiguration().put("test.deploy.config", "roll_back");
                     testController.reconcile(dep, context);
                     assertEquals(
                             JobState.SUSPENDED,
@@ -98,6 +99,11 @@ public class RollbackTest {
                                     .getJob()
                                     .getState());
                     testController.reconcile(dep, context);
+                    assertEquals(
+                            "roll_back",
+                            flinkService
+                                    .getSubmittedConf()
+                                    .getString("test.deploy.config", "unknown"));
 
                     // Trigger rollback by delaying the recovery
                     offsetReconcilerClock(dep, Duration.ofSeconds(15));
@@ -123,6 +129,7 @@ public class RollbackTest {
                 dep,
                 () -> {
                     dep.getSpec().getJob().setParallelism(9999);
+                    dep.getSpec().getFlinkConfiguration().put("test.deploy.config", "roll_back");
                     testController.reconcile(dep, context);
                     assertEquals(
                             JobState.SUSPENDED,
@@ -132,6 +139,11 @@ public class RollbackTest {
                                     .getJob()
                                     .getState());
                     testController.reconcile(dep, context);
+                    assertEquals(
+                            "roll_back",
+                            flinkService
+                                    .getSubmittedConf()
+                                    .getString("test.deploy.config", "unknown"));
 
                     // Trigger rollback by delaying the recovery
                     offsetReconcilerClock(dep, Duration.ofSeconds(15));
@@ -209,6 +221,7 @@ public class RollbackTest {
                 dep,
                 () -> {
                     dep.getSpec().getJob().setParallelism(9999);
+                    dep.getSpec().getFlinkConfiguration().put("test.deploy.config", "roll_back");
                     dep.getSpec().getFlinkConfiguration().remove("t");
                     testController.reconcile(dep, context);
                     assertEquals(
@@ -219,6 +232,11 @@ public class RollbackTest {
                                     .getJob()
                                     .getState());
                     testController.reconcile(dep, context);
+                    assertEquals(
+                            "roll_back",
+                            flinkService
+                                    .getSubmittedConf()
+                                    .getString("test.deploy.config", "unknown"));
 
                     // Trigger rollback by delaying the recovery
                     offsetReconcilerClock(dep, Duration.ofSeconds(15));
@@ -266,6 +284,7 @@ public class RollbackTest {
                                             .key(),
                                     "false");
                     dep.getSpec().getJob().setParallelism(9999);
+                    dep.getSpec().getFlinkConfiguration().put("test.deploy.config", "roll_back");
                     testController.reconcile(dep, context);
                     assertEquals(
                             JobState.SUSPENDED,
@@ -275,6 +294,11 @@ public class RollbackTest {
                                     .getJob()
                                     .getState());
                     testController.reconcile(dep, context);
+                    assertEquals(
+                            "roll_back",
+                            flinkService
+                                    .getSubmittedConf()
+                                    .getString("test.deploy.config", "unknown"));
                     // Validate that rollback config is picked up from latest deploy conf
                     dep.getSpec()
                             .getFlinkConfiguration()
@@ -337,6 +361,7 @@ public class RollbackTest {
                 KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(), "true");
         flinkConfiguration.put(
                 KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "10s");
+        flinkConfiguration.put("test.deploy.config", "stable");
 
         testController.reconcile(deployment, context);
 
@@ -367,6 +392,12 @@ public class RollbackTest {
         assertEquals(
                 ReconciliationState.ROLLED_BACK,
                 deployment.getStatus().getReconciliationStatus().getState());
+        if (flinkService.getSubmittedConf() != null) {
+            assertEquals(
+                    "stable",
+                    flinkService.getSubmittedConf().getString("test.deploy.config", "unknown"));
+        }
+
         deployment.getSpec().setLogConfiguration(null);
 
         testController.reconcile(deployment, context);

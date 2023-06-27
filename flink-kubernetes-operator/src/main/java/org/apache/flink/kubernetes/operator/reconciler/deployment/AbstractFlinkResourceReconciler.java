@@ -95,28 +95,25 @@ public abstract class AbstractFlinkResourceReconciler<
     }
 
     private boolean prepareCrForRollback(
-            FlinkResourceContext<CR> ctx,
-            boolean specChanged,
-            SPEC currentDeploySpec,
-            SPEC lastReconciledSpec) {
+            FlinkResourceContext<CR> ctx, SPEC currentDeploySpec, SPEC lastReconciledSpec) {
         var cr = ctx.getResource();
         var reconciliationStatus = cr.getStatus().getReconciliationStatus();
-        if (!specChanged) {
+        // Spec has changed while rolling back we should apply new spec and move to upgrading
+        // state
+        // Don't take in account changes on job.state as it could be overriden to running if the
+        // current spec is not valid
+        if (lastReconciledSpec.getJob() != null) {
+            lastReconciledSpec.getJob().setState(currentDeploySpec.getJob().getState());
+        }
+        var specDiffRollingBack =
+                new ReflectiveDiffBuilder<>(
+                                ctx.getDeploymentMode(), lastReconciledSpec, currentDeploySpec)
+                        .build();
+        if (DiffType.IGNORE != specDiffRollingBack.getType()) {
+            reconciliationStatus.setState(ReconciliationState.UPGRADING);
+        } else {
             // Rely on the last stable spec if rolling back and no change in the spec
             cr.setSpec(cr.getStatus().getReconciliationStatus().deserializeLastStableSpec());
-        } else {
-            // Spec has changed while rolling back we should apply new spec and move to upgrading
-            // state
-            // Don't take in account changes on job.state as it could be overriden to running if the
-            // current spec is not valid
-            lastReconciledSpec.getJob().setState(currentDeploySpec.getJob().getState());
-            var specDiffRollingBack =
-                    new ReflectiveDiffBuilder<>(
-                                    ctx.getDeploymentMode(), lastReconciledSpec, currentDeploySpec)
-                            .build();
-            if (DiffType.IGNORE != specDiffRollingBack.getType()) {
-                reconciliationStatus.setState(ReconciliationState.UPGRADING);
-            }
         }
         return true;
     }
@@ -124,8 +121,6 @@ public abstract class AbstractFlinkResourceReconciler<
     @Override
     public void reconcile(FlinkResourceContext<CR> ctx) throws Exception {
         var cr = ctx.getResource();
-        var spec = cr.getSpec();
-        var deployConfig = ctx.getDeployConfig(spec);
         var status = cr.getStatus();
         var reconciliationStatus = cr.getStatus().getReconciliationStatus();
 
@@ -139,6 +134,8 @@ public abstract class AbstractFlinkResourceReconciler<
         // No further logic is required at this point.
         if (reconciliationStatus.isBeforeFirstDeployment()) {
             LOG.info("Deploying for the first time");
+            var spec = cr.getSpec();
+            var deployConfig = ctx.getDeployConfig(spec);
             updateStatusBeforeFirstDeployment(cr, spec, deployConfig, status);
             deploy(
                     ctx,
@@ -166,12 +163,12 @@ public abstract class AbstractFlinkResourceReconciler<
                         || reconciliationStatus.getState() == ReconciliationState.UPGRADING;
 
         if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
-            specChanged =
-                    prepareCrForRollback(ctx, specChanged, currentDeploySpec, lastReconciledSpec);
+            specChanged = prepareCrForRollback(ctx, currentDeploySpec, lastReconciledSpec);
         }
 
         var observeConfig = ctx.getObserveConfig();
         if (specChanged) {
+            var deployConfig = ctx.getDeployConfig(cr.getSpec());
             if (checkNewSpecAlreadyDeployed(cr, deployConfig)) {
                 return;
             }
