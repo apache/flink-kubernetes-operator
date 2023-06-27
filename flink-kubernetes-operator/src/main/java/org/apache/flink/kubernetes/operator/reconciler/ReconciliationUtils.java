@@ -123,12 +123,23 @@ public class ReconciliationUtils {
         // Clear errors
         status.setError(null);
         reconciliationStatus.setReconciliationTimestamp(clock.instant().toEpochMilli());
-        reconciliationStatus.setState(
-                upgrading ? ReconciliationState.UPGRADING : ReconciliationState.DEPLOYED);
+        ReconciliationState state;
+        if (status.getReconciliationStatus().getState() == ReconciliationState.ROLLING_BACK) {
+            state = upgrading ? ReconciliationState.ROLLING_BACK : ReconciliationState.ROLLED_BACK;
+        } else {
+            state = upgrading ? ReconciliationState.UPGRADING : ReconciliationState.DEPLOYED;
+        }
+        reconciliationStatus.setState(state);
 
+        SPEC clonedSpec;
+        if (status.getReconciliationStatus().getState() == ReconciliationState.ROLLING_BACK
+                || status.getReconciliationStatus().getState() == ReconciliationState.ROLLED_BACK) {
+            clonedSpec = reconciliationStatus.deserializeLastReconciledSpec();
+        } else {
+            clonedSpec = ReconciliationUtils.clone(spec);
+        }
         if (spec.getJob() != null) {
             // For jobs we have to adjust the reconciled spec
-            var clonedSpec = ReconciliationUtils.clone(spec);
             var job = clonedSpec.getJob();
             job.setState(stateAfterReconcile);
 
@@ -151,7 +162,7 @@ public class ReconciliationUtils {
                 reconciliationStatus.markReconciledSpecAsStable();
             }
         } else {
-            reconciliationStatus.serializeAndSetLastReconciledSpec(spec, target);
+            reconciliationStatus.serializeAndSetLastReconciledSpec(clonedSpec, target);
         }
     }
 
@@ -352,7 +363,9 @@ public class ReconciliationUtils {
         } else {
             // We need to observe/reconcile using the last version of the deployment spec
             deployment.setSpec(lastReconciledSpecWithMeta.getSpec());
-            if (status.getReconciliationStatus().getState() == ReconciliationState.UPGRADING) {
+            if (status.getReconciliationStatus().getState() == ReconciliationState.UPGRADING
+                    || status.getReconciliationStatus().getState()
+                            == ReconciliationState.ROLLING_BACK) {
                 // We were in the middle of an application upgrade, must set desired state to
                 // running
                 deployment.getSpec().getJob().setState(JobState.RUNNING);

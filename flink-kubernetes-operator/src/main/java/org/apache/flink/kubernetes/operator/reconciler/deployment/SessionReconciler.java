@@ -23,8 +23,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.api.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -104,20 +102,6 @@ public class SessionReconciler
         ctx.getFlinkService().submitSessionCluster(deployConfig);
         cr.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         IngressUtils.updateIngressRules(cr.getMetadata(), spec, deployConfig, kubernetesClient);
-    }
-
-    @Override
-    protected void rollback(FlinkResourceContext<FlinkDeployment> ctx) throws Exception {
-        var deployment = ctx.getResource();
-        FlinkDeploymentStatus status = deployment.getStatus();
-        ReconciliationStatus<FlinkDeploymentSpec> reconciliationStatus =
-                status.getReconciliationStatus();
-        FlinkDeploymentSpec rollbackSpec = reconciliationStatus.deserializeLastStableSpec();
-
-        deleteSessionCluster(ctx);
-        deploy(ctx, rollbackSpec, ctx.getDeployConfig(rollbackSpec), Optional.empty(), false);
-
-        reconciliationStatus.setState(ReconciliationState.ROLLED_BACK);
     }
 
     @Override

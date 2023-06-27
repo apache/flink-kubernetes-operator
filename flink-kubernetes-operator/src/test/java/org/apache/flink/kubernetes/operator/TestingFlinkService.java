@@ -125,6 +125,8 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
 
+    @Getter private Configuration submittedConf;
+
     @Setter
     private Tuple2<
                     Optional<CheckpointHistoryWrapper.CompletedCheckpointInfo>,
@@ -178,6 +180,7 @@ public class TestingFlinkService extends AbstractFlinkService {
             validateHaMetadataExists(conf);
         }
         deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
+        submittedConf = conf.clone();
     }
 
     protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
