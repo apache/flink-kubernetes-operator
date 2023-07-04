@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.autoscaler.metrics;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
+import org.apache.flink.kubernetes.operator.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
@@ -27,11 +28,8 @@ import org.apache.commons.math3.util.Precision;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 /** Utilities for computing scaling metrics based on Flink metrics. */
 public class ScalingMetrics {
@@ -132,10 +130,12 @@ public class ScalingMetrics {
         var busyTimeMsPerSecond =
                 busyTimeAggregator.get(flinkMetrics.get(FlinkMetric.BUSY_TIME_PER_SEC));
         if (!Double.isFinite(busyTimeMsPerSecond)) {
-            LOG.warn(
-                    "No busyTimeMsPerSecond metric available for {}. No scaling will be performed for this vertex.",
-                    jobVertexId);
-            excludeVertexFromScaling(conf, jobVertexId);
+            if (AutoScalerUtils.excludeVertexFromScaling(conf, jobVertexId)) {
+                // We only want to log this once
+                LOG.warn(
+                        "No busyTimeMsPerSecond metric available for {}. No scaling will be performed for this vertex.",
+                        jobVertexId);
+            }
             // Pretend that the load is balanced because we don't know any better
             busyTimeMsPerSecond = conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
         }
@@ -232,13 +232,6 @@ public class ScalingMetrics {
             return Double.POSITIVE_INFINITY;
         }
         return rate / (busyTimeMsPerSecond / 1000);
-    }
-
-    /** Temporarily exclude vertex from scaling for this run. This does not update the spec. */
-    private static void excludeVertexFromScaling(Configuration conf, JobVertexID jobVertexId) {
-        Set<String> excludedIds = new HashSet<>(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS));
-        excludedIds.add(jobVertexId.toHexString());
-        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
     }
 
     public static double roundMetric(double value) {

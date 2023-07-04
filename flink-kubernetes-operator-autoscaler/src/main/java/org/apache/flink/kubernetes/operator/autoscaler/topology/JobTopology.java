@@ -50,6 +50,7 @@ public class JobTopology {
     @Getter private final ImmutableMap<JobVertexID, Integer> parallelisms;
     private final ImmutableMap<JobVertexID, Integer> originalMaxParallelism;
     @Getter private final Map<JobVertexID, Integer> maxParallelisms;
+    @Getter private final Set<JobVertexID> finishedVertices;
 
     public JobTopology(VertexInfo... vertexInfo) {
         this(Set.of(vertexInfo));
@@ -62,6 +63,7 @@ public class JobTopology {
         Map<JobVertexID, Integer> vertexParallelism = new HashMap<>();
         maxParallelisms = new HashMap<>();
 
+        var finishedVertices = ImmutableSet.<JobVertexID>builder();
         vertexInfo.forEach(
                 info -> {
                     var vertexId = info.getId();
@@ -76,6 +78,9 @@ public class JobTopology {
                                             vertexOutputs
                                                     .computeIfAbsent(inputId, id -> new HashSet<>())
                                                     .add(vertexId));
+                    if (info.isFinished()) {
+                        finishedVertices.add(vertexId);
+                    }
                 });
 
         var outputBuilder = ImmutableMap.<JobVertexID, Set<JobVertexID>>builder();
@@ -88,6 +93,7 @@ public class JobTopology {
 
         this.parallelisms = ImmutableMap.copyOf(vertexParallelism);
         this.originalMaxParallelism = ImmutableMap.copyOf(maxParallelisms);
+        this.finishedVertices = finishedVertices.build();
     }
 
     public boolean isSource(JobVertexID jobVertexID) {
@@ -126,7 +132,7 @@ public class JobTopology {
     }
 
     public static JobTopology fromJsonPlan(
-            String jsonPlan, Map<JobVertexID, Integer> maxParallelismMap)
+            String jsonPlan, Map<JobVertexID, Integer> maxParallelismMap, Set<JobVertexID> finished)
             throws JsonProcessingException {
         ObjectNode plan = objectMapper.readValue(jsonPlan, ObjectNode.class);
         ArrayNode nodes = (ArrayNode) plan.get("nodes");
@@ -141,7 +147,8 @@ public class JobTopology {
                             vertexId,
                             inputList,
                             node.get("parallelism").asInt(),
-                            maxParallelismMap.get(vertexId)));
+                            maxParallelismMap.get(vertexId),
+                            finished.contains(vertexId)));
             if (node.has("inputs")) {
                 for (JsonNode input : node.get("inputs")) {
                     inputList.add(JobVertexID.fromHexString(input.get("id").asText()));
