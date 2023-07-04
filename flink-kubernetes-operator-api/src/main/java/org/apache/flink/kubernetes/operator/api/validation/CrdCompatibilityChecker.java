@@ -24,6 +24,7 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -63,7 +64,14 @@ public class CrdCompatibilityChecker {
     }
 
     private static JsonNode getSchema(String url) throws IOException {
-        JsonNode crd = objectMapper.readTree(new URL(url));
+        var target = new URL(url);
+        var protocol = target.getProtocol();
+        JsonNode crd;
+        if ("file".equals(protocol)) {
+            crd = objectMapper.readTree(new File(url.substring(7)));
+        } else {
+            crd = objectMapper.readTree(target);
+        }
         return crd.get("spec").get("versions").get(0).get("schema").get("openAPIV3Schema");
     }
 
