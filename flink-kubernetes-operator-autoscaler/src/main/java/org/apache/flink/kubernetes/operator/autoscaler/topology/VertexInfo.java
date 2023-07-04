@@ -19,12 +19,14 @@ package org.apache.flink.kubernetes.operator.autoscaler.topology;
 
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
+import lombok.RequiredArgsConstructor;
 import lombok.Value;
 
 import java.util.Set;
 
 /** Job vertex information. */
 @Value
+@RequiredArgsConstructor
 public class VertexInfo {
 
     JobVertexID id;
@@ -34,4 +36,11 @@ public class VertexInfo {
     int parallelism;
 
     int maxParallelism;
+
+    boolean finished;
+
+    public VertexInfo(
+            JobVertexID id, Set<JobVertexID> inputs, int parallelism, int maxParallelism) {
+        this(id, inputs, parallelism, maxParallelism, false);
+    }
 }

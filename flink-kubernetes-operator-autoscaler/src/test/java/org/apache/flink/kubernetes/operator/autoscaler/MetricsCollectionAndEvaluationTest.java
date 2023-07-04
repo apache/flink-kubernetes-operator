@@ -202,13 +202,10 @@ public class MetricsCollectionAndEvaluationTest {
 
         var resourceID = ResourceID.fromResource(app);
         assertNotNull(metricsCollector.getHistories().get(resourceID));
-        assertNotNull(metricsCollector.getTopologies().get(resourceID));
 
         metricsCollector.cleanup(app);
         assertNull(metricsCollector.getHistories().get(resourceID));
         assertNull(metricsCollector.getAvailableVertexMetricNames().get(resourceID));
-        assertNull(metricsCollector.getTopologies().get(resourceID));
-        assertNull(metricsCollector.getTopologies().get(resourceID));
     }
 
     private void setDefaultMetrics(TestingMetricsCollector metricsCollector) {
@@ -406,6 +403,48 @@ public class MetricsCollectionAndEvaluationTest {
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
         assertEquals(1, scaledParallelism.get(source1));
+    }
+
+    @Test
+    public void testFinishedVertexMetricsCollection() throws Exception {
+        var s1 = new JobVertexID();
+        var finished = new JobVertexID();
+        var topology =
+                new JobTopology(
+                        new VertexInfo(s1, Set.of(), 10, 720),
+                        new VertexInfo(finished, Set.of(), 10, 720, true));
+
+        metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector.setJobUpdateTs(startTime);
+        metricsCollector.setCurrentMetrics(
+                Map.of(
+                        // Set source1 metrics without the PENDING_RECORDS metric
+                        s1,
+                        Map.of(
+                                FlinkMetric.BUSY_TIME_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, 0.1, Double.NaN, Double.NaN),
+                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1000.),
+                                FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
+                                new AggregatedMetric(
+                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
+
+        var collectedMetrics = collectMetrics().getMetricHistory();
+        var finishedMetrics =
+                collectedMetrics.get(collectedMetrics.lastKey()).getVertexMetrics().get(finished);
+        assertEquals(
+                Map.of(
+                        ScalingMetric.LAG,
+                        0.,
+                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                        0.,
+                        ScalingMetric.SOURCE_DATA_RATE,
+                        0.,
+                        ScalingMetric.TRUE_PROCESSING_RATE,
+                        Double.POSITIVE_INFINITY,
+                        ScalingMetric.LOAD,
+                        0.),
+                finishedMetrics);
     }
 
     @Test

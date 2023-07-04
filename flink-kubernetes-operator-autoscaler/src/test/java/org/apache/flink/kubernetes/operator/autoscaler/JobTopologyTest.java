@@ -27,6 +27,7 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Set;
 
@@ -72,7 +73,8 @@ public class JobTopologyTest {
                             : SchedulerBase.getDefaultMaxParallelism(vertex));
         }
 
-        JobTopology jobTopology = JobTopology.fromJsonPlan(jsonPlan, maxParallelism);
+        JobTopology jobTopology =
+                JobTopology.fromJsonPlan(jsonPlan, maxParallelism, Collections.emptySet());
 
         assertTrue(jobTopology.getOutputs().get(vertices.get("Sink: sink1")).isEmpty());
         assertTrue(jobTopology.getOutputs().get(vertices.get("Sink: sink2")).isEmpty());

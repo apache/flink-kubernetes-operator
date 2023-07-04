@@ -21,6 +21,7 @@ import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -39,11 +40,20 @@ public enum FlinkMetric {
             s -> s.startsWith("Source__") && s.endsWith(".numRecordsInPerSecond")),
     PENDING_RECORDS(s -> s.endsWith(".pendingRecords"));
 
+    public static final Map<FlinkMetric, AggregatedMetric> FINISHED_METRICS =
+            Map.of(
+                    FlinkMetric.BUSY_TIME_PER_SEC, zero(),
+                    FlinkMetric.PENDING_RECORDS, zero(),
+                    FlinkMetric.NUM_RECORDS_IN_PER_SEC, zero(),
+                    FlinkMetric.NUM_RECORDS_OUT_PER_SEC, zero(),
+                    FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC, zero(),
+                    FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC, zero());
+
+    public final Predicate<String> predicate;
+
     FlinkMetric(Predicate<String> predicate) {
         this.predicate = predicate;
     }
-
-    public final Predicate<String> predicate;
 
     public Optional<String> findAny(Collection<AggregatedMetric> metrics) {
         return metrics.stream().map(AggregatedMetric::getId).filter(predicate).findAny();
@@ -54,5 +64,9 @@ public enum FlinkMetric {
                 .map(AggregatedMetric::getId)
                 .filter(predicate)
                 .collect(Collectors.toList());
+    }
+
+    private static AggregatedMetric zero() {
+        return new AggregatedMetric("", 0., 0., 0., 0.);
     }
 }
