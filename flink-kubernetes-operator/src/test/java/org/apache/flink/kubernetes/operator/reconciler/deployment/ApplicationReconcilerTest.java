@@ -79,6 +79,8 @@ import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_DEPLOYMENT_NAME;
+import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_NAMESPACE;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler.MSG_SUBMIT;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.MSG_RECOVERY;
@@ -109,6 +111,32 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         statusRecorder,
                         new NoopJobAutoscalerFactory());
         reconciler = new TestReconcilerAdapter<>(this, appReconciler);
+    }
+
+    @ParameterizedTest
+    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
+    public void testSubmitAndCleanUpWithSavepoint(FlinkVersion flinkVersion) throws Exception {
+        FlinkDeployment deployment =
+                TestUtils.buildApplicationCluster(
+                        TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, flinkVersion, true);
+
+        // session ready
+        reconciler.reconcile(deployment, TestUtils.createContextWithReadyFlinkDeployment());
+        var runningJobs = flinkService.listJobs();
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs);
+
+        // clean up
+        assertEquals(
+                null, deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
+        reconciler.cleanup(deployment, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(
+                "savepoint_0",
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
     }
 
     @ParameterizedTest

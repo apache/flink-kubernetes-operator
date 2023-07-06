@@ -60,6 +60,8 @@ spec:
                     type: string
                   allowNonRestoredState:
                     type: boolean
+                  savepointOnDeletion:
+                    type: boolean
                 type: object
               restartNonce:
                 type: integer

@@ -123,6 +123,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | initialSavepointPath | java.lang.String | Savepoint path used by the job the first time it is deployed. Upgrades/redeployments will not be affected. |
 | upgradeMode | org.apache.flink.kubernetes.operator.api.spec.UpgradeMode | Upgrade mode of the Flink job. |
 | allowNonRestoredState | java.lang.Boolean | Allow checkpoint state that cannot be mapped to any job vertex in tasks. |
+| savepointOnDeletion | java.lang.Boolean | Indicate if a savepoint must be taken on FlinkDeployment/FlinkSessionJob deletion. |
 
 ### JobState
 **Class**: org.apache.flink.kubernetes.operator.api.spec.JobState

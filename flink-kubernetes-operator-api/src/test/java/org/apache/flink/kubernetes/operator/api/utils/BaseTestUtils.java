@@ -87,15 +87,15 @@ public class BaseTestUtils {
     }
 
     public static FlinkDeployment buildApplicationCluster(String name, String namespace) {
-        return buildApplicationCluster(name, namespace, FlinkVersion.v1_17);
+        return buildApplicationCluster(name, namespace, FlinkVersion.v1_17, false);
     }
 
     public static FlinkDeployment buildApplicationCluster(FlinkVersion version) {
-        return buildApplicationCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version);
+        return buildApplicationCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version, false);
     }
 
     public static FlinkDeployment buildApplicationCluster(
-            String name, String namespace, FlinkVersion version) {
+            String name, String namespace, FlinkVersion version, boolean savepointOnDeletion) {
         FlinkDeployment deployment = buildSessionCluster(name, namespace, version);
         deployment
                 .getSpec()
@@ -105,12 +105,14 @@ public class BaseTestUtils {
                                 .parallelism(1)
                                 .upgradeMode(UpgradeMode.STATELESS)
                                 .state(JobState.RUNNING)
+                                .savepointOnDeletion(savepointOnDeletion)
                                 .build());
         deployment.setStatus(deployment.initStatus());
         return deployment;
     }
 
-    public static FlinkSessionJob buildSessionJob(String name, String namespace) {
+    public static FlinkSessionJob buildSessionJob(
+            String name, String namespace, boolean savepointOnDeletion) {
         FlinkSessionJob sessionJob = new FlinkSessionJob();
         sessionJob.setStatus(new FlinkSessionJobStatus());
         sessionJob.setMetadata(
@@ -134,14 +136,19 @@ public class BaseTestUtils {
                                         .parallelism(1)
                                         .upgradeMode(UpgradeMode.STATELESS)
                                         .state(JobState.RUNNING)
+                                        .savepointOnDeletion(savepointOnDeletion)
                                         .build())
                         .flinkConfiguration(conf)
                         .build());
         return sessionJob;
     }
 
+    public static FlinkSessionJob buildSessionJob(String name, String namespace) {
+        return buildSessionJob(name, namespace, false);
+    }
+
     public static FlinkSessionJob buildSessionJob() {
-        return buildSessionJob(TEST_SESSION_JOB_NAME, TEST_NAMESPACE);
+        return buildSessionJob(TEST_SESSION_JOB_NAME, TEST_NAMESPACE, false);
     }
 
     public static FlinkDeploymentSpec getTestFlinkDeploymentSpec(FlinkVersion version) {

@@ -63,6 +63,8 @@ import static org.apache.flink.api.common.JobStatus.RECONCILING;
 import static org.apache.flink.api.common.JobStatus.RESTARTING;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.api.common.JobStatus.SUSPENDED;
+import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_NAMESPACE;
+import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_SESSION_JOB_NAME;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -111,6 +113,31 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         // clean up
         reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
         assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
+    }
+
+    @Test
+    public void testSubmitAndCleanUpWithSavepoint() throws Exception {
+        FlinkSessionJob sessionJob =
+                TestUtils.buildSessionJob(TEST_SESSION_JOB_NAME, TEST_NAMESPACE, true);
+
+        // session ready
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+        // clean up
+        assertEquals(
+                null, sessionJob.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
+        reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
+        assertEquals(
+                "savepoint_0",
+                sessionJob
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
     }
 
     @Test

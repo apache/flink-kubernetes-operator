@@ -107,7 +107,11 @@ public class SessionJobReconciler
             String jobID = ctx.getResource().getStatus().getJobStatus().getJobId();
             if (jobID != null) {
                 try {
-                    cancelJob(ctx, UpgradeMode.STATELESS);
+                    var cleanupUpgradeMode =
+                            ctx.getResource().getSpec().getJob().isSavepointOnDeletion()
+                                    ? UpgradeMode.SAVEPOINT
+                                    : UpgradeMode.STATELESS;
+                    cancelJob(ctx, cleanupUpgradeMode);
                 } catch (ExecutionException e) {
                     final var cause = e.getCause();
 

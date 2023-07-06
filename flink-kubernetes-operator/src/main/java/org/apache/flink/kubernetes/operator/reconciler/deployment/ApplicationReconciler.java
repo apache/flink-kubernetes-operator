@@ -358,12 +358,15 @@ public class ApplicationReconciler
         var deployment = ctx.getResource();
         var status = deployment.getStatus();
         var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
+        var cleanupUpgradeMode =
+                deployment.getSpec().getJob().isSavepointOnDeletion()
+                        ? UpgradeMode.SAVEPOINT
+                        : UpgradeMode.STATELESS;
         if (status.getReconciliationStatus().isBeforeFirstDeployment()) {
             ctx.getFlinkService()
                     .deleteClusterDeployment(deployment.getMetadata(), status, conf, true);
         } else {
-            ctx.getFlinkService()
-                    .cancelJob(deployment, UpgradeMode.STATELESS, ctx.getObserveConfig());
+            ctx.getFlinkService().cancelJob(deployment, cleanupUpgradeMode, ctx.getObserveConfig());
         }
         return DeleteControl.defaultDelete();
     }

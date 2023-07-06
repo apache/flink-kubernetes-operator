@@ -80,4 +80,8 @@ public class JobSpec implements Diffable<JobSpec> {
     /** Allow checkpoint state that cannot be mapped to any job vertex in tasks. */
     @SpecDiff(DiffType.IGNORE)
     private Boolean allowNonRestoredState;
+
+    /** Indicate if a savepoint must be taken on FlinkDeployment/FlinkSessionJob deletion. */
+    @SpecDiff(DiffType.IGNORE)
+    private boolean savepointOnDeletion;
 }
