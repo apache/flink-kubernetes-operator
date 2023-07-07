@@ -219,7 +219,9 @@ public class FlinkConfigBuilderTest {
         inConfig.set(KubernetesOperatorConfigOptions.OPERATOR_JM_STARTUP_PROBE_ENABLED, false);
 
         var configuration =
-                new FlinkConfigBuilder(flinkDeployment, inConfig).applyPodTemplate().build();
+                new FlinkConfigBuilder(flinkDeployment, inConfig.clone())
+                        .applyPodTemplate()
+                        .build();
 
         Assertions.assertEquals(
                 configuration.getString(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE),
@@ -232,7 +234,9 @@ public class FlinkConfigBuilderTest {
         flinkDeployment.getSpec().getTaskManager().getResource().setEphemeralStorage("2G");
 
         configuration =
-                new FlinkConfigBuilder(flinkDeployment, inConfig).applyPodTemplate().build();
+                new FlinkConfigBuilder(flinkDeployment, inConfig.clone())
+                        .applyPodTemplate()
+                        .build();
         assertMainContainerEphemeralStorage(
                 getJmPod(configuration).getSpec().getContainers().get(1), "2G");
         Assertions.assertEquals(
@@ -249,7 +253,9 @@ public class FlinkConfigBuilderTest {
         inConfig.set(KubernetesOperatorConfigOptions.OPERATOR_JM_STARTUP_PROBE_ENABLED, true);
 
         configuration =
-                new FlinkConfigBuilder(flinkDeployment, inConfig).applyPodTemplate().build();
+                new FlinkConfigBuilder(flinkDeployment, inConfig.clone())
+                        .applyPodTemplate()
+                        .build();
 
         var jmPod = getJmPod(configuration);
         var tmPod = getTmPod(configuration);
@@ -265,7 +271,9 @@ public class FlinkConfigBuilderTest {
         // With completely empty podtemplates still generate startup probe
         flinkDeployment.getSpec().setPodTemplate(null);
         configuration =
-                new FlinkConfigBuilder(flinkDeployment, inConfig).applyPodTemplate().build();
+                new FlinkConfigBuilder(flinkDeployment, inConfig.clone())
+                        .applyPodTemplate()
+                        .build();
         Assertions.assertNull(
                 configuration.getString(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE));
         jmPod = getJmPod(configuration);
@@ -286,7 +294,9 @@ public class FlinkConfigBuilderTest {
                 .setPodTemplate(TestUtils.getTestPod("", "", List.of(container1)));
 
         configuration =
-                new FlinkConfigBuilder(flinkDeployment, inConfig).applyPodTemplate().build();
+                new FlinkConfigBuilder(flinkDeployment, inConfig.clone())
+                        .applyPodTemplate()
+                        .build();
 
         jmPod = getJmPod(configuration);
         tmPod = getTmPod(configuration);
@@ -307,7 +317,9 @@ public class FlinkConfigBuilderTest {
         flinkDeployment.getSpec().setPodTemplate(common);
 
         configuration =
-                new FlinkConfigBuilder(flinkDeployment, inConfig).applyPodTemplate().build();
+                new FlinkConfigBuilder(flinkDeployment, inConfig.clone())
+                        .applyPodTemplate()
+                        .build();
 
         jmPod = getJmPod(configuration);
         tmPod = getTmPod(configuration);
@@ -329,7 +341,9 @@ public class FlinkConfigBuilderTest {
         flinkDeployment.getSpec().setTaskManager(null);
         flinkDeployment.getSpec().setJobManager(null);
         configuration =
-                new FlinkConfigBuilder(flinkDeployment, inConfig).applyPodTemplate().build();
+                new FlinkConfigBuilder(flinkDeployment, inConfig.clone())
+                        .applyPodTemplate()
+                        .build();
         Assertions.assertFalse(
                 configuration.contains(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE));
         Assertions.assertFalse(
@@ -340,7 +354,9 @@ public class FlinkConfigBuilderTest {
         flinkDeployment.getSpec().setTaskManager(new TaskManagerSpec());
         flinkDeployment.getSpec().setJobManager(new JobManagerSpec());
         configuration =
-                new FlinkConfigBuilder(flinkDeployment, inConfig).applyPodTemplate().build();
+                new FlinkConfigBuilder(flinkDeployment, inConfig.clone())
+                        .applyPodTemplate()
+                        .build();
         Assertions.assertFalse(
                 configuration.contains(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE));
         Assertions.assertFalse(

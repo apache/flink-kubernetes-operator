@@ -37,6 +37,9 @@ public class KubernetesOperatorConfigOptions {
 
     public static final String K8S_OP_CONF_PREFIX = "kubernetes.operator.";
 
+    private static final String DEFAULT_CONF_PREFIX = K8S_OP_CONF_PREFIX + "default-configuration.";
+    public static final String VERSION_CONF_PREFIX = DEFAULT_CONF_PREFIX + "flink-version.";
+    public static final String NAMESPACE_CONF_PREFIX = DEFAULT_CONF_PREFIX + "namespace.";
     public static final String SECTION_SYSTEM = "system";
     public static final String SECTION_ADVANCED = "system_advanced";
     public static final String SECTION_DYNAMIC = "dynamic";

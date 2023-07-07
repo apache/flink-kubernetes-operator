@@ -93,12 +93,11 @@ public class TestingFlinkSessionJobController
 
         flinkSessionJobController =
                 new FlinkSessionJobController(
-                        configManager,
                         ValidatorUtils.discoverValidators(configManager),
                         ctxFactory,
                         new SessionJobReconciler(
                                 kubernetesClient, eventRecorder, statusRecorder, configManager),
-                        new FlinkSessionJobObserver(configManager, eventRecorder),
+                        new FlinkSessionJobObserver(eventRecorder),
                         statusRecorder,
                         eventRecorder,
                         canaryResourceManager);

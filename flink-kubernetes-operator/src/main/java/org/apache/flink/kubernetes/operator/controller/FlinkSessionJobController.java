@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.observer.Observer;
@@ -59,7 +58,6 @@ public class FlinkSessionJobController
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSessionJobController.class);
 
-    private final FlinkConfigManager configManager;
     private final Set<FlinkResourceValidator> validators;
     private final FlinkResourceContextFactory ctxFactory;
     private final Reconciler<FlinkSessionJob> reconciler;
@@ -69,7 +67,6 @@ public class FlinkSessionJobController
     private final CanaryResourceManager<FlinkSessionJob> canaryResourceManager;
 
     public FlinkSessionJobController(
-            FlinkConfigManager configManager,
             Set<FlinkResourceValidator> validators,
             FlinkResourceContextFactory ctxFactory,
             Reconciler<FlinkSessionJob> reconciler,
@@ -77,7 +74,6 @@ public class FlinkSessionJobController
             StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder,
             EventRecorder eventRecorder,
             CanaryResourceManager<FlinkSessionJob> canaryResourceManager) {
-        this.configManager = configManager;
         this.validators = validators;
         this.ctxFactory = ctxFactory;
         this.reconciler = reconciler;
@@ -102,10 +98,10 @@ public class FlinkSessionJobController
         var ctx = ctxFactory.getResourceContext(flinkSessionJob, josdkContext);
 
         observer.observe(ctx);
-        if (!validateSessionJob(flinkSessionJob, josdkContext)) {
+        if (!validateSessionJob(ctx)) {
             statusRecorder.patchAndCacheStatus(flinkSessionJob);
             return ReconciliationUtils.toUpdateControl(
-                    configManager.getOperatorConfiguration(), flinkSessionJob, previousJob, false);
+                    ctx.getOperatorConfig(), flinkSessionJob, previousJob, false);
         }
 
         try {
@@ -122,7 +118,7 @@ public class FlinkSessionJobController
         }
         statusRecorder.patchAndCacheStatus(flinkSessionJob);
         return ReconciliationUtils.toUpdateControl(
-                configManager.getOperatorConfiguration(), flinkSessionJob, previousJob, true);
+                ctx.getOperatorConfig(), flinkSessionJob, previousJob, true);
     }
 
     @Override
@@ -148,12 +144,8 @@ public class FlinkSessionJobController
     @Override
     public ErrorStatusUpdateControl<FlinkSessionJob> updateErrorStatus(
             FlinkSessionJob sessionJob, Context<FlinkSessionJob> context, Exception e) {
-        return ReconciliationUtils.toErrorStatusUpdateControl(
-                sessionJob,
-                context.getRetryInfo(),
-                e,
-                statusRecorder,
-                configManager.getOperatorConfiguration());
+        var ctx = ctxFactory.getResourceContext(sessionJob, context);
+        return ReconciliationUtils.toErrorStatusUpdateControl(ctx, e, statusRecorder);
     }
 
     @Override
@@ -163,11 +155,13 @@ public class FlinkSessionJobController
                 EventSourceUtils.getFlinkDeploymentInformerEventSource(context));
     }
 
-    private boolean validateSessionJob(FlinkSessionJob sessionJob, Context<?> context) {
+    private boolean validateSessionJob(FlinkResourceContext<FlinkSessionJob> ctx) {
+        var sessionJob = ctx.getResource();
         for (FlinkResourceValidator validator : validators) {
             Optional<String> validationError =
                     validator.validateSessionJob(
-                            sessionJob, context.getSecondaryResource(FlinkDeployment.class));
+                            sessionJob,
+                            ctx.getJosdkContext().getSecondaryResource(FlinkDeployment.class));
             if (validationError.isPresent()) {
                 eventRecorder.triggerEvent(
                         sessionJob,
@@ -176,9 +170,7 @@ public class FlinkSessionJobController
                         EventRecorder.Component.Operator,
                         validationError.get());
                 return ReconciliationUtils.applyValidationErrorAndResetSpec(
-                        sessionJob,
-                        validationError.get(),
-                        configManager.getOperatorConfiguration());
+                        ctx, validationError.get());
             }
         }
         return true;

@@ -62,9 +62,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
 
     @Override
     public void setup() {
-        observer =
-                new TestObserverAdapter<>(
-                        this, new FlinkSessionJobObserver(configManager, eventRecorder));
+        observer = new TestObserverAdapter<>(this, new FlinkSessionJobObserver(eventRecorder));
         reconciler =
                 new TestReconcilerAdapter<>(
                         this,

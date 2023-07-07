@@ -58,9 +58,9 @@ public class FlinkOperatorWebhook {
         EnvUtils.logEnvironmentInfo(LOG, "Flink Kubernetes Webhook", args);
         var informerManager = new InformerManager(new KubernetesClientBuilder().build());
         var configManager = new FlinkConfigManager(informerManager::setNamespaces);
-        if (!configManager.getOperatorConfiguration().isDynamicNamespacesEnabled()) {
-            informerManager.setNamespaces(
-                    configManager.getOperatorConfiguration().getWatchedNamespaces());
+        var operatorConfig = configManager.getOperatorConfiguration();
+        if (!operatorConfig.isDynamicNamespacesEnabled()) {
+            informerManager.setNamespaces(operatorConfig.getWatchedNamespaces());
         }
         Set<FlinkResourceValidator> validators = ValidatorUtils.discoverValidators(configManager);
 

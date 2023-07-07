@@ -26,9 +26,11 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
+import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
+import org.apache.flink.util.concurrent.Executors;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -69,7 +71,11 @@ public class StandaloneFlinkServiceTest {
 
         kubernetesClient = mockServer.createClient().inAnyNamespace();
         flinkStandaloneService =
-                new StandaloneFlinkService(kubernetesClient, new FlinkConfigManager(configuration));
+                new StandaloneFlinkService(
+                        kubernetesClient,
+                        new ArtifactManager(configManager),
+                        Executors.newDirectExecutorService(),
+                        configManager.getOperatorConfiguration());
         flinkDeployment = TestUtils.buildSessionCluster();
         flinkDeployment
                 .getStatus()
@@ -244,7 +250,11 @@ public class StandaloneFlinkServiceTest {
         int nbCall = 0;
 
         public TestingStandaloneFlinkService(StandaloneFlinkService service) {
-            super(service.kubernetesClient, service.configManager);
+            super(
+                    service.kubernetesClient,
+                    service.artifactManager,
+                    service.executorService,
+                    service.operatorConfig);
         }
 
         public Configuration getRuntimeConfig() {

@@ -50,6 +50,24 @@ defaultConfiguration:
 
 To learn more about metrics and logging configuration please refer to the dedicated [docs page]({{< ref "docs/operations/metrics-logging" >}}).
 
+### Flink Version and Namespace specific defaults
+
+The operator also supports default configuration overrides for selected Flink versions and namespaces. This can be important if some behaviour changed across Flink versions or we want to treat certain namespaces differently (such as reconcile it more or less frequently etc).
+
+```
+# Flink Version specific defaults 
+kubernetes.operator.default-configuration.flink-version.v1_17.k1: v1
+kubernetes.operator.default-configuration.flink-version.v1_17.k2: v2
+kubernetes.operator.default-configuration.flink-version.v1_17.k3: v3
+
+# Namespace specific defaults
+kubernetes.operator.default-configuration.namespace.ns1.k1: v1
+kubernetes.operator.default-configuration.namespace.ns1.k2: v2
+kubernetes.operator.default-configuration.namespace.ns2.k1: v1
+```
+
+Flink version specific defaults will have a higher precedence so namespace defaults would be overridden by the same key.
+
 ## Dynamic Operator Configuration
 
 The Kubernetes operator supports dynamic config changes through the operator ConfigMaps. Dynamic operator configuration is enabled by default, and can be disabled by setting `kubernetes.operator.dynamic.config.enabled` to false. Time interval for checking dynamic config changes is specified by `kubernetes.operator.dynamic.config.check.interval` of which default value is 5 minutes.

@@ -18,11 +18,9 @@
 package org.apache.flink.kubernetes.operator.observer.sessionjob;
 
 import org.apache.flink.api.common.JobID;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.MissingSessionJobException;
 import org.apache.flink.kubernetes.operator.observer.AbstractFlinkResourceObserver;
@@ -53,10 +51,10 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
     private final SessionJobStatusObserver jobStatusObserver;
     private final SavepointObserver<FlinkSessionJob, FlinkSessionJobStatus> savepointObserver;
 
-    public FlinkSessionJobObserver(FlinkConfigManager configManager, EventRecorder eventRecorder) {
-        super(configManager, eventRecorder);
-        this.jobStatusObserver = new SessionJobStatusObserver(configManager, eventRecorder);
-        this.savepointObserver = new SavepointObserver<>(configManager, eventRecorder);
+    public FlinkSessionJobObserver(EventRecorder eventRecorder) {
+        super(eventRecorder);
+        this.jobStatusObserver = new SessionJobStatusObserver(eventRecorder);
+        this.savepointObserver = new SavepointObserver<>(eventRecorder);
     }
 
     @Override
@@ -130,9 +128,8 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
 
     private static class SessionJobStatusObserver extends JobStatusObserver<FlinkSessionJob> {
 
-        public SessionJobStatusObserver(
-                FlinkConfigManager configManager, EventRecorder eventRecorder) {
-            super(configManager, eventRecorder);
+        public SessionJobStatusObserver(EventRecorder eventRecorder) {
+            super(eventRecorder);
         }
 
         @Override
@@ -163,25 +160,24 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
         }
 
         @Override
-        protected void onTargetJobNotFound(FlinkSessionJob resource, Configuration config) {
-            ifHaDisabledMarkSessionJobMissing(resource, config);
+        protected void onTargetJobNotFound(FlinkResourceContext<FlinkSessionJob> ctx) {
+            ifHaDisabledMarkSessionJobMissing(ctx);
         }
 
         @Override
-        protected void onNoJobsFound(FlinkSessionJob resource, Configuration config) {
-            ifHaDisabledMarkSessionJobMissing(resource, config);
+        protected void onNoJobsFound(FlinkResourceContext<FlinkSessionJob> ctx) {
+            ifHaDisabledMarkSessionJobMissing(ctx);
         }
 
         /**
          * When HA is disabled the session job will not recover on JM restarts. If the JM goes down
          * / restarted the session job should be marked missing.
          *
-         * @param sessionJob Flink session job.
-         * @param conf Flink config.
+         * @param ctx Flink session job context.
          */
-        private void ifHaDisabledMarkSessionJobMissing(
-                FlinkSessionJob sessionJob, Configuration conf) {
-            if (HighAvailabilityMode.isHighAvailabilityModeActivated(conf)) {
+        private void ifHaDisabledMarkSessionJobMissing(FlinkResourceContext<FlinkSessionJob> ctx) {
+            var sessionJob = ctx.getResource();
+            if (HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig())) {
                 return;
             }
             sessionJob
@@ -190,9 +186,7 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
                     .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
             LOG.error(MISSING_SESSION_JOB_ERR);
             ReconciliationUtils.updateForReconciliationError(
-                    sessionJob,
-                    new MissingSessionJobException(MISSING_SESSION_JOB_ERR),
-                    configManager.getOperatorConfiguration());
+                    ctx, new MissingSessionJobException(MISSING_SESSION_JOB_ERR));
             eventRecorder.triggerEvent(
                     sessionJob,
                     EventRecorder.Type.Warning,

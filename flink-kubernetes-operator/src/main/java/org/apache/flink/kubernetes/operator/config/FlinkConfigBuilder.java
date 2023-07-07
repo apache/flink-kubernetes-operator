@@ -97,23 +97,20 @@ public class FlinkConfigBuilder {
     private final FlinkDeploymentSpec spec;
     private final Configuration effectiveConfig;
 
-    protected FlinkConfigBuilder(FlinkDeployment deployment, Configuration flinkConfig) {
+    protected FlinkConfigBuilder(FlinkDeployment deployment, Configuration flinkConf) {
         this(
                 deployment.getMetadata().getNamespace(),
                 deployment.getMetadata().getName(),
                 deployment.getSpec(),
-                flinkConfig);
+                flinkConf);
     }
 
     protected FlinkConfigBuilder(
-            String namespace,
-            String clusterId,
-            FlinkDeploymentSpec spec,
-            Configuration flinkConfig) {
+            String namespace, String clusterId, FlinkDeploymentSpec spec, Configuration flinkConf) {
         this.namespace = namespace;
         this.clusterId = clusterId;
         this.spec = spec;
-        this.effectiveConfig = new Configuration(flinkConfig);
+        this.effectiveConfig = flinkConf;
     }
 
     protected FlinkConfigBuilder applyImage() {

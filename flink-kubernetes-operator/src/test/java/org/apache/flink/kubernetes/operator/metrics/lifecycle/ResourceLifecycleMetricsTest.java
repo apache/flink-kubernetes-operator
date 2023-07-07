@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.metrics.CustomResourceMetrics;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
@@ -162,7 +161,7 @@ public class ResourceLifecycleMetricsTest {
         var conf = new Configuration();
         var metricManager =
                 MetricManager.createFlinkDeploymentMetricManager(
-                        new FlinkConfigManager(conf), TestUtils.createTestMetricGroup(conf));
+                        conf, TestUtils.createTestMetricGroup(conf));
         var lifeCycleMetrics = getLifeCycleMetrics(metricManager);
 
         metricManager.onUpdate(dep1);
@@ -197,7 +196,7 @@ public class ResourceLifecycleMetricsTest {
                 false);
         metricManager =
                 MetricManager.createFlinkDeploymentMetricManager(
-                        new FlinkConfigManager(conf), TestUtils.createTestMetricGroup(conf));
+                        conf, TestUtils.createTestMetricGroup(conf));
         lifeCycleMetrics = getLifeCycleMetrics(metricManager);
 
         metricManager.onUpdate(dep1);
@@ -222,7 +221,7 @@ public class ResourceLifecycleMetricsTest {
         conf.set(KubernetesOperatorMetricOptions.OPERATOR_LIFECYCLE_METRICS_ENABLED, false);
         metricManager =
                 MetricManager.createFlinkDeploymentMetricManager(
-                        new FlinkConfigManager(conf), TestUtils.createTestMetricGroup(conf));
+                        conf, TestUtils.createTestMetricGroup(conf));
         assertNull(getLifeCycleMetrics(metricManager));
 
         metricManager.onUpdate(dep1);
@@ -236,14 +235,14 @@ public class ResourceLifecycleMetricsTest {
         var testingMetricListener = new TestingMetricListener(new Configuration());
         var deploymentMetricManager =
                 MetricManager.createFlinkDeploymentMetricManager(
-                        new FlinkConfigManager(conf), testingMetricListener.getMetricGroup());
+                        conf, testingMetricListener.getMetricGroup());
         var deploymentLifecycleMetrics = getLifeCycleMetrics(deploymentMetricManager);
         deploymentLifecycleMetrics.onUpdate(TestUtils.buildApplicationCluster());
         testGlobalHistoNames(testingMetricListener, FlinkDeployment.class);
 
         var sessionJobMetricManager =
                 MetricManager.createFlinkSessionJobMetricManager(
-                        new FlinkConfigManager(conf), testingMetricListener.getMetricGroup());
+                        conf, testingMetricListener.getMetricGroup());
         var sessionJobLifecycleMetrics = getLifeCycleMetrics(sessionJobMetricManager);
         sessionJobLifecycleMetrics.onUpdate(TestUtils.buildSessionJob());
 

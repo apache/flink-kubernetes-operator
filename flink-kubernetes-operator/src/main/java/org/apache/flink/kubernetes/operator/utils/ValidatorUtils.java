@@ -35,11 +35,12 @@ public final class ValidatorUtils {
     private static final Logger LOG = LoggerFactory.getLogger(FlinkUtils.class);
 
     public static Set<FlinkResourceValidator> discoverValidators(FlinkConfigManager configManager) {
+        var conf = configManager.getDefaultConfig();
         Set<FlinkResourceValidator> resourceValidators = new HashSet<>();
         DefaultValidator defaultValidator = new DefaultValidator(configManager);
-        defaultValidator.configure(configManager.getDefaultConfig());
+        defaultValidator.configure(conf);
         resourceValidators.add(defaultValidator);
-        PluginUtils.createPluginManagerFromRootFolder(configManager.getDefaultConfig())
+        PluginUtils.createPluginManagerFromRootFolder(conf)
                 .load(FlinkResourceValidator.class)
                 .forEachRemaining(
                         validator -> {
@@ -50,7 +51,7 @@ public final class ValidatorUtils {
                                                     ConfigConstants.ENV_FLINK_PLUGINS_DIR,
                                                     ConfigConstants.DEFAULT_FLINK_PLUGINS_DIRS),
                                     validator.getClass().getName());
-                            validator.configure(configManager.getDefaultConfig());
+                            validator.configure(conf);
                             resourceValidators.add(validator);
                         });
         return resourceValidators;

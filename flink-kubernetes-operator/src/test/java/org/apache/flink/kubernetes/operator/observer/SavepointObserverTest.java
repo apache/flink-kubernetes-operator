@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.utils.SavepointStatus;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 
@@ -55,11 +54,16 @@ public class SavepointObserverTest extends OperatorTestBase {
 
     @Override
     public void setup() {
-        observer = new SavepointObserver<>(configManager, eventRecorder);
+        observer = new SavepointObserver<>(eventRecorder);
     }
 
     @Test
     public void testBasicObserve() {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         SavepointInfo spInfo = new SavepointInfo();
         Assertions.assertTrue(spInfo.getSavepointHistory().isEmpty());
 
@@ -67,7 +71,7 @@ public class SavepointObserverTest extends OperatorTestBase {
                 new Savepoint(
                         1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp);
-        observer.cleanupSavepointHistory(flinkService, spInfo, configManager.getDefaultConfig());
+        observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
 
         Assertions.assertNotNull(spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -76,10 +80,15 @@ public class SavepointObserverTest extends OperatorTestBase {
 
     @Test
     public void testAgeBasedDispose() {
+        var cr = TestUtils.buildSessionCluster();
+        cr.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(cr.getSpec(), cr);
         Configuration conf = new Configuration();
         conf.set(
                 KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
                 Duration.ofMillis(5));
+        configManager.updateDefaultConfig(conf);
 
         SavepointInfo spInfo = new SavepointInfo();
 
@@ -87,7 +96,7 @@ public class SavepointObserverTest extends OperatorTestBase {
                 new Savepoint(
                         1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
+        observer.cleanupSavepointHistory(getResourceContext(cr), spInfo);
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp1), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -97,7 +106,7 @@ public class SavepointObserverTest extends OperatorTestBase {
                 new Savepoint(
                         2, "sp2", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
+        observer.cleanupSavepointHistory(getResourceContext(cr), spInfo);
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp2), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -106,6 +115,11 @@ public class SavepointObserverTest extends OperatorTestBase {
 
     @Test
     public void testAgeBasedDisposeWithAgeThreshold() {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         Configuration conf = new Configuration();
         conf.set(
                 KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
@@ -120,7 +134,7 @@ public class SavepointObserverTest extends OperatorTestBase {
                 new Savepoint(
                         1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
+        observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp1), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -130,7 +144,7 @@ public class SavepointObserverTest extends OperatorTestBase {
                 new Savepoint(
                         2, "sp2", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
+        observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
         Assertions.assertIterableEquals(
                 Collections.singletonList(sp2), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
@@ -141,6 +155,11 @@ public class SavepointObserverTest extends OperatorTestBase {
 
     @Test
     public void testDisabledDispose() {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
         Configuration conf = new Configuration();
         conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED, false);
         conf.set(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT, 1000);
@@ -160,7 +179,7 @@ public class SavepointObserverTest extends OperatorTestBase {
                         SavepointFormatType.CANONICAL,
                         123L);
         spInfo.updateLastSavepoint(sp1);
-        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
+        observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
 
         Savepoint sp2 =
                 new Savepoint(
@@ -170,7 +189,7 @@ public class SavepointObserverTest extends OperatorTestBase {
                         SavepointFormatType.CANONICAL,
                         123L);
         spInfo.updateLastSavepoint(sp2);
-        observer.cleanupSavepointHistory(flinkService, spInfo, conf);
+        observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
         Assertions.assertIterableEquals(List.of(sp1, sp2), spInfo.getSavepointHistory());
         Assertions.assertIterableEquals(
                 Collections.emptyList(), flinkService.getDisposedSavepoints());
@@ -180,7 +199,6 @@ public class SavepointObserverTest extends OperatorTestBase {
     public void testPeriodicSavepoint() {
         var conf = new Configuration();
         var deployment = TestUtils.buildApplicationCluster();
-        var spec = deployment.getSpec();
         var status = deployment.getStatus();
         var jobStatus = status.getJobStatus();
         status.getReconciliationStatus()
@@ -197,7 +215,6 @@ public class SavepointObserverTest extends OperatorTestBase {
         assertEquals(SavepointStatus.PENDING, SavepointUtils.getLastSavepointStatus(deployment));
         assertTrue(triggerTs > 0);
 
-        new FlinkDeploymentContext(deployment, null, null, flinkService, configManager);
         // Pending
         observer.observeSavepointStatus(getResourceContext(deployment));
         // Completed

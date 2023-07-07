@@ -25,7 +25,6 @@ import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -48,11 +47,9 @@ public class SavepointObserver<
 
     private static final Logger LOG = LoggerFactory.getLogger(SavepointObserver.class);
 
-    private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
 
-    public SavepointObserver(FlinkConfigManager configManager, EventRecorder eventRecorder) {
-        this.configManager = configManager;
+    public SavepointObserver(EventRecorder eventRecorder) {
         this.eventRecorder = eventRecorder;
     }
 
@@ -74,7 +71,7 @@ public class SavepointObserver<
                     ctx.getFlinkService(), savepointInfo, jobId, ctx.getObserveConfig());
         }
 
-        cleanupSavepointHistory(ctx.getFlinkService(), savepointInfo, ctx.getObserveConfig());
+        cleanupSavepointHistory(ctx, savepointInfo);
     }
 
     /**
@@ -137,11 +134,11 @@ public class SavepointObserver<
 
     /** Clean up and dispose savepoints according to the configured max size/age. */
     @VisibleForTesting
-    void cleanupSavepointHistory(
-            FlinkService flinkService,
-            SavepointInfo currentSavepointInfo,
-            Configuration observeConfig) {
-        final boolean savepointCleanupEnabled =
+    void cleanupSavepointHistory(FlinkResourceContext<CR> ctx, SavepointInfo currentSavepointInfo) {
+
+        var observeConfig = ctx.getObserveConfig();
+        var flinkService = ctx.getFlinkService();
+        boolean savepointCleanupEnabled =
                 observeConfig.getBoolean(
                         KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED);
 
@@ -159,9 +156,7 @@ public class SavepointObserver<
                                 observeConfig,
                                 KubernetesOperatorConfigOptions
                                         .OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
-                                configManager
-                                        .getOperatorConfiguration()
-                                        .getSavepointHistoryCountThreshold()));
+                                ctx.getOperatorConfig().getSavepointHistoryCountThreshold()));
         while (savepointHistory.size() > maxCount) {
             // remove oldest entries
             Savepoint sp = savepointHistory.remove(0);
@@ -174,7 +169,7 @@ public class SavepointObserver<
                 ConfigOptionUtils.getValueWithThreshold(
                         observeConfig,
                         KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
-                        configManager.getOperatorConfiguration().getSavepointHistoryAgeThreshold());
+                        ctx.getOperatorConfig().getSavepointHistoryAgeThreshold());
         long maxTms = System.currentTimeMillis() - maxAge.toMillis();
         Iterator<Savepoint> it = savepointHistory.iterator();
         while (it.hasNext()) {

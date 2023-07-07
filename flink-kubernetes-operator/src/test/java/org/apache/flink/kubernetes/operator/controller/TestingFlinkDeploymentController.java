@@ -105,11 +105,10 @@ public class TestingFlinkDeploymentController
         canaryResourceManager = new CanaryResourceManager<>(configManager, kubernetesClient);
         flinkDeploymentController =
                 new FlinkDeploymentController(
-                        configManager,
                         ValidatorUtils.discoverValidators(configManager),
                         contextFactory,
                         reconcilerFactory,
-                        new FlinkDeploymentObserverFactory(configManager, eventRecorder),
+                        new FlinkDeploymentObserverFactory(eventRecorder),
                         statusRecorder,
                         eventRecorder,
                         canaryResourceManager);

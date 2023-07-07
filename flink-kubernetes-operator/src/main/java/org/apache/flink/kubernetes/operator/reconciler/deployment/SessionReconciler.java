@@ -142,11 +142,7 @@ public class SessionReconciler
                 LOG.warn(error);
             }
             return DeleteControl.noFinalizerRemoval()
-                    .rescheduleAfter(
-                            configManager
-                                    .getOperatorConfiguration()
-                                    .getReconcileInterval()
-                                    .toMillis());
+                    .rescheduleAfter(ctx.getOperatorConfig().getReconcileInterval().toMillis());
         } else {
             LOG.info("Stopping session cluster");
             var conf = ctx.getDeployConfig(ctx.getResource().getSpec());

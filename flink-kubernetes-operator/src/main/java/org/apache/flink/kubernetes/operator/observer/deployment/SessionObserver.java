@@ -19,7 +19,6 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
@@ -28,8 +27,8 @@ import java.util.concurrent.TimeoutException;
 /** The observer of the {@link org.apache.flink.kubernetes.operator.config.Mode#SESSION} cluster. */
 public class SessionObserver extends AbstractFlinkDeploymentObserver {
 
-    public SessionObserver(FlinkConfigManager configManager, EventRecorder eventRecorder) {
-        super(configManager, eventRecorder);
+    public SessionObserver(EventRecorder eventRecorder) {
+        super(eventRecorder);
     }
 
     @Override

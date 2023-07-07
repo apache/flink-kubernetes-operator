@@ -18,8 +18,8 @@
 package org.apache.flink.kubernetes.operator;
 
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
@@ -46,7 +46,7 @@ public class TestingFlinkResourceContextFactory extends FlinkResourceContextFact
     }
 
     @Override
-    protected FlinkService getOrCreateFlinkService(FlinkDeployment deployment) {
+    protected FlinkService getFlinkService(FlinkResourceContext<?> ctx) {
         return flinkService;
     }
 
