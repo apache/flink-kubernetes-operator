@@ -19,7 +19,6 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -34,12 +33,9 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
 
     protected final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    protected final FlinkConfigManager configManager;
     protected final EventRecorder eventRecorder;
 
-    public AbstractFlinkResourceObserver(
-            FlinkConfigManager configManager, EventRecorder eventRecorder) {
-        this.configManager = configManager;
+    public AbstractFlinkResourceObserver(EventRecorder eventRecorder) {
         this.eventRecorder = eventRecorder;
     }
 

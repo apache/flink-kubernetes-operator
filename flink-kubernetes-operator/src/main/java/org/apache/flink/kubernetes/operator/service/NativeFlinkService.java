@@ -37,7 +37,8 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -62,6 +63,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -78,9 +80,11 @@ public class NativeFlinkService extends AbstractFlinkService {
 
     public NativeFlinkService(
             KubernetesClient kubernetesClient,
-            FlinkConfigManager configManager,
+            ArtifactManager artifactManager,
+            ExecutorService executorService,
+            FlinkOperatorConfiguration operatorConfig,
             EventRecorder eventRecorder) {
-        super(kubernetesClient, configManager);
+        super(kubernetesClient, artifactManager, executorService, operatorConfig);
         this.eventRecorder = eventRecorder;
     }
 
@@ -268,12 +272,7 @@ public class NativeFlinkService extends AbstractFlinkService {
         var requestBody = new JobResourceRequirementsBody(new JobResourceRequirements(newReqs));
 
         client.sendRequest(new JobResourcesRequirementsUpdateHeaders(), jobParameters, requestBody)
-                .get(
-                        configManager
-                                .getOperatorConfiguration()
-                                .getFlinkClientTimeout()
-                                .toSeconds(),
-                        TimeUnit.SECONDS);
+                .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
     }
 
     @VisibleForTesting
@@ -289,12 +288,7 @@ public class NativeFlinkService extends AbstractFlinkService {
                                 new JobResourceRequirementsHeaders(),
                                 jobParameters,
                                 EmptyRequestBody.getInstance())
-                        .get(
-                                configManager
-                                        .getOperatorConfiguration()
-                                        .getFlinkClientTimeout()
-                                        .toSeconds(),
-                                TimeUnit.SECONDS);
+                        .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
 
         return currentRequirements.asJobResourceRequirements().get().getJobVertexParallelisms();
     }

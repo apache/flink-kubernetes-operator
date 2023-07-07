@@ -44,6 +44,7 @@ import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
@@ -58,6 +59,7 @@ import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
+import org.apache.flink.util.concurrent.Executors;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -76,6 +78,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -100,6 +103,9 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     @Getter private KubernetesClient kubernetesClient;
     private ApplicationReconciler appReconciler;
 
+    private FlinkOperatorConfiguration operatorConfig;
+    private ExecutorService executorService;
+
     @Override
     public void setup() {
         appReconciler =
@@ -109,6 +115,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         statusRecorder,
                         new NoopJobAutoscalerFactory());
         reconciler = new TestReconcilerAdapter<>(this, appReconciler);
+        operatorConfig = configManager.getOperatorConfiguration();
+        executorService = Executors.newDirectExecutorService();
     }
 
     @ParameterizedTest
@@ -610,7 +618,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         // We create a service mocking out some methods we don't want to call explicitly
         var nativeService =
-                new NativeFlinkService(kubernetesClient, configManager, eventRecorder) {
+                new NativeFlinkService(
+                        kubernetesClient, null, executorService, operatorConfig, eventRecorder) {
 
                     Map<JobVertexID, JobVertexResourceRequirements> submitted = Map.of();
 

@@ -80,7 +80,11 @@ public class DefaultValidator implements FlinkResourceValidator {
     @Override
     public Optional<String> validateDeployment(FlinkDeployment deployment) {
         FlinkDeploymentSpec spec = deployment.getSpec();
-        Map<String, String> effectiveConfig = configManager.getDefaultConfig().toMap();
+        Map<String, String> effectiveConfig =
+                configManager
+                        .getDefaultConfig(
+                                deployment.getMetadata().getNamespace(), spec.getFlinkVersion())
+                        .toMap();
         if (spec.getFlinkConfiguration() != null) {
             effectiveConfig.putAll(spec.getFlinkConfiguration());
         }
@@ -472,7 +476,12 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     private Optional<String> validateSessionJobWithCluster(
             FlinkSessionJob sessionJob, FlinkDeployment sessionCluster) {
-        Map<String, String> effectiveConfig = configManager.getDefaultConfig().toMap();
+        Map<String, String> effectiveConfig =
+                configManager
+                        .getDefaultConfig(
+                                sessionJob.getMetadata().getNamespace(),
+                                sessionCluster.getSpec().getFlinkVersion())
+                        .toMap();
         if (sessionCluster.getSpec().getFlinkConfiguration() != null) {
             effectiveConfig.putAll(sessionCluster.getSpec().getFlinkConfiguration());
         }

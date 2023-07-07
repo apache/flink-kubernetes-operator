@@ -22,7 +22,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
-import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
+import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGrou
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -40,6 +41,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** Factory for creating the {@link FlinkResourceContext}. */
 public class FlinkResourceContextFactory {
@@ -48,10 +51,10 @@ public class FlinkResourceContextFactory {
 
     private final KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager;
+    private final ArtifactManager artifactManager;
+    private final ExecutorService clientExecutorService;
     private final KubernetesOperatorMetricGroup operatorMetricGroup;
-
     private final EventRecorder eventRecorder;
-    private final Map<KubernetesDeploymentMode, FlinkService> serviceMap;
 
     protected final Map<Tuple2<Class<?>, ResourceID>, KubernetesResourceMetricGroup>
             resourceMetricGroups = new ConcurrentHashMap<>();
@@ -65,7 +68,11 @@ public class FlinkResourceContextFactory {
         this.configManager = configManager;
         this.operatorMetricGroup = operatorMetricGroup;
         this.eventRecorder = eventRecorder;
-        this.serviceMap = new ConcurrentHashMap<>();
+        this.artifactManager = new ArtifactManager(configManager);
+        this.clientExecutorService =
+                Executors.newFixedThreadPool(
+                        configManager.getOperatorConfiguration().getReconcilerMaxParallelism(),
+                        new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
     }
 
     public <CR extends AbstractFlinkResource<?, ?>> FlinkResourceContext<CR> getResourceContext(
@@ -81,43 +88,42 @@ public class FlinkResourceContextFactory {
             var flinkDep = (FlinkDeployment) resource;
             return (FlinkResourceContext<CR>)
                     new FlinkDeploymentContext(
-                            flinkDep,
-                            josdkContext,
-                            resMg,
-                            getOrCreateFlinkService(flinkDep),
-                            configManager);
+                            flinkDep, josdkContext, resMg, configManager, this::getFlinkService);
         } else if (resource instanceof FlinkSessionJob) {
             return (FlinkResourceContext<CR>)
                     new FlinkSessionJobContext(
-                            (FlinkSessionJob) resource, josdkContext, resMg, this, configManager);
+                            (FlinkSessionJob) resource,
+                            josdkContext,
+                            resMg,
+                            configManager,
+                            this::getFlinkService);
         } else {
             throw new IllegalArgumentException(
                     "Unknown resource type " + resource.getClass().getSimpleName());
         }
     }
 
-    private FlinkService getOrCreateFlinkService(KubernetesDeploymentMode deploymentMode) {
-        return serviceMap.computeIfAbsent(
-                deploymentMode,
-                mode -> {
-                    switch (mode) {
-                        case NATIVE:
-                            LOG.debug("Using NativeFlinkService");
-                            return new NativeFlinkService(
-                                    kubernetesClient, configManager, eventRecorder);
-                        case STANDALONE:
-                            LOG.debug("Using StandaloneFlinkService");
-                            return new StandaloneFlinkService(kubernetesClient, configManager);
-                        default:
-                            throw new UnsupportedOperationException(
-                                    String.format("Unsupported deployment mode: %s", mode));
-                    }
-                });
-    }
-
     @VisibleForTesting
-    protected FlinkService getOrCreateFlinkService(FlinkDeployment deployment) {
-        return getOrCreateFlinkService(KubernetesDeploymentMode.getDeploymentMode(deployment));
+    protected FlinkService getFlinkService(FlinkResourceContext<?> ctx) {
+        var deploymentMode = ctx.getDeploymentMode();
+        switch (deploymentMode) {
+            case NATIVE:
+                return new NativeFlinkService(
+                        kubernetesClient,
+                        artifactManager,
+                        clientExecutorService,
+                        ctx.getOperatorConfig(),
+                        eventRecorder);
+            case STANDALONE:
+                return new StandaloneFlinkService(
+                        kubernetesClient,
+                        artifactManager,
+                        clientExecutorService,
+                        ctx.getOperatorConfig());
+            default:
+                throw new UnsupportedOperationException(
+                        String.format("Unsupported deployment mode: %s", deploymentMode));
+        }
     }
 
     public <CR extends AbstractFlinkResource<?, ?>> void cleanup(CR flinkApp) {

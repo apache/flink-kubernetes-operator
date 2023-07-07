@@ -20,7 +20,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClientException;
@@ -95,11 +95,10 @@ public class KubernetesClientMetricsTest {
         var configuration = new Configuration();
         configuration.set(
                 KubernetesOperatorMetricOptions.OPERATOR_KUBERNETES_CLIENT_METRICS_ENABLED, false);
-        var flinkConfigManager = new FlinkConfigManager(configuration);
-        var listener = new TestingMetricListener(flinkConfigManager.getDefaultConfig());
+        var listener = new TestingMetricListener(configuration);
         var kubernetesClient =
                 KubernetesClientUtils.getKubernetesClient(
-                        flinkConfigManager.getOperatorConfiguration(),
+                        FlinkOperatorConfiguration.fromConfiguration(configuration),
                         listener.getMetricGroup(),
                         mockServer.createClient().getConfiguration());
 
@@ -119,11 +118,11 @@ public class KubernetesClientMetricsTest {
     @Test
     @Order(2)
     public void testMetricsEnabled() {
-        var flinkConfigManager = new FlinkConfigManager(new Configuration());
-        var listener = new TestingMetricListener(flinkConfigManager.getDefaultConfig());
+        var configuration = new Configuration();
+        var listener = new TestingMetricListener(configuration);
         var kubernetesClient =
                 KubernetesClientUtils.getKubernetesClient(
-                        flinkConfigManager.getOperatorConfiguration(),
+                        FlinkOperatorConfiguration.fromConfiguration(configuration),
                         listener.getMetricGroup(),
                         mockServer.createClient().getConfiguration());
 
@@ -239,11 +238,10 @@ public class KubernetesClientMetricsTest {
                 KubernetesOperatorMetricOptions
                         .OPERATOR_KUBERNETES_CLIENT_METRICS_HTTP_RESPONSE_CODE_GROUPS_ENABLED,
                 true);
-        var flinkConfigManager = new FlinkConfigManager(configuration);
         var listener = new TestingMetricListener(configuration);
         var kubernetesClient =
                 KubernetesClientUtils.getKubernetesClient(
-                        flinkConfigManager.getOperatorConfiguration(),
+                        FlinkOperatorConfiguration.fromConfiguration(configuration),
                         listener.getMetricGroup(),
                         mockServer.createClient().getConfiguration());
 
@@ -376,11 +374,11 @@ public class KubernetesClientMetricsTest {
     @Test
     @Order(3)
     public void testAPIServerIsDown() {
-        var flinkConfigManager = new FlinkConfigManager(new Configuration());
-        var listener = new TestingMetricListener(flinkConfigManager.getDefaultConfig());
+        var configuration = new Configuration();
+        var listener = new TestingMetricListener(configuration);
         var kubernetesClient =
                 KubernetesClientUtils.getKubernetesClient(
-                        flinkConfigManager.getOperatorConfiguration(),
+                        FlinkOperatorConfiguration.fromConfiguration(configuration),
                         listener.getMetricGroup(),
                         mockServer.createClient().getConfiguration());
 

@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.observer.Observer;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -31,14 +30,11 @@ import java.util.concurrent.ConcurrentHashMap;
 /** The factory to create the observer based on the {@link FlinkDeployment} mode. */
 public class FlinkDeploymentObserverFactory {
 
-    private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
     private final Map<Tuple2<Mode, KubernetesDeploymentMode>, Observer<FlinkDeployment>>
             observerMap;
 
-    public FlinkDeploymentObserverFactory(
-            FlinkConfigManager configManager, EventRecorder eventRecorder) {
-        this.configManager = configManager;
+    public FlinkDeploymentObserverFactory(EventRecorder eventRecorder) {
         this.eventRecorder = eventRecorder;
         this.observerMap = new ConcurrentHashMap<>();
     }
@@ -51,9 +47,9 @@ public class FlinkDeploymentObserverFactory {
                 modes -> {
                     switch (modes.f0) {
                         case SESSION:
-                            return new SessionObserver(configManager, eventRecorder);
+                            return new SessionObserver(eventRecorder);
                         case APPLICATION:
-                            return new ApplicationObserver(configManager, eventRecorder);
+                            return new ApplicationObserver(eventRecorder);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", modes.f0));

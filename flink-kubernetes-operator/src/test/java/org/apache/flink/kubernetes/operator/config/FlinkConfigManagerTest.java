@@ -25,6 +25,7 @@ import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
@@ -230,5 +231,52 @@ public class FlinkConfigManagerTest {
         } finally {
             TestUtils.setEnv(originalEnv);
         }
+    }
+
+    @Test
+    public void testVersionNamespaceDefaultConfs() {
+        var opConf = new Configuration();
+        opConf.setString("conf0", "false");
+        opConf.setString(KubernetesOperatorConfigOptions.VERSION_CONF_PREFIX + "v1_17.conf1", "v1");
+        opConf.setString(
+                KubernetesOperatorConfigOptions.VERSION_CONF_PREFIX + "v1_17.conf0", "true");
+
+        opConf.setString(KubernetesOperatorConfigOptions.VERSION_CONF_PREFIX + "v1_18.conf2", "v2");
+
+        opConf.setString(KubernetesOperatorConfigOptions.NAMESPACE_CONF_PREFIX + "ns1.conf1", "vn");
+        opConf.setString(KubernetesOperatorConfigOptions.NAMESPACE_CONF_PREFIX + "ns1.conf3", "v3");
+        var configManager = new FlinkConfigManager(opConf);
+
+        var v17Conf = configManager.getDefaultConfig("ns1", FlinkVersion.v1_17).toMap();
+        var v18Conf = configManager.getDefaultConfig("ns1", FlinkVersion.v1_18).toMap();
+        var controlConf = configManager.getDefaultConfig("control", FlinkVersion.v1_16).toMap();
+
+        assertEquals("v1", v17Conf.get("conf1"));
+        assertEquals("true", v17Conf.get("conf0"));
+
+        assertEquals("v2", v18Conf.get("conf2"));
+        assertEquals("false", v18Conf.get("conf0"));
+
+        // Namespace defaults
+        assertEquals("vn", v18Conf.get("conf1"));
+        assertEquals("v3", v18Conf.get("conf3"));
+        assertEquals("v3", v17Conf.get("conf3"));
+
+        assertFalse(controlConf.containsKey("conf1"));
+        assertFalse(controlConf.containsKey("conf2"));
+        assertFalse(controlConf.containsKey("conf3"));
+        assertEquals("false", controlConf.get("conf0"));
+
+        var deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_18);
+        deployment.getMetadata().setNamespace("ns1");
+        deployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
+        var observeConfig = configManager.getObserveConfig(deployment).toMap();
+        assertEquals("vn", observeConfig.get("conf1"));
+        assertEquals("v2", observeConfig.get("conf2"));
+        assertEquals("v3", observeConfig.get("conf3"));
+        assertEquals("false", observeConfig.get("conf0"));
     }
 }

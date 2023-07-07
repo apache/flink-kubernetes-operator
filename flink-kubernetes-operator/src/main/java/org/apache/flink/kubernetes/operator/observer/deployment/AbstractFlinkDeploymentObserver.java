@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.exception.MissingJobManagerException;
@@ -55,9 +54,8 @@ public abstract class AbstractFlinkDeploymentObserver
 
     protected final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    public AbstractFlinkDeploymentObserver(
-            FlinkConfigManager configManager, EventRecorder eventRecorder) {
-        super(configManager, eventRecorder);
+    public AbstractFlinkDeploymentObserver(EventRecorder eventRecorder) {
+        super(eventRecorder);
     }
 
     @Override
@@ -155,7 +153,7 @@ public abstract class AbstractFlinkDeploymentObserver
 
         if (previousJmStatus != JobManagerDeploymentStatus.MISSING
                 && previousJmStatus != JobManagerDeploymentStatus.ERROR) {
-            onMissingDeployment(flinkApp);
+            onMissingDeployment(ctx);
         }
     }
 
@@ -217,15 +215,12 @@ public abstract class AbstractFlinkDeploymentObserver
                 && lastReconciledSpec.getJob().getState() == JobState.SUSPENDED;
     }
 
-    private void onMissingDeployment(FlinkDeployment deployment) {
+    private void onMissingDeployment(FlinkResourceContext<FlinkDeployment> ctx) {
         String err = "Missing JobManager deployment";
         logger.error(err);
-        ReconciliationUtils.updateForReconciliationError(
-                deployment,
-                new MissingJobManagerException(err),
-                configManager.getOperatorConfiguration());
+        ReconciliationUtils.updateForReconciliationError(ctx, new MissingJobManagerException(err));
         eventRecorder.triggerEvent(
-                deployment,
+                ctx.getResource(),
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.Missing,
                 EventRecorder.Component.JobManagerDeployment,

@@ -29,7 +29,8 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.kubeclient.Fabric8FlinkStandaloneKubeClient;
@@ -58,8 +59,11 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     private static final Logger LOG = LoggerFactory.getLogger(StandaloneFlinkService.class);
 
     public StandaloneFlinkService(
-            KubernetesClient kubernetesClient, FlinkConfigManager configManager) {
-        super(kubernetesClient, configManager);
+            KubernetesClient kubernetesClient,
+            ArtifactManager artifactManager,
+            ExecutorService executorService,
+            FlinkOperatorConfiguration operatorConfig) {
+        super(kubernetesClient, artifactManager, executorService, operatorConfig);
     }
 
     @Override

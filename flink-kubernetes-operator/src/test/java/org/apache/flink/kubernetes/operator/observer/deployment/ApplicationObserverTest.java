@@ -73,9 +73,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     @Override
     public void setup() {
-        observer =
-                new TestObserverAdapter<>(
-                        this, new ApplicationObserver(configManager, eventRecorder));
+        observer = new TestObserverAdapter<>(this, new ApplicationObserver(eventRecorder));
     }
 
     @Test

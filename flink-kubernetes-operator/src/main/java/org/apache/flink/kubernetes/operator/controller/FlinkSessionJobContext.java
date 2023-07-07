@@ -22,32 +22,30 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
-import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+
+import java.util.function.Function;
 
 import static org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler.sessionClusterReady;
 
 /** Context for reconciling a Flink resource. * */
 public class FlinkSessionJobContext extends FlinkResourceContext<FlinkSessionJob> {
 
-    private final FlinkResourceContextFactory flinkResourceContextFactory;
-    private final FlinkConfigManager configManager;
-    private FlinkService flinkService;
+    private FlinkVersion flinkVersion;
 
     public FlinkSessionJobContext(
             FlinkSessionJob resource,
             Context<?> josdkContext,
             KubernetesResourceMetricGroup resourceMetricGroup,
-            FlinkResourceContextFactory flinkResourceContextFactory,
-            FlinkConfigManager configManager) {
-        super(resource, josdkContext, resourceMetricGroup);
-        this.flinkResourceContextFactory = flinkResourceContextFactory;
-        this.configManager = configManager;
+            FlinkConfigManager configManager,
+            Function<FlinkResourceContext<?>, FlinkService> flinkServiceFactory) {
+        super(resource, josdkContext, resourceMetricGroup, configManager, flinkServiceFactory);
     }
 
     @Override
@@ -61,17 +59,9 @@ public class FlinkSessionJobContext extends FlinkResourceContext<FlinkSessionJob
     }
 
     @Override
-    public FlinkService getFlinkService() {
-        if (flinkService != null) {
-            return flinkService;
-        }
+    protected FlinkService createFlinkService() {
         var session = getJosdkContext().getSecondaryResource(FlinkDeployment.class);
-        return flinkService =
-                sessionClusterReady(session)
-                        ? flinkResourceContextFactory
-                                .getResourceContext(session.get(), getJosdkContext())
-                                .getFlinkService()
-                        : null;
+        return sessionClusterReady(session) ? super.createFlinkService() : null;
     }
 
     @Override
@@ -83,5 +73,18 @@ public class FlinkSessionJobContext extends FlinkResourceContext<FlinkSessionJob
     public KubernetesDeploymentMode getDeploymentMode() {
         return KubernetesDeploymentMode.getDeploymentMode(
                 getJosdkContext().getSecondaryResource(FlinkDeployment.class).get());
+    }
+
+    @Override
+    public FlinkVersion getFlinkVersion() {
+        if (flinkVersion != null) {
+            return flinkVersion;
+        }
+        flinkVersion =
+                getJosdkContext()
+                        .getSecondaryResource(FlinkDeployment.class)
+                        .map(fd -> fd.getSpec().getFlinkVersion())
+                        .orElse(null);
+        return flinkVersion;
     }
 }

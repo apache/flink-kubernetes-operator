@@ -19,9 +19,10 @@ package org.apache.flink.kubernetes.operator.metrics.lifecycle;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.metrics.CustomResourceMetrics;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions;
@@ -71,7 +72,6 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
             new ConcurrentHashMap<>();
     private final Set<String> namespaces = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-    private final FlinkConfigManager configManager;
     private final Clock clock;
     private final KubernetesOperatorMetricGroup operatorMetricGroup;
     private final boolean namespaceHistosEnabled;
@@ -81,17 +81,19 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
 
     private Function<MetricGroup, MetricGroup> metricGroupFunction = mg -> mg.addGroup("Lifecycle");
 
+    private FlinkOperatorConfiguration operatorConfig;
+    private Configuration config;
+
     public LifecycleMetrics(
-            FlinkConfigManager configManager, KubernetesOperatorMetricGroup operatorMetricGroup) {
-        this.configManager = configManager;
+            Configuration configuration, KubernetesOperatorMetricGroup operatorMetricGroup) {
         this.clock = Clock.systemDefaultZone();
         this.operatorMetricGroup = operatorMetricGroup;
+        this.config = configuration;
+        this.operatorConfig = FlinkOperatorConfiguration.fromConfiguration(config);
         this.namespaceHistosEnabled =
-                configManager
-                        .getDefaultConfig()
-                        .get(
-                                KubernetesOperatorMetricOptions
-                                        .OPERATOR_LIFECYCLE_NAMESPACE_HISTOGRAMS_ENABLED);
+                config.get(
+                        KubernetesOperatorMetricOptions
+                                .OPERATOR_LIFECYCLE_NAMESPACE_HISTOGRAMS_ENABLED);
     }
 
     @Override
@@ -134,7 +136,7 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
         MetricGroup lifecycleGroup =
                 metricGroupFunction.apply(
                         operatorMetricGroup.createResourceNamespaceGroup(
-                                configManager.getDefaultConfig(), cr.getClass(), namespace));
+                                config, cr.getClass(), namespace));
         for (ResourceLifecycleState state : ResourceLifecycleState.values()) {
             lifecycleGroup
                     .addGroup("State")
@@ -195,8 +197,7 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
                                                                         metricName,
                                                                         operatorMetricGroup
                                                                                 .createResourceNamespaceGroup(
-                                                                                        configManager
-                                                                                                .getDefaultConfig(),
+                                                                                        config,
                                                                                         cr
                                                                                                 .getClass(),
                                                                                         ns))))
@@ -220,8 +221,7 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
                                                                         state,
                                                                         operatorMetricGroup
                                                                                 .createResourceNamespaceGroup(
-                                                                                        configManager
-                                                                                                .getDefaultConfig(),
+                                                                                        config,
                                                                                         cr
                                                                                                 .getClass(),
                                                                                         ns))))
@@ -234,10 +234,7 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
                 .apply(group)
                 .addGroup("Transition")
                 .addGroup(metricName)
-                .histogram(
-                        "TimeSeconds",
-                        OperatorMetricUtils.createHistogram(
-                                configManager.getOperatorConfiguration()));
+                .histogram("TimeSeconds", OperatorMetricUtils.createHistogram(operatorConfig));
     }
 
     private Histogram createStateTimeHistogram(ResourceLifecycleState state, MetricGroup group) {
@@ -245,10 +242,7 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
                 .apply(group)
                 .addGroup("State")
                 .addGroup(state.name())
-                .histogram(
-                        "TimeSeconds",
-                        OperatorMetricUtils.createHistogram(
-                                configManager.getOperatorConfiguration()));
+                .histogram("TimeSeconds", OperatorMetricUtils.createHistogram(operatorConfig));
     }
 
     private static List<Transition> getTrackedTransitions() {

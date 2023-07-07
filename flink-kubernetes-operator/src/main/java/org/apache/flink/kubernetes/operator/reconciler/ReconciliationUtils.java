@@ -35,6 +35,7 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ValidationException;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -42,7 +43,6 @@ import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.reconciler.ErrorStatusUpdateControl;
-import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -50,7 +50,6 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Optional;
 
 import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
@@ -203,9 +202,8 @@ public class ReconciliationUtils {
         }
     }
 
-    public static void updateForReconciliationError(
-            AbstractFlinkResource<?, ?> target, Throwable error, FlinkOperatorConfiguration conf) {
-        updateFlinkResourceException(error, target, conf);
+    public static void updateForReconciliationError(FlinkResourceContext ctx, Throwable error) {
+        updateFlinkResourceException(error, ctx.getResource(), ctx.getOperatorConfig());
     }
 
     public static <T> T clone(T object) {
@@ -336,23 +334,22 @@ public class ReconciliationUtils {
      * <p>For in-flight application upgrades we need extra logic to set the desired job state to
      * running
      *
-     * @param deployment The current deployment to be reconciled
+     * @param ctx The current deployment context
      * @param validationError Validation error encountered for the current spec
-     * @param conf Operator config
      * @param <SPEC> Spec type.
      * @return True if the spec was reset and reconciliation can continue. False if nothing to
      *     reconcile.
      */
     public static <SPEC extends AbstractFlinkSpec> boolean applyValidationErrorAndResetSpec(
-            AbstractFlinkResource<SPEC, ?> deployment,
-            String validationError,
-            FlinkOperatorConfiguration conf) {
+            FlinkResourceContext<? extends AbstractFlinkResource<SPEC, ?>> ctx,
+            String validationError) {
 
+        var deployment = ctx.getResource();
         var status = deployment.getStatus();
         if (!validationError.equals(status.getError())) {
             LOG.error("Validation failed: " + validationError);
             ReconciliationUtils.updateForReconciliationError(
-                    deployment, new ValidationException(validationError), conf);
+                    ctx, new ValidationException(validationError));
         }
 
         var lastReconciledSpecWithMeta =
@@ -384,20 +381,18 @@ public class ReconciliationUtils {
      *
      * @param <STATUS> Status type.
      * @param <R> Resource type.
-     * @param resource Flink Resource to be updated
-     * @param retryInfo Current RetryInformation
+     * @param ctx Flink Resource context
      * @param e Exception that caused the retry
      * @param statusRecorder statusRecorder object for patching status
-     * @param operatorConfiguration Operator config
      * @return This always returns Empty optional currently, due to the status update logic
      */
     public static <STATUS extends CommonStatus<?>, R extends AbstractFlinkResource<?, STATUS>>
             ErrorStatusUpdateControl<R> toErrorStatusUpdateControl(
-                    R resource,
-                    Optional<RetryInfo> retryInfo,
+                    FlinkResourceContext<R> ctx,
                     Exception e,
-                    StatusRecorder<R, STATUS> statusRecorder,
-                    FlinkOperatorConfiguration operatorConfiguration) {
+                    StatusRecorder<R, STATUS> statusRecorder) {
+
+        var retryInfo = ctx.getJosdkContext().getRetryInfo();
 
         retryInfo.ifPresent(
                 r ->
@@ -406,9 +401,9 @@ public class ReconciliationUtils {
                                 r.getAttemptCount(),
                                 r.isLastAttempt()));
 
-        statusRecorder.updateStatusFromCache(resource);
-        ReconciliationUtils.updateForReconciliationError(resource, e, operatorConfiguration);
-        statusRecorder.patchAndCacheStatus(resource);
+        statusRecorder.updateStatusFromCache(ctx.getResource());
+        ReconciliationUtils.updateForReconciliationError(ctx, e);
+        statusRecorder.patchAndCacheStatus(ctx.getResource());
 
         // Status was updated already, no need to return anything
         return ErrorStatusUpdateControl.noStatusUpdate();

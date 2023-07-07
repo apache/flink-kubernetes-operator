@@ -122,10 +122,7 @@ public class SessionJobReconciler
                     }
 
                     final long delay =
-                            configManager
-                                    .getOperatorConfiguration()
-                                    .getProgressCheckInterval()
-                                    .toMillis();
+                            ctx.getOperatorConfig().getProgressCheckInterval().toMillis();
                     LOG.error(
                             "Failed to cancel job {}, will reschedule after {} milliseconds.",
                             jobID,

@@ -17,11 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.observer.deployment;
 
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.UnknownJobException;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthObserver;
@@ -45,10 +43,10 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
 
     private final ClusterHealthObserver clusterHealthObserver;
 
-    public ApplicationObserver(FlinkConfigManager configManager, EventRecorder eventRecorder) {
-        super(configManager, eventRecorder);
-        this.savepointObserver = new SavepointObserver<>(configManager, eventRecorder);
-        this.jobStatusObserver = new ApplicationJobObserver(configManager, eventRecorder);
+    public ApplicationObserver(EventRecorder eventRecorder) {
+        super(eventRecorder);
+        this.savepointObserver = new SavepointObserver<>(eventRecorder);
+        this.jobStatusObserver = new ApplicationJobObserver(eventRecorder);
         this.clusterHealthObserver = new ClusterHealthObserver();
     }
 
@@ -66,9 +64,8 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
     }
 
     private class ApplicationJobObserver extends JobStatusObserver<FlinkDeployment> {
-        public ApplicationJobObserver(
-                FlinkConfigManager configManager, EventRecorder eventRecorder) {
-            super(configManager, eventRecorder);
+        public ApplicationJobObserver(EventRecorder eventRecorder) {
+            super(eventRecorder);
         }
 
         @Override
@@ -88,31 +85,28 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
         }
 
         @Override
-        protected void onTargetJobNotFound(FlinkDeployment resource, Configuration config) {
+        protected void onTargetJobNotFound(FlinkResourceContext<FlinkDeployment> ctx) {
             // This should never happen for application clusters, there is something
             // wrong
-            setUnknownJobError(resource);
+            setUnknownJobError(ctx);
         }
 
         /**
          * We found a job on an application cluster that doesn't match the expected job. Trigger
          * error.
          *
-         * @param deployment Application deployment.
+         * @param ctx Application deployment context.
          */
-        private void setUnknownJobError(FlinkDeployment deployment) {
-            deployment
+        private void setUnknownJobError(FlinkResourceContext<FlinkDeployment> ctx) {
+            ctx.getResource()
                     .getStatus()
                     .getJobStatus()
                     .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
             String err = "Unrecognized Job for Application deployment";
             logger.error(err);
-            ReconciliationUtils.updateForReconciliationError(
-                    deployment,
-                    new UnknownJobException(err),
-                    configManager.getOperatorConfiguration());
+            ReconciliationUtils.updateForReconciliationError(ctx, new UnknownJobException(err));
             eventRecorder.triggerEvent(
-                    deployment,
+                    ctx.getResource(),
                     EventRecorder.Type.Warning,
                     EventRecorder.Reason.Missing,
                     EventRecorder.Component.Job,

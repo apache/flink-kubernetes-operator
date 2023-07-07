@@ -42,6 +42,7 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
@@ -65,6 +66,7 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerReq
 import org.apache.flink.runtime.rest.util.RestMapperUtils;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
+import org.apache.flink.util.concurrent.Executors;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
@@ -86,6 +88,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
@@ -109,6 +112,8 @@ public class NativeFlinkServiceTest {
     private final EventCollector eventCollector = new EventCollector();
 
     private EventRecorder eventRecorder;
+    private FlinkOperatorConfiguration operatorConfig;
+    private ExecutorService executorService;
 
     @BeforeEach
     public void setup() {
@@ -116,6 +121,8 @@ public class NativeFlinkServiceTest {
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
         configuration.set(FLINK_VERSION, FlinkVersion.v1_15);
         eventRecorder = new EventRecorder(client, eventCollector);
+        operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);
+        executorService = Executors.newDirectExecutorService();
     }
 
     @Test
@@ -511,8 +518,9 @@ public class NativeFlinkServiceTest {
     @Test
     public void testDeletionPropagation() {
         var propagation = new ArrayList<DeletionPropagation>();
-        var flinkService =
-                new NativeFlinkService(client, configManager, eventRecorder) {
+        NativeFlinkService flinkService =
+                new NativeFlinkService(
+                        client, null, executorService, operatorConfig, eventRecorder) {
                     @Override
                     protected void deleteClusterInternal(
                             ObjectMeta meta,
@@ -530,7 +538,23 @@ public class NativeFlinkServiceTest {
         configuration.set(
                 KubernetesOperatorConfigOptions.RESOURCE_DELETION_PROPAGATION,
                 DeletionPropagation.BACKGROUND);
-        configManager.updateDefaultConfig(configuration);
+
+        flinkService =
+                new NativeFlinkService(
+                        client,
+                        null,
+                        executorService,
+                        FlinkOperatorConfiguration.fromConfiguration(configuration),
+                        eventRecorder) {
+                    @Override
+                    protected void deleteClusterInternal(
+                            ObjectMeta meta,
+                            Configuration conf,
+                            boolean deleteHaData,
+                            DeletionPropagation deletionPropagation) {
+                        propagation.add(deletionPropagation);
+                    }
+                };
         flinkService.deleteClusterDeployment(
                 new ObjectMeta(), new FlinkDeploymentStatus(), configuration, true);
         assertEquals(DeletionPropagation.BACKGROUND, propagation.get(1));
@@ -540,7 +564,8 @@ public class NativeFlinkServiceTest {
     public void testSendConfigOnRunJar() throws Exception {
         var jarRuns = new ArrayList<JarRunRequestBody>();
         var flinkService =
-                new NativeFlinkService(client, configManager, eventRecorder) {
+                new NativeFlinkService(
+                        client, null, executorService, operatorConfig, eventRecorder) {
                     @Override
                     public RestClusterClient<String> getClusterClient(Configuration conf)
                             throws Exception {
@@ -597,7 +622,8 @@ public class NativeFlinkServiceTest {
         var updated = new ArrayList<Map<JobVertexID, JobVertexResourceRequirements>>();
         updated.add(null);
         var service =
-                new NativeFlinkService(client, configManager, eventRecorder) {
+                new NativeFlinkService(
+                        client, null, executorService, operatorConfig, eventRecorder) {
                     @Override
                     protected Map<JobVertexID, JobVertexResourceRequirements> getVertexResources(
                             RestClusterClient<String> client,
@@ -645,8 +671,8 @@ public class NativeFlinkServiceTest {
                                 flinkDep,
                                 TestUtils.createEmptyContext(),
                                 null,
-                                service,
-                                configManager)));
+                                configManager,
+                                ctx -> service)));
         assertEquals(
                 Map.of(
                         v1,
@@ -768,8 +794,8 @@ public class NativeFlinkServiceTest {
                                 depCopy,
                                 TestUtils.createEmptyContext(),
                                 null,
-                                service,
-                                configManager)));
+                                configManager,
+                                c -> service)));
     }
 
     private void testScaleConditionLastSpec(
@@ -814,7 +840,11 @@ public class NativeFlinkServiceTest {
         jobStatus.setJobId(new JobID().toHexString());
         var ctx =
                 new FlinkDeploymentContext(
-                        flinkDep, TestUtils.createEmptyContext(), null, service, configManager);
+                        flinkDep,
+                        TestUtils.createEmptyContext(),
+                        null,
+                        configManager,
+                        c -> service);
 
         var currentJobDetails = new ArrayList<JobDetailsInfo>();
         currentJobDetails.add(null);
@@ -910,7 +940,9 @@ public class NativeFlinkServiceTest {
         public TestingNativeFlinkService(NativeFlinkService nativeFlinkService) {
             super(
                     nativeFlinkService.kubernetesClient,
-                    nativeFlinkService.configManager,
+                    nativeFlinkService.artifactManager,
+                    nativeFlinkService.executorService,
+                    NativeFlinkServiceTest.this.operatorConfig,
                     eventRecorder);
         }
 
@@ -951,7 +983,7 @@ public class NativeFlinkServiceTest {
 
     private FlinkService createFlinkService(RestClusterClient<String> clusterClient) {
         return new NativeFlinkService(
-                client, new FlinkConfigManager(configuration), eventRecorder) {
+                client, null, executorService, operatorConfig, eventRecorder) {
             @Override
             public RestClusterClient<String> getClusterClient(Configuration config) {
                 return clusterClient;

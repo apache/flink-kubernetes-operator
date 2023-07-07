@@ -21,7 +21,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
@@ -55,7 +54,7 @@ public class FlinkDeploymentMetricsTest {
         listener = new TestingMetricListener(configuration);
         metricManager =
                 MetricManager.createFlinkDeploymentMetricManager(
-                        new FlinkConfigManager(configuration), listener.getMetricGroup());
+                        configuration, listener.getMetricGroup());
     }
 
     @Test
@@ -416,8 +415,7 @@ public class FlinkDeploymentMetricsTest {
         conf.set(OPERATOR_RESOURCE_METRICS_ENABLED, false);
         var listener = new TestingMetricListener(conf);
         var metricManager =
-                MetricManager.createFlinkDeploymentMetricManager(
-                        new FlinkConfigManager(conf), listener.getMetricGroup());
+                MetricManager.createFlinkDeploymentMetricManager(conf, listener.getMetricGroup());
 
         var namespace = TestUtils.TEST_NAMESPACE;
         var deployment = TestUtils.buildApplicationCluster("deployment", namespace);

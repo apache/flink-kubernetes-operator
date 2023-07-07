@@ -51,8 +51,7 @@ public class SessionObserverTest extends OperatorTestBase {
 
     @Override
     public void setup() {
-        observer =
-                new TestObserverAdapter<>(this, new SessionObserver(configManager, eventRecorder));
+        observer = new TestObserverAdapter<>(this, new SessionObserver(eventRecorder));
     }
 
     @Test

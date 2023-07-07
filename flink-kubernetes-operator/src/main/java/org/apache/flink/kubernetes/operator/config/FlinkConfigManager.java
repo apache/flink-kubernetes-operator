@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
@@ -46,6 +47,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -56,8 +58,10 @@ import java.util.function.Consumer;
 
 import static org.apache.flink.configuration.CheckpointingOptions.SAVEPOINT_DIRECTORY;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.NAMESPACE_CONF_PREFIX;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.VERSION_CONF_PREFIX;
 
 /** Configuration manager for the Flink operator. */
 public class FlinkConfigManager {
@@ -66,7 +70,7 @@ public class FlinkConfigManager {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private volatile Configuration defaultConfig;
-    private volatile FlinkOperatorConfiguration operatorConfiguration;
+    private volatile FlinkOperatorConfiguration defaultOperatorConfiguration;
     private final AtomicLong defaultConfigVersion = new AtomicLong(0);
     private final LoadingCache<Key, Configuration> cache;
     private final Consumer<Set<String>> namespaceListener;
@@ -116,10 +120,12 @@ public class FlinkConfigManager {
         }
     }
 
-    public Configuration getDefaultConfig() {
-        return defaultConfig.clone();
-    }
-
+    /**
+     * Update the base configuration for the operator. Newly generated configs (observe, deploy,
+     * etc.) will use this as the base.
+     *
+     * @param newConf New config base.
+     */
     @VisibleForTesting
     public void updateDefaultConfig(Configuration newConf) {
         if (ObjectUtils.allNotNull(this.defaultConfig, newConf)
@@ -131,13 +137,14 @@ public class FlinkConfigManager {
         }
 
         var oldNs =
-                Optional.ofNullable(this.operatorConfiguration)
+                Optional.ofNullable(this.defaultOperatorConfiguration)
                         .map(FlinkOperatorConfiguration::getWatchedNamespaces)
                         .orElse(Set.of());
-        this.operatorConfiguration = FlinkOperatorConfiguration.fromConfiguration(newConf);
-        var newNs = this.operatorConfiguration.getWatchedNamespaces();
-        if (this.operatorConfiguration.isDynamicNamespacesEnabled() && !oldNs.equals(newNs)) {
-            this.namespaceListener.accept(operatorConfiguration.getWatchedNamespaces());
+        this.defaultOperatorConfiguration = FlinkOperatorConfiguration.fromConfiguration(newConf);
+        var newNs = this.defaultOperatorConfiguration.getWatchedNamespaces();
+        if (this.defaultOperatorConfiguration.isDynamicNamespacesEnabled()
+                && !oldNs.equals(newNs)) {
+            this.namespaceListener.accept(defaultOperatorConfiguration.getWatchedNamespaces());
         }
         this.defaultConfig = newConf.clone();
         // We do not invalidate the cache to avoid deleting currently used temp files,
@@ -145,16 +152,82 @@ public class FlinkConfigManager {
         this.defaultConfigVersion.incrementAndGet();
     }
 
+    /**
+     * @return The base configuration for Flink Operator. This is not tied to any specific resource
+     *     and is aimed to be used for platform level settings.
+     */
     public FlinkOperatorConfiguration getOperatorConfiguration() {
-        return operatorConfiguration;
+        return defaultOperatorConfiguration;
     }
 
+    /**
+     * @return The base configuration for Flink Operator. This is not tied to any specific resource
+     *     and is aimed to be used for platform level settings.
+     */
+    public Configuration getDefaultConfig() {
+        return defaultConfig.clone();
+    }
+
+    /**
+     * Get the operator configuration for the given namespace and flink version combination. This is
+     * different from the platform level base config as it may contain namespaces or version
+     * overrides.
+     *
+     * @param namespace Resource namespace
+     * @param flinkVersion Resource Flink version
+     * @return Base config
+     */
+    public FlinkOperatorConfiguration getOperatorConfiguration(
+            String namespace, FlinkVersion flinkVersion) {
+        return FlinkOperatorConfiguration.fromConfiguration(
+                getDefaultConfig(namespace, flinkVersion));
+    }
+
+    /**
+     * Get the base configuration for the given namespace and flink version combination. This is
+     * different from the platform level base config as it may contain namespaces or version
+     * overrides.
+     *
+     * @param namespace Resource namespace
+     * @param flinkVersion Resource Flink version
+     * @return Base config
+     */
+    public Configuration getDefaultConfig(String namespace, FlinkVersion flinkVersion) {
+        var baseConfMap = defaultConfig.toMap();
+        var conf = new Configuration(defaultConfig);
+
+        if (namespace != null) {
+            applyDefault(NAMESPACE_CONF_PREFIX + namespace + ".", baseConfMap, conf);
+        }
+
+        if (flinkVersion != null) {
+            applyDefault(VERSION_CONF_PREFIX + flinkVersion + ".", baseConfMap, conf);
+        }
+
+        return conf;
+    }
+
+    /**
+     * Get deployment configuration that will be passed to the Flink Cluster clients during cluster
+     * submission.
+     *
+     * @param objectMeta Resource meta
+     * @param spec Resource spec
+     * @return Deployment config
+     */
     public Configuration getDeployConfig(ObjectMeta objectMeta, FlinkDeploymentSpec spec) {
         var conf = getConfig(objectMeta, spec);
         FlinkUtils.setGenerationAnnotation(conf, objectMeta.getGeneration());
         return conf;
     }
 
+    /**
+     * Get the observe configuration that can be used to interact with already submitted clusters
+     * through the Flink rest clients.
+     *
+     * @param deployment Deployment resource
+     * @return Observe config
+     */
     public Configuration getObserveConfig(FlinkDeployment deployment) {
         var deployedSpec = ReconciliationUtils.getDeployedSpec(deployment);
         if (deployedSpec == null) {
@@ -191,6 +264,14 @@ public class FlinkConfigManager {
         }
     }
 
+    /**
+     * Get configuration for interacting with session jobs. Similar to the observe configuration for
+     * FlinkDeployments.
+     *
+     * @param deployment FlinkDeployment for the session cluster
+     * @param sessionJobSpec Session job spec
+     * @return Session job config
+     */
     public Configuration getSessionJobConfig(
             FlinkDeployment deployment, FlinkSessionJobSpec sessionJobSpec) {
         Configuration sessionJobConfig = getObserveConfig(deployment);
@@ -220,11 +301,12 @@ public class FlinkConfigManager {
     private Configuration generateConfig(Key key) {
         try {
             LOG.debug("Generating new config");
+            var spec = objectMapper.convertValue(key.spec, FlinkDeploymentSpec.class);
             return FlinkConfigBuilder.buildFrom(
                     key.namespace,
                     key.name,
-                    objectMapper.convertValue(key.spec, FlinkDeploymentSpec.class),
-                    defaultConfig);
+                    spec,
+                    getDefaultConfig(key.namespace, spec.getFlinkVersion()));
         } catch (Exception e) {
             throw new RuntimeException("Failed to load configuration", e);
         }
@@ -252,11 +334,23 @@ public class FlinkConfigManager {
         if (confOverrideDir.isPresent()) {
             Configuration configOverrides =
                     GlobalConfiguration.loadConfiguration(confOverrideDir.get());
-            LOG.debug("Loading default configuration with overrides from " + confOverrideDir.get());
+            LOG.debug(
+                    "Loading default configuration with overrides from {}", confOverrideDir.get());
             return GlobalConfiguration.loadConfiguration(configOverrides);
         }
         LOG.debug("Loading default configuration");
         return GlobalConfiguration.loadConfiguration();
+    }
+
+    private static void applyDefault(
+            String prefix, Map<String, String> from, Configuration toConf) {
+        int pLen = prefix.length();
+        from.forEach(
+                (k, v) -> {
+                    if (k.startsWith(prefix)) {
+                        toConf.setString(k.substring(pLen), v);
+                    }
+                });
     }
 
     private class ConfigUpdater implements Runnable {
