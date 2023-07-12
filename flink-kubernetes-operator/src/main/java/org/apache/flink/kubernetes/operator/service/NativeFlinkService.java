@@ -206,9 +206,26 @@ public class NativeFlinkService extends AbstractFlinkService {
 
         var deployConfig = ctx.getDeployConfig(spec);
         var newOverrides = deployConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
+        var previousOverrides = observeConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
+        if (newOverrides.isEmpty() && previousOverrides.isEmpty()) {
+            return false;
+        }
 
         try (var client = getClusterClient(observeConfig)) {
             var currentReqs = getVertexResources(client, resource);
+
+            for (String previousOverrideVertex : previousOverrides.keySet()) {
+                // Check if this is an active vertex (present in the current jobgraph)
+                if (currentReqs.containsKey(JobVertexID.fromHexString(previousOverrideVertex))) {
+                    if (!newOverrides.containsKey(previousOverrideVertex)) {
+                        LOG.info(
+                                "Parallelism override for {} has been removed, falling back to regular upgrade.",
+                                previousOverrideVertex);
+                        return false;
+                    }
+                }
+            }
+
             var newReqs = new HashMap<>(currentReqs);
             newOverrides.forEach(
                     (vs, ps) -> {
