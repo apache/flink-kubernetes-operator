@@ -28,6 +28,30 @@ under the License.
 
 We gathered a set of best practices here to aid development.
 
+## Build from sources
+
+In order to build the operator you need to [clone the git repository]({{< github_repo >}}).
+
+```bash
+git clone {{< github_repo >}}
+```
+
+To build from the command line, it is necessary to have **Maven 3** and a **Java Development Kit** (JDK) installed. Please note that Flink Kubernetes Operator requires **Java 11**.
+
+To build the project, you can use the following command:
+
+```bash
+mvn clean install
+```
+
+To speed up the build you can:
+- skip the tests by using ' -DskipTests'
+- use Maven's parallel build feature, e.g., 'mvn package -T 1C' will attempt to build 1 module for each CPU core in parallel
+
+```bash
+mvn clean install -DskipTests -T 1C
+```
+
 ## Local environment setup
 
 We recommend you install [Docker Desktop](https://www.docker.com/products/docker-desktop), [minikube](https://minikube.sigs.k8s.io/docs/start/)
