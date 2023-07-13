@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.BiFunction;
 
 /**
  * Assists in implementing comparison of {@link Diffable} instances.
@@ -53,108 +54,16 @@ public class DiffBuilder<T> implements Builder<DiffResult<?>> {
         this.triviallyEqual = before == after || before.equals(after);
     }
 
-    public DiffBuilder<T> append(
+    public <S> DiffBuilder<T> append(
             @NonNull final String fieldName,
-            final boolean[] left,
-            final boolean[] right,
+            S left,
+            S right,
+            BiFunction<S, S, Boolean> equals,
             DiffType type) {
         if (triviallyEqual) {
             return this;
         }
-        if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName, final byte[] left, final byte[] right, DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName, final char[] left, final char[] right, DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName,
-            final double[] left,
-            final double[] right,
-            DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName,
-            final float[] left,
-            final float[] right,
-            DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName, final int[] left, final int[] right, DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName, final long[] left, final long[] right, DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (!Arrays.equals(left, right)) {
-            diffs.add(new Diff<>(fieldName, left, right, type));
-        }
-        return this;
-    }
-
-    public DiffBuilder<T> append(
-            @NonNull final String fieldName,
-            final short[] left,
-            final short[] right,
-            DiffType type) {
-
-        if (triviallyEqual) {
-            return this;
-        }
-        if (!Arrays.equals(left, right)) {
+        if (!equals.apply(left, right)) {
             diffs.add(new Diff<>(fieldName, left, right, type));
         }
         return this;
@@ -174,31 +83,31 @@ public class DiffBuilder<T> implements Builder<DiffResult<?>> {
 
         if (objectToTest.getClass().isArray()) {
             if (objectToTest instanceof boolean[]) {
-                return append(fieldName, (boolean[]) left, (boolean[]) right, type);
+                return append(fieldName, (boolean[]) left, (boolean[]) right, Arrays::equals, type);
             }
             if (objectToTest instanceof byte[]) {
-                return append(fieldName, (byte[]) left, (byte[]) right, type);
+                return append(fieldName, (byte[]) left, (byte[]) right, Arrays::equals, type);
             }
             if (objectToTest instanceof char[]) {
-                return append(fieldName, (char[]) left, (char[]) right, type);
+                return append(fieldName, (char[]) left, (char[]) right, Arrays::equals, type);
             }
             if (objectToTest instanceof double[]) {
-                return append(fieldName, (double[]) left, (double[]) right, type);
+                return append(fieldName, (double[]) left, (double[]) right, Arrays::equals, type);
             }
             if (objectToTest instanceof float[]) {
-                return append(fieldName, (float[]) left, (float[]) right, type);
+                return append(fieldName, (float[]) left, (float[]) right, Arrays::equals, type);
             }
             if (objectToTest instanceof int[]) {
-                return append(fieldName, (int[]) left, (int[]) right, type);
+                return append(fieldName, (int[]) left, (int[]) right, Arrays::equals, type);
             }
             if (objectToTest instanceof long[]) {
-                return append(fieldName, (long[]) left, (long[]) right, type);
+                return append(fieldName, (long[]) left, (long[]) right, Arrays::equals, type);
             }
             if (objectToTest instanceof short[]) {
-                return append(fieldName, (short[]) left, (short[]) right, type);
+                return append(fieldName, (short[]) left, (short[]) right, Arrays::equals, type);
             }
 
-            return append(fieldName, (Object[]) left, (Object[]) right, type);
+            return append(fieldName, (Object[]) left, (Object[]) right, Arrays::equals, type);
         }
 
         if (left != null && left.equals(right)) {
