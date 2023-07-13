@@ -33,14 +33,17 @@ import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
 import io.fabric8.kubernetes.api.model.HostAlias;
+import lombok.Value;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Spec diff test. */
 public class SpecDiffTest {
@@ -250,5 +253,66 @@ public class SpecDiffTest {
                         + "podTemplate.spec.hostname : localhost1 -> localhost2, "
                         + "restartNonce : null -> 1]",
                 diff.toString());
+    }
+
+    @Test
+    public void testArrayDiffs() {
+        var left =
+                new TestClass(
+                        new boolean[] {true},
+                        new byte[] {0},
+                        new char[] {'a'},
+                        new double[] {0.},
+                        new float[] {0f},
+                        new int[] {0},
+                        new long[] {0L},
+                        new short[] {2},
+                        new Object[] {"a"});
+        var right =
+                new TestClass(
+                        new boolean[] {true},
+                        new byte[] {0},
+                        new char[] {'a'},
+                        new double[] {0.},
+                        new float[] {0f},
+                        new int[] {0},
+                        new long[] {0L},
+                        new short[] {2},
+                        new Object[] {"a"});
+
+        var diff =
+                new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
+        assertTrue(diff.getDiffList().isEmpty());
+
+        right =
+                new TestClass(
+                        new boolean[] {false},
+                        new byte[] {0},
+                        new char[] {'a'},
+                        new double[] {0.},
+                        new float[] {0f},
+                        new int[] {0},
+                        new long[] {0L},
+                        new short[] {2},
+                        new Object[] {"b"});
+        diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
+        assertEquals(2, diff.getNumDiffs());
+        assertEquals(
+                Map.of("f0", DiffType.UPGRADE, "f8", DiffType.UPGRADE),
+                diff.getDiffList().stream()
+                        .collect(Collectors.toMap(Diff::getFieldName, Diff::getType)));
+    }
+
+    @Value
+    private static class TestClass {
+        boolean[] f0;
+        byte[] f1;
+        char[] f2;
+        double[] f3;
+        float[] f4;
+        int[] f5;
+        long[] f6;
+        short[] f7;
+        Object[] f8;
     }
 }
