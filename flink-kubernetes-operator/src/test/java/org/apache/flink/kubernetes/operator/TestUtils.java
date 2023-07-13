@@ -292,7 +292,10 @@ public class TestUtils extends BaseTestUtils {
     }
 
     public static Stream<Arguments> flinkVersions() {
-        return Stream.of(arguments(FlinkVersion.v1_14), arguments(FlinkVersion.v1_15));
+        return Stream.of(
+                arguments(FlinkVersion.v1_14),
+                arguments(FlinkVersion.v1_15),
+                arguments(FlinkVersion.v1_17));
     }
 
     public static FlinkDeployment createCanaryDeployment() {

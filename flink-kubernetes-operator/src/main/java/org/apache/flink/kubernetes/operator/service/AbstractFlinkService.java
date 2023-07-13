@@ -79,10 +79,10 @@ import org.apache.flink.runtime.webmonitor.handlers.JarDeleteMessageParameters;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunMessageParameters;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
-import org.apache.flink.runtime.webmonitor.handlers.JarRunResponseBody;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
+import org.apache.flink.util.ConfigurationException;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -220,7 +220,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         try (var clusterClient = getClusterClient(config)) {
             uri = URI.create(clusterClient.getWebInterfaceURL());
         } catch (Exception ex) {
-            throw new RuntimeException(ex);
+            throw new FlinkRuntimeException(ex);
         }
         SocketAddress socketAddress = new InetSocketAddress(uri.getHost(), uri.getPort());
         Socket socket = new Socket();
@@ -660,7 +660,8 @@ public abstract class AbstractFlinkService implements FlinkService {
                 conf, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
-    private JarRunResponseBody runJar(
+    @VisibleForTesting
+    protected void runJar(
             JobSpec job,
             JobID jobID,
             JarUploadResponseBody response,
@@ -688,7 +689,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     ? conf.toMap()
                                     : null);
             LOG.info("Submitting job: {} to session cluster.", jobID.toHexString());
-            return clusterClient
+            clusterClient
                     .sendRequest(headers, parameters, runRequestBody)
                     .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
         } catch (Exception e) {
@@ -716,8 +717,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                         operatorConfig.getFlinkServiceHostOverride(),
                         ExternalServiceDecorator.getNamespacedExternalServiceName(
                                 clusterId, namespace));
-        try (RestClient restClient = new RestClient(conf, executorService)) {
-            // TODO add method in flink#RestClusterClient to support upload jar.
+        try (var restClient = getRestClient(conf)) {
             return restClient
                     .sendRequest(
                             host,
@@ -735,6 +735,11 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
+    @VisibleForTesting
+    protected RestClient getRestClient(Configuration conf) throws ConfigurationException {
+        return new RestClient(conf, executorService);
+    }
+
     private String findJarURI(JobSpec jobSpec) {
         if (jobSpec.getJarURI() != null) {
             return jobSpec.getJarURI();
@@ -743,8 +748,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    @VisibleForTesting
-    protected void deleteJar(Configuration conf, String jarId) {
+    private void deleteJar(Configuration conf, String jarId) {
         LOG.debug("Deleting the jar: {}", jarId);
         try (var clusterClient = getClusterClient(conf)) {
             JarDeleteHeaders headers = JarDeleteHeaders.getInstance();
@@ -910,7 +914,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    public TaskManagersInfo getTaskManagersInfo(Configuration conf) throws Exception {
+    private TaskManagersInfo getTaskManagersInfo(Configuration conf) throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
             return clusterClient
                     .sendRequest(
