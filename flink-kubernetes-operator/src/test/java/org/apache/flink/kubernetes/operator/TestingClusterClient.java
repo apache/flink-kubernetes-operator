@@ -39,6 +39,9 @@ import org.apache.flink.runtime.rest.messages.RequestBody;
 import org.apache.flink.runtime.rest.messages.ResponseBody;
 import org.apache.flink.util.function.TriFunction;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -48,17 +51,24 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-/** Testing ClusterClient used implementation. */
+/** Testing ClusterClient implementation. */
 public class TestingClusterClient<T> extends RestClusterClient<T> {
 
+    @Setter
     private Function<JobID, CompletableFuture<Acknowledge>> cancelFunction =
             ignore -> CompletableFuture.completedFuture(Acknowledge.get());
+
+    @Setter
     private TriFunction<JobID, Boolean, String, CompletableFuture<String>>
             stopWithSavepointFunction =
                     (ignore1, ignore2, savepointPath) ->
                             CompletableFuture.completedFuture(savepointPath);
+
+    @Setter
     private TriFunction<JobID, SavepointFormatType, String, CompletableFuture<String>>
             stopWithSavepointFormat;
+
+    @Setter
     private TriFunction<
                     MessageHeaders<?, ?, ?>,
                     MessageParameters,
@@ -68,17 +78,19 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
                     (ignore1, ignore2, ignore) ->
                             CompletableFuture.completedFuture(EmptyResponseBody.getInstance());
 
+    @Setter
     private Supplier<CompletableFuture<Collection<JobStatusMessage>>> listJobsFunction =
             () -> {
                 throw new UnsupportedOperationException();
             };
 
+    @Setter
     private Function<JobID, CompletableFuture<JobResult>> requestResultFunction =
             jobID ->
                     CompletableFuture.completedFuture(
                             new JobResult.Builder().jobId(jobID).netRuntime(1).build());
 
-    private final T clusterId;
+    @Getter private final T clusterId;
 
     public TestingClusterClient(Configuration configuration, T clusterId) throws Exception {
         super(configuration, clusterId, (c, e) -> new StandaloneClientHAServices("localhost"));
@@ -87,47 +99,6 @@ public class TestingClusterClient<T> extends RestClusterClient<T> {
 
     public TestingClusterClient(Configuration configuration) throws Exception {
         this(configuration, (T) configuration.get(KubernetesConfigOptions.CLUSTER_ID));
-    }
-
-    public void setCancelFunction(Function<JobID, CompletableFuture<Acknowledge>> cancelFunction) {
-        this.cancelFunction = cancelFunction;
-    }
-
-    public void setStopWithSavepointFunction(
-            TriFunction<JobID, Boolean, String, CompletableFuture<String>>
-                    stopWithSavepointFunction) {
-        this.stopWithSavepointFunction = stopWithSavepointFunction;
-    }
-
-    public void setStopWithSavepointFormat(
-            TriFunction<JobID, SavepointFormatType, String, CompletableFuture<String>>
-                    stopWithSavepointFormat) {
-        this.stopWithSavepointFormat = stopWithSavepointFormat;
-    }
-
-    public void setRequestProcessor(
-            TriFunction<
-                            MessageHeaders<?, ?, ?>,
-                            MessageParameters,
-                            RequestBody,
-                            CompletableFuture<ResponseBody>>
-                    requestProcessor) {
-        this.requestProcessor = requestProcessor;
-    }
-
-    public void setListJobsFunction(
-            Supplier<CompletableFuture<Collection<JobStatusMessage>>> listJobsFunction) {
-        this.listJobsFunction = listJobsFunction;
-    }
-
-    public void setRequestResultFunction(
-            Function<JobID, CompletableFuture<JobResult>> requestResultFunction) {
-        this.requestResultFunction = requestResultFunction;
-    }
-
-    @Override
-    public T getClusterId() {
-        return clusterId;
     }
 
     @Override
