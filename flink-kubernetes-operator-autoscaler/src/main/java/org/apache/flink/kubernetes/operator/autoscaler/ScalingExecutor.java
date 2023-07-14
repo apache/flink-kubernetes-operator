@@ -24,11 +24,9 @@ import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.KubernetesClientUtils;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,7 +38,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedMap;
 
-import static org.apache.flink.configuration.PipelineOptions.PARALLELISM_OVERRIDES;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
@@ -57,20 +54,15 @@ public class ScalingExecutor {
     public static final String SCALING_SUMMARY_HEADER_SCALING_ENABLED = "Scaling vertices:";
     private static final Logger LOG = LoggerFactory.getLogger(ScalingExecutor.class);
 
-    private final KubernetesClient kubernetesClient;
     private final JobVertexScaler jobVertexScaler;
     private final EventRecorder eventRecorder;
     private Clock clock = Clock.system(ZoneId.systemDefault());
 
-    public ScalingExecutor(KubernetesClient kubernetesClient, EventRecorder eventRecorder) {
-        this(kubernetesClient, new JobVertexScaler(eventRecorder), eventRecorder);
+    public ScalingExecutor(EventRecorder eventRecorder) {
+        this(new JobVertexScaler(eventRecorder), eventRecorder);
     }
 
-    public ScalingExecutor(
-            KubernetesClient kubernetesClient,
-            JobVertexScaler jobVertexScaler,
-            EventRecorder eventRecorder) {
-        this.kubernetesClient = kubernetesClient;
+    public ScalingExecutor(JobVertexScaler jobVertexScaler, EventRecorder eventRecorder) {
         this.jobVertexScaler = jobVertexScaler;
         this.eventRecorder = eventRecorder;
     }
@@ -112,15 +104,9 @@ public class ScalingExecutor {
             return false;
         }
 
-        setVertexParallelismOverrides(resource, evaluatedMetrics, scalingSummaries);
-        KubernetesClientUtils.applyToStoredCr(
-                kubernetesClient,
-                resource,
-                stored ->
-                        stored.getSpec()
-                                .setFlinkConfiguration(resource.getSpec().getFlinkConfiguration()));
-
         scalingInformation.addToScalingHistory(clock.instant(), scalingSummaries, conf);
+        scalingInformation.setCurrentOverrides(
+                getVertexParallelismOverrides(evaluatedMetrics, scalingSummaries));
 
         return true;
     }
@@ -230,28 +216,24 @@ public class ScalingExecutor {
         return out;
     }
 
-    private void setVertexParallelismOverrides(
-            AbstractFlinkResource<?, ?> resource,
+    private static Map<String, String> getVertexParallelismOverrides(
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
             Map<JobVertexID, ScalingSummary> summaries) {
-        var flinkConf = Configuration.fromMap(resource.getSpec().getFlinkConfiguration());
         var overrides = new HashMap<String, String>();
         evaluatedMetrics.forEach(
                 (id, metrics) -> {
                     if (summaries.containsKey(id)) {
                         overrides.put(
-                                id.toHexString(),
+                                id.toString(),
                                 String.valueOf(summaries.get(id).getNewParallelism()));
                     } else {
                         overrides.put(
-                                id.toHexString(),
+                                id.toString(),
                                 String.valueOf(
                                         (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent()));
                     }
                 });
-        flinkConf.set(PARALLELISM_OVERRIDES, overrides);
-
-        resource.getSpec().setFlinkConfiguration(flinkConf.toMap());
+        return overrides;
     }
 
     @VisibleForTesting

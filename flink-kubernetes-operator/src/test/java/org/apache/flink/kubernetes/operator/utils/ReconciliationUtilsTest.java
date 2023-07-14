@@ -24,13 +24,17 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for {@link org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils}. */
 public class ReconciliationUtilsTest {
@@ -61,5 +65,37 @@ public class ReconciliationUtilsTest {
         assertFalse(updateControl.isUpdateResource());
         assertFalse(updateControl.isUpdateStatus());
         assertNotEquals(0, updateControl.getScheduleDelay().get());
+    }
+
+    @Test
+    public void testRescheduleDuringScaling() {
+        FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
+        app.getSpec().getJob().setState(JobState.RUNNING);
+        app.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+        var previous = ReconciliationUtils.clone(app);
+        ReconciliationUtils.updateAfterScaleUp(
+                app,
+                new Configuration(),
+                Clock.systemDefaultZone(),
+                FlinkService.ScalingResult.SCALING_TRIGGERED);
+
+        var updateControl =
+                ReconciliationUtils.toUpdateControl(operatorConfiguration, app, previous, true);
+
+        assertTrue(updateControl.getScheduleDelay().get() > 0);
+    }
+
+    @Test
+    public void testRescheduleIfImmediateFlagSet() {
+        var previous = BaseTestUtils.buildApplicationCluster();
+        var current = BaseTestUtils.buildApplicationCluster();
+        var updateControl =
+                ReconciliationUtils.toUpdateControl(operatorConfiguration, current, previous, true);
+        assertTrue(updateControl.getScheduleDelay().get() > 0);
+
+        current.getStatus().setImmediateReconciliationNeeded(true);
+        updateControl =
+                ReconciliationUtils.toUpdateControl(operatorConfiguration, current, previous, true);
+        assertEquals(0, updateControl.getScheduleDelay().get());
     }
 }

@@ -33,7 +33,7 @@ public class JobVertexResourceRequirements implements Serializable {
 
     private static final String FIELD_NAME_PARALLELISM = "parallelism";
 
-    /** Parallelisms. * */
+    /** Parallelisms. */
     public static class Parallelism implements Serializable {
 
         private static final String FIELD_NAME_LOWER_BOUND = "lowerBound";

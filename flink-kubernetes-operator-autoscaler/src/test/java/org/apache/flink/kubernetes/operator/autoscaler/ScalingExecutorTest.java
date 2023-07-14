@@ -40,14 +40,13 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
-import static org.apache.flink.configuration.PipelineOptions.PARALLELISM_OVERRIDES;
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_ENTRY;
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_DISABLED;
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for scaling execution logic. */
@@ -65,8 +64,7 @@ public class ScalingExecutorTest {
     public void setup() {
         eventCollector = new EventCollector();
         scalingDecisionExecutor =
-                new ScalingExecutor(
-                        kubernetesClient, new EventRecorder(kubernetesClient, eventCollector));
+                new ScalingExecutor(new EventRecorder(kubernetesClient, eventCollector));
         conf = new Configuration();
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
@@ -104,7 +102,7 @@ public class ScalingExecutorTest {
         evaluated = Map.of(op1, evaluated(1, 70, 100));
         scalingSummary = Map.of(op1, new ScalingSummary(2, 1, evaluated.get(op1)));
         assertTrue(ScalingExecutor.allVerticesWithinUtilizationTarget(evaluated, scalingSummary));
-        assertNull(getScaledParallelism(flinkDep));
+        assertTrue(getScaledParallelism(kubernetesClient, flinkDep).isEmpty());
 
         var op2 = new JobVertexID();
         evaluated =
@@ -203,6 +201,7 @@ public class ScalingExecutorTest {
         var event2 = eventCollector.events.poll();
         assertEquals(event.getMetadata().getUid(), event2.getMetadata().getUid());
         assertEquals(2, event2.getCount());
+        assertEquals(!scalingEnabled, scalingInfo.getCurrentOverrides().isEmpty());
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
@@ -224,17 +223,15 @@ public class ScalingExecutorTest {
     }
 
     protected static Map<JobVertexID, Integer> getScaledParallelism(
-            AbstractFlinkResource<?, ?> resource) {
+            KubernetesClient client, AbstractFlinkResource<?, ?> cr) {
+        return getScaledParallelism(AutoScalerInfo.getOrCreate(cr, client));
+    }
 
-        var conf = Configuration.fromMap(resource.getSpec().getFlinkConfiguration());
-        var overrides = conf.get(PARALLELISM_OVERRIDES);
-        if (overrides == null || overrides.isEmpty()) {
-            return null;
-        }
-
-        var out = new HashMap<JobVertexID, Integer>();
-
-        overrides.forEach((k, v) -> out.put(JobVertexID.fromHexString(k), Integer.parseInt(v)));
-        return out;
+    protected static Map<JobVertexID, Integer> getScaledParallelism(AutoScalerInfo info) {
+        return info.getCurrentOverrides().entrySet().stream()
+                .collect(
+                        Collectors.toMap(
+                                e -> JobVertexID.fromHexString(e.getKey()),
+                                e -> Integer.valueOf(e.getValue())));
     }
 }

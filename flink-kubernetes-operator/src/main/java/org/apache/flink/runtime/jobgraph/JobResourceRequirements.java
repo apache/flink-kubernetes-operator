@@ -36,7 +36,7 @@ public class JobResourceRequirements implements Serializable {
         return new Builder();
     }
 
-    /** Builder. * */
+    /** Builder. */
     public static final class Builder {
 
         private final Map<JobVertexID, JobVertexResourceRequirements> vertexResources =

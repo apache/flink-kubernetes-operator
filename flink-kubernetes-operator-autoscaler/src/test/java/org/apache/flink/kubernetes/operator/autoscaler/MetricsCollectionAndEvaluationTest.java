@@ -88,9 +88,7 @@ public class MetricsCollectionAndEvaluationTest {
     public void setup() {
         evaluator = new ScalingMetricEvaluator();
         scalingExecutor =
-                new ScalingExecutor(
-                        kubernetesClient,
-                        new EventRecorder(kubernetesClient, new EventCollector()));
+                new ScalingExecutor(new EventRecorder(kubernetesClient, new EventCollector()));
         service = new TestingFlinkService();
 
         app = TestUtils.buildApplicationCluster();
@@ -180,7 +178,7 @@ public class MetricsCollectionAndEvaluationTest {
         var evaluation = evaluator.evaluate(conf, collectedMetrics);
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
 
-        var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
+        var scaledParallelism = ScalingExecutorTest.getScaledParallelism(scalingInfo);
         assertEquals(4, scaledParallelism.size());
 
         assertEquals(2, scaledParallelism.get(source1));
@@ -194,7 +192,7 @@ public class MetricsCollectionAndEvaluationTest {
         evaluation = evaluator.evaluate(conf, collectedMetrics);
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
 
-        scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
+        scaledParallelism = ScalingExecutorTest.getScaledParallelism(scalingInfo);
         assertEquals(4, scaledParallelism.get(source1));
         assertEquals(4, scaledParallelism.get(source2));
         assertEquals(12, scaledParallelism.get(map));
@@ -401,7 +399,7 @@ public class MetricsCollectionAndEvaluationTest {
                 evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
 
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
-        var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
+        var scaledParallelism = ScalingExecutorTest.getScaledParallelism(scalingInfo);
         assertEquals(1, scaledParallelism.get(source1));
     }
 
@@ -481,7 +479,7 @@ public class MetricsCollectionAndEvaluationTest {
                 evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
 
         scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
-        var scaledParallelism = ScalingExecutorTest.getScaledParallelism(app);
+        var scaledParallelism = ScalingExecutorTest.getScaledParallelism(scalingInfo);
         assertEquals(1, scaledParallelism.get(source1));
     }
 

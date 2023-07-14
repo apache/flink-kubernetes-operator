@@ -33,7 +33,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.util.function.Function;
 
-/** Context for reconciling a Flink resource. * */
+/** Context for reconciling a Flink resource. */
 @RequiredArgsConstructor
 public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?>> {
 

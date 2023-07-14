@@ -18,10 +18,12 @@
 package org.apache.flink.kubernetes.operator.api.status;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.annotation.Internal;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.fabric8.kubernetes.model.annotation.PrinterColumn;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -93,4 +95,10 @@ public abstract class CommonStatus<SPEC extends AbstractFlinkSpec> {
 
         return ResourceLifecycleState.DEPLOYED;
     }
+
+    /**
+     * Internal flag to signal that due to some condition we need to schedule a new reconciliation
+     * loop immediately. For example autoscaler overrides have changed and we need to apply them.
+     */
+    @JsonIgnore @Internal private boolean immediateReconciliationNeeded = false;
 }

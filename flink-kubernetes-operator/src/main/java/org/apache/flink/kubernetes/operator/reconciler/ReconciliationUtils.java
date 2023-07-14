@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.api.status.ReconciliationStatus;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
 import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
@@ -231,8 +232,9 @@ public class ReconciliationUtils {
         }
 
         if (upgradeStarted(
-                status.getReconciliationStatus().getState(),
-                previous.getStatus().getReconciliationStatus().getState())) {
+                        status.getReconciliationStatus(),
+                        previous.getStatus().getReconciliationStatus())
+                || current.getStatus().isImmediateReconciliationNeeded()) {
             return updateControl.rescheduleAfter(0);
         }
 
@@ -306,8 +308,14 @@ public class ReconciliationUtils {
     }
 
     private static boolean upgradeStarted(
-            ReconciliationState currentReconState, ReconciliationState previousReconState) {
+            ReconciliationStatus<?> currentStatus, ReconciliationStatus<?> previousStatus) {
+        var currentReconState = currentStatus.getState();
+        var previousReconState = previousStatus.getState();
+
         if (currentReconState == previousReconState) {
+            return false;
+        }
+        if (currentStatus.scalingInProgress()) {
             return false;
         }
         return currentReconState == ReconciliationState.ROLLING_BACK

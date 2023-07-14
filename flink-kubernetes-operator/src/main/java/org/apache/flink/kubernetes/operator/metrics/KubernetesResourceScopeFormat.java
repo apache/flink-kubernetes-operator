@@ -26,7 +26,7 @@ import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorSco
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesResourceNamespaceScopeFormat.RESOURCE_NS;
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesResourceNamespaceScopeFormat.RESOURCE_TYPE;
 
-/** Format for metrics. * */
+/** Format for metrics. */
 public class KubernetesResourceScopeFormat extends ScopeFormat {
 
     public static final String RESOURCE = asVariable("resourcename");
