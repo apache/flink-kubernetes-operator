@@ -32,6 +32,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -66,6 +67,7 @@ public class FlinkOperatorConfiguration {
     int exceptionStackTraceLengthThreshold;
     int exceptionFieldLengthThreshold;
     int exceptionThrowableCountThreshold;
+    Map<String, String> exceptionLabelMapper;
     String labelSelector;
     LeaderElectionConfiguration leaderElectionConfiguration;
     DeletionPropagation deletionPropagation;
@@ -122,6 +124,8 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorConfigOptions
                                 .OPERATOR_EXCEPTION_THROWABLE_LIST_MAX_COUNT);
+        Map<String, String> exceptionLabelMapper =
+                operatorConfig.get(KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_LABEL_MAPPER);
 
         String flinkServiceHostOverride = null;
         if (getEnv(ENV_KUBERNETES_SERVICE_HOST).isEmpty()) {
@@ -200,6 +204,7 @@ public class FlinkOperatorConfiguration {
                 exceptionStackTraceLengthThreshold,
                 exceptionFieldLengthThreshold,
                 exceptionThrowableCountThreshold,
+                exceptionLabelMapper,
                 labelSelector,
                 getLeaderElectionConfig(operatorConfig),
                 deletionPropagation);

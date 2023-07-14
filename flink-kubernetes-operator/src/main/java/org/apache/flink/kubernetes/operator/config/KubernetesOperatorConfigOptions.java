@@ -29,6 +29,7 @@ import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Constants;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 
 /** This class holds configuration constants used by flink operator. */
@@ -258,6 +259,14 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(2)
                     .withDescription(
                             "Maximum number of throwable to be included in CR status error field.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Map<String, String>> OPERATOR_EXCEPTION_LABEL_MAPPER =
+            operatorConfig("exception.label.mapper")
+                    .mapType()
+                    .defaultValue(new HashMap<>())
+                    .withDescription(
+                            "Key-Value pair where key is the REGEX to filter through the exception messages and value is the string to be included in CR status error label field if the REGEX matches. Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
 
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD =

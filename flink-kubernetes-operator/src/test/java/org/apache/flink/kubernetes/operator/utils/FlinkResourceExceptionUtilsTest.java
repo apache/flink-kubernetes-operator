@@ -36,10 +36,17 @@ import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseSt
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 
+import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.LABELS;
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.getSubstringWithMaxLength;
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -70,6 +77,9 @@ public class FlinkResourceExceptionUtilsTest {
         assertEquals(
                 KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_FIELD_MAX_LENGTH.defaultValue(),
                 configManager.getOperatorConfiguration().getExceptionFieldLengthThreshold());
+        assertEquals(
+                KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_LABEL_MAPPER.defaultValue(),
+                configManager.getOperatorConfiguration().getExceptionLabelMapper());
 
         testUpdateFlinkResourceException(configManager);
 
@@ -80,6 +90,7 @@ public class FlinkResourceExceptionUtilsTest {
         testConfig.set(
                 KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_THROWABLE_LIST_MAX_COUNT, 0);
         testConfig.set(KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_FIELD_MAX_LENGTH, 0);
+        testConfig.set(KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_LABEL_MAPPER, Map.of());
 
         configManager.updateDefaultConfig(testConfig);
         testUpdateFlinkResourceException(configManager);
@@ -89,6 +100,9 @@ public class FlinkResourceExceptionUtilsTest {
         testConfig.set(
                 KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_THROWABLE_LIST_MAX_COUNT, 100);
         testConfig.set(KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_FIELD_MAX_LENGTH, 100);
+        testConfig.set(
+                KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_LABEL_MAPPER,
+                Map.of("rest client .*", "rest exception found"));
 
         configManager.updateDefaultConfig(testConfig);
         testUpdateFlinkResourceException(configManager);
@@ -115,7 +129,6 @@ public class FlinkResourceExceptionUtilsTest {
             FlinkResourceException flinkResourceException =
                     new ObjectMapper().readValue(errorJson, FlinkResourceException.class);
 
-            assertNull(flinkResourceException.getAdditionalMetadata());
             assertEquals(
                     getSubstringWithMaxLength(
                                     "reconciliation exception message",
@@ -138,6 +151,22 @@ public class FlinkResourceExceptionUtilsTest {
                             <= configManager
                                     .getOperatorConfiguration()
                                     .getExceptionThrowableCountThreshold());
+
+            configManager
+                    .getOperatorConfiguration()
+                    .getExceptionLabelMapper()
+                    .forEach(
+                            (key, value) -> {
+                                assertTrue(
+                                        flinkResourceException.getAdditionalMetadata().get(LABELS)
+                                                instanceof ArrayList);
+                                assertTrue(
+                                        ((ArrayList<?>)
+                                                        flinkResourceException
+                                                                .getAdditionalMetadata()
+                                                                .get(LABELS))
+                                                .contains(value));
+                            });
 
             flinkResourceException
                     .getThrowableList()
@@ -184,7 +213,76 @@ public class FlinkResourceExceptionUtilsTest {
         }
     }
 
-    private ReconciliationException getTestException() {
+    private static Stream<Arguments> labelMapperProvider() {
+        return Stream.of(
+                Arguments.of(Map.of(), List.of(), getTestException()),
+                Arguments.of(
+                        Map.of("test rest client", "rest exception found"),
+                        List.of(),
+                        getTestException()),
+                Arguments.of(
+                        Map.of("rest client .*", "rest exception found"),
+                        List.of("rest exception found"),
+                        getTestException()),
+                Arguments.of(
+                        Map.of(
+                                "rest client .*",
+                                "rest exception found",
+                                ".*missing.*",
+                                "job manager is missing"),
+                        List.of("rest exception found", "job manager is missing"),
+                        getTestException()),
+                Arguments.of(
+                        Map.of("test rest client", "rest exception found"),
+                        List.of(),
+                        new Exception()));
+    }
+
+    @ParameterizedTest
+    @MethodSource("labelMapperProvider")
+    public void testUpdateFlinkResourceExceptionWithLabelMapper(
+            Map<String, String> labelMapper,
+            List<String> expectedLabelMapperMetadata,
+            Exception testException)
+            throws JsonProcessingException {
+        Configuration testConfig = new Configuration();
+        FlinkConfigManager configManager = new FlinkConfigManager(testConfig);
+
+        testConfig.set(
+                KubernetesOperatorConfigOptions.OPERATOR_EXCEPTION_LABEL_MAPPER, labelMapper);
+        configManager.updateDefaultConfig(testConfig);
+
+        List<AbstractFlinkResource> resources = getTestResources();
+        for (AbstractFlinkResource resource : resources) {
+            updateFlinkResourceException(
+                    testException, resource, configManager.getOperatorConfiguration());
+
+            String errorJson =
+                    Optional.ofNullable(resource)
+                            .map(r -> (CommonStatus) r.getStatus())
+                            .map(CommonStatus::getError)
+                            .orElseThrow(RuntimeException::new);
+
+            FlinkResourceException flinkResourceException =
+                    new ObjectMapper().readValue(errorJson, FlinkResourceException.class);
+
+            if (flinkResourceException.getAdditionalMetadata().get(LABELS) != null) {
+                assertTrue(
+                        flinkResourceException.getAdditionalMetadata().get(LABELS) instanceof List);
+                List<String> labelMapperList =
+                        (ArrayList) flinkResourceException.getAdditionalMetadata().get(LABELS);
+
+                expectedLabelMapperMetadata.forEach(
+                        (value) -> {
+                            assertTrue(labelMapperList.contains(value));
+                        });
+
+                assertEquals(expectedLabelMapperMetadata.size(), labelMapperList.size());
+            }
+        }
+    }
+
+    private static ReconciliationException getTestException() {
         return new ReconciliationException(
                 "reconciliation exception message",
                 new MissingJobManagerException(
@@ -197,7 +295,7 @@ public class FlinkResourceExceptionUtilsTest {
                                 new HttpResponseStatus(400, "http response status"))));
     }
 
-    private List<AbstractFlinkResource> getTestResources() {
+    private static List<AbstractFlinkResource> getTestResources() {
         return List.of(new FlinkSessionJob(), new FlinkDeployment());
     }
 }
