@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.api.docs;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.sun.source.doctree.DocCommentTree;
 import com.sun.source.util.DocTrees;
@@ -194,6 +195,13 @@ public class CrdReferenceDoclet implements Doclet {
         public Void scan(Element e, Integer depth) {
             DocCommentTree dcTree = treeUtils.getDocCommentTree(e);
             ElementKind kind = e.getKind();
+
+            // Do not document ignored fields
+            var jsonIgnore = e.getAnnotation(JsonIgnore.class);
+            if (jsonIgnore != null && jsonIgnore.value()) {
+                return null;
+            }
+
             switch (kind) {
                 case CLASS:
                     out.println();

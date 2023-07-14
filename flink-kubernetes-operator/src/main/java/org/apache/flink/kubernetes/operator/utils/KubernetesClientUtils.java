@@ -19,7 +19,6 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics;
 import org.apache.flink.metrics.MetricGroup;
@@ -31,8 +30,6 @@ import io.fabric8.kubernetes.client.okhttp.OkHttpClientFactory;
 import okhttp3.OkHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.function.Consumer;
 
 /** Kubernetes client utils. */
 public class KubernetesClientUtils {
@@ -69,21 +66,5 @@ public class KubernetesClientUtils {
         }
 
         return clientBuilder.build();
-    }
-
-    public static <T extends AbstractFlinkResource<?, ?>> void applyToStoredCr(
-            KubernetesClient kubernetesClient, T cr, Consumer<T> function) {
-        var inKube = kubernetesClient.resource(cr).get();
-        Long localGeneration = cr.getMetadata().getGeneration();
-        Long serverGeneration = inKube.getMetadata().getGeneration();
-        if (serverGeneration.equals(localGeneration)) {
-            function.accept(inKube);
-            kubernetesClient.resource(inKube).lockResourceVersion().update();
-        } else {
-            LOG.info(
-                    "Spec already upgrading in kube (generation - local: {} server: {}), skipping scale operation.",
-                    localGeneration,
-                    serverGeneration);
-        }
     }
 }

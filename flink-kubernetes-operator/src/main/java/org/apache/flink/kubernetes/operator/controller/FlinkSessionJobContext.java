@@ -34,7 +34,7 @@ import java.util.function.Function;
 
 import static org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler.sessionClusterReady;
 
-/** Context for reconciling a Flink resource. * */
+/** Context for reconciling a Flink resource. */
 public class FlinkSessionJobContext extends FlinkResourceContext<FlinkSessionJob> {
 
     private FlinkVersion flinkVersion;

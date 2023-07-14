@@ -31,7 +31,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 
 import java.util.function.Function;
 
-/** Context for reconciling a Flink resource. * */
+/** Context for reconciling a Flink resource. */
 public class FlinkDeploymentContext extends FlinkResourceContext<FlinkDeployment> {
 
     public FlinkDeploymentContext(

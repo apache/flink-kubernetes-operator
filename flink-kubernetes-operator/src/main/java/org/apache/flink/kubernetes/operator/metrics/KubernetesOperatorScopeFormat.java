@@ -22,7 +22,7 @@ import org.apache.flink.runtime.metrics.scope.ScopeFormat;
 
 import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricOptions.SCOPE_NAMING_KUBERNETES_OPERATOR;
 
-/** Format for metrics. * */
+/** Format for metrics. */
 public class KubernetesOperatorScopeFormat extends ScopeFormat {
 
     public static final String NAMESPACE = asVariable("namespace");

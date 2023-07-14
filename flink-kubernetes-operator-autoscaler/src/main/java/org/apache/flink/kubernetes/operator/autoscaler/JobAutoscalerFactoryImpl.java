@@ -36,7 +36,7 @@ public class JobAutoscalerFactoryImpl implements JobAutoScalerFactory {
                 kubernetesClient,
                 new RestApiMetricsCollector(),
                 new ScalingMetricEvaluator(),
-                new ScalingExecutor(kubernetesClient, eventRecorder),
+                new ScalingExecutor(eventRecorder),
                 eventRecorder);
     }
 }

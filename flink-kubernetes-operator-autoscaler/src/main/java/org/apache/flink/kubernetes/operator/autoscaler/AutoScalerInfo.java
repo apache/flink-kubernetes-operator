@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetrics;
@@ -37,6 +38,7 @@ import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import lombok.SneakyThrows;
 import org.apache.commons.io.IOUtils;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -65,6 +67,8 @@ public class AutoScalerInfo {
 
     protected static final String COLLECTED_METRICS_KEY = "collectedMetrics";
     protected static final String SCALING_HISTORY_KEY = "scalingHistory";
+
+    protected static final String PARALLELISM_OVERRIDES_KEY = "parallelismOverrides";
 
     protected static final int MAX_CM_BYTES = 1000000;
 
@@ -182,6 +186,26 @@ public class AutoScalerInfo {
         storeScalingHistory();
     }
 
+    public void setCurrentOverrides(Map<String, String> overrides) {
+        configMap
+                .getData()
+                .put(
+                        PARALLELISM_OVERRIDES_KEY,
+                        ConfigurationUtils.convertValue(overrides, String.class));
+    }
+
+    public Map<String, String> getCurrentOverrides() {
+        var overridesStr = configMap.getData().get(PARALLELISM_OVERRIDES_KEY);
+        if (overridesStr == null) {
+            return Map.of();
+        }
+        return ConfigurationUtils.convertValue(overridesStr, Map.class);
+    }
+
+    public void removeCurrentOverrides() {
+        configMap.getData().remove(PARALLELISM_OVERRIDES_KEY);
+    }
+
     private void storeScalingHistory() throws Exception {
         configMap
                 .getData()
@@ -217,33 +241,42 @@ public class AutoScalerInfo {
         }
     }
 
-    public static AutoScalerInfo forResource(
+    public static Optional<AutoScalerInfo> get(
             AbstractFlinkResource<?, ?> cr, KubernetesClient kubeClient) {
+        return getScalingInfoConfigMap(getAutoscalerInfoMeta(cr), kubeClient)
+                .map(AutoScalerInfo::new);
+    }
 
-        var objectMeta = new ObjectMeta();
-        objectMeta.setName("autoscaler-" + cr.getMetadata().getName());
-        objectMeta.setNamespace(cr.getMetadata().getNamespace());
-
-        ConfigMap infoCm =
-                getScalingInfoConfigMap(objectMeta, kubeClient)
+    public static AutoScalerInfo getOrCreate(
+            AbstractFlinkResource<?, ?> cr, KubernetesClient kubeClient) {
+        var meta = getAutoscalerInfoMeta(cr);
+        var info =
+                getScalingInfoConfigMap(getAutoscalerInfoMeta(cr), kubeClient)
                         .orElseGet(
                                 () -> {
                                     LOG.info("Creating scaling info config map");
-
-                                    objectMeta.setLabels(
-                                            Map.of(
-                                                    Constants.LABEL_COMPONENT_KEY,
-                                                    LABEL_COMPONENT_AUTOSCALER,
-                                                    Constants.LABEL_APP_KEY,
-                                                    cr.getMetadata().getName()));
                                     var cm = new ConfigMap();
-                                    cm.setMetadata(objectMeta);
+                                    cm.setMetadata(meta);
                                     cm.addOwnerReference(cr);
                                     cm.setData(new HashMap<>());
                                     return kubeClient.resource(cm).create();
                                 });
 
-        return new AutoScalerInfo(infoCm);
+        return new AutoScalerInfo(info);
+    }
+
+    @NotNull
+    private static ObjectMeta getAutoscalerInfoMeta(AbstractFlinkResource<?, ?> cr) {
+        var objectMeta = new ObjectMeta();
+        objectMeta.setName("autoscaler-" + cr.getMetadata().getName());
+        objectMeta.setNamespace(cr.getMetadata().getNamespace());
+        objectMeta.setLabels(
+                Map.of(
+                        Constants.LABEL_COMPONENT_KEY,
+                        LABEL_COMPONENT_AUTOSCALER,
+                        Constants.LABEL_APP_KEY,
+                        cr.getMetadata().getName()));
+        return objectMeta;
     }
 
     private static Optional<ConfigMap> getScalingInfoConfigMap(

@@ -25,23 +25,32 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
+import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for JobAutoScalerImpl. */
 @EnableKubernetesMockClient(crud = true)
 public class JobAutoScalerImplTest extends OperatorTestBase {
 
     @Getter private KubernetesClient kubernetesClient;
+
+    KubernetesMockServer mockWebServer;
 
     private FlinkDeployment app;
 
@@ -73,5 +82,55 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
         Assertions.assertEquals(2, autoscaler.flinkMetrics.get(resourceId).numErrors.getCount());
 
         assertEquals(0, autoscaler.flinkMetrics.get(resourceId).numScalings.getCount());
+    }
+
+    @Test
+    void testParallelismOverrides() throws Exception {
+        var autoscaler = new JobAutoScalerImpl(kubernetesClient, null, null, null, eventRecorder);
+        var ctx = getResourceContext(app);
+
+        // Initially we should return empty overrides, do not crate any CM
+        assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));
+        assertFalse(AutoScalerInfo.get(ctx.getResource(), kubernetesClient).isPresent());
+
+        var autoscalerInfo = AutoScalerInfo.getOrCreate(ctx.getResource(), kubernetesClient);
+
+        var v1 = new JobVertexID().toString();
+        var v2 = new JobVertexID().toString();
+        autoscalerInfo.setCurrentOverrides(Map.of(v1, "1", v2, "2"));
+        autoscalerInfo.replaceInKubernetes(kubernetesClient);
+
+        assertEquals(Map.of(v1, "1", v2, "2"), autoscaler.getParallelismOverrides(ctx));
+
+        // Disabling autoscaler should clear overrides
+        app.getSpec().getFlinkConfiguration().put(AUTOSCALER_ENABLED.key(), "false");
+        ctx = getResourceContext(app);
+        assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));
+        // But not clear the autoscaler info
+        assertTrue(AutoScalerInfo.get(ctx.getResource(), kubernetesClient).isPresent());
+
+        int requestCount = mockWebServer.getRequestCount();
+        // Make sure we don't update in kubernetes once removed
+        autoscaler.getParallelismOverrides(ctx);
+        assertEquals(requestCount, mockWebServer.getRequestCount());
+
+        app.getSpec().getFlinkConfiguration().put(AUTOSCALER_ENABLED.key(), "true");
+        ctx = getResourceContext(app);
+        assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));
+
+        autoscalerInfo = AutoScalerInfo.getOrCreate(ctx.getResource(), kubernetesClient);
+        autoscalerInfo.setCurrentOverrides(Map.of(v1, "1", v2, "2"));
+        autoscalerInfo.replaceInKubernetes(kubernetesClient);
+        assertEquals(Map.of(v1, "1", v2, "2"), autoscaler.getParallelismOverrides(ctx));
+
+        app.getSpec().getFlinkConfiguration().put(SCALING_ENABLED.key(), "false");
+        ctx = getResourceContext(app);
+        assertEquals(Map.of(v1, "1", v2, "2"), autoscaler.getParallelismOverrides(ctx));
+
+        // Test error handling
+        // Invalid config
+        app.getSpec().getFlinkConfiguration().put(AUTOSCALER_ENABLED.key(), "asd");
+        ctx = getResourceContext(app);
+        assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));
     }
 }
