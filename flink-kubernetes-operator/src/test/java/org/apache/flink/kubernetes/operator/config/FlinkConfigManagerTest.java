@@ -134,9 +134,6 @@ public class FlinkConfigManagerTest {
                 deployConfig.contains(KubernetesOperatorConfigOptions.OPERATOR_RECONCILE_INTERVAL));
         assertTrue(new File(deployConfig.get(DeploymentOptionsInternal.CONF_DIR)).exists());
         assertTrue(
-                new File(deployConfig.get(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE))
-                        .exists());
-        assertTrue(
                 new File(deployConfig.get(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE))
                         .exists());
         assertTrue(
@@ -147,9 +144,6 @@ public class FlinkConfigManagerTest {
 
         assertTrue(new File(deployConfig.get(DeploymentOptionsInternal.CONF_DIR)).exists());
         assertTrue(
-                new File(deployConfig.get(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE))
-                        .exists());
-        assertTrue(
                 new File(deployConfig.get(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE))
                         .exists());
         assertTrue(
@@ -159,9 +153,6 @@ public class FlinkConfigManagerTest {
         configManager.getCache().invalidateAll();
 
         assertFalse(new File(deployConfig.get(DeploymentOptionsInternal.CONF_DIR)).exists());
-        assertFalse(
-                new File(deployConfig.get(KubernetesConfigOptions.KUBERNETES_POD_TEMPLATE))
-                        .exists());
         assertFalse(
                 new File(deployConfig.get(KubernetesConfigOptions.TASK_MANAGER_POD_TEMPLATE))
                         .exists());

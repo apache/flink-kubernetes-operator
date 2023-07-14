@@ -37,8 +37,11 @@ import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.EmptyDirVolumeSource;
 import io.fabric8.kubernetes.api.model.EphemeralVolumeSource;
+import io.fabric8.kubernetes.api.model.HTTPGetAction;
+import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.Probe;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
@@ -84,6 +87,45 @@ public class FlinkUtilsTest {
 
         assertEquals(pod2.getApiVersion(), mergedPod.getApiVersion());
         assertEquals(pod2.getSpec().getContainers(), mergedPod.getSpec().getContainers());
+    }
+
+    @Test
+    public void testAddStartupProbe() {
+        Pod pod = new Pod();
+        FlinkUtils.addStartupProbe(pod);
+
+        Probe expectedProbe = new Probe();
+        expectedProbe.setPeriodSeconds(1);
+        expectedProbe.setFailureThreshold(Integer.MAX_VALUE);
+        expectedProbe.setHttpGet(new HTTPGetAction());
+        expectedProbe.getHttpGet().setPort(new IntOrString("rest"));
+        expectedProbe.getHttpGet().setPath("/config");
+
+        assertEquals(1, pod.getSpec().getContainers().size());
+        assertEquals(Constants.MAIN_CONTAINER_NAME, pod.getSpec().getContainers().get(0).getName());
+        assertEquals(expectedProbe, pod.getSpec().getContainers().get(0).getStartupProbe());
+
+        FlinkUtils.addStartupProbe(pod);
+
+        assertEquals(1, pod.getSpec().getContainers().size());
+        assertEquals(Constants.MAIN_CONTAINER_NAME, pod.getSpec().getContainers().get(0).getName());
+        assertEquals(expectedProbe, pod.getSpec().getContainers().get(0).getStartupProbe());
+
+        // Custom startup probe
+        pod.getSpec().getContainers().get(0).setStartupProbe(new Probe());
+        FlinkUtils.addStartupProbe(pod);
+
+        assertEquals(1, pod.getSpec().getContainers().size());
+        assertEquals(Constants.MAIN_CONTAINER_NAME, pod.getSpec().getContainers().get(0).getName());
+        assertEquals(new Probe(), pod.getSpec().getContainers().get(0).getStartupProbe());
+
+        // Test adding probe if main container was undefined
+        pod.getSpec().setContainers(List.of(new Container()));
+        FlinkUtils.addStartupProbe(pod);
+
+        assertEquals(2, pod.getSpec().getContainers().size());
+        assertEquals(Constants.MAIN_CONTAINER_NAME, pod.getSpec().getContainers().get(1).getName());
+        assertEquals(expectedProbe, pod.getSpec().getContainers().get(1).getStartupProbe());
     }
 
     @Test

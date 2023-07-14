@@ -707,6 +707,50 @@ public class NativeFlinkServiceTest {
                 flinkDep, service, d -> d.getStatus().getJobStatus().setState("RUNNING"), true);
 
         testScaleConditionDep(flinkDep, service, d -> d.getSpec().setJob(null), false);
+
+        // Do not scale if parallelism overrides were removed from an active vertex
+        testScaleConditionLastSpec(
+                flinkDep,
+                service,
+                s ->
+                        s.getFlinkConfiguration()
+                                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v2 + ":3"),
+                false);
+
+        // Scale if parallelism overrides were removed only from a non-active vertex
+        testScaleConditionLastSpec(
+                flinkDep,
+                service,
+                s ->
+                        s.getFlinkConfiguration()
+                                .put(
+                                        PipelineOptions.PARALLELISM_OVERRIDES.key(),
+                                        v1 + ":1," + new JobVertexID() + ":5"),
+                true);
+
+        // Do not scale if parallelism overrides were completely removed out
+        var flinkDep2 = ReconciliationUtils.clone(flinkDep);
+        flinkDep2
+                .getSpec()
+                .getFlinkConfiguration()
+                .remove(PipelineOptions.PARALLELISM_OVERRIDES.key());
+        testScaleConditionLastSpec(
+                flinkDep2,
+                service,
+                s ->
+                        s.getFlinkConfiguration()
+                                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v2 + ":3"),
+                false);
+
+        // Do not scale if overrides never set
+        testScaleConditionDep(
+                flinkDep2,
+                service,
+                d ->
+                        flinkDep.getSpec()
+                                .getFlinkConfiguration()
+                                .remove(PipelineOptions.PARALLELISM_OVERRIDES.key()),
+                false);
     }
 
     private void testScaleConditionDep(

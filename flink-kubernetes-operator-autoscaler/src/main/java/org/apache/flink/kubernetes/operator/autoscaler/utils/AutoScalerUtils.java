@@ -21,8 +21,14 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
@@ -66,5 +72,22 @@ public class AutoScalerUtils {
         double inputTargetAtUtilization = avgInputTargetRate / targetUtilization;
 
         return Math.round(lagCatchupTargetRate + restartCatchupRate + inputTargetAtUtilization);
+    }
+
+    /** Temporarily exclude vertex from scaling for this run. This does not update the spec. */
+    public static boolean excludeVertexFromScaling(Configuration conf, JobVertexID jobVertexId) {
+        return excludeVerticesFromScaling(conf, List.of(jobVertexId));
+    }
+
+    public static boolean excludeVerticesFromScaling(
+            Configuration conf, Collection<JobVertexID> ids) {
+        Set<String> excludedIds = new HashSet<>(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS));
+        boolean anyAdded = false;
+        for (JobVertexID id : ids) {
+            String hexString = id.toHexString();
+            anyAdded |= excludedIds.add(hexString);
+        }
+        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
+        return anyAdded;
     }
 }

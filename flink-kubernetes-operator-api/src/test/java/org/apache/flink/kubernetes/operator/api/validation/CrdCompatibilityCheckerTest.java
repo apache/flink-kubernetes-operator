@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URL;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -268,6 +269,20 @@ public class CrdCompatibilityCheckerTest {
                 objectMapper.readValue(
                         new File("src/test/resources/test-deployment.yaml"), FlinkDeployment.class);
         assertEquals(flinkDeploymentWithUnknownFields.toString(), flinkDeployment.toString());
+    }
+
+    @Test
+    public void testGetSchemaFromUrl() throws IOException {
+        var fileUrl =
+                "file://" + new File("src/test/resources/test-deployment.yaml").getAbsolutePath();
+        var httpUrl =
+                "https://raw.githubusercontent.com/apache/flink-kubernetes-operator/release-1.4.0/helm/flink-kubernetes-operator/crds/flinkdeployments.flink.apache.org-v1.yml";
+        assertEquals("file", new URL(fileUrl).getProtocol());
+        assertEquals("https", new URL(httpUrl).getProtocol());
+        var fileNode = objectMapper.readTree(new File(fileUrl.substring(7)));
+        var httpNode = objectMapper.readTree(new URL(httpUrl));
+        assertEquals("FlinkDeployment", fileNode.get("kind").asText());
+        assertEquals("CustomResourceDefinition", httpNode.get("kind").asText());
     }
 
     private void expectSuccess(String oldSchema, String newSchema) throws JsonProcessingException {

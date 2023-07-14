@@ -501,6 +501,14 @@ public class KubernetesOperatorConfigOptions {
                             "Allowed max time between spec update and reconciliation for canary resources.");
 
     @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> OPERATOR_JM_STARTUP_PROBE_ENABLED =
+            operatorConfig("jm-deployment.startup.probe.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Enable job manager startup probe to allow detecting when the jobmanager could not submit the job.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> POD_TEMPLATE_MERGE_BY_NAME =
             operatorConfig("pod-template.merge-arrays-by-name")
                     .booleanType()

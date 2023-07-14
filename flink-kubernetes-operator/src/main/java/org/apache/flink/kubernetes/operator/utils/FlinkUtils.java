@@ -28,9 +28,11 @@ import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.runtime.rest.messages.DashboardConfigurationHeaders;
 import org.apache.flink.runtime.util.ZooKeeperUtils;
 import org.apache.flink.util.Preconditions;
 
@@ -40,8 +42,13 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapList;
+import io.fabric8.kubernetes.api.model.Container;
+import io.fabric8.kubernetes.api.model.HTTPGetAction;
+import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodSpec;
+import io.fabric8.kubernetes.api.model.Probe;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -49,6 +56,7 @@ import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -69,9 +77,9 @@ public class FlinkUtils {
 
     public static Pod mergePodTemplates(Pod toPod, Pod fromPod, boolean mergeArraysByName) {
         if (fromPod == null) {
-            return toPod;
+            return ReconciliationUtils.clone(toPod);
         } else if (toPod == null) {
-            return fromPod;
+            return ReconciliationUtils.clone(fromPod);
         }
         JsonNode node1 = MAPPER.valueToTree(toPod);
         JsonNode node2 = MAPPER.valueToTree(fromPod);
@@ -148,6 +156,49 @@ public class FlinkUtils {
         var out = new LinkedHashMap<String, ObjectNode>();
         node.elements().forEachRemaining(e -> out.put((e.get("name").asText()), (ObjectNode) e));
         return out;
+    }
+
+    public static void addStartupProbe(Pod pod) {
+        var spec = pod.getSpec();
+        if (spec == null) {
+            spec = new PodSpec();
+            pod.setSpec(spec);
+        }
+
+        var containers = spec.getContainers();
+        if (containers == null) {
+            containers = new ArrayList<>();
+            spec.setContainers(containers);
+        }
+
+        var mainContainer =
+                containers.stream()
+                        .filter(c -> Constants.MAIN_CONTAINER_NAME.equals(c.getName()))
+                        .findAny()
+                        .orElseGet(
+                                () -> {
+                                    var c = new Container();
+                                    c.setName(Constants.MAIN_CONTAINER_NAME);
+                                    var containersCopy =
+                                            new ArrayList<>(pod.getSpec().getContainers());
+                                    containersCopy.add(c);
+                                    pod.getSpec().setContainers(containersCopy);
+                                    return c;
+                                });
+
+        if (mainContainer.getStartupProbe() == null) {
+            var probe = new Probe();
+            probe.setFailureThreshold(Integer.MAX_VALUE);
+            probe.setPeriodSeconds(1);
+
+            var configGet = new HTTPGetAction();
+            configGet.setPath(
+                    DashboardConfigurationHeaders.getInstance().getTargetRestEndpointURL());
+            configGet.setPort(new IntOrString(Constants.REST_PORT_NAME));
+            probe.setHttpGet(configGet);
+
+            mainContainer.setStartupProbe(probe);
+        }
     }
 
     public static void deleteZookeeperHAMetadata(Configuration conf) {

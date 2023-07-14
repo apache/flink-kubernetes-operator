@@ -19,18 +19,35 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.client.program.rest.RestClusterClient;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.TestingFlinkService;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
+import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
+import org.apache.flink.kubernetes.operator.autoscaler.topology.VertexInfo;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.JobPlanInfo;
 import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /** Tests for {@link ScalingMetricCollector}. */
 public class ScalingMetricCollectorTest {
@@ -64,5 +81,96 @@ public class ScalingMetricCollectorTest {
                         new JobPlanInfo.RawJson(""));
         var metricsCollector = new RestApiMetricsCollector();
         assertEquals(Instant.ofEpochMilli(3L), metricsCollector.getJobUpdateTs(details));
+    }
+
+    @Test
+    public void testQueryNamesOnTopologyChange() {
+        var metricNameQueryCounter = new AtomicInteger(0);
+        var collector =
+                new RestApiMetricsCollector() {
+                    @Override
+                    protected Map<String, FlinkMetric> getFilteredVertexMetricNames(
+                            RestClusterClient<?> rc, JobID id, JobVertexID jvi, JobTopology t) {
+                        metricNameQueryCounter.incrementAndGet();
+                        return Map.of();
+                    }
+                };
+
+        var app = TestUtils.buildApplicationCluster();
+        app.getStatus().getJobStatus().setJobId(new JobID().toHexString());
+        var conf =
+                new FlinkConfigManager(new Configuration())
+                        .getDeployConfig(app.getMetadata(), app.getSpec());
+
+        var t1 = new JobTopology(new VertexInfo(new JobVertexID(), Collections.emptySet(), 1, 1));
+        var t2 = new JobTopology(new VertexInfo(new JobVertexID(), Collections.emptySet(), 1, 1));
+
+        collector.queryFilteredMetricNames(new TestingFlinkService(), app, conf, t1);
+        assertEquals(1, metricNameQueryCounter.get());
+        collector.queryFilteredMetricNames(new TestingFlinkService(), app, conf, t1);
+        collector.queryFilteredMetricNames(new TestingFlinkService(), app, conf, t1);
+        assertEquals(1, metricNameQueryCounter.get());
+        collector.queryFilteredMetricNames(new TestingFlinkService(), app, conf, t2);
+        assertEquals(2, metricNameQueryCounter.get());
+        collector.queryFilteredMetricNames(new TestingFlinkService(), app, conf, t2);
+        collector.queryFilteredMetricNames(new TestingFlinkService(), app, conf, t2);
+        assertEquals(2, metricNameQueryCounter.get());
+    }
+
+    @Test
+    public void testRequiredMetrics() {
+        List<AggregatedMetric> metricList = new ArrayList<>();
+        var testCollector =
+                new RestApiMetricsCollector() {
+                    @Override
+                    protected Collection<AggregatedMetric> queryAggregatedMetricNames(
+                            RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID)
+                            throws Exception {
+                        return metricList;
+                    }
+                };
+
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Set.of(), 1, 1),
+                        new VertexInfo(sink, Set.of(source), 1, 1));
+
+        testRequiredMetrics(
+                metricList, getSourceRequiredMetrics(), testCollector, source, topology);
+        testRequiredMetrics(metricList, getRequiredMetrics(), testCollector, sink, topology);
+    }
+
+    private void testRequiredMetrics(
+            List<AggregatedMetric> metricList,
+            List<AggregatedMetric> requiredMetrics,
+            RestApiMetricsCollector testCollector,
+            JobVertexID vertex,
+            JobTopology topology) {
+        for (var m : requiredMetrics) {
+            metricList.clear();
+            metricList.addAll(requiredMetrics);
+            metricList.removeIf(a -> a.getId().equals(m.getId()));
+            try {
+                testCollector.getFilteredVertexMetricNames(null, new JobID(), vertex, topology);
+                fail(m.getId());
+            } catch (Exception e) {
+                assertTrue(e.getMessage().startsWith("Could not find required metric "));
+            }
+        }
+    }
+
+    private List<AggregatedMetric> getSourceRequiredMetrics() {
+        return List.of(
+                new AggregatedMetric("busyTimeMsPerSecond"),
+                new AggregatedMetric("numRecordsOutPerSecond"),
+                new AggregatedMetric("Source__XXX.numRecordsInPerSecond"));
+    }
+
+    private List<AggregatedMetric> getRequiredMetrics() {
+        return List.of(
+                new AggregatedMetric("busyTimeMsPerSecond"),
+                new AggregatedMetric("numRecordsInPerSecond"));
     }
 }
