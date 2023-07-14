@@ -51,6 +51,12 @@
             <td>Whether to enable rolling back failed deployment upgrades.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.exception.label.mapper</h5></td>
+            <td style="word-wrap: break-word;"></td>
+            <td>Map</td>
+            <td>Key-Value pair where key is the REGEX to filter through the exception messages and value is the string to be included in CR status error label field if the REGEX matches. Expected format: headerKey1:headerValue1,headerKey2:headerValue2.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.jm-deployment-recovery.enabled</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>

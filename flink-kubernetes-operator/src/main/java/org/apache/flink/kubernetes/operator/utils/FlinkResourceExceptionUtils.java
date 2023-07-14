@@ -29,14 +29,18 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /** Flink Resource Exception utilities. */
 public final class FlinkResourceExceptionUtils {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
+    public static final String LABELS = "labels";
 
     public static <R extends AbstractFlinkResource> void updateFlinkResourceException(
             Throwable throwable, R resource, FlinkOperatorConfiguration conf) {
@@ -45,6 +49,7 @@ public final class FlinkResourceExceptionUtils {
         int stackTraceLengthThreshold = conf.getExceptionStackTraceLengthThreshold();
         int lengthThreshold = conf.getExceptionFieldLengthThreshold();
         int throwableCountThreshold = conf.getExceptionThrowableCountThreshold();
+        Map<String, String> labelMapper = conf.getExceptionLabelMapper();
 
         Preconditions.checkNotNull(stackTraceEnabled);
 
@@ -54,7 +59,8 @@ public final class FlinkResourceExceptionUtils {
                         stackTraceEnabled,
                         stackTraceLengthThreshold,
                         lengthThreshold,
-                        throwableCountThreshold);
+                        throwableCountThreshold,
+                        labelMapper);
 
         try {
             ((AbstractFlinkResource<?, ?>) resource)
@@ -76,10 +82,16 @@ public final class FlinkResourceExceptionUtils {
             boolean isStackTraceEnabled,
             int stackTraceLengthThreshold,
             int lengthThreshold,
-            int throwableCountThreshold) {
+            int throwableCountThreshold,
+            Map<String, String> labelMapper) {
+
         FlinkResourceException flinkResourceException =
                 convertToFlinkResourceException(
-                        throwable, isStackTraceEnabled, stackTraceLengthThreshold, lengthThreshold);
+                        throwable,
+                        isStackTraceEnabled,
+                        stackTraceLengthThreshold,
+                        lengthThreshold,
+                        labelMapper);
 
         flinkResourceException.setThrowableList(
                 ExceptionUtils.getThrowableList(throwable.getCause()).stream()
@@ -90,7 +102,8 @@ public final class FlinkResourceExceptionUtils {
                                                 t,
                                                 false,
                                                 stackTraceLengthThreshold,
-                                                lengthThreshold))
+                                                lengthThreshold,
+                                                labelMapper))
                         .collect(Collectors.toList()));
 
         return flinkResourceException;
@@ -100,7 +113,8 @@ public final class FlinkResourceExceptionUtils {
             Throwable throwable,
             boolean stackTraceEnabled,
             int stackTraceLengthThreshold,
-            int lengthThreshold) {
+            int lengthThreshold,
+            Map<String, String> labelMapper) {
         FlinkResourceException flinkResourceException = FlinkResourceException.builder().build();
 
         getSubstringWithMaxLength(throwable.getClass().getName(), lengthThreshold)
@@ -109,11 +123,12 @@ public final class FlinkResourceExceptionUtils {
                 .ifPresent(flinkResourceException::setMessage);
 
         if (stackTraceEnabled) {
-            getSubstringWithMaxLength(ExceptionUtils.getStackTrace(throwable), lengthThreshold)
+            getSubstringWithMaxLength(
+                            ExceptionUtils.getStackTrace(throwable), stackTraceLengthThreshold)
                     .ifPresent(flinkResourceException::setStackTrace);
         }
 
-        enrichMetadata(throwable, flinkResourceException, lengthThreshold);
+        enrichMetadata(throwable, flinkResourceException, lengthThreshold, labelMapper);
 
         return flinkResourceException;
     }
@@ -129,12 +144,18 @@ public final class FlinkResourceExceptionUtils {
     private static void enrichMetadata(
             Throwable throwable,
             FlinkResourceException flinkResourceException,
-            int lengthThreshold) {
+            int lengthThreshold,
+            Map<String, String> labelMapper) {
+        if (flinkResourceException.getAdditionalMetadata() == null) {
+            flinkResourceException.setAdditionalMetadata(new HashMap<>());
+        }
+
         if (throwable instanceof RestClientException) {
-            flinkResourceException.setAdditionalMetadata(
-                    Map.of(
+            flinkResourceException
+                    .getAdditionalMetadata()
+                    .put(
                             "httpResponseCode",
-                            ((RestClientException) throwable).getHttpResponseStatus().code()));
+                            ((RestClientException) throwable).getHttpResponseStatus().code());
         }
 
         if (throwable instanceof DeploymentFailedException) {
@@ -142,11 +163,41 @@ public final class FlinkResourceExceptionUtils {
                             ((DeploymentFailedException) throwable).getReason(), lengthThreshold)
                     .ifPresent(
                             reason ->
-                                    flinkResourceException.setAdditionalMetadata(
-                                            Map.of("reason", reason)));
+                                    flinkResourceException
+                                            .getAdditionalMetadata()
+                                            .put("reason", reason));
         }
 
+        labelMapper
+                .entrySet()
+                .forEach(
+                        (entry) -> {
+                            Pattern pattern = Pattern.compile(entry.getKey());
+
+                            org.apache.flink.util.ExceptionUtils.findThrowable(
+                                            throwable,
+                                            t ->
+                                                    pattern.matcher(
+                                                                    Optional.ofNullable(
+                                                                                    t.getMessage())
+                                                                            .orElse(""))
+                                                            .find())
+                                    .ifPresent(
+                                            (t) -> {
+                                                enrichMetadataWithLabelMapper(
+                                                        flinkResourceException, entry.getValue());
+                                            });
+                        });
+
         // This section can be extended to enrich more metadata in the future.
+    }
+
+    private static void enrichMetadataWithLabelMapper(
+            FlinkResourceException flinkResourceException, String value) {
+        if (!flinkResourceException.getAdditionalMetadata().containsKey(LABELS)) {
+            flinkResourceException.getAdditionalMetadata().put(LABELS, new ArrayList<String>());
+        }
+        ((ArrayList) flinkResourceException.getAdditionalMetadata().get(LABELS)).add(value);
     }
 
     private static String convertToJson(FlinkResourceException flinkResourceException)

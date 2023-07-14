@@ -43,6 +43,7 @@ parallelism.default: 1
 # kubernetes.operator.exception.stacktrace.max.length: 2048
 # kubernetes.operator.exception.field.max.length: 2048
 # kubernetes.operator.exception.throwable.list.max.count: 2
+# kubernetes.operator.exception.label.mapper: Job has already been submitted:duplicatedJobFound,Server returned HTTP response code:httpResponseCodeFound
 # kubernetes.operator.leader-election.enabled: false
 # kubernetes.operator.leader-election.lease-name: flink-operator-lease
 
