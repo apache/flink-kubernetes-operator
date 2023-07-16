@@ -22,6 +22,7 @@ import org.apache.flink.annotation.docs.Documentation;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.core.execution.SavepointFormatType;
+import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.javaoperatorsdk.operator.api.config.ConfigurationService;
@@ -95,6 +96,14 @@ public class KubernetesOperatorConfigOptions {
                             operatorConfigKey("observer.savepoint.trigger.grace-period"))
                     .withDescription(
                             "The interval before a savepoint trigger attempt is marked as unsuccessful.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Duration> OPERATOR_CHECKPOINT_TRIGGER_GRACE_PERIOD =
+            operatorConfig("checkpoint.trigger.grace-period")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(1))
+                    .withDescription(
+                            "The interval before a checkpoint trigger attempt is marked as unsuccessful.");
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Duration> OPERATOR_FLINK_CLIENT_TIMEOUT =
@@ -295,7 +304,24 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(Duration.ZERO)
                     .withDescription(
                             "Interval at which periodic savepoints will be triggered. "
-                                    + "The triggering schedule is not guaranteed, savepoints will be triggered as part of the regular reconcile loop.");
+                                    + "The triggering schedule is not guaranteed, savepoints will be "
+                                    + "triggered as part of the regular reconcile loop.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Duration> PERIODIC_CHECKPOINT_INTERVAL =
+            operatorConfig("periodic.checkpoint.interval")
+                    .durationType()
+                    .defaultValue(Duration.ZERO)
+                    .withDescription(
+                            "Interval at which periodic checkpoints will be triggered. "
+                                    + "The triggering schedule is not guaranteed, checkpoints will "
+                                    + "be triggered as part of the regular reconcile loop. "
+                                    + "NOTE: checkpoints are generally managed by Flink. This "
+                                    + "setting isn't meant to replace Flink's checkpoint settings, "
+                                    + "but to complement them in special cases. For instance, a "
+                                    + "full checkpoint might need to be occasionally triggered to "
+                                    + "break the chain of incremental checkpoints and consolidate "
+                                    + "the partial incremental files.");
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<String> OPERATOR_WATCHED_NAMESPACES =
@@ -368,6 +394,13 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(SavepointFormatType.DEFAULT)
                     .withDescription(
                             "Type of the binary format in which a savepoint should be taken.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<CheckpointType> OPERATOR_CHECKPOINT_TYPE =
+            operatorConfig("checkpoint.type")
+                    .enumType(CheckpointType.class)
+                    .defaultValue(CheckpointType.FULL)
+                    .withDescription("Type of checkpoint.");
 
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Boolean> OPERATOR_HEALTH_PROBE_ENABLED =

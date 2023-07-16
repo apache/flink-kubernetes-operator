@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.UnknownJobException;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthObserver;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
-import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
+import org.apache.flink.kubernetes.operator.observer.SnapshotObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -38,14 +38,14 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 /** The observer of {@link org.apache.flink.kubernetes.operator.config.Mode#APPLICATION} cluster. */
 public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
 
-    private final SavepointObserver<FlinkDeployment, FlinkDeploymentStatus> savepointObserver;
+    private final SnapshotObserver<FlinkDeployment, FlinkDeploymentStatus> savepointObserver;
     private final JobStatusObserver<FlinkDeployment> jobStatusObserver;
 
     private final ClusterHealthObserver clusterHealthObserver;
 
     public ApplicationObserver(EventRecorder eventRecorder) {
         super(eventRecorder);
-        this.savepointObserver = new SavepointObserver<>(eventRecorder);
+        this.savepointObserver = new SnapshotObserver<>(eventRecorder);
         this.jobStatusObserver = new ApplicationJobObserver(eventRecorder);
         this.clusterHealthObserver = new ClusterHealthObserver();
     }
@@ -57,6 +57,7 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
         if (jobFound) {
             var observeConfig = ctx.getObserveConfig();
             savepointObserver.observeSavepointStatus(ctx);
+            savepointObserver.observeCheckpointStatus(ctx);
             if (observeConfig.getBoolean(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED)) {
                 clusterHealthObserver.observe(ctx);
             }

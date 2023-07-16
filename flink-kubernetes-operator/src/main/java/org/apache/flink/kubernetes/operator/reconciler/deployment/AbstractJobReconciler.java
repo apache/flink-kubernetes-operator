@@ -26,12 +26,13 @@ import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -82,7 +83,7 @@ public abstract class AbstractJobReconciler<
     private boolean shouldWaitForPendingSavepoint(JobStatus jobStatus, Configuration conf) {
         return !conf.getBoolean(
                         KubernetesOperatorConfigOptions.JOB_UPGRADE_IGNORE_PENDING_SAVEPOINT)
-                && SavepointUtils.savepointInProgress(jobStatus);
+                && SnapshotUtils.savepointInProgress(jobStatus);
     }
 
     @Override
@@ -277,8 +278,20 @@ public abstract class AbstractJobReconciler<
             resubmitJob(ctx, false);
             return true;
         } else {
-            return SavepointUtils.triggerSavepointIfNeeded(
-                    ctx.getFlinkService(), ctx.getResource(), ctx.getObserveConfig());
+            boolean savepointTriggered =
+                    SnapshotUtils.triggerSnapshotIfNeeded(
+                            ctx.getFlinkService(),
+                            ctx.getResource(),
+                            ctx.getObserveConfig(),
+                            SnapshotType.SAVEPOINT);
+            boolean checkpointTriggered =
+                    SnapshotUtils.triggerSnapshotIfNeeded(
+                            ctx.getFlinkService(),
+                            ctx.getResource(),
+                            ctx.getObserveConfig(),
+                            SnapshotType.CHECKPOINT);
+
+            return savepointTriggered || checkpointTriggered;
         }
     }
 

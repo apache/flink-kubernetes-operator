@@ -28,12 +28,12 @@ import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
-import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -63,6 +63,12 @@ import static org.apache.flink.api.common.JobStatus.RECONCILING;
 import static org.apache.flink.api.common.JobStatus.RESTARTING;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.api.common.JobStatus.SUSPENDED;
+import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.CHECKPOINT;
+import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.SAVEPOINT;
+import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getCheckpointInfo;
+import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobSpec;
+import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobStatus;
+import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getReconciledJobSpec;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -294,7 +300,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                         .getSavepointHistory()
                         .size());
         assertEquals(
-                SavepointTriggerType.UPGRADE,
+                SnapshotTriggerType.UPGRADE,
                 statefulSessionJob
                         .getStatus()
                         .getJobStatus()
@@ -317,32 +323,32 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     @Test
     public void testTriggerSavepoint() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
-        assertFalse(SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
+        assertFalse(SnapshotUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
         reconciler.reconcile(sessionJob, readyContext);
         verifyAndSetRunningJobsToStatus(
                 sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
 
-        assertFalse(SavepointUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
+        assertFalse(SnapshotUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
         // trigger savepoint
         var sp1SessionJob = ReconciliationUtils.clone(sessionJob);
 
         // do not trigger savepoint if nonce is null
         reconciler.reconcile(sp1SessionJob, readyContext);
-        assertFalse(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
+        assertFalse(SnapshotUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
 
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(2L);
         sp1SessionJob.getStatus().getJobStatus().setState(CREATED.name());
         reconciler.reconcile(sp1SessionJob, readyContext);
         // do not trigger savepoint if job is not running
-        assertFalse(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
+        assertFalse(SnapshotUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
 
         sp1SessionJob.getStatus().getJobStatus().setState(RUNNING.name());
 
         reconciler.reconcile(sp1SessionJob, readyContext);
-        assertTrue(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
+        assertTrue(SnapshotUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
 
         // the last reconcile nonce updated
         assertNull(
@@ -357,7 +363,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(3L);
         reconciler.reconcile(sp1SessionJob, readyContext);
         assertEquals(
-                "trigger_0",
+                "savepoint_trigger_0",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
 
         // don't trigger upgrade when savepoint is in progress
@@ -372,10 +378,10 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         sp1SessionJob.getSpec().getJob().setParallelism(100);
         reconciler.reconcile(sp1SessionJob, readyContext);
         assertEquals(
-                "trigger_0",
+                "savepoint_trigger_0",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         assertEquals(
-                SavepointTriggerType.MANUAL,
+                SnapshotTriggerType.MANUAL,
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerType());
 
         // parallelism not changed
@@ -389,8 +395,10 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                         .getParallelism());
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
-                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(), sp1SessionJob);
+        ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(),
+                sp1SessionJob,
+                SAVEPOINT);
 
         // running -> suspended
         reconciler.reconcile(sp1SessionJob, readyContext);
@@ -409,24 +417,143 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sp1SessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
-                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(), sp1SessionJob);
+        ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(),
+                sp1SessionJob,
+                SAVEPOINT);
 
         // trigger when new nonce is defined
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(4L);
         reconciler.reconcile(sp1SessionJob, readyContext);
         assertEquals(
-                "trigger_1",
+                "savepoint_trigger_1",
                 sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
 
         sp1SessionJob.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
-                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(), sp1SessionJob);
+        ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                sp1SessionJob.getStatus().getJobStatus().getSavepointInfo(),
+                sp1SessionJob,
+                SAVEPOINT);
 
         // don't trigger when nonce is cleared
         sp1SessionJob.getSpec().getJob().setSavepointTriggerNonce(null);
         reconciler.reconcile(sp1SessionJob, readyContext);
-        assertFalse(SavepointUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
+        assertFalse(SnapshotUtils.savepointInProgress(sp1SessionJob.getStatus().getJobStatus()));
+    }
+
+    @Test
+    public void testTriggerCheckpoint() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sessionJob)));
+
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+        reconciler.reconcile(sessionJob, readyContext);
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+
+        assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sessionJob)));
+
+        // trigger checkpoint
+        var sp1SessionJob = ReconciliationUtils.clone(sessionJob);
+
+        // do not trigger checkpoint if nonce is null
+        reconciler.reconcile(sp1SessionJob, readyContext);
+        assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sp1SessionJob)));
+
+        getJobSpec(sp1SessionJob).setCheckpointTriggerNonce(2L);
+        getJobStatus(sp1SessionJob).setState(CREATED.name());
+        reconciler.reconcile(sp1SessionJob, readyContext);
+        // do not trigger checkpoint if job is not running
+        assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sp1SessionJob)));
+
+        getJobStatus(sp1SessionJob).setState(RUNNING.name());
+
+        reconciler.reconcile(sp1SessionJob, readyContext);
+        assertTrue(SnapshotUtils.checkpointInProgress(getJobStatus(sp1SessionJob)));
+
+        // the last reconcile nonce updated
+        assertNull(getReconciledJobSpec(sp1SessionJob).getCheckpointTriggerNonce());
+
+        // don't trigger new checkpoint when checkpoint is in progress
+        getJobSpec(sp1SessionJob).setCheckpointTriggerNonce(3L);
+        reconciler.reconcile(sp1SessionJob, readyContext);
+        assertEquals("checkpoint_trigger_0", getCheckpointInfo(sp1SessionJob).getTriggerId());
+        /*
+            TODO: this section needs to be reintroduced in case the LAST_STATE optimization gets
+             added
+
+            // don't trigger upgrade when checkpoint is in progress
+            assertEquals(
+                    1,
+                    sp1SessionJob
+                            .getStatus()
+                            .getReconciliationStatus()
+                            .deserializeLastReconciledSpec()
+                            .getJob()
+                            .getParallelism());
+            getJobSpec(sp1SessionJob).setParallelism(100);
+            reconciler.reconcile(sp1SessionJob, readyContext);
+            assertEquals(
+                    "checkpoint_trigger_0",
+                    getCheckpointInfo(sp1SessionJob).getTriggerId());
+            assertEquals(
+                    SnapshotTriggerType.MANUAL,
+                    getCheckpointInfo(sp1SessionJob).getTriggerType());
+
+            // parallelism not changed
+            assertEquals(
+                    1,
+                    sp1SessionJob
+                            .getStatus()
+                            .getReconciliationStatus()
+                            .deserializeLastReconciledSpec()
+                            .getJob()
+                            .getParallelism());
+
+            getCheckpointInfo(sp1SessionJob).resetTrigger();
+            ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                    getCheckpointInfo(sp1SessionJob),
+                    sp1SessionJob,
+                    CHECKPOINT);
+
+            // running -> suspended
+            reconciler.reconcile(sp1SessionJob, readyContext);
+            // suspended -> running
+            reconciler.reconcile(sp1SessionJob, readyContext);
+            // parallelism changed
+            assertEquals(
+                    100,
+                    sp1SessionJob
+                            .getStatus()
+                            .getReconciliationStatus()
+                            .deserializeLastReconciledSpec()
+                            .getJob()
+                            .getParallelism());
+                verifyAndSetRunningJobsToStatus(
+                    sp1SessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+
+            getJobStatus(sp1SessionJob).getSavepointInfo().resetTrigger();
+            ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                    getJobStatus(sp1SessionJob).getSavepointInfo(),
+                    sp1SessionJob,
+                    SAVEPOINT);
+        */
+        // trigger when new nonce is defined
+        getJobSpec(sp1SessionJob).setCheckpointTriggerNonce(4L);
+        reconciler.reconcile(sp1SessionJob, readyContext);
+        assertEquals(
+                // TODO: enable if upgrade delay test gets reenabled
+                // "savepoint_trigger_1",
+                "checkpoint_trigger_0", getCheckpointInfo(sp1SessionJob).getTriggerId());
+
+        getCheckpointInfo(sp1SessionJob).resetTrigger();
+        ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                getCheckpointInfo(sp1SessionJob), sp1SessionJob, CHECKPOINT);
+
+        // don't trigger when nonce is cleared
+        getJobSpec(sp1SessionJob).setCheckpointTriggerNonce(null);
+        reconciler.reconcile(sp1SessionJob, readyContext);
+        assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sp1SessionJob)));
     }
 
     private static Stream<Arguments> cancelStatelessSessionJobParams() {
@@ -632,7 +759,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 .setSavepointTriggerNonce(ThreadLocalRandom.current().nextLong());
         reconciler.reconcile(spSessionJob, readyContext);
         assertEquals(
-                "trigger_0",
+                "savepoint_trigger_0",
                 spSessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         assertEquals(JobState.RUNNING.name(), spSessionJob.getStatus().getJobStatus().getState());
 
@@ -646,7 +773,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         spSessionJob.getSpec().getJob().setParallelism(100);
         reconciler.reconcile(spSessionJob, readyContext);
         assertEquals(
-                "trigger_0",
+                "savepoint_trigger_0",
                 spSessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         assertEquals("FINISHED", spSessionJob.getStatus().getJobStatus().getState());
     }

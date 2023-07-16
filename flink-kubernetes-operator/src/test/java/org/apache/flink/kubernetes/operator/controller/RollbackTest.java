@@ -26,7 +26,7 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler;
@@ -312,8 +312,7 @@ public class RollbackTest {
                     dep.getStatus()
                             .getJobStatus()
                             .getSavepointInfo()
-                            .updateLastSavepoint(
-                                    Savepoint.of("test", SavepointTriggerType.UPGRADE));
+                            .updateLastSavepoint(Savepoint.of("test", SnapshotTriggerType.UPGRADE));
                     testController.reconcile(dep, context);
                 },
                 () -> {

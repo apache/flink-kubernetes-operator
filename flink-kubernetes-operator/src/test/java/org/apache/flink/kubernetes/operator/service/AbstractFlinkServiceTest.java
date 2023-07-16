@@ -40,7 +40,7 @@ import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -64,6 +64,7 @@ import org.apache.flink.runtime.rest.messages.MessageParameters;
 import org.apache.flink.runtime.rest.messages.RequestBody;
 import org.apache.flink.runtime.rest.messages.ResponseBody;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricCollectionResponseBody;
@@ -426,13 +427,41 @@ public class AbstractFlinkServiceTest {
         flinkDeployment.getStatus().setJobStatus(jobStatus);
         flinkService.triggerSavepoint(
                 flinkDeployment.getStatus().getJobStatus().getJobId(),
-                SavepointTriggerType.MANUAL,
+                SnapshotTriggerType.MANUAL,
                 flinkDeployment.getStatus().getJobStatus().getSavepointInfo(),
                 configuration);
         assertTrue(triggerSavepointFuture.isDone());
         assertEquals(jobID, triggerSavepointFuture.get().f0);
         assertEquals(savepointPath, triggerSavepointFuture.get().f1);
         assertFalse(triggerSavepointFuture.get().f2);
+    }
+
+    @Test
+    public void testTriggerCheckpoint() throws Exception {
+        final CompletableFuture<JobID> triggerCheckpointFuture = new CompletableFuture<>();
+        var flinkService =
+                getTestingService(
+                        (headers, parameters, requestBody) -> {
+                            triggerCheckpointFuture.complete(
+                                    ((CheckpointTriggerMessageParameters) parameters)
+                                            .jobID.getValue());
+                            return CompletableFuture.completedFuture(
+                                    new TriggerResponse(new TriggerId()));
+                        });
+
+        final JobID jobID = JobID.generate();
+        final FlinkDeployment flinkDeployment = TestUtils.buildApplicationCluster();
+        ReconciliationUtils.updateStatusForDeployedSpec(flinkDeployment, new Configuration());
+        JobStatus jobStatus = new JobStatus();
+        jobStatus.setJobId(jobID.toString());
+        flinkDeployment.getStatus().setJobStatus(jobStatus);
+        flinkService.triggerCheckpoint(
+                flinkDeployment.getStatus().getJobStatus().getJobId(),
+                SnapshotTriggerType.MANUAL,
+                flinkDeployment.getStatus().getJobStatus().getCheckpointInfo(),
+                configuration);
+        assertTrue(triggerCheckpointFuture.isDone());
+        assertEquals(jobID, triggerCheckpointFuture.get());
     }
 
     @Test
@@ -503,7 +532,7 @@ public class AbstractFlinkServiceTest {
         deployment.getStatus().setJobStatus(jobStatus);
         flinkService.triggerSavepoint(
                 deployment.getStatus().getJobStatus().getJobId(),
-                SavepointTriggerType.MANUAL,
+                SnapshotTriggerType.MANUAL,
                 deployment.getStatus().getJobStatus().getSavepointInfo(),
                 new Configuration(configuration)
                         .set(OPERATOR_SAVEPOINT_FORMAT_TYPE, SavepointFormatType.NATIVE));

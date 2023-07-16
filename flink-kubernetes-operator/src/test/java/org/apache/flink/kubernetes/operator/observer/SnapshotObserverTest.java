@@ -25,10 +25,10 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.utils.SavepointStatus;
-import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.kubernetes.operator.utils.SnapshotStatus;
+import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -40,21 +40,23 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 
+import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.CHECKPOINT;
+import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.SAVEPOINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Tests for {@link SavepointObserver}. */
+/** Tests for {@link SnapshotObserver}. */
 @EnableKubernetesMockClient(crud = true)
-public class SavepointObserverTest extends OperatorTestBase {
+public class SnapshotObserverTest extends OperatorTestBase {
 
     @Getter private KubernetesClient kubernetesClient;
-    private SavepointObserver<FlinkDeployment, FlinkDeploymentStatus> observer;
+    private SnapshotObserver<FlinkDeployment, FlinkDeploymentStatus> observer;
 
     @Override
     public void setup() {
-        observer = new SavepointObserver<>(eventRecorder);
+        observer = new SnapshotObserver<>(eventRecorder);
     }
 
     @Test
@@ -69,7 +71,7 @@ public class SavepointObserverTest extends OperatorTestBase {
 
         Savepoint sp =
                 new Savepoint(
-                        1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
+                        1, "sp1", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp);
         observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
 
@@ -94,7 +96,7 @@ public class SavepointObserverTest extends OperatorTestBase {
 
         Savepoint sp1 =
                 new Savepoint(
-                        1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
+                        1, "sp1", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp1);
         observer.cleanupSavepointHistory(getResourceContext(cr), spInfo);
         Assertions.assertIterableEquals(
@@ -104,7 +106,7 @@ public class SavepointObserverTest extends OperatorTestBase {
 
         Savepoint sp2 =
                 new Savepoint(
-                        2, "sp2", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
+                        2, "sp2", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp2);
         observer.cleanupSavepointHistory(getResourceContext(cr), spInfo);
         Assertions.assertIterableEquals(
@@ -132,7 +134,7 @@ public class SavepointObserverTest extends OperatorTestBase {
 
         Savepoint sp1 =
                 new Savepoint(
-                        1, "sp1", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
+                        1, "sp1", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp1);
         observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
         Assertions.assertIterableEquals(
@@ -142,7 +144,7 @@ public class SavepointObserverTest extends OperatorTestBase {
 
         Savepoint sp2 =
                 new Savepoint(
-                        2, "sp2", SavepointTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
+                        2, "sp2", SnapshotTriggerType.MANUAL, SavepointFormatType.CANONICAL, 123L);
         spInfo.updateLastSavepoint(sp2);
         observer.cleanupSavepointHistory(getResourceContext(deployment), spInfo);
         Assertions.assertIterableEquals(
@@ -175,7 +177,7 @@ public class SavepointObserverTest extends OperatorTestBase {
                 new Savepoint(
                         9999999999999998L,
                         "sp1",
-                        SavepointTriggerType.MANUAL,
+                        SnapshotTriggerType.MANUAL,
                         SavepointFormatType.CANONICAL,
                         123L);
         spInfo.updateLastSavepoint(sp1);
@@ -185,7 +187,7 @@ public class SavepointObserverTest extends OperatorTestBase {
                 new Savepoint(
                         9999999999999999L,
                         "sp2",
-                        SavepointTriggerType.MANUAL,
+                        SnapshotTriggerType.MANUAL,
                         SavepointFormatType.CANONICAL,
                         123L);
         spInfo.updateLastSavepoint(sp2);
@@ -206,13 +208,14 @@ public class SavepointObserverTest extends OperatorTestBase {
         jobStatus.setState("RUNNING");
 
         var savepointInfo = jobStatus.getSavepointInfo();
-        flinkService.triggerSavepoint(null, SavepointTriggerType.PERIODIC, savepointInfo, conf);
+        flinkService.triggerSavepoint(null, SnapshotTriggerType.PERIODIC, savepointInfo, conf);
 
         var triggerTs = savepointInfo.getTriggerTimestamp();
         assertEquals(0L, savepointInfo.getLastPeriodicSavepointTimestamp());
-        assertEquals(SavepointTriggerType.PERIODIC, savepointInfo.getTriggerType());
-        assertTrue(SavepointUtils.savepointInProgress(jobStatus));
-        assertEquals(SavepointStatus.PENDING, SavepointUtils.getLastSavepointStatus(deployment));
+        assertEquals(SnapshotTriggerType.PERIODIC, savepointInfo.getTriggerType());
+        assertTrue(SnapshotUtils.savepointInProgress(jobStatus));
+        assertEquals(
+                SnapshotStatus.PENDING, SnapshotUtils.getLastSnapshotStatus(deployment, SAVEPOINT));
         assertTrue(triggerTs > 0);
 
         // Pending
@@ -220,11 +223,49 @@ public class SavepointObserverTest extends OperatorTestBase {
         // Completed
         observer.observeSavepointStatus(getResourceContext(deployment));
         assertEquals(triggerTs, savepointInfo.getLastPeriodicSavepointTimestamp());
-        assertFalse(SavepointUtils.savepointInProgress(jobStatus));
-        assertEquals(SavepointUtils.getLastSavepointStatus(deployment), SavepointStatus.SUCCEEDED);
+        assertFalse(SnapshotUtils.savepointInProgress(jobStatus));
+        assertEquals(
+                SnapshotUtils.getLastSnapshotStatus(deployment, SAVEPOINT),
+                SnapshotStatus.SUCCEEDED);
         assertEquals(savepointInfo.getLastSavepoint(), savepointInfo.getSavepointHistory().get(0));
         assertEquals(
-                SavepointTriggerType.PERIODIC, savepointInfo.getLastSavepoint().getTriggerType());
+                SnapshotTriggerType.PERIODIC, savepointInfo.getLastSavepoint().getTriggerType());
         assertNull(savepointInfo.getLastSavepoint().getTriggerNonce());
+    }
+
+    @Test
+    public void testPeriodicCheckpoint() {
+        var conf = new Configuration();
+        var deployment = TestUtils.buildApplicationCluster();
+        var status = deployment.getStatus();
+        var jobStatus = status.getJobStatus();
+        status.getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
+        jobStatus.setState("RUNNING");
+
+        var checkpointInfo = jobStatus.getCheckpointInfo();
+        flinkService.triggerCheckpoint(null, SnapshotTriggerType.PERIODIC, checkpointInfo, conf);
+
+        var triggerTs = checkpointInfo.getTriggerTimestamp();
+        assertEquals(0L, checkpointInfo.getLastPeriodicTriggerTimestamp());
+        assertEquals(SnapshotTriggerType.PERIODIC, checkpointInfo.getTriggerType());
+        assertTrue(SnapshotUtils.checkpointInProgress(jobStatus));
+        assertEquals(
+                SnapshotStatus.PENDING,
+                SnapshotUtils.getLastSnapshotStatus(deployment, CHECKPOINT));
+        assertTrue(triggerTs > 0);
+
+        // Pending
+        observer.observeCheckpointStatus(getResourceContext(deployment));
+        // Completed
+        observer.observeCheckpointStatus(getResourceContext(deployment));
+        assertEquals(triggerTs, checkpointInfo.getLastPeriodicTriggerTimestamp());
+        assertFalse(SnapshotUtils.checkpointInProgress(jobStatus));
+        assertEquals(
+                SnapshotUtils.getLastSnapshotStatus(deployment, CHECKPOINT),
+                SnapshotStatus.SUCCEEDED);
+        assertEquals(
+                SnapshotTriggerType.PERIODIC, checkpointInfo.getLastCheckpoint().getTriggerType());
+        assertNull(checkpointInfo.getLastCheckpoint().getTriggerNonce());
     }
 }

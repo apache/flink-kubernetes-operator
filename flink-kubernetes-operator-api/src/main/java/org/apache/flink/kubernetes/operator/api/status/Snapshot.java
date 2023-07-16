@@ -17,14 +17,5 @@
 
 package org.apache.flink.kubernetes.operator.api.status;
 
-/** Savepoint trigger mechanism. */
-public enum SavepointTriggerType {
-    /** Savepoint manually triggered by changing the savepointTriggerNonce. */
-    MANUAL,
-    /** Savepoint periodically triggered by the operator. */
-    PERIODIC,
-    /** Savepoint triggered during stateful upgrade. */
-    UPGRADE,
-    /** Savepoint trigger mechanism unknown, such as savepoint retrieved directly from Flink job. */
-    UNKNOWN
-}
+/** A common interface for {@link Checkpoint} and {@link Savepoint}. */
+public interface Snapshot {}

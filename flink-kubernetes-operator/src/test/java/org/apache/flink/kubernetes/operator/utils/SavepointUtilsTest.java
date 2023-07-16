@@ -23,25 +23,30 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
+import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.CHECKPOINT;
+import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.SAVEPOINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Tests for {@link SavepointUtils}. */
+/** Tests for {@link SnapshotUtils}. */
 public class SavepointUtilsTest {
 
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
 
-    @Test
-    public void testTriggering() {
+    @ParameterizedTest
+    @EnumSource(SnapshotType.class)
+    public void testTriggering(SnapshotType snapshotType) {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_15);
         deployment
                 .getMetadata()
@@ -57,28 +62,50 @@ public class SavepointUtilsTest {
 
         assertEquals(
                 Optional.empty(),
-                SavepointUtils.shouldTriggerSavepoint(
-                        deployment, configManager.getObserveConfig(deployment)));
+                SnapshotUtils.shouldTriggerSnapshot(
+                        deployment, configManager.getObserveConfig(deployment), snapshotType));
 
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL.key(), "10m");
+        deployment.getSpec().getFlinkConfiguration().put(getPeriodicConfigKey(snapshotType), "10m");
         deployment
                 .getStatus()
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
 
         assertEquals(
-                Optional.of(SavepointTriggerType.PERIODIC),
-                SavepointUtils.shouldTriggerSavepoint(
-                        deployment, configManager.getObserveConfig(deployment)));
+                Optional.of(SnapshotTriggerType.PERIODIC),
+                SnapshotUtils.shouldTriggerSnapshot(
+                        deployment, configManager.getObserveConfig(deployment), snapshotType));
         deployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
 
-        deployment.getSpec().getJob().setSavepointTriggerNonce(123L);
+        setManualTriggerNonce(deployment, snapshotType);
         assertEquals(
-                Optional.of(SavepointTriggerType.MANUAL),
-                SavepointUtils.shouldTriggerSavepoint(
-                        deployment, configManager.getObserveConfig(deployment)));
+                Optional.of(SnapshotTriggerType.MANUAL),
+                SnapshotUtils.shouldTriggerSnapshot(
+                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+    }
+
+    private static void setManualTriggerNonce(
+            FlinkDeployment deployment, SnapshotType snapshotType) {
+        switch (snapshotType) {
+            case SAVEPOINT:
+                deployment.getSpec().getJob().setSavepointTriggerNonce(123L);
+                break;
+            case CHECKPOINT:
+                deployment.getSpec().getJob().setCheckpointTriggerNonce(123L);
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
+        }
+    }
+
+    private static String getPeriodicConfigKey(SnapshotType snapshotType) {
+        switch (snapshotType) {
+            case SAVEPOINT:
+                return KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL.key();
+            case CHECKPOINT:
+                return KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL.key();
+            default:
+                throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
+        }
     }
 }

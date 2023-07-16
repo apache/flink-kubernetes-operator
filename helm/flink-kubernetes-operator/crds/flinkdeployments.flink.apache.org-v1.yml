@@ -9266,6 +9266,8 @@ spec:
                     type: integer
                   initialSavepointPath:
                     type: string
+                  checkpointTriggerNonce:
+                    type: integer
                   upgradeMode:
                     enum:
                     - savepoint
@@ -9397,6 +9399,48 @@ spec:
                           type: object
                         type: array
                       lastPeriodicSavepointTimestamp:
+                        type: integer
+                    type: object
+                  checkpointInfo:
+                    properties:
+                      lastCheckpoint:
+                        properties:
+                          timeStamp:
+                            type: integer
+                          triggerType:
+                            enum:
+                            - MANUAL
+                            - PERIODIC
+                            - UPGRADE
+                            - UNKNOWN
+                            type: string
+                          formatType:
+                            enum:
+                            - FULL
+                            - INCREMENTAL
+                            - UNKNOWN
+                            type: string
+                          triggerNonce:
+                            type: integer
+                        type: object
+                      triggerId:
+                        type: string
+                      triggerTimestamp:
+                        type: integer
+                      triggerType:
+                        enum:
+                        - MANUAL
+                        - PERIODIC
+                        - UPGRADE
+                        - UNKNOWN
+                        type: string
+                      formatType:
+                        enum:
+                        - FULL
+                        - INCREMENTAL
+                        - UNKNOWN
+                        type: string
+                      lastPeriodicCheckpointTimestamp:
                         type: integer
                     type: object
                 type: object
