@@ -177,13 +177,71 @@ public class NativeFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public boolean scale(FlinkResourceContext<?> ctx) throws Exception {
+    public ScalingResult scale(FlinkResourceContext<?> ctx, Configuration deployConfig)
+            throws Exception {
         var resource = ctx.getResource();
-        var spec = resource.getSpec();
-
         var observeConfig = ctx.getObserveConfig();
 
-        if (spec.getJob() == null
+        if (!supportsInPlaceScaling(resource, observeConfig)) {
+            return ScalingResult.CANNOT_SCALE;
+        }
+
+        var newOverrides = deployConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
+        var previousOverrides = observeConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
+        if (newOverrides.isEmpty() && previousOverrides.isEmpty()) {
+            LOG.info("No overrides defined before or after. Cannot scale in-place.");
+            return ScalingResult.CANNOT_SCALE;
+        }
+
+        try (var client = getClusterClient(observeConfig)) {
+            var requirements = new HashMap<>(getVertexResources(client, resource));
+            var result = ScalingResult.ALREADY_SCALED;
+
+            for (Map.Entry<JobVertexID, JobVertexResourceRequirements> entry :
+                    requirements.entrySet()) {
+                var jobId = entry.getKey().toString();
+                var parallelism = entry.getValue().getParallelism();
+                var overrideStr = newOverrides.get(jobId);
+
+                if (overrideStr != null) {
+                    // We have an override for the vertex
+                    int p = Integer.parseInt(overrideStr);
+                    var newParallelism = new JobVertexResourceRequirements.Parallelism(p, p);
+                    // If the requirements changed we mark this as scaling triggered
+                    if (!parallelism.equals(newParallelism)) {
+                        entry.setValue(new JobVertexResourceRequirements(newParallelism));
+                        result = ScalingResult.SCALING_TRIGGERED;
+                    }
+                } else if (previousOverrides.containsKey(jobId)) {
+                    LOG.info(
+                            "Parallelism override for {} has been removed, falling back to regular upgrade.",
+                            jobId);
+                    return ScalingResult.CANNOT_SCALE;
+                } else {
+                    // No overrides for this vertex
+                }
+            }
+            if (result == ScalingResult.ALREADY_SCALED) {
+                LOG.info("Vertex resources requirements already match target, nothing to do...");
+            } else {
+                updateVertexResources(client, resource, requirements);
+                eventRecorder.triggerEvent(
+                        resource,
+                        EventRecorder.Type.Normal,
+                        EventRecorder.Reason.Scaling,
+                        EventRecorder.Component.Job,
+                        "In-place scaling triggered");
+            }
+            return result;
+        } catch (Throwable t) {
+            LOG.error("Error while rescaling, falling back to regular upgrade", t);
+            return ScalingResult.CANNOT_SCALE;
+        }
+    }
+
+    private static boolean supportsInPlaceScaling(
+            AbstractFlinkResource<?, ?> resource, Configuration observeConfig) {
+        if (resource.getSpec().getJob() == null
                 || !observeConfig.get(
                         KubernetesOperatorConfigOptions.JOB_UPGRADE_INPLACE_SCALING_ENABLED)) {
             return false;
@@ -207,56 +265,7 @@ public class NativeFlinkService extends AbstractFlinkService {
             LOG.info("Job in terminal or reconciling state cannot be scaled in-place");
             return false;
         }
-
-        var deployConfig = ctx.getDeployConfig(spec);
-        var newOverrides = deployConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
-        var previousOverrides = observeConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
-        if (newOverrides.isEmpty() && previousOverrides.isEmpty()) {
-            return false;
-        }
-
-        try (var client = getClusterClient(observeConfig)) {
-            var currentReqs = getVertexResources(client, resource);
-
-            for (String previousOverrideVertex : previousOverrides.keySet()) {
-                // Check if this is an active vertex (present in the current jobgraph)
-                if (currentReqs.containsKey(JobVertexID.fromHexString(previousOverrideVertex))) {
-                    if (!newOverrides.containsKey(previousOverrideVertex)) {
-                        LOG.info(
-                                "Parallelism override for {} has been removed, falling back to regular upgrade.",
-                                previousOverrideVertex);
-                        return false;
-                    }
-                }
-            }
-
-            var newReqs = new HashMap<>(currentReqs);
-            newOverrides.forEach(
-                    (vs, ps) -> {
-                        int p = Integer.parseInt(ps);
-                        newReqs.put(
-                                JobVertexID.fromHexString(vs),
-                                new JobVertexResourceRequirements(
-                                        new JobVertexResourceRequirements.Parallelism(p, p)));
-                    });
-
-            if (currentReqs.equals(newReqs)) {
-                LOG.info("Vertex resources requirements already match target, nothing to do...");
-            } else {
-                updateVertexResources(client, resource, newReqs);
-                eventRecorder.triggerEvent(
-                        resource,
-                        EventRecorder.Type.Normal,
-                        EventRecorder.Reason.Scaling,
-                        EventRecorder.Component.Job,
-                        "In-place scaling triggered");
-            }
-
-            return true;
-        } catch (Throwable t) {
-            LOG.error("Error while rescaling, falling back to regular upgrade", t);
-            return false;
-        }
+        return true;
     }
 
     @VisibleForTesting
@@ -301,6 +310,11 @@ public class NativeFlinkService extends AbstractFlinkService {
             var jobId = JobID.fromHexString(status.getJobStatus().getJobId());
             var jobDetailsInfo = client.getJobDetails(jobId).get();
 
+            // Return false on empty jobgraph
+            if (jobDetailsInfo.getJobVertexInfos().isEmpty()) {
+                return false;
+            }
+
             Map<JobVertexID, Integer> currentParallelisms =
                     jobDetailsInfo.getJobVertexInfos().stream()
                             .collect(
@@ -310,16 +324,19 @@ public class NativeFlinkService extends AbstractFlinkService {
 
             Map<String, String> parallelismOverrides =
                     conf.get(PipelineOptions.PARALLELISM_OVERRIDES);
-            for (Map.Entry<String, String> entry : parallelismOverrides.entrySet()) {
-                Integer currentP =
-                        currentParallelisms.get(JobVertexID.fromHexString(entry.getKey()));
-                Integer expectedP = Integer.valueOf(entry.getValue());
-                if (!expectedP.equals(currentP)) {
+            for (Map.Entry<JobVertexID, Integer> entry : currentParallelisms.entrySet()) {
+                String override = parallelismOverrides.get(entry.getKey().toHexString());
+                if (override == null) {
+                    // No override defined for this vertex
+                    continue;
+                }
+                Integer overrideParallelism = Integer.valueOf(override);
+                if (!overrideParallelism.equals(entry.getValue())) {
                     LOG.info(
                             "Scaling still in progress for vertex {}, {} -> {}",
                             entry.getKey(),
-                            currentP,
-                            expectedP);
+                            entry.getValue(),
+                            overrideParallelism);
                     return false;
                 }
             }

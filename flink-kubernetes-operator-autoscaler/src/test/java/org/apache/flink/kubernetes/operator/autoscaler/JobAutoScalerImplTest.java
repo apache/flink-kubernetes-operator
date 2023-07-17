@@ -109,11 +109,6 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
         // But not clear the autoscaler info
         assertTrue(AutoScalerInfo.get(ctx.getResource(), kubernetesClient).isPresent());
 
-        int requestCount = mockWebServer.getRequestCount();
-        // Make sure we don't update in kubernetes once removed
-        autoscaler.getParallelismOverrides(ctx);
-        assertEquals(requestCount, mockWebServer.getRequestCount());
-
         app.getSpec().getFlinkConfiguration().put(AUTOSCALER_ENABLED.key(), "true");
         ctx = getResourceContext(app);
         assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));

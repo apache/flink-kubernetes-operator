@@ -38,6 +38,7 @@ import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ValidationException;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
@@ -167,9 +168,21 @@ public class ReconciliationUtils {
     }
 
     public static <SPEC extends AbstractFlinkSpec> void updateAfterScaleUp(
-            AbstractFlinkResource<SPEC, ?> target, Configuration deployConfig, Clock clock) {
+            AbstractFlinkResource<SPEC, ?> target,
+            Configuration deployConfig,
+            Clock clock,
+            FlinkService.ScalingResult scalingResult) {
+
+        var reconState = target.getStatus().getReconciliationStatus().getState();
+        // We mark the spec reconciled, and set state upgrading only if it was already upgrading or
+        // we actually triggered a new scale up
         ReconciliationUtils.updateStatusForSpecReconciliation(
-                target, JobState.RUNNING, deployConfig, true, clock);
+                target,
+                JobState.RUNNING,
+                deployConfig,
+                reconState == ReconciliationState.UPGRADING
+                        || scalingResult == FlinkService.ScalingResult.SCALING_TRIGGERED,
+                clock);
     }
 
     public static <SPEC extends AbstractFlinkSpec> void updateLastReconciledSavepointTriggerNonce(

@@ -174,14 +174,14 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public boolean scale(FlinkResourceContext<?> ctx) {
-        var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
+    public ScalingResult scale(FlinkResourceContext<?> ctx, Configuration deployConfig) {
+        var observeConfig = ctx.getObserveConfig();
         var jobSpec = ctx.getResource().getSpec();
         var meta = ctx.getResource().getMetadata();
-        if (conf.get(JobManagerOptions.SCHEDULER_MODE) != SchedulerExecutionMode.REACTIVE
+        if (observeConfig.get(JobManagerOptions.SCHEDULER_MODE) != SchedulerExecutionMode.REACTIVE
                 && jobSpec != null) {
             LOG.info("Reactive scaling is not enabled");
-            return false;
+            return ScalingResult.CANNOT_SCALE;
         }
 
         var clusterId = meta.getName();
@@ -192,25 +192,26 @@ public class StandaloneFlinkService extends AbstractFlinkService {
 
         if (deployment == null || deployment.get() == null) {
             LOG.warn("TM Deployment ({}) not found", name);
-            return false;
+            return ScalingResult.CANNOT_SCALE;
         }
 
         var actualReplicas = deployment.get().getSpec().getReplicas();
         var desiredReplicas =
-                conf.get(StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS);
+                deployConfig.get(
+                        StandaloneKubernetesConfigOptionsInternal.KUBERNETES_TASKMANAGER_REPLICAS);
         if (actualReplicas != desiredReplicas) {
             LOG.info(
                     "Scaling TM replicas: actual({}) -> desired({})",
                     actualReplicas,
                     desiredReplicas);
             deployment.scale(desiredReplicas);
-            return true;
+            return ScalingResult.SCALING_TRIGGERED;
         } else {
             LOG.info(
                     "Not scaling TM replicas: actual({}) == desired({})",
                     actualReplicas,
                     desiredReplicas);
-            return false;
+            return ScalingResult.ALREADY_SCALED;
         }
     }
 
