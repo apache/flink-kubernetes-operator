@@ -108,7 +108,8 @@ public interface FlinkService {
 
     void waitForClusterShutdown(Configuration conf);
 
-    boolean scale(FlinkResourceContext<?> resourceContext) throws Exception;
+    ScalingResult scale(FlinkResourceContext<?> resourceContext, Configuration deployConfig)
+            throws Exception;
 
     boolean scalingCompleted(FlinkResourceContext<?> resourceContext);
 
@@ -118,4 +119,14 @@ public interface FlinkService {
     RestClusterClient<String> getClusterClient(Configuration conf) throws Exception;
 
     JobDetailsInfo getJobDetailsInfo(JobID jobID, Configuration conf) throws Exception;
+
+    /** Result of an in-place scaling operation. */
+    enum ScalingResult {
+        // Scaling triggered by the operation
+        SCALING_TRIGGERED,
+        // Job already scaled to target previously
+        ALREADY_SCALED,
+        // Cannot execute scaling, full upgrade required
+        CANNOT_SCALE;
+    }
 }

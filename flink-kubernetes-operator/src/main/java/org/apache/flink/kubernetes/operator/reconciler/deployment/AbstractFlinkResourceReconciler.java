@@ -41,6 +41,7 @@ import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.diff.DiffResult;
 import org.apache.flink.kubernetes.operator.reconciler.diff.ReflectiveDiffBuilder;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -154,9 +155,12 @@ public abstract class AbstractFlinkResourceReconciler<
                 return;
             }
             triggerSpecChangeEvent(cr, specDiff);
-            boolean reconciled =
-                    scale(ctx, deployConfig, diffType) || reconcileSpecChange(ctx, deployConfig);
-            if (reconciled) {
+
+            // Try scaling if this is not an upgrade change
+            boolean scaled = diffType != DiffType.UPGRADE && scale(ctx, deployConfig);
+
+            // Reconcile spec change unless scaling was enough
+            if (scaled || reconcileSpecChange(ctx, deployConfig)) {
                 // If we executed a scale or spec upgrade action we return, otherwise we
                 // continue to reconcile other changes
                 return;
@@ -352,23 +356,20 @@ public abstract class AbstractFlinkResourceReconciler<
      *
      * @param ctx Resource context.
      * @param deployConfig Configuration to be deployed.
-     * @param diffType Spec change type.
      * @return True if the scaling is successful
      * @throws Exception
      */
-    private boolean scale(
-            FlinkResourceContext<CR> ctx, Configuration deployConfig, DiffType diffType)
+    private boolean scale(FlinkResourceContext<CR> ctx, Configuration deployConfig)
             throws Exception {
 
-        if (diffType == DiffType.UPGRADE) {
+        var scalingResult = ctx.getFlinkService().scale(ctx, deployConfig);
+        if (scalingResult == FlinkService.ScalingResult.CANNOT_SCALE) {
             return false;
         }
 
-        if (ctx.getFlinkService().scale(ctx)) {
-            ReconciliationUtils.updateAfterScaleUp(ctx.getResource(), deployConfig, clock);
-            return true;
-        }
-        return false;
+        ReconciliationUtils.updateAfterScaleUp(
+                ctx.getResource(), deployConfig, clock, scalingResult);
+        return true;
     }
 
     /**
@@ -461,9 +462,8 @@ public abstract class AbstractFlinkResourceReconciler<
         var cr = ctx.getResource();
         var reconciliationStatus = cr.getStatus().getReconciliationStatus();
         // Spec has changed while rolling back we should apply new spec and move to upgrading
-        // state
-        // Don't take in account changes on job.state as it could be overriden to running if the
-        // current spec is not valid
+        // state. Don't take in account changes on job.state as it could be overriden to running if
+        // the current spec is not valid
         if (lastReconciledSpec.getJob() != null) {
             lastReconciledSpec.getJob().setState(currentDeploySpec.getJob().getState());
         }

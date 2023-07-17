@@ -152,7 +152,9 @@ public class StandaloneFlinkServiceTest {
                                 TestUtils.createTestMetricGroup(new Configuration()),
                                 null)
                         .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
-        assertTrue(flinkStandaloneService.scale(ctx));
+        assertEquals(
+                FlinkService.ScalingResult.SCALING_TRIGGERED,
+                flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
         assertEquals(
                 5,
                 kubernetesClient
@@ -168,10 +170,23 @@ public class StandaloneFlinkServiceTest {
                 .getSpec()
                 .getFlinkConfiguration()
                 .remove(JobManagerOptions.SCHEDULER_MODE.key());
+        flinkDeployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(flinkDeployment.getSpec(), flinkDeployment);
+        ctx =
+                new FlinkResourceContextFactory(
+                                kubernetesClient,
+                                configManager,
+                                TestUtils.createTestMetricGroup(new Configuration()),
+                                null)
+                        .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
 
         // Add replicas and verify that the scaling is not honoured as reactive mode not enabled
         flinkDeployment.getSpec().getTaskManager().setReplicas(10);
-        assertFalse(flinkStandaloneService.scale(ctx));
+        assertEquals(
+                FlinkService.ScalingResult.CANNOT_SCALE,
+                flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
     }
 
     @Test
@@ -187,6 +202,11 @@ public class StandaloneFlinkServiceTest {
                 .put(
                         JobManagerOptions.SCHEDULER_MODE.key(),
                         SchedulerExecutionMode.REACTIVE.name());
+        flinkDeployment
+                .getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(flinkDeployment.getSpec(), flinkDeployment);
+
         var ctx =
                 new FlinkResourceContextFactory(
                                 kubernetesClient,
@@ -194,7 +214,9 @@ public class StandaloneFlinkServiceTest {
                                 TestUtils.createTestMetricGroup(new Configuration()),
                                 null)
                         .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
-        assertTrue(flinkStandaloneService.scale(ctx));
+        assertEquals(
+                FlinkService.ScalingResult.SCALING_TRIGGERED,
+                flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
 
         assertEquals(
                 3,
@@ -210,7 +232,9 @@ public class StandaloneFlinkServiceTest {
         // Scale the replica count of the task managers
         flinkDeployment.getSpec().getTaskManager().setReplicas(10);
         createDeployments(flinkDeployment);
-        assertTrue(flinkStandaloneService.scale(ctx));
+        assertEquals(
+                FlinkService.ScalingResult.SCALING_TRIGGERED,
+                flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
 
         assertEquals(
                 10,

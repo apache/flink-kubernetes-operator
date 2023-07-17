@@ -617,13 +617,18 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     @Test
     public void testScaleWithRescaleApi() throws Exception {
         var rescaleCounter = new AtomicInteger(0);
+        var v1 = new JobVertexID();
 
         // We create a service mocking out some methods we don't want to call explicitly
         var nativeService =
                 new NativeFlinkService(
                         kubernetesClient, null, executorService, operatorConfig, eventRecorder) {
 
-                    Map<JobVertexID, JobVertexResourceRequirements> submitted = Map.of();
+                    Map<JobVertexID, JobVertexResourceRequirements> submitted =
+                            Map.of(
+                                    v1,
+                                    new JobVertexResourceRequirements(
+                                            new JobVertexResourceRequirements.Parallelism(1, 1)));
 
                     @Override
                     protected Map<JobVertexID, JobVertexResourceRequirements> getVertexResources(
@@ -672,7 +677,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         // Override parallelism for a vertex and trigger rescaling
-        var v1 = new JobVertexID();
         deployment
                 .getSpec()
                 .getFlinkConfiguration()

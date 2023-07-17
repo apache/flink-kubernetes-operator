@@ -550,7 +550,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public boolean scale(FlinkResourceContext<?> ctx) {
+    public ScalingResult scale(FlinkResourceContext<?> ctx, Configuration deployConfig) {
         boolean standalone = ctx.getDeploymentMode() == KubernetesDeploymentMode.STANDALONE;
         boolean session = ctx.getResource().getSpec().getJob() == null;
         boolean reactive =
@@ -563,10 +563,10 @@ public class TestingFlinkService extends AbstractFlinkService {
                             .get(
                                     StandaloneKubernetesConfigOptionsInternal
                                             .KUBERNETES_TASKMANAGER_REPLICAS);
-            return true;
+            return ScalingResult.SCALING_TRIGGERED;
         }
 
-        return false;
+        return ScalingResult.CANNOT_SCALE;
     }
 
     @Override

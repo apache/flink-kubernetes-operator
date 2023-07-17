@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -717,7 +718,10 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
         // Update status after triggering scale operation
         ReconciliationUtils.updateAfterScaleUp(
-                deployment, new Configuration(), Clock.systemDefaultZone());
+                deployment,
+                new Configuration(),
+                Clock.systemDefaultZone(),
+                FlinkService.ScalingResult.SCALING_TRIGGERED);
         assertEquals(
                 ReconciliationState.UPGRADING,
                 deployment.getStatus().getReconciliationStatus().getState());
