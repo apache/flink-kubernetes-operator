@@ -58,6 +58,8 @@ public class JobAutoScalerImpl implements JobAutoScaler {
     @VisibleForTesting
     final Map<ResourceID, AutoscalerFlinkMetrics> flinkMetrics = new ConcurrentHashMap<>();
 
+    @VisibleForTesting final AutoscalerInfoManager infoManager;
+
     public JobAutoScalerImpl(
             KubernetesClient kubernetesClient,
             ScalingMetricCollector metricsCollector,
@@ -69,6 +71,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         this.evaluator = evaluator;
         this.scalingExecutor = scalingExecutor;
         this.eventRecorder = eventRecorder;
+        this.infoManager = new AutoscalerInfoManager(kubernetesClient);
     }
 
     @Override
@@ -79,13 +82,14 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         var resourceId = ResourceID.fromResource(cr);
         lastEvaluatedMetrics.remove(resourceId);
         flinkMetrics.remove(resourceId);
+        infoManager.removeInfoFromCache(cr);
     }
 
     @Override
     public Map<String, String> getParallelismOverrides(FlinkResourceContext<?> ctx) {
         var conf = ctx.getObserveConfig();
         try {
-            var infoOpt = AutoScalerInfo.get(ctx.getResource(), kubernetesClient);
+            var infoOpt = infoManager.getInfo(ctx.getResource());
             if (infoOpt.isPresent()) {
                 var info = infoOpt.get();
                 // If autoscaler was disabled need to delete the overrides
@@ -127,7 +131,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                 return false;
             }
 
-            var autoScalerInfo = AutoScalerInfo.getOrCreate(resource, kubernetesClient);
+            var autoScalerInfo = infoManager.getOrCreateInfo(resource);
 
             var collectedMetrics =
                     metricsCollector.updateMetrics(

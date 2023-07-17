@@ -52,6 +52,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerTestUtils.getOrCreateInfo;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.RECOMMENDED_PARALLELISM;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -163,8 +164,7 @@ public class RecommendedParallelismTest extends OperatorTestBase {
 
         // the recommended parallelism values are empty initially
         autoscaler.scale(getResourceContext(app, ctx));
-        assertEquals(
-                1, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(1, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
         assertNull(getCurrentMetricValue(source, RECOMMENDED_PARALLELISM));
         assertNull(getCurrentMetricValue(sink, RECOMMENDED_PARALLELISM));
         assertEquals(1., getCurrentMetricValue(source, PARALLELISM));
@@ -177,8 +177,7 @@ public class RecommendedParallelismTest extends OperatorTestBase {
 
         // it stays empty until the metric window is full
         autoscaler.scale(getResourceContext(app, ctx));
-        assertEquals(
-                2, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(2, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
         assertNull(getCurrentMetricValue(source, RECOMMENDED_PARALLELISM));
         assertNull(getCurrentMetricValue(sink, RECOMMENDED_PARALLELISM));
         assertEquals(1., getCurrentMetricValue(source, PARALLELISM));
@@ -190,8 +189,7 @@ public class RecommendedParallelismTest extends OperatorTestBase {
 
         // then the recommended parallelism can change according to the evaluated metrics
         autoscaler.scale(getResourceContext(app, ctx));
-        assertEquals(
-                3, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(3, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
         assertEquals(1., getCurrentMetricValue(source, PARALLELISM));
         assertEquals(1., getCurrentMetricValue(sink, PARALLELISM));
         assertEquals(4., getCurrentMetricValue(source, RECOMMENDED_PARALLELISM));
@@ -206,8 +204,7 @@ public class RecommendedParallelismTest extends OperatorTestBase {
 
         // the scaled parallelism will pick up the recommended parallelism values
         autoscaler.scale(getResourceContext(app, ctx));
-        assertEquals(
-                3, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(3, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
         assertEquals(4., getCurrentMetricValue(source, RECOMMENDED_PARALLELISM));
         assertEquals(4., getCurrentMetricValue(sink, RECOMMENDED_PARALLELISM));
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(kubernetesClient, app);
@@ -226,8 +223,7 @@ public class RecommendedParallelismTest extends OperatorTestBase {
 
         // after restart while the job is not running the evaluated metrics are gone
         autoscaler.scale(getResourceContext(app, ctx));
-        assertEquals(
-                3, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(3, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
         assertNull(autoscaler.lastEvaluatedMetrics.get(ResourceID.fromResource(app)));
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(kubernetesClient, app);
         assertEquals(4, scaledParallelism.get(source));
@@ -240,8 +236,7 @@ public class RecommendedParallelismTest extends OperatorTestBase {
         // once the job is running we got back the evaluated metric except the recommended
         // parallelisms (until the metric window is full again)
         autoscaler.scale(getResourceContext(app, ctx));
-        assertEquals(
-                1, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(1, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
         assertEquals(4., getCurrentMetricValue(source, PARALLELISM));
         assertEquals(4., getCurrentMetricValue(sink, PARALLELISM));
         assertNull(getCurrentMetricValue(source, RECOMMENDED_PARALLELISM));

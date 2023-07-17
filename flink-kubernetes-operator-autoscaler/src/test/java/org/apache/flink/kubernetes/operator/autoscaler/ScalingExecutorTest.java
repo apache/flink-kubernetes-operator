@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerTestUtils.getOrCreateInfo;
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_ENTRY;
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_DISABLED;
 import static org.apache.flink.kubernetes.operator.autoscaler.ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_ENABLED;
@@ -224,7 +225,7 @@ public class ScalingExecutorTest {
 
     protected static Map<JobVertexID, Integer> getScaledParallelism(
             KubernetesClient client, AbstractFlinkResource<?, ?> cr) {
-        return getScaledParallelism(AutoScalerInfo.getOrCreate(cr, client));
+        return getScaledParallelism(getOrCreateInfo(cr, client));
     }
 
     protected static Map<JobVertexID, Integer> getScaledParallelism(AutoScalerInfo info) {
