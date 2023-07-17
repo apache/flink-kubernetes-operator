@@ -51,6 +51,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerTestUtils.getOrCreateInfo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -154,15 +155,13 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));
 
         autoscaler.scale(getResourceContext(app, ctx));
-        assertEquals(
-                1, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(1, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
         assertFlinkMetricsCount(0, 0, ctx);
 
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
-        assertEquals(
-                2, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(2, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(kubernetesClient, app);
         assertEquals(4, scaledParallelism.get(source1));
@@ -205,8 +204,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
 
         autoscaler.scale(getResourceContext(app, ctx));
         assertFlinkMetricsCount(1, 0, ctx);
-        assertEquals(
-                1, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(1, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(kubernetesClient, app);
         assertEquals(4, scaledParallelism.get(source1));
         assertEquals(4, scaledParallelism.get(sink));
@@ -236,8 +234,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
         assertFlinkMetricsCount(1, 0, ctx);
-        assertEquals(
-                2, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(2, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(kubernetesClient, app);
         assertEquals(4, scaledParallelism.get(source1));
         assertEquals(4, scaledParallelism.get(sink));
@@ -268,8 +265,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         setClocksTo(now);
         autoscaler.scale(getResourceContext(app, ctx));
         assertFlinkMetricsCount(2, 0, ctx);
-        assertEquals(
-                3, AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().size());
+        assertEquals(3, getOrCreateInfo(app, kubernetesClient).getMetricHistory().size());
 
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(kubernetesClient, app);
         assertEquals(2, scaledParallelism.get(source1));
@@ -391,7 +387,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));
 
         autoscaler.scale(getResourceContext(app, ctx));
-        assertFalse(AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().isEmpty());
+        assertFalse(getOrCreateInfo(app, kubernetesClient).getMetricHistory().isEmpty());
     }
 
     @Test
@@ -419,7 +415,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         setClocksTo(now);
         metricsCollector.setJobUpdateTs(now);
         assertFalse(autoscaler.scale(getResourceContext(app, ctx)));
-        assertTrue(AutoScalerInfo.getOrCreate(app, kubernetesClient).getMetricHistory().isEmpty());
+        assertTrue(getOrCreateInfo(app, kubernetesClient).getMetricHistory().isEmpty());
         assertTrue(eventCollector.events.isEmpty());
     }
 

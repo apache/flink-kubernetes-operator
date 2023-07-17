@@ -20,11 +20,9 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
-import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.kubernetes.operator.autoscaler.utils.AutoScalerSerDeModule;
-import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
@@ -34,11 +32,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.fabric8.kubernetes.api.model.ConfigMap;
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import lombok.SneakyThrows;
 import org.apache.commons.io.IOUtils;
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -52,7 +48,6 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.zip.GZIPInputStream;
@@ -62,8 +57,6 @@ import java.util.zip.GZIPOutputStream;
 public class AutoScalerInfo {
 
     private static final Logger LOG = LoggerFactory.getLogger(AutoScalerInfo.class);
-
-    private static final String LABEL_COMPONENT_AUTOSCALER = "autoscaler";
 
     protected static final String COLLECTED_METRICS_KEY = "collectedMetrics";
     protected static final String SCALING_HISTORY_KEY = "scalingHistory";
@@ -77,7 +70,7 @@ public class AutoScalerInfo {
                     .registerModule(new JavaTimeModule())
                     .registerModule(new AutoScalerSerDeModule());
 
-    private final ConfigMap configMap;
+    private ConfigMap configMap;
     private Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory;
 
     public AutoScalerInfo(ConfigMap configMap) {
@@ -214,7 +207,19 @@ public class AutoScalerInfo {
 
     public void replaceInKubernetes(KubernetesClient client) throws Exception {
         trimHistoryToMaxCmSize();
-        client.resource(configMap).update();
+        try {
+            configMap = client.resource(configMap).update();
+        } catch (Exception e) {
+            LOG.error(
+                    "Error while updating autoscaler info configmap, invalidating to clear the cache",
+                    e);
+            configMap = null;
+            throw e;
+        }
+    }
+
+    public boolean isValid() {
+        return configMap != null;
     }
 
     @VisibleForTesting
@@ -241,52 +246,9 @@ public class AutoScalerInfo {
         }
     }
 
-    public static Optional<AutoScalerInfo> get(
-            AbstractFlinkResource<?, ?> cr, KubernetesClient kubeClient) {
-        return getScalingInfoConfigMap(getAutoscalerInfoMeta(cr), kubeClient)
-                .map(AutoScalerInfo::new);
-    }
-
-    public static AutoScalerInfo getOrCreate(
-            AbstractFlinkResource<?, ?> cr, KubernetesClient kubeClient) {
-        var meta = getAutoscalerInfoMeta(cr);
-        var info =
-                getScalingInfoConfigMap(getAutoscalerInfoMeta(cr), kubeClient)
-                        .orElseGet(
-                                () -> {
-                                    LOG.info("Creating scaling info config map");
-                                    var cm = new ConfigMap();
-                                    cm.setMetadata(meta);
-                                    cm.addOwnerReference(cr);
-                                    cm.setData(new HashMap<>());
-                                    return kubeClient.resource(cm).create();
-                                });
-
-        return new AutoScalerInfo(info);
-    }
-
-    @NotNull
-    private static ObjectMeta getAutoscalerInfoMeta(AbstractFlinkResource<?, ?> cr) {
-        var objectMeta = new ObjectMeta();
-        objectMeta.setName("autoscaler-" + cr.getMetadata().getName());
-        objectMeta.setNamespace(cr.getMetadata().getNamespace());
-        objectMeta.setLabels(
-                Map.of(
-                        Constants.LABEL_COMPONENT_KEY,
-                        LABEL_COMPONENT_AUTOSCALER,
-                        Constants.LABEL_APP_KEY,
-                        cr.getMetadata().getName()));
-        return objectMeta;
-    }
-
-    private static Optional<ConfigMap> getScalingInfoConfigMap(
-            ObjectMeta objectMeta, KubernetesClient kubeClient) {
-        return Optional.ofNullable(
-                kubeClient
-                        .configMaps()
-                        .inNamespace(objectMeta.getNamespace())
-                        .withName(objectMeta.getName())
-                        .get());
+    @VisibleForTesting
+    protected ConfigMap getConfigMap() {
+        return configMap;
     }
 
     private static String compress(String original) throws IOException {
