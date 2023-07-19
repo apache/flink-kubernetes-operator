@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -48,15 +47,12 @@ public class SessionReconciler
                 FlinkDeployment, FlinkDeploymentSpec, FlinkDeploymentStatus> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
-    private final FlinkConfigManager configManager;
 
     public SessionReconciler(
             KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
-            FlinkConfigManager configManager) {
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder) {
         super(kubernetesClient, eventRecorder, statusRecorder, new NoopJobAutoscalerFactory());
-        this.configManager = configManager;
     }
 
     @Override

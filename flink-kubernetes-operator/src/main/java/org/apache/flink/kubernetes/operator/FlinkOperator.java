@@ -187,8 +187,7 @@ public class FlinkOperator {
         var metricManager =
                 MetricManager.createFlinkSessionJobMetricManager(baseConfig, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
-        var reconciler =
-                new SessionJobReconciler(client, eventRecorder, statusRecorder, configManager);
+        var reconciler = new SessionJobReconciler(client, eventRecorder, statusRecorder);
         var observer = new FlinkSessionJobObserver(eventRecorder);
         var canaryResourceManager =
                 new CanaryResourceManager<FlinkSessionJob>(configManager, client);

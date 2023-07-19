@@ -66,10 +66,7 @@ public class ReconcilerFactory {
                     switch (modes.f0) {
                         case SESSION:
                             return new SessionReconciler(
-                                    kubernetesClient,
-                                    eventRecorder,
-                                    deploymentStatusRecorder,
-                                    configManager);
+                                    kubernetesClient, eventRecorder, deploymentStatusRecorder);
                         case APPLICATION:
                             return new ApplicationReconciler(
                                     kubernetesClient,
