@@ -33,7 +33,8 @@ import org.junit.jupiter.api.BeforeEach;
 /** @link JobStatusObserver unit tests */
 public abstract class OperatorTestBase {
 
-    protected FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+    protected Configuration conf = new Configuration();
+    protected FlinkConfigManager configManager = new FlinkConfigManager(conf);
     protected TestingFlinkService flinkService;
     protected EventCollector eventCollector = new EventCollector();
     protected EventRecorder eventRecorder;

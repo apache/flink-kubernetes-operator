@@ -525,4 +525,12 @@ public class KubernetesOperatorConfigOptions {
                     .enumType(DeletionPropagation.class)
                     .defaultValue(DeletionPropagation.FOREGROUND)
                     .withDescription("JM/TM Deployment deletion propagation.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> SAVEPOINT_ON_DELETION =
+            operatorConfig("job.savepoint-on-deletion")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Indicate whether a savepoint must be taken when deleting a FlinkDeployment or FlinkSessionJob.");
 }

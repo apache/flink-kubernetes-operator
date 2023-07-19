@@ -61,8 +61,7 @@ public class SessionReconcilerTest extends OperatorTestBase {
         reconciler =
                 new TestReconcilerAdapter<>(
                         this,
-                        new SessionReconciler(
-                                kubernetesClient, eventRecorder, statusRecorder, configManager));
+                        new SessionReconciler(kubernetesClient, eventRecorder, statusRecorder));
     }
 
     @Test

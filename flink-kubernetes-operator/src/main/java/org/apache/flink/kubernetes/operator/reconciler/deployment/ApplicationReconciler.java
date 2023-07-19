@@ -362,8 +362,11 @@ public class ApplicationReconciler
             ctx.getFlinkService()
                     .deleteClusterDeployment(deployment.getMetadata(), status, conf, true);
         } else {
-            ctx.getFlinkService()
-                    .cancelJob(deployment, UpgradeMode.STATELESS, ctx.getObserveConfig());
+            UpgradeMode upgradeMode =
+                    ctx.getOperatorConfig().isSavepointOnDeletion()
+                            ? UpgradeMode.SAVEPOINT
+                            : UpgradeMode.STATELESS;
+            cancelJob(ctx, upgradeMode);
         }
         return DeleteControl.defaultDelete();
     }
