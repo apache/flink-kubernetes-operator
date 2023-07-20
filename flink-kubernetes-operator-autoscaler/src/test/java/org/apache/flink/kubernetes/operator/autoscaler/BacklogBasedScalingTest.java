@@ -19,14 +19,16 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.autoscaler.AutoscalerFlinkMetrics;
+import org.apache.flink.autoscaler.ScalingMetricEvaluator;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.autoscaler.metrics.FlinkMetric;
+import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
-import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
-import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
-import org.apache.flink.kubernetes.operator.autoscaler.topology.VertexInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
@@ -441,7 +443,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         AutoscalerFlinkMetrics autoscalerFlinkMetrics =
                 autoscaler.flinkMetrics.get(
                         ResourceID.fromResource(getResourceContext(app, ctx).getResource()));
-        assertEquals(scalingCount, autoscalerFlinkMetrics.numScalings.getCount());
-        assertEquals(balancedCount, autoscalerFlinkMetrics.numBalanced.getCount());
+        assertEquals(scalingCount, autoscalerFlinkMetrics.getNumScalings().getCount());
+        assertEquals(balancedCount, autoscalerFlinkMetrics.getNumBalanced().getCount());
     }
 }

@@ -38,8 +38,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
-import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -76,12 +76,14 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
         ResourceID resourceId = ResourceID.fromResource(app);
 
         autoscaler.scale(resourceContext);
-        Assertions.assertEquals(1, autoscaler.flinkMetrics.get(resourceId).numErrors.getCount());
+        Assertions.assertEquals(
+                1, autoscaler.flinkMetrics.get(resourceId).getNumErrors().getCount());
 
         autoscaler.scale(resourceContext);
-        Assertions.assertEquals(2, autoscaler.flinkMetrics.get(resourceId).numErrors.getCount());
+        Assertions.assertEquals(
+                2, autoscaler.flinkMetrics.get(resourceId).getNumErrors().getCount());
 
-        assertEquals(0, autoscaler.flinkMetrics.get(resourceId).numScalings.getCount());
+        assertEquals(0, autoscaler.flinkMetrics.get(resourceId).getNumScalings().getCount());
     }
 
     @Test
