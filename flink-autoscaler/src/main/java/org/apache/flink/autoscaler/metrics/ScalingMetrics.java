@@ -160,6 +160,28 @@ public class ScalingMetrics {
         return out;
     }
 
+    public static Map<ScalingMetric, Double> computeGlobalMetrics(
+            Map<FlinkMetric, AggregatedMetric> collectedTmMetrics) {
+        if (collectedTmMetrics == null) {
+            return null;
+        }
+
+        var out = new HashMap<ScalingMetric, Double>();
+
+        var gcTime = collectedTmMetrics.get(FlinkMetric.TOTAL_GC_TIME_PER_SEC);
+        if (gcTime != null) {
+            out.put(ScalingMetric.GC_PRESSURE, gcTime.getMax() / 1000);
+        }
+
+        var heapMax = collectedTmMetrics.get(FlinkMetric.HEAP_MAX);
+        var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_USED);
+        if (heapMax != null && heapUsed != null) {
+            out.put(ScalingMetric.HEAP_USAGE, heapUsed.getMax() / heapMax.getMax());
+        }
+
+        return out;
+    }
+
     public static void computeLagMetrics(
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             Map<ScalingMetric, Double> scalingMetrics) {

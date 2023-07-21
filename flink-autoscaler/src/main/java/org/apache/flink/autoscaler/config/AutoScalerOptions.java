@@ -219,6 +219,22 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Processing rate increase threshold for detecting ineffective scaling threshold. 0.1 means if we do not accomplish at least 10% of the desired capacity increase with scaling, the action is marked ineffective.");
 
+    public static final ConfigOption<Double> GC_PRESSURE_THRESHOLD =
+            autoScalerConfig("memory.gc-pressure.threshold")
+                    .doubleType()
+                    .defaultValue(1.)
+                    .withFallbackKeys(oldOperatorConfigKey("memory.gc-pressure.threshold"))
+                    .withDescription(
+                            "Max allowed GC pressure (percentage spent garbage collecting) during scaling operations. Autoscaling will be paused if the GC pressure exceeds this limit.");
+
+    public static final ConfigOption<Double> HEAP_USAGE_THRESHOLD =
+            autoScalerConfig("memory.heap-usage.threshold")
+                    .doubleType()
+                    .defaultValue(1.)
+                    .withFallbackKeys(oldOperatorConfigKey("memory.heap-usage.threshold"))
+                    .withDescription(
+                            "Max allowed percentage of heap usage during scaling operations. Autoscaling will be paused if the heap usage exceeds this threshold.");
+
     public static final ConfigOption<Integer> VERTEX_SCALING_HISTORY_COUNT =
             autoScalerConfig("history.max.count")
                     .intType()

@@ -158,7 +158,7 @@ public class JobAutoScalerImplTest {
                 collectorWhichThrowsRecoverableException =
                         new TestingMetricsCollector<>(new JobTopology(Collections.emptySet())) {
                             @Override
-                            protected Collection<AggregatedMetric> queryAggregatedMetricNames(
+                            protected Collection<String> queryAggregatedMetricNames(
                                     RestClusterClient<?> restClient,
                                     JobID jobID,
                                     JobVertexID jobVertexID) {

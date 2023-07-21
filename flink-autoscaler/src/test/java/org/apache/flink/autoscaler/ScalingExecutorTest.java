@@ -20,10 +20,12 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
+import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +59,13 @@ public class ScalingExecutorTest {
 
     private InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
 
+    private Configuration conf;
+
+    private static final Map<ScalingMetric, EvaluatedScalingMetric> dummyGlobalMetrics =
+            Map.of(
+                    ScalingMetric.GC_PRESSURE, EvaluatedScalingMetric.of(Double.NaN),
+                    ScalingMetric.HEAP_USAGE, EvaluatedScalingMetric.of(Double.NaN));
+
     @BeforeEach
     public void setup() {
         eventCollector = new TestingEventCollector<>();
@@ -64,7 +73,7 @@ public class ScalingExecutorTest {
         stateStore = new InMemoryAutoScalerStateStore<>();
 
         scalingDecisionExecutor = new ScalingExecutor<>(eventCollector, stateStore);
-        var conf = context.getConfiguration();
+        conf = context.getConfiguration();
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
         conf.set(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 1.);
@@ -138,13 +147,15 @@ public class ScalingExecutorTest {
         var conf = context.getConfiguration();
         conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
         var metrics =
-                Map.of(
-                        source,
-                        evaluated(10, 80, 100),
-                        filterOperator,
-                        evaluated(10, 30, 100),
-                        sink,
-                        evaluated(10, 80, 100));
+                new EvaluatedMetrics(
+                        Map.of(
+                                source,
+                                evaluated(10, 80, 100),
+                                filterOperator,
+                                evaluated(10, 30, 100),
+                                sink,
+                                evaluated(10, 80, 100)),
+                        dummyGlobalMetrics);
         // filter operator should not scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of(filterOperatorHexString));
         var now = Instant.now();
@@ -181,14 +192,14 @@ public class ScalingExecutorTest {
         var jobVertexID = new JobVertexID();
         var conf = context.getConfiguration();
         conf.set(AutoScalerOptions.SCALING_ENABLED, scalingEnabled);
-
-        var metrics = Map.of(jobVertexID, evaluated(1, 110, 100));
-
         if (interval != null) {
             conf.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, interval);
         }
 
         var now = Instant.now();
+        var metrics =
+                new EvaluatedMetrics(
+                        Map.of(jobVertexID, evaluated(1, 110, 100)), dummyGlobalMetrics);
         assertEquals(
                 scalingEnabled,
                 scalingDecisionExecutor.scaleResource(
@@ -197,7 +208,6 @@ public class ScalingExecutorTest {
                 scalingEnabled,
                 scalingDecisionExecutor.scaleResource(
                         context, metrics, new HashMap<>(), new ScalingTracking(), now));
-
         int expectedSize = (interval == null || interval.toMillis() > 0) && !scalingEnabled ? 1 : 2;
         assertEquals(expectedSize, eventCollector.events.size());
 
@@ -225,10 +235,9 @@ public class ScalingExecutorTest {
                                         : SCALING_SUMMARY_HEADER_SCALING_DISABLED));
         assertEquals(SCALING_REPORT_REASON, event.getReason());
 
-        metrics = Map.of(jobVertexID, evaluated(1, 110, 101));
-
-        assertEquals(expectedSize, event.getCount());
-
+        metrics =
+                new EvaluatedMetrics(
+                        Map.of(jobVertexID, evaluated(1, 110, 101)), dummyGlobalMetrics);
         assertEquals(
                 scalingEnabled,
                 scalingDecisionExecutor.scaleResource(
@@ -238,6 +247,74 @@ public class ScalingExecutorTest {
         assertThat(event2.getContext()).isSameAs(event.getContext());
         assertEquals(expectedSize + 1, event2.getCount());
         assertEquals(!scalingEnabled, stateStore.getParallelismOverrides(context).isEmpty());
+    }
+
+    @Test
+    public void testScalingUnderGcPressure() throws Exception {
+        var jobVertexID = new JobVertexID();
+        conf.set(AutoScalerOptions.SCALING_ENABLED, true);
+        conf.set(AutoScalerOptions.GC_PRESSURE_THRESHOLD, 0.5);
+        conf.set(AutoScalerOptions.HEAP_USAGE_THRESHOLD, 0.8);
+
+        var vertexMetrics = Map.of(jobVertexID, evaluated(1, 110, 100));
+        var metrics =
+                new EvaluatedMetrics(
+                        vertexMetrics,
+                        Map.of(
+                                ScalingMetric.GC_PRESSURE,
+                                EvaluatedScalingMetric.of(Double.NaN),
+                                ScalingMetric.HEAP_USAGE,
+                                EvaluatedScalingMetric.of(Double.NaN)));
+
+        // Baseline, no GC/Heap metrics
+        assertTrue(
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), Instant.now()));
+
+        // Just below the thresholds
+        metrics =
+                new EvaluatedMetrics(
+                        vertexMetrics,
+                        Map.of(
+                                ScalingMetric.GC_PRESSURE,
+                                EvaluatedScalingMetric.of(0.49),
+                                ScalingMetric.HEAP_USAGE,
+                                new EvaluatedScalingMetric(0.9, 0.79)));
+        assertTrue(
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), Instant.now()));
+
+        eventCollector.events.clear();
+
+        // GC Pressure above limit
+        metrics =
+                new EvaluatedMetrics(
+                        vertexMetrics,
+                        Map.of(
+                                ScalingMetric.GC_PRESSURE,
+                                EvaluatedScalingMetric.of(0.51),
+                                ScalingMetric.HEAP_USAGE,
+                                new EvaluatedScalingMetric(0.9, 0.79)));
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), Instant.now()));
+        assertEquals("MemoryPressure", eventCollector.events.poll().getReason());
+        assertTrue(eventCollector.events.isEmpty());
+
+        // Heap usage above limit
+        metrics =
+                new EvaluatedMetrics(
+                        vertexMetrics,
+                        Map.of(
+                                ScalingMetric.GC_PRESSURE,
+                                EvaluatedScalingMetric.of(0.49),
+                                ScalingMetric.HEAP_USAGE,
+                                new EvaluatedScalingMetric(0.6, 0.81)));
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), Instant.now()));
+        assertEquals("MemoryPressure", eventCollector.events.poll().getReason());
+        assertTrue(eventCollector.events.isEmpty());
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(

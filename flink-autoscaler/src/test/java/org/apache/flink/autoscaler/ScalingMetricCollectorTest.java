@@ -24,10 +24,18 @@ import org.apache.flink.autoscaler.metrics.MetricNotFoundException;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.client.program.rest.RestClusterClient;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.JobPlanInfo;
+import org.apache.flink.runtime.rest.messages.MessageHeaders;
+import org.apache.flink.runtime.rest.messages.MessageParameters;
+import org.apache.flink.runtime.rest.messages.RequestBody;
+import org.apache.flink.runtime.rest.messages.ResponseBody;
 import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetricsResponseBody;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsHeaders;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -41,6 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -155,11 +164,11 @@ public class ScalingMetricCollectorTest {
 
     @Test
     public void testRequiredMetrics() {
-        List<AggregatedMetric> metricList = new ArrayList<>();
+        List<String> metricList = new ArrayList<>();
         RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>> testCollector =
                 new RestApiMetricsCollector<>() {
                     @Override
-                    protected Collection<AggregatedMetric> queryAggregatedMetricNames(
+                    protected Collection<String> queryAggregatedMetricNames(
                             RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
                         return metricList;
                     }
@@ -177,36 +186,67 @@ public class ScalingMetricCollectorTest {
         testRequiredMetrics(metricList, getRequiredMetrics(), testCollector, sink, topology);
     }
 
+    @Test
+    public void testQueryMetricNames() throws Exception {
+        var testCollector = new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>();
+        var response = new ArrayList<AggregatedMetric>();
+        var client =
+                new RestClusterClient<>(
+                        new Configuration(),
+                        "test-cluster",
+                        (c, e) -> new StandaloneClientHAServices("localhost")) {
+                    @Override
+                    public <
+                                    M extends MessageHeaders<R, P, U>,
+                                    U extends MessageParameters,
+                                    R extends RequestBody,
+                                    P extends ResponseBody>
+                            CompletableFuture<P> sendRequest(M headers, U parameters, R request) {
+                        if (headers instanceof AggregatedSubtaskMetricsHeaders) {
+                            return (CompletableFuture<P>)
+                                    CompletableFuture.completedFuture(
+                                            new AggregatedMetricsResponseBody(response));
+                        }
+                        throw new UnsupportedOperationException();
+                    }
+                };
+
+        response.add(new AggregatedMetric("a"));
+        response.add(new AggregatedMetric("b"));
+
+        assertEquals(
+                Set.of("a", "b"),
+                testCollector.queryAggregatedMetricNames(client, new JobID(), new JobVertexID()));
+    }
+
     private void testRequiredMetrics(
-            List<AggregatedMetric> metricList,
-            List<AggregatedMetric> requiredMetrics,
-            ScalingMetricCollector<JobID, JobAutoScalerContext<JobID>> testCollector,
+            List<String> metricList,
+            List<String> requiredMetrics,
+            RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>> testCollector,
             JobVertexID vertex,
             JobTopology topology) {
         for (var m : requiredMetrics) {
             metricList.clear();
             metricList.addAll(requiredMetrics);
-            metricList.removeIf(a -> a.getId().equals(m.getId()));
+            metricList.remove(m);
             try {
                 testCollector.getFilteredVertexMetricNames(null, new JobID(), vertex, topology);
-                fail(m.getId());
+                fail(m);
             } catch (Exception e) {
                 assertTrue(e.getMessage().startsWith("Could not find required metric "));
             }
         }
     }
 
-    private List<AggregatedMetric> getSourceRequiredMetrics() {
+    private List<String> getSourceRequiredMetrics() {
         return List.of(
-                new AggregatedMetric("busyTimeMsPerSecond"),
-                new AggregatedMetric("numRecordsOutPerSecond"),
-                new AggregatedMetric("Source__XXX.numRecordsInPerSecond"));
+                "busyTimeMsPerSecond",
+                "numRecordsOutPerSecond",
+                "Source__XXX.numRecordsInPerSecond");
     }
 
-    private List<AggregatedMetric> getRequiredMetrics() {
-        return List.of(
-                new AggregatedMetric("busyTimeMsPerSecond"),
-                new AggregatedMetric("numRecordsInPerSecond"));
+    private List<String> getRequiredMetrics() {
+        return List.of("busyTimeMsPerSecond", "numRecordsInPerSecond");
     }
 
     @Test
