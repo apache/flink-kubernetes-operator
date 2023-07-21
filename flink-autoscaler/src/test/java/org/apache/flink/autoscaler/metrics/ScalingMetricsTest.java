@@ -480,7 +480,29 @@ public class ScalingMetricsTest {
         return scalingMetrics.get(ScalingMetric.OBSERVED_TPR);
     }
 
+    @Test
+    public void testGlobalMetrics() {
+        assertEquals(Map.of(), ScalingMetrics.computeGlobalMetrics(Map.of()));
+        assertEquals(
+                Map.of(),
+                ScalingMetrics.computeGlobalMetrics(Map.of(FlinkMetric.HEAP_USED, aggMax(100))));
+        assertEquals(
+                Map.of(ScalingMetric.HEAP_USAGE, 0.5, ScalingMetric.GC_PRESSURE, 0.25),
+                ScalingMetrics.computeGlobalMetrics(
+                        Map.of(
+                                FlinkMetric.HEAP_USED,
+                                aggMax(100),
+                                FlinkMetric.HEAP_MAX,
+                                aggMax(200.),
+                                FlinkMetric.TOTAL_GC_TIME_PER_SEC,
+                                aggMax(250.))));
+    }
+
     private static AggregatedMetric aggSum(double sum) {
         return new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, sum);
+    }
+
+    private static AggregatedMetric aggMax(double max) {
+        return new AggregatedMetric("", Double.NaN, max, Double.NaN, Double.NaN);
     }
 }

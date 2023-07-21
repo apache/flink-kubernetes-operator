@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
+import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
@@ -44,6 +45,13 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_
 
 /** Class responsible for executing scaling decisions. */
 public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
+
+    public static final String GC_PRESSURE_MESSAGE =
+            "GC Pressure %s is above the allowed limit for scaling operations. Please adjust the available memory manually.";
+
+    public static final String HEAP_USAGE_MESSAGE =
+            "Heap Usage %s is above the allowed limit for scaling operations. Please adjust the available memory manually.";
+
     private static final Logger LOG = LoggerFactory.getLogger(ScalingExecutor.class);
 
     private final JobVertexScaler<KEY, Context> jobVertexScaler;
@@ -70,12 +78,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     public boolean scaleResource(
             Context context,
-            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
+            EvaluatedMetrics evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
             ScalingTracking scalingTracking,
             Instant now)
             throws Exception {
-
         var conf = context.getConfiguration();
         var restartTime = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
@@ -87,11 +94,12 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return false;
         }
 
-        if (allVerticesWithinUtilizationTarget(evaluatedMetrics, scalingSummaries)) {
+        if (allVerticesWithinUtilizationTarget(
+                evaluatedMetrics.getVertexMetrics(), scalingSummaries)) {
             return false;
         }
 
-        updateRecommendedParallelism(evaluatedMetrics, scalingSummaries);
+        updateRecommendedParallelism(evaluatedMetrics.getVertexMetrics(), scalingSummaries);
 
         var scaleEnabled = conf.get(SCALING_ENABLED);
         autoScalerEventHandler.handleScalingEvent(
@@ -108,7 +116,9 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         autoScalerStateStore.storeScalingTracking(context, scalingTracking);
 
         autoScalerStateStore.storeParallelismOverrides(
-                context, getVertexParallelismOverrides(evaluatedMetrics, scalingSummaries));
+                context,
+                getVertexParallelismOverrides(
+                        evaluatedMetrics.getVertexMetrics(), scalingSummaries));
 
         return true;
     }
@@ -162,40 +172,77 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     @VisibleForTesting
     Map<JobVertexID, ScalingSummary> computeScalingSummary(
             Context context,
-            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
+            EvaluatedMetrics evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
             Duration restartTime) {
+
+        if (isJobUnderMemoryPressure(context, evaluatedMetrics.getGlobalMetrics())) {
+            LOG.info("Skipping vertex scaling due to memory pressure");
+            return Map.of();
+        }
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
         var excludeVertexIdList =
                 context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
-        evaluatedMetrics.forEach(
-                (v, metrics) -> {
-                    if (excludeVertexIdList.contains(v.toHexString())) {
-                        LOG.debug(
-                                "Vertex {} is part of `vertex.exclude.ids` config, Ignoring it for scaling",
-                                v);
-                    } else {
-                        var currentParallelism =
-                                (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
-                        var newParallelism =
-                                jobVertexScaler.computeScaleTargetParallelism(
-                                        context,
-                                        v,
-                                        metrics,
-                                        scalingHistory.getOrDefault(
-                                                v, Collections.emptySortedMap()),
-                                        restartTime);
-                        if (currentParallelism != newParallelism) {
-                            out.put(
-                                    v,
-                                    new ScalingSummary(
-                                            currentParallelism, newParallelism, metrics));
-                        }
-                    }
-                });
-
+        evaluatedMetrics
+                .getVertexMetrics()
+                .forEach(
+                        (v, metrics) -> {
+                            if (excludeVertexIdList.contains(v.toHexString())) {
+                                LOG.debug(
+                                        "Vertex {} is part of `vertex.exclude.ids` config, Ignoring it for scaling",
+                                        v);
+                            } else {
+                                var currentParallelism =
+                                        (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
+                                var newParallelism =
+                                        jobVertexScaler.computeScaleTargetParallelism(
+                                                context,
+                                                v,
+                                                metrics,
+                                                scalingHistory.getOrDefault(
+                                                        v, Collections.emptySortedMap()),
+                                                restartTime);
+                                if (currentParallelism != newParallelism) {
+                                    out.put(
+                                            v,
+                                            new ScalingSummary(
+                                                    currentParallelism, newParallelism, metrics));
+                                }
+                            }
+                        });
         return out;
+    }
+
+    private boolean isJobUnderMemoryPressure(
+            Context ctx, Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics) {
+
+        var gcPressure = evaluatedMetrics.get(ScalingMetric.GC_PRESSURE).getCurrent();
+        var conf = ctx.getConfiguration();
+        if (gcPressure > conf.get(AutoScalerOptions.GC_PRESSURE_THRESHOLD)) {
+            autoScalerEventHandler.handleEvent(
+                    ctx,
+                    AutoScalerEventHandler.Type.Normal,
+                    "MemoryPressure",
+                    String.format(GC_PRESSURE_MESSAGE, gcPressure),
+                    "gcPressure",
+                    conf.get(SCALING_EVENT_INTERVAL));
+            return true;
+        }
+
+        var heapUsage = evaluatedMetrics.get(ScalingMetric.HEAP_USAGE).getAverage();
+        if (heapUsage > conf.get(AutoScalerOptions.HEAP_USAGE_THRESHOLD)) {
+            autoScalerEventHandler.handleEvent(
+                    ctx,
+                    AutoScalerEventHandler.Type.Normal,
+                    "MemoryPressure",
+                    String.format(HEAP_USAGE_MESSAGE, heapUsage),
+                    "heapUsage",
+                    conf.get(SCALING_EVENT_INTERVAL));
+            return true;
+        }
+
+        return false;
     }
 
     private static Map<String, String> getVertexParallelismOverrides(

@@ -45,6 +45,18 @@
             <td>Maximum number of past scaling decisions to retain per vertex.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.memory.gc-pressure.threshold</h5></td>
+            <td style="word-wrap: break-word;">1.0</td>
+            <td>Double</td>
+            <td>Max allowed GC pressure (percentage spent garbage collecting) during scaling operations. Autoscaling will be paused if the GC pressure exceeds this limit.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.memory.heap-usage.threshold</h5></td>
+            <td style="word-wrap: break-word;">1.0</td>
+            <td>Double</td>
+            <td>Max allowed percentage of heap usage during scaling operations. Autoscaling will be paused if the heap usage exceeds this threshold.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.metrics.busy-time.aggregator</h5></td>
             <td style="word-wrap: break-word;">MAX</td>
             <td><p>Enum</p></td>

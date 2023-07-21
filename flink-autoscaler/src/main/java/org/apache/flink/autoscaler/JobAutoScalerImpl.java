@@ -175,16 +175,16 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         var evaluatedMetrics =
                 evaluator.evaluate(ctx.getConfiguration(), collectedMetrics, restartTime);
         LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
-        lastEvaluatedMetrics.put(ctx.getJobKey(), evaluatedMetrics);
+        lastEvaluatedMetrics.put(ctx.getJobKey(), evaluatedMetrics.getVertexMetrics());
 
-        initRecommendedParallelism(evaluatedMetrics);
+        initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
         autoscalerMetrics.registerScalingMetrics(
                 jobTopology.getVerticesInTopologicalOrder(),
                 () -> lastEvaluatedMetrics.get(ctx.getJobKey()));
 
         if (!collectedMetrics.isFullyCollected()) {
             // We have done an upfront evaluation, but we are not ready for scaling.
-            resetRecommendedParallelism(evaluatedMetrics);
+            resetRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
             return;
         }
 

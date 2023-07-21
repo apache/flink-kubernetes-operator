@@ -65,7 +65,16 @@ public enum ScalingMetric {
     SCALE_DOWN_RATE_THRESHOLD(false),
 
     /** Expected true processing rate after scale up. */
-    EXPECTED_PROCESSING_RATE(false);
+    EXPECTED_PROCESSING_RATE(false),
+
+    /**
+     * Maximum GC pressure across taskmanagers. Percentage of time spent garbage collecting between
+     * 0 (no time in GC) and 1 (100% time in GC).
+     */
+    GC_PRESSURE(false),
+
+    /** Percentage of max heap used (between 0 and 1). */
+    HEAP_USAGE(true);
 
     private final boolean calculateAverage;
 

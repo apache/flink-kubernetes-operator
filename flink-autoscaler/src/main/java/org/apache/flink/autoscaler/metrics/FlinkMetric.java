@@ -39,7 +39,11 @@ public enum FlinkMetric {
     SOURCE_TASK_NUM_RECORDS_IN_PER_SEC(
             s -> s.startsWith("Source__") && s.endsWith(".numRecordsInPerSecond")),
     PENDING_RECORDS(s -> s.endsWith(".pendingRecords")),
-    BACKPRESSURE_TIME_PER_SEC(s -> s.equals("backPressuredTimeMsPerSecond"));
+    BACKPRESSURE_TIME_PER_SEC(s -> s.equals("backPressuredTimeMsPerSecond")),
+
+    HEAP_MAX(s -> s.equals("Status.JVM.Memory.Heap.Max")),
+    HEAP_USED(s -> s.equals("Status.JVM.Memory.Heap.Used")),
+    TOTAL_GC_TIME_PER_SEC(s -> s.equals("Status.JVM.GarbageCollector.All.TimeMsPerSecond"));
 
     public static final Map<FlinkMetric, AggregatedMetric> FINISHED_METRICS =
             Map.of(
@@ -56,15 +60,12 @@ public enum FlinkMetric {
         this.predicate = predicate;
     }
 
-    public Optional<String> findAny(Collection<AggregatedMetric> metrics) {
-        return metrics.stream().map(AggregatedMetric::getId).filter(predicate).findAny();
+    public Optional<String> findAny(Collection<String> metrics) {
+        return metrics.stream().filter(predicate).findAny();
     }
 
-    public List<String> findAll(Collection<AggregatedMetric> metrics) {
-        return metrics.stream()
-                .map(AggregatedMetric::getId)
-                .filter(predicate)
-                .collect(Collectors.toList());
+    public List<String> findAll(Collection<String> metrics) {
+        return metrics.stream().filter(predicate).collect(Collectors.toList());
     }
 
     private static AggregatedMetric zero() {

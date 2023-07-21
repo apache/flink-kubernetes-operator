@@ -195,7 +195,9 @@ public class KubernetesAutoScalerStateStoreTest {
         metricHistory.put(
                 jobUpdateTs,
                 new CollectedMetrics(
-                        Map.of(v1, Map.of(ScalingMetric.TRUE_PROCESSING_RATE, 1.)), Map.of()));
+                        Map.of(v1, Map.of(ScalingMetric.TRUE_PROCESSING_RATE, 1.)),
+                        Map.of(),
+                        Map.of()));
 
         var scalingHistory = new HashMap<JobVertexID, SortedMap<Instant, ScalingSummary>>();
         scalingHistory.put(v1, new TreeMap<>());
@@ -245,7 +247,8 @@ public class KubernetesAutoScalerStateStoreTest {
                         new JobVertexID(),
                         Map.of(ScalingMetric.TRUE_PROCESSING_RATE, rnd.nextDouble()));
             }
-            metricHistory.put(Instant.now(), new CollectedMetrics(m, Collections.emptyMap()));
+            metricHistory.put(
+                    Instant.now(), new CollectedMetrics(m, Collections.emptyMap(), Map.of()));
         }
 
         var scalingHistory = new HashMap<JobVertexID, SortedMap<Instant, ScalingSummary>>();
