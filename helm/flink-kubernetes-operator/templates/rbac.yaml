@@ -43,6 +43,7 @@ rules:
       - apps
     resources:
       - deployments
+      - deployments/scale
       - deployments/finalizers
       - replicasets
     verbs:
