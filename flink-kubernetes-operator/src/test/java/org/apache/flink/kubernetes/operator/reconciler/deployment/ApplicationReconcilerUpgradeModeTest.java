@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.autoscaler.factory.NoopJobAutoscalerFactory;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
@@ -81,7 +82,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                                 kubernetesClient,
                                 eventRecorder,
                                 statusRecorder,
-                                new NoopJobAutoscalerFactory()));
+                                new NoopJobAutoscalerFactory<>()));
     }
 
     @ParameterizedTest

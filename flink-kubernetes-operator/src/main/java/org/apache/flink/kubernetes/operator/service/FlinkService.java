@@ -42,6 +42,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +52,8 @@ import java.util.Optional;
 public interface FlinkService {
 
     KubernetesClient getKubernetesClient();
+
+    Duration getFlinkClientTimeout();
 
     void submitApplicationCluster(JobSpec jobSpec, Configuration conf, boolean requireHaMetadata)
             throws Exception;

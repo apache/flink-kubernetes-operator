@@ -15,25 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler;
+package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
+import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.utils.AutoScalerSerDeModule;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import io.fabric8.kubernetes.api.model.ConfigMap;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import lombok.SneakyThrows;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
@@ -71,40 +68,33 @@ public class AutoScalerInfo {
                     .registerModule(new JavaTimeModule())
                     .registerModule(new AutoScalerSerDeModule());
 
-    private ConfigMap configMap;
+    private final AutoScalerStateStore stateStore;
     private Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory;
 
-    public AutoScalerInfo(ConfigMap configMap) {
-        this.configMap = configMap;
-    }
-
-    @VisibleForTesting
-    public AutoScalerInfo(Map<String, String> data) {
-        this(new ConfigMap());
-        configMap.setData(Preconditions.checkNotNull(data));
+    public AutoScalerInfo(AutoScalerStateStore stateStore) {
+        this.stateStore = stateStore;
     }
 
     public SortedMap<Instant, CollectedMetrics> getMetricHistory() {
-        var historyYaml = configMap.getData().get(COLLECTED_METRICS_KEY);
-        if (historyYaml == null) {
+        var collectedMetrics = stateStore.get(COLLECTED_METRICS_KEY);
+        if (collectedMetrics.isEmpty()) {
             return new TreeMap<>();
         }
 
         try {
-            return YAML_MAPPER.readValue(decompress(historyYaml), new TypeReference<>() {});
+            return YAML_MAPPER.readValue(
+                    decompress(collectedMetrics.get()), new TypeReference<>() {});
         } catch (JacksonException e) {
             LOG.error(
                     "Could not deserialize metric history, possibly the format changed. Discarding...");
-            configMap.getData().remove(COLLECTED_METRICS_KEY);
+            stateStore.remove(COLLECTED_METRICS_KEY);
             return new TreeMap<>();
         }
     }
 
     @SneakyThrows
     public void updateMetricHistory(SortedMap<Instant, CollectedMetrics> history) {
-        configMap
-                .getData()
-                .put(COLLECTED_METRICS_KEY, compress(YAML_MAPPER.writeValueAsString(history)));
+        stateStore.put(COLLECTED_METRICS_KEY, compress(YAML_MAPPER.writeValueAsString(history)));
     }
 
     @SneakyThrows
@@ -118,7 +108,7 @@ public class AutoScalerInfo {
     }
 
     public void clearMetricHistory() {
-        configMap.getData().remove(COLLECTED_METRICS_KEY);
+        stateStore.remove(COLLECTED_METRICS_KEY);
     }
 
     private void trimScalingHistory(Instant now, Configuration conf) {
@@ -151,20 +141,21 @@ public class AutoScalerInfo {
             trimScalingHistory(now, conf);
             return scalingHistory;
         }
-        var yaml = decompress(configMap.getData().get(SCALING_HISTORY_KEY));
-        if (yaml == null) {
-            scalingHistory = new HashMap<>();
-            return scalingHistory;
+        var yaml = stateStore.get(SCALING_HISTORY_KEY);
+        if (yaml.isEmpty()) {
+            this.scalingHistory = new HashMap<>();
+            return this.scalingHistory;
         }
         try {
-            scalingHistory = YAML_MAPPER.readValue(yaml, new TypeReference<>() {});
+            scalingHistory =
+                    YAML_MAPPER.readValue(decompress(yaml.get()), new TypeReference<>() {});
         } catch (JacksonException e) {
             LOG.error(
                     "Could not deserialize scaling history, possibly the format changed. Discarding...");
-            configMap.getData().remove(SCALING_HISTORY_KEY);
+            stateStore.remove(SCALING_HISTORY_KEY);
             scalingHistory = new HashMap<>();
         }
-        return scalingHistory;
+        return this.scalingHistory;
     }
 
     @SneakyThrows
@@ -181,54 +172,41 @@ public class AutoScalerInfo {
     }
 
     public void setCurrentOverrides(Map<String, String> overrides) {
-        configMap
-                .getData()
-                .put(
-                        PARALLELISM_OVERRIDES_KEY,
-                        ConfigurationUtils.convertValue(overrides, String.class));
+        stateStore.put(
+                PARALLELISM_OVERRIDES_KEY,
+                ConfigurationUtils.convertValue(overrides, String.class));
     }
 
     public Map<String, String> getCurrentOverrides() {
-        var overridesStr = configMap.getData().get(PARALLELISM_OVERRIDES_KEY);
-        if (overridesStr == null) {
+        var overridesStr = stateStore.get(PARALLELISM_OVERRIDES_KEY);
+        if (overridesStr.isEmpty()) {
             return Map.of();
         }
-        return ConfigurationUtils.convertValue(overridesStr, Map.class);
+        return ConfigurationUtils.convertValue(overridesStr.get(), Map.class);
     }
 
     public void removeCurrentOverrides() {
-        configMap.getData().remove(PARALLELISM_OVERRIDES_KEY);
+        stateStore.remove(PARALLELISM_OVERRIDES_KEY);
     }
 
     private void storeScalingHistory() throws Exception {
-        configMap
-                .getData()
-                .put(SCALING_HISTORY_KEY, compress(YAML_MAPPER.writeValueAsString(scalingHistory)));
+        stateStore.put(
+                SCALING_HISTORY_KEY, compress(YAML_MAPPER.writeValueAsString(scalingHistory)));
     }
 
-    public void replaceInKubernetes(KubernetesClient client) throws Exception {
+    public void persistState() throws Exception {
         trimHistoryToMaxCmSize();
-        try {
-            configMap = client.resource(configMap).update();
-        } catch (Exception e) {
-            LOG.error(
-                    "Error while updating autoscaler info configmap, invalidating to clear the cache",
-                    e);
-            configMap = null;
-            throw e;
-        }
+        stateStore.flush();
     }
 
     public boolean isValid() {
-        return configMap != null;
+        return stateStore.isValid();
     }
 
     @VisibleForTesting
     protected void trimHistoryToMaxCmSize() throws Exception {
-        var data = configMap.getData();
-
-        int scalingHistorySize = data.getOrDefault(SCALING_HISTORY_KEY, "").length();
-        int metricHistorySize = data.getOrDefault(COLLECTED_METRICS_KEY, "").length();
+        int scalingHistorySize = stateStore.get(SCALING_HISTORY_KEY).map(String::length).orElse(0);
+        int metricHistorySize = stateStore.get(COLLECTED_METRICS_KEY).map(String::length).orElse(0);
 
         SortedMap<Instant, CollectedMetrics> metricHistory = null;
         while (scalingHistorySize + metricHistorySize > MAX_CM_BYTES) {
@@ -242,14 +220,9 @@ public class AutoScalerInfo {
             LOG.info("Trimming metric history by removing {}", firstKey);
             metricHistory.remove(firstKey);
             String compressed = compress(YAML_MAPPER.writeValueAsString(metricHistory));
-            data.put(COLLECTED_METRICS_KEY, compressed);
+            stateStore.put(COLLECTED_METRICS_KEY, compressed);
             metricHistorySize = compressed.length();
         }
-    }
-
-    @VisibleForTesting
-    protected ConfigMap getConfigMap() {
-        return configMap;
     }
 
     private static String compress(String original) throws IOException {

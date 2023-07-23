@@ -107,6 +107,7 @@ import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.nio.file.Files;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -163,6 +164,11 @@ public abstract class AbstractFlinkService implements FlinkService {
     @Override
     public KubernetesClient getKubernetesClient() {
         return kubernetesClient;
+    }
+
+    @Override
+    public Duration getFlinkClientTimeout() {
+        return operatorConfig.getFlinkClientTimeout();
     }
 
     @Override

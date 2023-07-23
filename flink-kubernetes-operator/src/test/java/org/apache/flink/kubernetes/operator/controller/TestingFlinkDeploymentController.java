@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.autoscaler.factory.NoopJobAutoscalerFactory;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkResourceContextFactory;
@@ -30,7 +31,6 @@ import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.reconciler.deployment.NoopJobAutoscalerFactory;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -101,7 +101,7 @@ public class TestingFlinkDeploymentController
                         configManager,
                         eventRecorder,
                         statusRecorder,
-                        new NoopJobAutoscalerFactory());
+                        new NoopJobAutoscalerFactory<>());
         canaryResourceManager = new CanaryResourceManager<>(configManager, kubernetesClient);
         flinkDeploymentController =
                 new FlinkDeploymentController(

@@ -15,33 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.reconciler.deployment;
+package org.apache.flink.autoscaler.factory;
 
-import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
-import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-
-import io.fabric8.kubernetes.client.KubernetesClient;
-
-import java.util.Map;
+import org.apache.flink.autoscaler.JobAutoScaler;
+import org.apache.flink.autoscaler.JobAutoScalerImpl;
+import org.apache.flink.autoscaler.RestApiMetricsCollector;
+import org.apache.flink.autoscaler.ScalingExecutor;
+import org.apache.flink.autoscaler.ScalingMetricEvaluator;
+import org.apache.flink.autoscaler.handler.AutoScalerEventHandler;
 
 /** An autoscaler implementation which does nothing. */
-public class NoopJobAutoscalerFactory implements JobAutoScalerFactory, JobAutoScaler {
+public class JobAutoscalerFactoryImpl<KEY, INFO> implements JobAutoScalerFactory<KEY, INFO> {
 
     @Override
-    public JobAutoScaler create(KubernetesClient kubernetesClient, EventRecorder eventRecorder) {
-        return this;
-    }
-
-    @Override
-    public boolean scale(FlinkResourceContext<?> ctx) {
-        return false;
-    }
-
-    @Override
-    public void cleanup(FlinkResourceContext<?> ctx) {}
-
-    @Override
-    public Map<String, String> getParallelismOverrides(FlinkResourceContext<?> ctx) {
-        return Map.of();
+    public JobAutoScaler<KEY, INFO> create(AutoScalerEventHandler<KEY, INFO> eventHandler) {
+        return new JobAutoScalerImpl<>(
+                new RestApiMetricsCollector<>(),
+                new ScalingMetricEvaluator(),
+                new ScalingExecutor<>(eventHandler),
+                eventHandler);
     }
 }

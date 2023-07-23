@@ -15,13 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler;
+package org.apache.flink.autoscaler;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.JobIDPathParameter;
@@ -39,14 +35,12 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /** Metric collector using flink rest api. */
-public class RestApiMetricsCollector extends ScalingMetricCollector {
+public class RestApiMetricsCollector<KEY, INFO> extends ScalingMetricCollector<KEY, INFO> {
     private static final Logger LOG = LoggerFactory.getLogger(RestApiMetricsCollector.class);
 
     @Override
     protected Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> queryAllAggregatedMetrics(
-            AbstractFlinkResource<?, ?> cr,
-            FlinkService flinkService,
-            Configuration conf,
+            JobAutoScalerContext<KEY, INFO> context,
             Map<JobVertexID, Map<String, FlinkMetric>> filteredVertexMetricNames) {
 
         return filteredVertexMetricNames.entrySet().stream()
@@ -55,25 +49,21 @@ public class RestApiMetricsCollector extends ScalingMetricCollector {
                                 Map.Entry::getKey,
                                 e ->
                                         queryAggregatedVertexMetrics(
-                                                flinkService, cr, conf, e.getKey(), e.getValue())));
+                                                context, e.getKey(), e.getValue())));
     }
 
     @SneakyThrows
     protected Map<FlinkMetric, AggregatedMetric> queryAggregatedVertexMetrics(
-            FlinkService flinkService,
-            AbstractFlinkResource<?, ?> cr,
-            Configuration conf,
+            JobAutoScalerContext<KEY, INFO> context,
             JobVertexID jobVertexID,
             Map<String, FlinkMetric> metrics) {
 
         LOG.debug("Querying metrics {} for {}", metrics, jobVertexID);
 
-        var jobId = JobID.fromHexString(cr.getStatus().getJobStatus().getJobId());
-
         var parameters = new AggregatedSubtaskMetricsParameters();
         var pathIt = parameters.getPathParameters().iterator();
 
-        ((JobIDPathParameter) pathIt.next()).resolve(jobId);
+        ((JobIDPathParameter) pathIt.next()).resolve(context.getJobID());
         ((JobVertexIdPathParameter) pathIt.next()).resolve(jobVertexID);
 
         parameters
@@ -82,7 +72,7 @@ public class RestApiMetricsCollector extends ScalingMetricCollector {
                 .next()
                 .resolveFromString(StringUtils.join(metrics.keySet(), ","));
 
-        try (var restClient = flinkService.getClusterClient(conf)) {
+        try (var restClient = context.getRestClusterClient()) {
 
             var responseBody =
                     restClient

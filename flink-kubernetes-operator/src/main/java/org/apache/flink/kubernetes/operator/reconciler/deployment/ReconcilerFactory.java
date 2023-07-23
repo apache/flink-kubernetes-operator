@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.autoscaler.factory.JobAutoScalerFactory;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
@@ -28,6 +29,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,7 +41,7 @@ public class ReconcilerFactory {
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
     private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder;
-    private final JobAutoScalerFactory autoscalerFactory;
+    private final JobAutoScalerFactory<ResourceID, FlinkDeployment> autoscalerFactory;
     private final Map<Tuple2<Mode, KubernetesDeploymentMode>, Reconciler<FlinkDeployment>>
             reconcilerMap;
 
@@ -48,7 +50,7 @@ public class ReconcilerFactory {
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder,
-            JobAutoScalerFactory autoscalerFactory) {
+            JobAutoScalerFactory<ResourceID, FlinkDeployment> autoscalerFactory) {
         this.kubernetesClient = kubernetesClient;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;

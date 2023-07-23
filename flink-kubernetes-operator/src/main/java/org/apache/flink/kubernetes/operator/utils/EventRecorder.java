@@ -181,8 +181,6 @@ public class EventRecorder {
         RecoverDeployment,
         RestartUnhealthyJob,
         ScalingReport,
-        IneffectiveScaling,
-        AutoscalerError,
         Scaling
     }
 }

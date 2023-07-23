@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.autoscaler.factory.JobAutoScalerFactory;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
@@ -35,6 +36,7 @@ import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,7 +64,7 @@ public abstract class AbstractJobReconciler<
             KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
             StatusRecorder<CR, STATUS> statusRecorder,
-            JobAutoScalerFactory autoscalerFactory) {
+            JobAutoScalerFactory<ResourceID, CR> autoscalerFactory) {
         super(kubernetesClient, eventRecorder, statusRecorder, autoscalerFactory);
     }
 

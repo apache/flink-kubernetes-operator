@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.autoscaler.factory.JobAutoScalerFactory;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
@@ -45,6 +46,7 @@ import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.SneakyThrows;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,7 +69,7 @@ public class ApplicationReconciler
             KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
-            JobAutoScalerFactory autoscalerFactory) {
+            JobAutoScalerFactory<ResourceID, FlinkDeployment> autoscalerFactory) {
         super(kubernetesClient, eventRecorder, statusRecorder, autoscalerFactory);
     }
 

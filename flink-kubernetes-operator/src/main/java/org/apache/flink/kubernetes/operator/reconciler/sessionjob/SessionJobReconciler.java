@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.sessionjob;
 
+import org.apache.flink.autoscaler.factory.NoopJobAutoscalerFactory;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
@@ -27,7 +28,6 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
-import org.apache.flink.kubernetes.operator.reconciler.deployment.NoopJobAutoscalerFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.messages.FlinkJobNotFoundException;

@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler;
+package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.autoscaler.handler.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
@@ -47,7 +45,7 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /** Class responsible for executing scaling decisions. */
-public class ScalingExecutor {
+public class ScalingExecutor<KEY, INFO> {
     public static final String SCALING_SUMMARY_ENTRY =
             " Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f";
     public static final String SCALING_SUMMARY_HEADER_SCALING_DISABLED =
@@ -55,21 +53,25 @@ public class ScalingExecutor {
     public static final String SCALING_SUMMARY_HEADER_SCALING_ENABLED = "Scaling vertices:";
     private static final Logger LOG = LoggerFactory.getLogger(ScalingExecutor.class);
 
-    private final JobVertexScaler jobVertexScaler;
-    private final EventRecorder eventRecorder;
+    private final JobVertexScaler<KEY, INFO> jobVertexScaler;
+
+    private final AutoScalerEventHandler<KEY, INFO> eventHandler;
+
     private Clock clock = Clock.system(ZoneId.systemDefault());
 
-    public ScalingExecutor(EventRecorder eventRecorder) {
-        this(new JobVertexScaler(eventRecorder), eventRecorder);
+    public ScalingExecutor(AutoScalerEventHandler<KEY, INFO> eventHandler) {
+        this(new JobVertexScaler<>(eventHandler), eventHandler);
     }
 
-    public ScalingExecutor(JobVertexScaler jobVertexScaler, EventRecorder eventRecorder) {
+    public ScalingExecutor(
+            JobVertexScaler<KEY, INFO> jobVertexScaler,
+            AutoScalerEventHandler<KEY, INFO> eventHandler) {
         this.jobVertexScaler = jobVertexScaler;
-        this.eventRecorder = eventRecorder;
+        this.eventHandler = eventHandler;
     }
 
     public boolean scaleResource(
-            AbstractFlinkResource<?, ?> resource,
+            JobAutoScalerContext<KEY, INFO> context,
             AutoScalerInfo scalingInformation,
             Configuration conf,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
@@ -77,7 +79,7 @@ public class ScalingExecutor {
         var now = Instant.now();
         var scalingHistory = scalingInformation.getScalingHistory(now, conf);
         var scalingSummaries =
-                computeScalingSummary(resource, conf, evaluatedMetrics, scalingHistory);
+                computeScalingSummary(context, conf, evaluatedMetrics, scalingHistory);
 
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
@@ -93,21 +95,18 @@ public class ScalingExecutor {
         var scalingEnabled = conf.get(SCALING_ENABLED);
 
         var scalingReport = scalingReport(scalingSummaries, scalingEnabled);
-        eventRecorder.triggerEvent(
-                resource,
-                EventRecorder.Type.Normal,
-                EventRecorder.Reason.ScalingReport,
-                EventRecorder.Component.Operator,
-                scalingReport,
-                "ScalingExecutor");
+        eventHandler.handlerScalingReport(context, scalingReport);
 
         if (!scalingEnabled) {
             return false;
         }
 
         scalingInformation.addToScalingHistory(clock.instant(), scalingSummaries, conf);
-        scalingInformation.setCurrentOverrides(
-                getVertexParallelismOverrides(evaluatedMetrics, scalingSummaries));
+        Map<String, String> recommendedParallelism =
+                getVertexParallelismOverrides(evaluatedMetrics, scalingSummaries);
+        scalingInformation.setCurrentOverrides(recommendedParallelism);
+
+        eventHandler.handlerRecommendedParallelism(context, recommendedParallelism);
 
         return true;
     }
@@ -181,7 +180,7 @@ public class ScalingExecutor {
     }
 
     private Map<JobVertexID, ScalingSummary> computeScalingSummary(
-            AbstractFlinkResource<?, ?> resource,
+            JobAutoScalerContext<KEY, INFO> context,
             Configuration conf,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
@@ -199,7 +198,7 @@ public class ScalingExecutor {
                                 (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
                         var newParallelism =
                                 jobVertexScaler.computeScaleTargetParallelism(
-                                        resource,
+                                        context,
                                         conf,
                                         v,
                                         metrics,

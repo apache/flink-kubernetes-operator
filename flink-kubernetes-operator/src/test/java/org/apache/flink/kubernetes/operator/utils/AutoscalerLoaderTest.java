@@ -17,12 +17,14 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.autoscaler.factory.JobAutoScalerFactory;
+import org.apache.flink.autoscaler.factory.NoopJobAutoscalerFactory;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.autoscaler.TestingAutoscalerFactory;
-import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScalerFactory;
-import org.apache.flink.kubernetes.operator.reconciler.deployment.NoopJobAutoscalerFactory;
 
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -38,7 +40,8 @@ public class AutoscalerLoaderTest {
 
     @Test
     void testLoadFallbackNoopImplementation() {
-        JobAutoScalerFactory factory = AutoscalerLoader.loadJobAutoscalerFactory();
+        JobAutoScalerFactory<ResourceID, FlinkDeployment> factory =
+                AutoscalerLoader.loadJobAutoscalerFactory();
         Assertions.assertTrue(factory instanceof NoopJobAutoscalerFactory);
     }
 
@@ -52,7 +55,8 @@ public class AutoscalerLoaderTest {
                     TestUtils.getTestPluginsRootDir(temporaryFolder));
             TestUtils.setEnv(systemEnv);
 
-            JobAutoScalerFactory factory = AutoscalerLoader.loadJobAutoscalerFactory();
+            JobAutoScalerFactory<ResourceID, FlinkDeployment> factory =
+                    AutoscalerLoader.loadJobAutoscalerFactory();
             Assertions.assertTrue(factory instanceof TestingAutoscalerFactory);
         } finally {
             TestUtils.setEnv(originalEnv);

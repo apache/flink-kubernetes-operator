@@ -23,11 +23,10 @@ WORKDIR /app
 
 COPY . .
 
-RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl flink-kubernetes-standalone,flink-kubernetes-operator-api,flink-kubernetes-operator,flink-kubernetes-operator-autoscaler,flink-autoscaler,flink-kubernetes-webhook -DskipTests=$SKIP_TESTS
+RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl flink-kubernetes-standalone,flink-kubernetes-operator-api,flink-kubernetes-operator,flink-autoscaler,flink-kubernetes-webhook -DskipTests=$SKIP_TESTS
 
 RUN cd /app/tools/license; mkdir jars; cd jars; \
     cp /app/flink-kubernetes-operator/target/flink-kubernetes-operator-*-shaded.jar . && \
-    cp /app/flink-kubernetes-operator-autoscaler/target/flink-kubernetes-operator-autoscaler-*.jar . && \
     cp /app/flink-kubernetes-webhook/target/flink-kubernetes-webhook-*-shaded.jar . && \
     cp /app/flink-kubernetes-standalone/target/flink-kubernetes-standalone-*.jar . && \
     cp -r /app/flink-kubernetes-operator/target/plugins ./plugins && \
@@ -39,7 +38,6 @@ ENV FLINK_HOME=/opt/flink
 ENV FLINK_PLUGINS_DIR=$FLINK_HOME/plugins
 ENV OPERATOR_VERSION=1.6-SNAPSHOT
 ENV OPERATOR_JAR=flink-kubernetes-operator-$OPERATOR_VERSION-shaded.jar
-ENV AUTOSCALER_JAR=flink-kubernetes-operator-autoscaler-$OPERATOR_VERSION.jar
 ENV WEBHOOK_JAR=flink-kubernetes-webhook-$OPERATOR_VERSION-shaded.jar
 ENV KUBERNETES_STANDALONE_JAR=flink-kubernetes-standalone-$OPERATOR_VERSION.jar
 
@@ -51,7 +49,6 @@ RUN groupadd --system --gid=9999 flink && \
     useradd --system --home-dir $FLINK_HOME --uid=9999 --gid=flink flink
 
 COPY --from=build /app/flink-kubernetes-operator/target/$OPERATOR_JAR .
-COPY --from=build /app/flink-kubernetes-operator-autoscaler/target/$AUTOSCALER_JAR .
 COPY --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR .
 COPY --from=build /app/flink-kubernetes-standalone/target/$KUBERNETES_STANDALONE_JAR .
 COPY --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
@@ -61,7 +58,6 @@ COPY docker-entrypoint.sh /
 
 RUN chown -R flink:flink $FLINK_HOME && \
     chown flink:flink $OPERATOR_JAR && \
-    chown flink:flink $AUTOSCALER_JAR && \
     chown flink:flink $WEBHOOK_JAR && \
     chown flink:flink $KUBERNETES_STANDALONE_JAR && \
     chown flink:flink /docker-entrypoint.sh

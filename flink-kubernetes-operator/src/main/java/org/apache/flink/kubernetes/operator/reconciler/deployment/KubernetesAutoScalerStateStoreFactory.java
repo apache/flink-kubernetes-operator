@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler;
+package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
-import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.autoscaler.state.AutoScalerStateStoreFactory;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.utils.Constants;
 
@@ -32,67 +33,37 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
-/** Class responsible to managing the creation and retrieval of {@link AutoScalerInfo} objects. */
-public class AutoscalerInfoManager {
+/** The factory of kubernetes auto scaler state store. */
+public class KubernetesAutoScalerStateStoreFactory implements AutoScalerStateStoreFactory {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AutoscalerInfoManager.class);
+    private static final Logger LOG =
+            LoggerFactory.getLogger(KubernetesAutoScalerStateStoreFactory.class);
+
     private static final String LABEL_COMPONENT_AUTOSCALER = "autoscaler";
 
-    private final ConcurrentHashMap<ResourceID, Optional<AutoScalerInfo>> cache =
-            new ConcurrentHashMap<>();
     private final KubernetesClient kubernetesClient;
 
-    public AutoscalerInfoManager(KubernetesClient kubernetesClient) {
+    private final AbstractFlinkResource<?, ?> cr;
+
+    public KubernetesAutoScalerStateStoreFactory(
+            KubernetesClient kubernetesClient, AbstractFlinkResource<?, ?> cr) {
         this.kubernetesClient = kubernetesClient;
+        this.cr = cr;
     }
 
-    public AutoScalerInfo getOrCreateInfo(AbstractFlinkResource<?, ?> cr) {
-        return cache.compute(
-                        ResourceID.fromResource(cr),
-                        (id, infOpt) -> {
-                            // If in the cache and valid simply return
-                            if (infOpt != null
-                                    && infOpt.map(AutoScalerInfo::isValid).orElse(false)) {
-                                return infOpt;
-                            }
-                            // Otherwise get or create
-                            return Optional.of(getOrCreateInternal(cr));
-                        })
-                .get();
+    @Override
+    public Optional<AutoScalerStateStore> get() {
+        return getScalingInfoConfigMap(createCmObjectMeta(ResourceID.fromResource(cr)))
+                .map(configMap -> new KubernetesAutoScalerStateStore(kubernetesClient, configMap));
     }
 
-    public Optional<AutoScalerInfo> getInfo(AbstractFlinkResource<?, ?> cr) {
-        return cache.compute(
-                ResourceID.fromResource(cr),
-                (id, infOpt) -> {
-                    // If in the cache and empty or valid simply return
-                    if (infOpt != null && (infOpt.isEmpty() || infOpt.get().isValid())) {
-                        return infOpt;
-                    }
-
-                    // Otherwise get
-                    return getScalingInfoConfigMap(createCmObjectMeta(ResourceID.fromResource(cr)))
-                            .map(AutoScalerInfo::new);
-                });
-    }
-
-    public void removeInfoFromCache(AbstractFlinkResource<?, ?> cr) {
-        // We don't need to remove from Kubernetes, that is handled through the owner reference
-        cache.remove(ResourceID.fromResource(cr));
-    }
-
-    @VisibleForTesting
-    protected Optional<ConfigMap> getInfoFromKubernetes(AbstractFlinkResource<?, ?> cr) {
-        return getScalingInfoConfigMap(createCmObjectMeta(ResourceID.fromResource(cr)));
-    }
-
-    private AutoScalerInfo getOrCreateInternal(HasMetadata cr) {
+    @Override
+    public AutoScalerStateStore getOrCreate() {
         var meta = createCmObjectMeta(ResourceID.fromResource(cr));
         var info = getScalingInfoConfigMap(meta).orElseGet(() -> createConfigMap(cr, meta));
 
-        return new AutoScalerInfo(info);
+        return new KubernetesAutoScalerStateStore(kubernetesClient, info);
     }
 
     private ConfigMap createConfigMap(HasMetadata cr, ObjectMeta meta) {

@@ -53,7 +53,6 @@ under the License.
     <modules>
         <module>flink-kubernetes-standalone</module>
         <module>flink-kubernetes-operator</module>
-        <module>flink-kubernetes-operator-autoscaler</module>
         <module>flink-kubernetes-operator-api</module>
         <module>flink-kubernetes-webhook</module>
         <module>flink-kubernetes-docs</module>
