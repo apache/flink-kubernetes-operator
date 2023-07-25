@@ -9419,6 +9419,7 @@ spec:
                             - FULL
                             - INCREMENTAL
                             - UNKNOWN
+                            - description
                             type: string
                           triggerNonce:
                             type: integer
@@ -9439,6 +9440,7 @@ spec:
                         - FULL
                         - INCREMENTAL
                         - UNKNOWN
+                        - description
                         type: string
                       lastPeriodicCheckpointTimestamp:
                         type: integer

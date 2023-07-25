@@ -17,10 +17,29 @@
 
 package org.apache.flink.kubernetes.operator.api.status;
 
+import org.apache.flink.annotation.Internal;
+import org.apache.flink.configuration.DescribedEnum;
+import org.apache.flink.configuration.description.InlineElement;
+
+import static org.apache.flink.configuration.description.TextElement.text;
+
 /** Checkpoint format type. */
-public enum CheckpointType {
-    FULL,
-    INCREMENTAL,
+public enum CheckpointType implements DescribedEnum {
+    FULL("A comprehensive snapshot, saving the complete state of a data stream."),
+    INCREMENTAL(
+            "A more efficient, reduced snapshot, saving only the differences in state data since the last checkpoint."),
     /** Checkpoint format unknown, if the checkpoint was not triggered by the operator. */
-    UNKNOWN
+    UNKNOWN("Only for internal purposes.");
+
+    private final InlineElement description;
+
+    CheckpointType(String description) {
+        this.description = text(description);
+    }
+
+    @Override
+    @Internal
+    public InlineElement getDescription() {
+        return description;
+    }
 }

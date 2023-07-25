@@ -9,6 +9,18 @@
     </thead>
     <tbody>
         <tr>
+            <td><h5>kubernetes.operator.checkpoint.trigger.grace-period</h5></td>
+            <td style="word-wrap: break-word;">1 min</td>
+            <td>Duration</td>
+            <td>The interval before a checkpoint trigger attempt is marked as unsuccessful.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.checkpoint.type</h5></td>
+            <td style="word-wrap: break-word;">FULL</td>
+            <td><p>Enum</p></td>
+            <td>Type of checkpoint.<br /><br />Possible values:<ul><li>"FULL": A comprehensive snapshot, saving the complete state of a data stream.</li><li>"INCREMENTAL": A more efficient, reduced snapshot, saving only the differences in state data since the last checkpoint.</li><li>"UNKNOWN": Only for internal purposes.</li></ul></td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.cluster.health-check.checkpoint-progress.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
@@ -103,6 +115,12 @@
             <td style="word-wrap: break-word;">(none)</td>
             <td>Duration</td>
             <td>Max allowed checkpoint age for initiating last-state upgrades on running jobs. If a checkpoint is not available within the desired age (and nothing in progress) a savepoint will be triggered.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.periodic.checkpoint.interval</h5></td>
+            <td style="word-wrap: break-word;">0 ms</td>
+            <td>Duration</td>
+            <td>Interval at which periodic checkpoints will be triggered. The triggering schedule is not guaranteed, checkpoints will be triggered as part of the regular reconcile loop. NOTE: checkpoints are generally managed by Flink. This setting isn't meant to replace Flink's checkpoint settings, but to complement them in special cases. For instance, a full checkpoint might need to be occasionally triggered to break the chain of incremental checkpoints and consolidate the partial incremental files.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.periodic.savepoint.interval</h5></td>

@@ -542,8 +542,6 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         getJobSpec(sp1SessionJob).setCheckpointTriggerNonce(4L);
         reconciler.reconcile(sp1SessionJob, readyContext);
         assertEquals(
-                // TODO: enable if upgrade delay test gets reenabled
-                // "savepoint_trigger_1",
                 "checkpoint_trigger_0", getCheckpointInfo(sp1SessionJob).getTriggerId());
 
         getCheckpointInfo(sp1SessionJob).resetTrigger();

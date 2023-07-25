@@ -18,4 +18,8 @@
 package org.apache.flink.kubernetes.operator.api.status;
 
 /** A common interface for {@link Checkpoint} and {@link Savepoint}. */
-public interface Snapshot {}
+public interface Snapshot {
+    long getTimeStamp();
+
+    SnapshotTriggerType getTriggerType();
+}

@@ -521,7 +521,6 @@ public abstract class AbstractFlinkService implements FlinkService {
 
             var timeout = operatorConfig.getFlinkClientTimeout().getSeconds();
 
-            //            var checkpointFormatType = SavepointUtils.getCheckpointFormatType(conf);
             var checkpointFormatType = org.apache.flink.core.execution.CheckpointType.FULL;
 
             var response =

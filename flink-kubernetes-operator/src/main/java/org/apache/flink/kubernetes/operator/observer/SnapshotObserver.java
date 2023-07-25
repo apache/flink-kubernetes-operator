@@ -86,10 +86,9 @@ public class SnapshotObserver<
         }
         var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
-        var checkpointInfo = jobStatus.getSavepointInfo();
         var jobId = jobStatus.getJobId();
 
-        // If any manual or periodic savepoint is in progress, observe it
+        // If any manual or periodic checkpoint is in progress, observe it
         if (SnapshotUtils.checkpointInProgress(jobStatus)) {
             observeTriggeredCheckpoint(ctx, jobId);
         }
@@ -168,12 +167,6 @@ public class SnapshotObserver<
         savepointInfo.updateLastSavepoint(savepoint);
     }
 
-    /**
-     * Observe the status of triggered checkpoints.
-     *
-     * @param ctx Resource context.
-     * @param jobID the jobID of the observed job.
-     */
     private void observeTriggeredCheckpoint(FlinkResourceContext<CR> ctx, String jobID) {
         var resource = (AbstractFlinkResource<?, ?>) ctx.getResource();
 
