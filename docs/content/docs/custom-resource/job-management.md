@@ -274,6 +274,9 @@ HA is currently required for the rollback functionality.
 Applications are never rolled back to a previous running state if they were suspended before the upgrade.
 In these cases no rollback will be performed.
 
+Rollbacks exclusively affect the `JobSpec`, while any other alterations performed with the release must be compatible with both the current and the last stable `JobSpec`. Failure to ensure compatibility may result in job instability after the rollback.
+For instance, any modifications to the config-map should be compatible with both the current and previous `JobSpec`.
+
 ### Stability condition
 
 Currently, a new job is marked stable as soon as the operator could observe it running. This allows us to detect obvious errors, but it's not always enough to detect more complex issues.
