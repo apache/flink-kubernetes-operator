@@ -16,6 +16,7 @@ github:
     release-1.3: {}
     release-1.4: {}
     release-1.5: {}
+    release-1.6: {}
 
 
 notifications:
