@@ -274,6 +274,9 @@ HA is currently required for the rollback functionality.
 Applications are never rolled back to a previous running state if they were suspended before the upgrade.
 In these cases no rollback will be performed.
 
+Rollbacks exclusively affect the `FlinkDeployment`/`FlinkSession` CRDs.
+When releasing a new version of your Flink application that updates several Kubernetes resources (such as config maps and services), you must ensure backward compatibility. This means that your updates to non-FlinkDeployment/FlinkSession resources must be compatible with both old and new FlinkDeployment/FlinkSession resources.
+
 ### Stability condition
 
 Currently, a new job is marked stable as soon as the operator could observe it running. This allows us to detect obvious errors, but it's not always enough to detect more complex issues.
