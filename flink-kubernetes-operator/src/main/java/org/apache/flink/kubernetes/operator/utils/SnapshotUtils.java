@@ -25,9 +25,9 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
-import org.apache.flink.kubernetes.operator.api.status.SnapshotType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import org.apache.commons.lang3.StringUtils;
@@ -39,9 +39,9 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
 
-import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.CHECKPOINT;
-import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.SAVEPOINT;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 
 /** Savepoint utilities. */
 public class SnapshotUtils {

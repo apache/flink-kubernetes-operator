@@ -47,6 +47,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
+import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
@@ -64,6 +65,8 @@ import org.apache.flink.runtime.rest.messages.MessageParameters;
 import org.apache.flink.runtime.rest.messages.RequestBody;
 import org.apache.flink.runtime.rest.messages.ResponseBody;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointInfo;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsMessageParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
@@ -649,6 +652,57 @@ public class AbstractFlinkServiceTest {
         assertTrue(
                 flinkService
                         .fetchSavepointInfo(triggerId.toString(), jobId.toString(), configuration)
+                        .getError()
+                        .contains("fail"));
+    }
+
+    @Test
+    public void fetchCheckpointInfoTest() throws Exception {
+        var triggerId = new TriggerId();
+        var jobId = new JobID();
+        var response = new AtomicReference<AsynchronousOperationResult<CheckpointInfo>>();
+        var flinkService =
+                getTestingService(
+                        (h, p, r) -> {
+                            if (p instanceof CheckpointStatusMessageParameters) {
+                                var params = (CheckpointStatusMessageParameters) p;
+                                assertEquals(jobId, params.jobIdPathParameter.getValue());
+                                assertEquals(triggerId, params.triggerIdPathParameter.getValue());
+                                if (response.get() == null) {
+                                    return CompletableFuture.failedFuture(new Exception("fail"));
+                                }
+                                return CompletableFuture.completedFuture(response.get());
+                            }
+                            fail("unknown request");
+                            return null;
+                        });
+
+        response.set(AsynchronousOperationResult.completed(new CheckpointInfo(123L, null)));
+        assertEquals(
+                CheckpointFetchResult.completed(),
+                flinkService.fetchCheckpointInfo(
+                        triggerId.toString(), jobId.toString(), configuration));
+
+        response.set(AsynchronousOperationResult.inProgress());
+        assertEquals(
+                CheckpointFetchResult.pending(),
+                flinkService.fetchCheckpointInfo(
+                        triggerId.toString(), jobId.toString(), configuration));
+
+        response.set(
+                AsynchronousOperationResult.completed(
+                        new CheckpointInfo(
+                                null, new SerializedThrowable(new Exception("testErr")))));
+        assertTrue(
+                flinkService
+                        .fetchCheckpointInfo(triggerId.toString(), jobId.toString(), configuration)
+                        .getError()
+                        .contains("testErr"));
+
+        response.set(null);
+        assertTrue(
+                flinkService
+                        .fetchCheckpointInfo(triggerId.toString(), jobId.toString(), configuration)
                         .getError()
                         .contains("fail"));
     }

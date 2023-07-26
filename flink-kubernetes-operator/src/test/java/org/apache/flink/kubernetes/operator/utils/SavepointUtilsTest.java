@@ -24,9 +24,9 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
-import org.apache.flink.kubernetes.operator.api.status.SnapshotType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -35,8 +35,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
-import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.CHECKPOINT;
-import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.SAVEPOINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** Tests for {@link SnapshotUtils}. */

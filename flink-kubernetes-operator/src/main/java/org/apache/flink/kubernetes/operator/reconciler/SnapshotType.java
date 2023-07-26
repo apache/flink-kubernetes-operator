@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.api.status;
+package org.apache.flink.kubernetes.operator.reconciler;
 
 /** This enumeration represents the types of state snapshots that can be taken in Flink. */
 public enum SnapshotType {

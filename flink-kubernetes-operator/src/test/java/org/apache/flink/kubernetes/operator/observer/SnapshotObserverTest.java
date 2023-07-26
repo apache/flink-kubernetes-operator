@@ -40,8 +40,8 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 
-import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.CHECKPOINT;
-import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.SAVEPOINT;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;

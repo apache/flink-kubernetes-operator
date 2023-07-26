@@ -63,13 +63,13 @@ import static org.apache.flink.api.common.JobStatus.RECONCILING;
 import static org.apache.flink.api.common.JobStatus.RESTARTING;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.api.common.JobStatus.SUSPENDED;
-import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.CHECKPOINT;
-import static org.apache.flink.kubernetes.operator.api.status.SnapshotType.SAVEPOINT;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getCheckpointInfo;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobSpec;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobStatus;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getReconciledJobSpec;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -541,8 +541,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         // trigger when new nonce is defined
         getJobSpec(sp1SessionJob).setCheckpointTriggerNonce(4L);
         reconciler.reconcile(sp1SessionJob, readyContext);
-        assertEquals(
-                "checkpoint_trigger_0", getCheckpointInfo(sp1SessionJob).getTriggerId());
+        assertEquals("checkpoint_trigger_0", getCheckpointInfo(sp1SessionJob).getTriggerId());
 
         getCheckpointInfo(sp1SessionJob).resetTrigger();
         ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
