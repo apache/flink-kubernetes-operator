@@ -92,15 +92,6 @@ public class SnapshotObserver<
         if (SnapshotUtils.checkpointInProgress(jobStatus)) {
             observeTriggeredCheckpoint(ctx, jobId);
         }
-
-        // REVIEW: clarify if this is relevant for checkpoints.
-        /*
-        // If job is in globally terminal state, observe last savepoint
-        if (ReconciliationUtils.isJobInTerminalState(resource.getStatus())) {
-            observeLatestCheckpoint(
-                    ctx.getFlinkService(), checkpointInfo, jobId, ctx.getObserveConfig());
-        }
-        */
     }
 
     /**
