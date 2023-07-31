@@ -211,6 +211,10 @@ public class SnapshotUtils {
                 snapshotInfo = jobStatus.getCheckpointInfo();
                 interval = conf.get(KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL);
                 if (!isCheckpointsTriggeringSupported(conf)) {
+                    LOG.warn(
+                            "Periodic checkpoints triggering every {} is configured, "
+                                    + "but not supported (requires Flink 1.17+)",
+                            interval);
                     return Optional.empty();
                 }
                 break;
