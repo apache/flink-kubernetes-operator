@@ -478,66 +478,7 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         getJobSpec(sp1SessionJob).setCheckpointTriggerNonce(3L);
         reconciler.reconcile(sp1SessionJob, readyContext);
         assertEquals("checkpoint_trigger_0", getCheckpointInfo(sp1SessionJob).getTriggerId());
-        /*
-            TODO: this section needs to be reintroduced in case the LAST_STATE optimization gets
-             added
 
-            // don't trigger upgrade when checkpoint is in progress
-            assertEquals(
-                    1,
-                    sp1SessionJob
-                            .getStatus()
-                            .getReconciliationStatus()
-                            .deserializeLastReconciledSpec()
-                            .getJob()
-                            .getParallelism());
-            getJobSpec(sp1SessionJob).setParallelism(100);
-            reconciler.reconcile(sp1SessionJob, readyContext);
-            assertEquals(
-                    "checkpoint_trigger_0",
-                    getCheckpointInfo(sp1SessionJob).getTriggerId());
-            assertEquals(
-                    SnapshotTriggerType.MANUAL,
-                    getCheckpointInfo(sp1SessionJob).getTriggerType());
-
-            // parallelism not changed
-            assertEquals(
-                    1,
-                    sp1SessionJob
-                            .getStatus()
-                            .getReconciliationStatus()
-                            .deserializeLastReconciledSpec()
-                            .getJob()
-                            .getParallelism());
-
-            getCheckpointInfo(sp1SessionJob).resetTrigger();
-            ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                    getCheckpointInfo(sp1SessionJob),
-                    sp1SessionJob,
-                    CHECKPOINT);
-
-            // running -> suspended
-            reconciler.reconcile(sp1SessionJob, readyContext);
-            // suspended -> running
-            reconciler.reconcile(sp1SessionJob, readyContext);
-            // parallelism changed
-            assertEquals(
-                    100,
-                    sp1SessionJob
-                            .getStatus()
-                            .getReconciliationStatus()
-                            .deserializeLastReconciledSpec()
-                            .getJob()
-                            .getParallelism());
-                verifyAndSetRunningJobsToStatus(
-                    sp1SessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
-
-            getJobStatus(sp1SessionJob).getSavepointInfo().resetTrigger();
-            ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                    getJobStatus(sp1SessionJob).getSavepointInfo(),
-                    sp1SessionJob,
-                    SAVEPOINT);
-        */
         // trigger when new nonce is defined
         getJobSpec(sp1SessionJob).setCheckpointTriggerNonce(4L);
         reconciler.reconcile(sp1SessionJob, readyContext);

@@ -94,12 +94,6 @@ public class SnapshotObserver<
         }
     }
 
-    /**
-     * Observe the status of triggered savepoints.
-     *
-     * @param ctx Resource context.
-     * @param jobID the jobID of the observed job.
-     */
     private void observeTriggeredSavepoint(FlinkResourceContext<CR> ctx, String jobID) {
         var resource = (AbstractFlinkResource<?, ?>) ctx.getResource();
 

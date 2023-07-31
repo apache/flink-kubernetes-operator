@@ -53,10 +53,6 @@ public class SnapshotUtils {
     }
 
     public static boolean checkpointInProgress(JobStatus jobStatus) {
-        // REVIEW: we create "new CheckpointInfo()" in JobStatus, but can it be reset to null
-        //  if not found in the previous versions of the spec? If so, a null check is needed here
-        //  and in multiple other places:
-        //  jobStatus.getCheckpointInfo() != null &&
         return StringUtils.isNotEmpty(jobStatus.getCheckpointInfo().getTriggerId());
     }
 
