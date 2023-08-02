@@ -360,16 +360,6 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | UPGRADE | Snapshot triggered during stateful upgrade. |
 | UNKNOWN | Snapshot trigger mechanism unknown, such as savepoint retrieved directly from Flink job. |
 
-### SnapshotType
-**Class**: org.apache.flink.kubernetes.operator.api.status.SnapshotType
-
-**Description**: This enumeration represents the types of state snapshots that can be taken in Flink.
-
-| Value | Docs |
-| ----- | ---- |
-| CHECKPOINT |  |
-| SAVEPOINT |  |
-
 ### TaskManagerInfo
 **Class**: org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo
 
