@@ -81,6 +81,7 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /** Testing utilities. */
 public class TestUtils extends BaseTestUtils {
+    public static final int MAX_RECONCILE_TIMES = 3;
 
     private static final String TEST_PLUGINS = "test-plugins";
     private static final String PlUGINS_JAR = TEST_PLUGINS + "-test-jar.jar";

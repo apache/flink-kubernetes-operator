@@ -113,8 +113,14 @@ public abstract class AbstractFlinkResourceReconciler<
         // If this is the first deployment for the resource we simply submit the job and return.
         // No further logic is required at this point.
         if (reconciliationStatus.isBeforeFirstDeployment()) {
-            LOG.info("Deploying for the first time");
             var spec = cr.getSpec();
+
+            // If the job is submitted in suspend state, no need to reconcile
+            if (spec.getJob() != null && spec.getJob().getState().equals(JobState.SUSPENDED)) {
+                return;
+            }
+
+            LOG.info("Deploying for the first time");
             var deployConfig = ctx.getDeployConfig(spec);
             updateStatusBeforeFirstDeployment(cr, spec, deployConfig, status);
             deploy(

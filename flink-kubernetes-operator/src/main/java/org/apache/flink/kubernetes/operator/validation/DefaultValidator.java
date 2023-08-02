@@ -396,10 +396,6 @@ public class DefaultValidator implements FlinkResourceValidator {
         FlinkDeploymentSpec newSpec = deployment.getSpec();
 
         if (deployment.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
-            if (newSpec.getJob() != null && !newSpec.getJob().getState().equals(JobState.RUNNING)) {
-                return Optional.of("Job must start in running state");
-            }
-
             return Optional.empty();
         }
 
@@ -532,11 +528,6 @@ public class DefaultValidator implements FlinkResourceValidator {
         FlinkSessionJobSpec newSpec = sessionJob.getSpec();
 
         if (sessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
-            // New job
-            if (newSpec.getJob() != null && !newSpec.getJob().getState().equals(JobState.RUNNING)) {
-                return Optional.of("Job must start in running state");
-            }
-
             return Optional.empty();
         } else {
             var lastReconciledSpec =

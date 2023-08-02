@@ -82,20 +82,29 @@ public class BaseTestUtils {
         return deployment;
     }
 
+    public static FlinkDeployment buildApplicationCluster(JobState state) {
+        return buildApplicationCluster(FlinkVersion.v1_17, state);
+    }
+
     public static FlinkDeployment buildApplicationCluster() {
-        return buildApplicationCluster(FlinkVersion.v1_17);
+        return buildApplicationCluster(FlinkVersion.v1_17, JobState.RUNNING);
     }
 
     public static FlinkDeployment buildApplicationCluster(String name, String namespace) {
-        return buildApplicationCluster(name, namespace, FlinkVersion.v1_17);
+        return buildApplicationCluster(name, namespace, FlinkVersion.v1_17, JobState.RUNNING);
     }
 
     public static FlinkDeployment buildApplicationCluster(FlinkVersion version) {
-        return buildApplicationCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version);
+        return buildApplicationCluster(
+                TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version, JobState.RUNNING);
+    }
+
+    public static FlinkDeployment buildApplicationCluster(FlinkVersion version, JobState state) {
+        return buildApplicationCluster(TEST_DEPLOYMENT_NAME, TEST_NAMESPACE, version, state);
     }
 
     public static FlinkDeployment buildApplicationCluster(
-            String name, String namespace, FlinkVersion version) {
+            String name, String namespace, FlinkVersion version, JobState state) {
         FlinkDeployment deployment = buildSessionCluster(name, namespace, version);
         deployment
                 .getSpec()
@@ -104,13 +113,18 @@ public class BaseTestUtils {
                                 .jarURI(SAMPLE_JAR)
                                 .parallelism(1)
                                 .upgradeMode(UpgradeMode.STATELESS)
-                                .state(JobState.RUNNING)
+                                .state(state)
                                 .build());
         deployment.setStatus(deployment.initStatus());
         return deployment;
     }
 
     public static FlinkSessionJob buildSessionJob(String name, String namespace) {
+        return buildSessionJob(name, namespace, JobState.RUNNING);
+    }
+
+    public static FlinkSessionJob buildSessionJob(
+            String name, String namespace, JobState jobState) {
         FlinkSessionJob sessionJob = new FlinkSessionJob();
         sessionJob.setStatus(new FlinkSessionJobStatus());
         sessionJob.setMetadata(
@@ -133,7 +147,7 @@ public class BaseTestUtils {
                                         .jarURI(SAMPLE_JAR)
                                         .parallelism(1)
                                         .upgradeMode(UpgradeMode.STATELESS)
-                                        .state(JobState.RUNNING)
+                                        .state(jobState)
                                         .build())
                         .flinkConfiguration(conf)
                         .build());
@@ -141,7 +155,11 @@ public class BaseTestUtils {
     }
 
     public static FlinkSessionJob buildSessionJob() {
-        return buildSessionJob(TEST_SESSION_JOB_NAME, TEST_NAMESPACE);
+        return buildSessionJob(JobState.RUNNING);
+    }
+
+    public static FlinkSessionJob buildSessionJob(JobState state) {
+        return buildSessionJob(TEST_SESSION_JOB_NAME, TEST_NAMESPACE, state);
     }
 
     public static FlinkDeploymentSpec getTestFlinkDeploymentSpec(FlinkVersion version) {
