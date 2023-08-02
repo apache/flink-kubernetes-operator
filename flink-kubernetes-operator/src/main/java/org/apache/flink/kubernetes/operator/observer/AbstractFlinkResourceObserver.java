@@ -22,7 +22,7 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,7 +48,7 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
         // Trigger resource specific observe logic
         observeInternal(ctx);
 
-        SavepointUtils.resetTriggerIfJobNotRunning(ctx.getResource(), eventRecorder);
+        SnapshotUtils.resetSnapshotTriggers(ctx.getResource(), eventRecorder);
     }
 
     /**

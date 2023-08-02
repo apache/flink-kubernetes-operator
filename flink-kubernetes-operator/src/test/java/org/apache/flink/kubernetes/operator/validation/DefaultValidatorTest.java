@@ -38,7 +38,7 @@ import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -332,7 +332,7 @@ public class DefaultValidatorTest {
                     dep.getStatus()
                             .getJobStatus()
                             .getSavepointInfo()
-                            .setLastSavepoint(Savepoint.of("sp", SavepointTriggerType.UPGRADE));
+                            .setLastSavepoint(Savepoint.of("sp", SnapshotTriggerType.UPGRADE));
 
                     dep.getStatus()
                             .setReconciliationStatus(new FlinkDeploymentReconciliationStatus());

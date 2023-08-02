@@ -25,7 +25,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.MissingSessionJobException;
 import org.apache.flink.kubernetes.operator.observer.AbstractFlinkResourceObserver;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
-import org.apache.flink.kubernetes.operator.observer.SavepointObserver;
+import org.apache.flink.kubernetes.operator.observer.SnapshotObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -49,12 +49,12 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
     private static final Logger LOG = LoggerFactory.getLogger(FlinkSessionJobObserver.class);
 
     private final SessionJobStatusObserver jobStatusObserver;
-    private final SavepointObserver<FlinkSessionJob, FlinkSessionJobStatus> savepointObserver;
+    private final SnapshotObserver<FlinkSessionJob, FlinkSessionJobStatus> savepointObserver;
 
     public FlinkSessionJobObserver(EventRecorder eventRecorder) {
         super(eventRecorder);
         this.jobStatusObserver = new SessionJobStatusObserver(eventRecorder);
-        this.savepointObserver = new SavepointObserver<>(eventRecorder);
+        this.savepointObserver = new SnapshotObserver<>(eventRecorder);
     }
 
     @Override
@@ -67,6 +67,7 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
         var jobFound = jobStatusObserver.observe(ctx);
         if (jobFound) {
             savepointObserver.observeSavepointStatus(ctx);
+            savepointObserver.observeCheckpointStatus(ctx);
         }
     }
 

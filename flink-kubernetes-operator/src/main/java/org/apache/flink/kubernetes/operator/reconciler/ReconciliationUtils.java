@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.reconciler.ReconciliationMetadata;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
+import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
@@ -31,8 +32,8 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationStatus;
-import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotInfo;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -146,8 +147,9 @@ public class ReconciliationUtils {
 
             var lastSpec = reconciliationStatus.deserializeLastReconciledSpec();
             if (lastSpec != null) {
-                // We preserve the last savepoint trigger to not lose new triggers during upgrade
+                // We preserve the last snapshot triggers to not lose new triggers during upgrade
                 job.setSavepointTriggerNonce(lastSpec.getJob().getSavepointTriggerNonce());
+                job.setCheckpointTriggerNonce(lastSpec.getJob().getCheckpointTriggerNonce());
             }
 
             if (target instanceof FlinkDeployment) {
@@ -185,11 +187,13 @@ public class ReconciliationUtils {
                 clock);
     }
 
-    public static <SPEC extends AbstractFlinkSpec> void updateLastReconciledSavepointTriggerNonce(
-            SavepointInfo savepointInfo, AbstractFlinkResource<SPEC, ?> target) {
+    public static <SPEC extends AbstractFlinkSpec> void updateLastReconciledSnapshotTriggerNonce(
+            SnapshotInfo snapshotInfo,
+            AbstractFlinkResource<SPEC, ?> target,
+            SnapshotType snapshotType) {
 
         // We only need to update for MANUAL triggers
-        if (savepointInfo.getTriggerType() != SavepointTriggerType.MANUAL) {
+        if (snapshotInfo.getTriggerType() != SnapshotTriggerType.MANUAL) {
             return;
         }
 
@@ -198,12 +202,28 @@ public class ReconciliationUtils {
         var reconciliationStatus = commonStatus.getReconciliationStatus();
         var lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
 
-        lastReconciledSpec
-                .getJob()
-                .setSavepointTriggerNonce(spec.getJob().getSavepointTriggerNonce());
+        JobSpec lastReconciledJobSpec = lastReconciledSpec.getJob();
+        JobSpec jobSpec = spec.getJob();
+
+        updateLastReconciledJobSpec(lastReconciledJobSpec, jobSpec, snapshotType);
 
         reconciliationStatus.serializeAndSetLastReconciledSpec(lastReconciledSpec, target);
         reconciliationStatus.setReconciliationTimestamp(System.currentTimeMillis());
+    }
+
+    private static void updateLastReconciledJobSpec(
+            JobSpec lastReconciledJobSpec, JobSpec jobSpec, SnapshotType snapshotType) {
+        switch (snapshotType) {
+            case SAVEPOINT:
+                lastReconciledJobSpec.setSavepointTriggerNonce(jobSpec.getSavepointTriggerNonce());
+                break;
+            case CHECKPOINT:
+                lastReconciledJobSpec.setCheckpointTriggerNonce(
+                        jobSpec.getCheckpointTriggerNonce());
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
+        }
     }
 
     private static TaskManagerInfo getTaskManagerInfo(

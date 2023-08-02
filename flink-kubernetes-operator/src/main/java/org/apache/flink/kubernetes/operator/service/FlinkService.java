@@ -26,11 +26,13 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobmaster.JobResult;
@@ -86,14 +88,23 @@ public interface FlinkService {
 
     void triggerSavepoint(
             String jobId,
-            SavepointTriggerType triggerType,
+            SnapshotTriggerType triggerType,
             SavepointInfo savepointInfo,
+            Configuration conf)
+            throws Exception;
+
+    void triggerCheckpoint(
+            String jobId,
+            SnapshotTriggerType triggerType,
+            CheckpointInfo checkpointInfo,
             Configuration conf)
             throws Exception;
 
     Optional<Savepoint> getLastCheckpoint(JobID jobId, Configuration conf) throws Exception;
 
     SavepointFetchResult fetchSavepointInfo(String triggerId, String jobId, Configuration conf);
+
+    CheckpointFetchResult fetchCheckpointInfo(String triggerId, String jobId, Configuration conf);
 
     Tuple2<
                     Optional<CheckpointHistoryWrapper.CompletedCheckpointInfo>,

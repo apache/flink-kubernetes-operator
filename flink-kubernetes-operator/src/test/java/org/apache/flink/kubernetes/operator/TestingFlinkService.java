@@ -35,21 +35,25 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
+import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
+import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.service.NativeFlinkServiceTest;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -106,7 +110,10 @@ public class TestingFlinkService extends AbstractFlinkService {
                     "1234567 @ 1970-01-01T00:00:00+00:00");
 
     private int savepointCounter = 0;
-    private int triggerCounter = 0;
+    private int savepointTriggerCounter = 0;
+
+    private int checkpointCounter = 0;
+    private int checkpointTriggerCounter = 0;
 
     private final List<Tuple3<String, JobStatusMessage, Configuration>> jobs = new ArrayList<>();
     private final Map<JobID, String> jobErrors = new HashMap<>();
@@ -122,6 +129,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Setter private Consumer<Configuration> listJobConsumer = conf -> {};
     private final List<String> disposedSavepoints = new ArrayList<>();
     private final Map<String, Boolean> savepointTriggers = new HashMap<>();
+    private final Map<String, Boolean> checkpointTriggers = new HashMap<>();
 
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
@@ -169,8 +177,10 @@ public class TestingFlinkService extends AbstractFlinkService {
     public void clear() {
         jobs.clear();
         sessions.clear();
-        triggerCounter = 0;
+        savepointTriggerCounter = 0;
         savepointCounter = 0;
+        checkpointTriggerCounter = 0;
+        checkpointCounter = 0;
     }
 
     public void clearJobsInTerminalState() {
@@ -278,15 +288,29 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Override
     public void triggerSavepoint(
             String jobId,
-            SavepointTriggerType triggerType,
+            SnapshotTriggerType triggerType,
             SavepointInfo savepointInfo,
             Configuration conf) {
-        var triggerId = "trigger_" + triggerCounter++;
+        var triggerId = "savepoint_trigger_" + savepointTriggerCounter++;
 
-        var savepointFormatType = SavepointUtils.getSavepointFormatType(conf);
+        var savepointFormatType = SnapshotUtils.getSavepointFormatType(conf);
         savepointInfo.setTrigger(
                 triggerId, triggerType, SavepointFormatType.valueOf(savepointFormatType.name()));
         savepointTriggers.put(triggerId, false);
+    }
+
+    @Override
+    public void triggerCheckpoint(
+            String jobId,
+            SnapshotTriggerType triggerType,
+            CheckpointInfo checkpointInfo,
+            Configuration conf) {
+        var triggerId = "checkpoint_trigger_" + checkpointTriggerCounter++;
+
+        var checkpointType = conf.get(KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_TYPE);
+        checkpointInfo.setTrigger(
+                triggerId, triggerType, CheckpointType.valueOf(checkpointType.name()));
+        checkpointTriggers.put(triggerId, false);
     }
 
     @Override
@@ -302,6 +326,22 @@ public class TestingFlinkService extends AbstractFlinkService {
         }
 
         return SavepointFetchResult.error("Failed");
+    }
+
+    @Override
+    public CheckpointFetchResult fetchCheckpointInfo(
+            String triggerId, String jobId, Configuration conf) {
+
+        if (checkpointTriggers.containsKey(triggerId)) {
+            if (checkpointTriggers.get(triggerId)) {
+                checkpointCounter++;
+                return CheckpointFetchResult.completed();
+            }
+            checkpointTriggers.put(triggerId, true);
+            return CheckpointFetchResult.pending();
+        }
+
+        return CheckpointFetchResult.error("Failed");
     }
 
     @Override

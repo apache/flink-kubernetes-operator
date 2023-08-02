@@ -174,6 +174,7 @@ public class EventRecorder {
         Submit,
         JobStatusChanged,
         SavepointError,
+        CheckpointError,
         Cleanup,
         CleanupFailed,
         Missing,

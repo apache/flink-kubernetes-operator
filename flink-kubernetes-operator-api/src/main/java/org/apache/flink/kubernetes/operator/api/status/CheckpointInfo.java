@@ -25,39 +25,33 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
-import java.util.List;
-
-/** Stores savepoint related information. */
+/** Stores checkpoint-related information. */
 @Experimental
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class SavepointInfo implements SnapshotInfo {
-    /** Last completed savepoint by the operator. */
-    private Savepoint lastSavepoint;
+public class CheckpointInfo implements SnapshotInfo {
+    /** Last completed checkpoint by the operator. */
+    private Checkpoint lastCheckpoint;
 
-    /** Trigger id of a pending savepoint operation. */
+    /** Trigger id of a pending checkpoint operation. */
     private String triggerId;
 
-    /** Trigger timestamp of a pending savepoint operation. */
+    /** Trigger timestamp of a pending checkpoint operation. */
     private Long triggerTimestamp;
 
-    /** Savepoint trigger mechanism. */
+    /** Checkpoint trigger mechanism. */
     private SnapshotTriggerType triggerType;
 
-    /** Savepoint format. */
-    private SavepointFormatType formatType;
+    /** Checkpoint format. */
+    private CheckpointType formatType;
 
-    /** List of recent savepoints. */
-    private List<Savepoint> savepointHistory = new ArrayList<>();
-
-    /** Trigger timestamp of last periodic savepoint operation. */
-    private long lastPeriodicSavepointTimestamp = 0L;
+    /** Trigger timestamp of last periodic checkpoint operation. */
+    private long lastPeriodicCheckpointTimestamp = 0L;
 
     public void setTrigger(
-            String triggerId, SnapshotTriggerType triggerType, SavepointFormatType formatType) {
+            String triggerId, SnapshotTriggerType triggerType, CheckpointType formatType) {
         this.triggerId = triggerId;
         this.triggerTimestamp = System.currentTimeMillis();
         this.triggerType = triggerType;
@@ -72,18 +66,14 @@ public class SavepointInfo implements SnapshotInfo {
     }
 
     /**
-     * Update last savepoint info and add the savepoint to the history if it isn't already the most
-     * recent savepoint.
+     * Update last checkpoint info.
      *
-     * @param savepoint Savepoint to be added.
+     * @param checkpoint Checkpoint to be added.
      */
-    public void updateLastSavepoint(Savepoint savepoint) {
-        if (lastSavepoint == null || !lastSavepoint.getLocation().equals(savepoint.getLocation())) {
-            lastSavepoint = savepoint;
-            savepointHistory.add(savepoint);
-            if (savepoint.getTriggerType() == SnapshotTriggerType.PERIODIC) {
-                lastPeriodicSavepointTimestamp = savepoint.getTimeStamp();
-            }
+    public void updateLastCheckpoint(Checkpoint checkpoint) {
+        lastCheckpoint = checkpoint;
+        if (checkpoint.getTriggerType() == SnapshotTriggerType.PERIODIC) {
+            lastPeriodicCheckpointTimestamp = checkpoint.getTimeStamp();
         }
         resetTrigger();
     }
@@ -91,32 +81,32 @@ public class SavepointInfo implements SnapshotInfo {
     @JsonIgnore
     @Override
     public Long getLastTriggerNonce() {
-        return lastSavepoint == null ? null : lastSavepoint.getTriggerNonce();
+        return lastCheckpoint == null ? null : lastCheckpoint.getTriggerNonce();
     }
 
     @JsonIgnore
     @Override
     public long getLastPeriodicTriggerTimestamp() {
-        return lastPeriodicSavepointTimestamp;
+        return lastPeriodicCheckpointTimestamp;
     }
 
     @JsonIgnore
     @Override
     public SnapshotTriggerType getLastTriggerType() {
-        return lastSavepoint == null ? null : lastSavepoint.getTriggerType();
+        return lastCheckpoint == null ? null : lastCheckpoint.getTriggerType();
     }
 
     @JsonIgnore
     @Override
     public String formatErrorMessage(Long triggerNonce) {
         return SnapshotTriggerType.PERIODIC == triggerType
-                ? "Periodic savepoint failed"
-                : "Savepoint failed for savepointTriggerNonce: " + triggerNonce;
+                ? "Periodic checkpoint failed"
+                : "Checkpoint failed for checkpointTriggerNonce: " + triggerNonce;
     }
 
     @JsonIgnore
     @Override
     public Snapshot getLastSnapshot() {
-        return lastSavepoint;
+        return lastCheckpoint;
     }
 }

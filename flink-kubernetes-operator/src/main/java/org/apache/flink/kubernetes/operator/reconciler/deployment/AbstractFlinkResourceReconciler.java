@@ -34,7 +34,7 @@ import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
@@ -220,7 +220,7 @@ public abstract class AbstractFlinkResourceReconciler<
             if (initialSp != null) {
                 status.getJobStatus()
                         .getSavepointInfo()
-                        .setLastSavepoint(Savepoint.of(initialSp, SavepointTriggerType.UNKNOWN));
+                        .setLastSavepoint(Savepoint.of(initialSp, SnapshotTriggerType.UNKNOWN));
                 initialUpgradeMode = UpgradeMode.SAVEPOINT;
             }
 

@@ -21,10 +21,12 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.status.Checkpoint;
+import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
-import org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -32,7 +34,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.ConfigOptionUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.SavepointUtils;
+import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,15 +43,19 @@ import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
 
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
+import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.isCheckpointsTriggeringSupported;
+
 /** An observer of savepoint progress. */
-public class SavepointObserver<
+public class SnapshotObserver<
         CR extends AbstractFlinkResource<?, STATUS>, STATUS extends CommonStatus<?>> {
 
-    private static final Logger LOG = LoggerFactory.getLogger(SavepointObserver.class);
+    private static final Logger LOG = LoggerFactory.getLogger(SnapshotObserver.class);
 
     private final EventRecorder eventRecorder;
 
-    public SavepointObserver(EventRecorder eventRecorder) {
+    public SnapshotObserver(EventRecorder eventRecorder) {
         this.eventRecorder = eventRecorder;
     }
 
@@ -61,7 +67,7 @@ public class SavepointObserver<
         var jobId = jobStatus.getJobId();
 
         // If any manual or periodic savepoint is in progress, observe it
-        if (SavepointUtils.savepointInProgress(jobStatus)) {
+        if (SnapshotUtils.savepointInProgress(jobStatus)) {
             observeTriggeredSavepoint(ctx, jobId);
         }
 
@@ -74,12 +80,20 @@ public class SavepointObserver<
         cleanupSavepointHistory(ctx, savepointInfo);
     }
 
-    /**
-     * Observe the status of manually triggered savepoints.
-     *
-     * @param ctx Resource context.
-     * @param jobID the jobID of the observed job.
-     */
+    public void observeCheckpointStatus(FlinkResourceContext<CR> ctx) {
+        if (!isCheckpointsTriggeringSupported(ctx.getObserveConfig())) {
+            return;
+        }
+        var resource = ctx.getResource();
+        var jobStatus = resource.getStatus().getJobStatus();
+        var jobId = jobStatus.getJobId();
+
+        // If any manual or periodic checkpoint is in progress, observe it
+        if (SnapshotUtils.checkpointInProgress(jobStatus)) {
+            observeTriggeredCheckpoint(ctx, jobId);
+        }
+    }
+
     private void observeTriggeredSavepoint(FlinkResourceContext<CR> ctx, String jobID) {
         var resource = (AbstractFlinkResource<?, ?>) ctx.getResource();
 
@@ -98,12 +112,17 @@ public class SavepointObserver<
 
         if (savepointFetchResult.getError() != null) {
             var err = savepointFetchResult.getError();
-            if (SavepointUtils.gracePeriodEnded(ctx.getObserveConfig(), savepointInfo)) {
+            Duration gracePeriod =
+                    ctx.getObserveConfig()
+                            .get(
+                                    KubernetesOperatorConfigOptions
+                                            .OPERATOR_SAVEPOINT_TRIGGER_GRACE_PERIOD);
+            if (SnapshotUtils.gracePeriodEnded(gracePeriod, savepointInfo)) {
                 LOG.error(
                         "Savepoint attempt failed after grace period. Won't be retried again: "
                                 + err);
-                ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(
-                        savepointInfo, (AbstractFlinkResource) resource);
+                ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                        savepointInfo, (AbstractFlinkResource) resource, SAVEPOINT);
             } else {
                 LOG.warn("Savepoint failed within grace period, retrying: " + err);
             }
@@ -112,8 +131,8 @@ public class SavepointObserver<
                     EventRecorder.Type.Warning,
                     EventRecorder.Reason.SavepointError,
                     EventRecorder.Component.Operator,
-                    SavepointUtils.createSavepointError(
-                            savepointInfo, resource.getSpec().getJob().getSavepointTriggerNonce()));
+                    savepointInfo.formatErrorMessage(
+                            resource.getSpec().getJob().getSavepointTriggerNonce()));
             savepointInfo.resetTrigger();
             return;
         }
@@ -124,12 +143,70 @@ public class SavepointObserver<
                         savepointFetchResult.getLocation(),
                         savepointInfo.getTriggerType(),
                         savepointInfo.getFormatType(),
-                        SavepointTriggerType.MANUAL == savepointInfo.getTriggerType()
+                        SnapshotTriggerType.MANUAL == savepointInfo.getTriggerType()
                                 ? resource.getSpec().getJob().getSavepointTriggerNonce()
                                 : null);
 
-        ReconciliationUtils.updateLastReconciledSavepointTriggerNonce(savepointInfo, resource);
+        ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                savepointInfo, resource, SAVEPOINT);
         savepointInfo.updateLastSavepoint(savepoint);
+    }
+
+    private void observeTriggeredCheckpoint(FlinkResourceContext<CR> ctx, String jobID) {
+        var resource = (AbstractFlinkResource<?, ?>) ctx.getResource();
+
+        CheckpointInfo checkpointInfo = resource.getStatus().getJobStatus().getCheckpointInfo();
+
+        LOG.info("Observing checkpoint status.");
+        var checkpointFetchResult =
+                ctx.getFlinkService()
+                        .fetchCheckpointInfo(
+                                checkpointInfo.getTriggerId(), jobID, ctx.getObserveConfig());
+
+        if (checkpointFetchResult.isPending()) {
+            LOG.info("Checkpoint operation not finished yet...");
+            return;
+        }
+
+        if (checkpointFetchResult.getError() != null) {
+            var err = checkpointFetchResult.getError();
+            Duration gracePeriod =
+                    ctx.getObserveConfig()
+                            .get(
+                                    KubernetesOperatorConfigOptions
+                                            .OPERATOR_CHECKPOINT_TRIGGER_GRACE_PERIOD);
+            if (SnapshotUtils.gracePeriodEnded(gracePeriod, checkpointInfo)) {
+                LOG.error(
+                        "Checkpoint attempt failed after grace period. Won't be retried again: "
+                                + err);
+                ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                        checkpointInfo, (AbstractFlinkResource) resource, CHECKPOINT);
+            } else {
+                LOG.warn("Checkpoint failed within grace period, retrying: " + err);
+            }
+            eventRecorder.triggerEvent(
+                    resource,
+                    EventRecorder.Type.Warning,
+                    EventRecorder.Reason.CheckpointError,
+                    EventRecorder.Component.Operator,
+                    checkpointInfo.formatErrorMessage(
+                            resource.getSpec().getJob().getCheckpointTriggerNonce()));
+            checkpointInfo.resetTrigger();
+            return;
+        }
+
+        var checkpoint =
+                new Checkpoint(
+                        checkpointInfo.getTriggerTimestamp(),
+                        checkpointInfo.getTriggerType(),
+                        checkpointInfo.getFormatType(),
+                        SnapshotTriggerType.MANUAL == checkpointInfo.getTriggerType()
+                                ? resource.getSpec().getJob().getCheckpointTriggerNonce()
+                                : null);
+
+        ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
+                checkpointInfo, resource, CHECKPOINT);
+        checkpointInfo.updateLastCheckpoint(checkpoint);
     }
 
     /** Clean up and dispose savepoints according to the configured max size/age. */

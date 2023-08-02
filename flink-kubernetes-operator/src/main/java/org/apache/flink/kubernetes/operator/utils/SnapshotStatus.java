@@ -15,16 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.api.status;
+package org.apache.flink.kubernetes.operator.utils;
 
-/** Savepoint trigger mechanism. */
-public enum SavepointTriggerType {
-    /** Savepoint manually triggered by changing the savepointTriggerNonce. */
-    MANUAL,
-    /** Savepoint periodically triggered by the operator. */
-    PERIODIC,
-    /** Savepoint triggered during stateful upgrade. */
-    UPGRADE,
-    /** Savepoint trigger mechanism unknown, such as savepoint retrieved directly from Flink job. */
-    UNKNOWN
+/** Enum encapsulating the lifecycle state of a Flink snapshot. */
+public enum SnapshotStatus {
+    /** Snapshot is pending, could be in the retry phase in the case of manual snapshots. */
+    PENDING,
+    /** Snapshot is completed successfully. */
+    SUCCEEDED,
+    /** Manual snapshot is abandoned after defined retries. */
+    ABANDONED
 }

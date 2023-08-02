@@ -121,6 +121,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | state | org.apache.flink.kubernetes.operator.api.spec.JobState | Desired state for the job. |
 | savepointTriggerNonce | java.lang.Long | Nonce used to manually trigger savepoint for the running job. In order to trigger a savepoint, change the number to anything other than the current value. |
 | initialSavepointPath | java.lang.String | Savepoint path used by the job the first time it is deployed. Upgrades/redeployments will not be affected. |
+| checkpointTriggerNonce | java.lang.Long | Nonce used to manually trigger checkpoint for the running job. In order to trigger a checkpoint, change the number to anything other than the current value. |
 | upgradeMode | org.apache.flink.kubernetes.operator.api.spec.UpgradeMode | Upgrade mode of the Flink job. |
 | allowNonRestoredState | java.lang.Boolean | Allow checkpoint state that cannot be mapped to any job vertex in tasks. |
 
@@ -178,6 +179,44 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | stateless | Job is upgraded with empty state. |
 
 ## Status
+
+### Checkpoint
+**Class**: org.apache.flink.kubernetes.operator.api.status.Checkpoint
+
+**Description**: Represents information about a finished checkpoint.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| timeStamp | long | Millisecond timestamp at the start of the checkpoint operation. |
+| triggerType | org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType | Checkpoint trigger mechanism. |
+| formatType | org.apache.flink.kubernetes.operator.api.status.CheckpointType | Checkpoint format. |
+| triggerNonce | java.lang.Long | Nonce value used when the checkpoint was triggered manually {@link SnapshotTriggerType#MANUAL}, null for other types of checkpoint. |
+
+### CheckpointInfo
+**Class**: org.apache.flink.kubernetes.operator.api.status.CheckpointInfo
+
+**Description**: Stores checkpoint-related information.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| lastCheckpoint | org.apache.flink.kubernetes.operator.api.status.Checkpoint | Last completed checkpoint by the operator. |
+| triggerId | java.lang.String | Trigger id of a pending checkpoint operation. |
+| triggerTimestamp | java.lang.Long | Trigger timestamp of a pending checkpoint operation. |
+| triggerType | org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType | Checkpoint trigger mechanism. |
+| formatType | org.apache.flink.kubernetes.operator.api.status.CheckpointType | Checkpoint format. |
+| lastPeriodicCheckpointTimestamp | long | Trigger timestamp of last periodic checkpoint operation. |
+
+### CheckpointType
+**Class**: org.apache.flink.kubernetes.operator.api.status.CheckpointType
+
+**Description**: Checkpoint format type.
+
+| Value | Docs |
+| ----- | ---- |
+| FULL |  |
+| INCREMENTAL |  |
+| UNKNOWN | Checkpoint format unknown, if the checkpoint was not triggered by the operator. |
+| description | org.apache.flink.configuration.description.InlineElement |  |
 
 ### FlinkDeploymentReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentReconciliationStatus
@@ -256,6 +295,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | startTime | java.lang.String | Start time of the job. |
 | updateTime | java.lang.String | Update time of the job. |
 | savepointInfo | org.apache.flink.kubernetes.operator.api.status.SavepointInfo | Information about pending and last savepoint for the job. |
+| checkpointInfo | org.apache.flink.kubernetes.operator.api.status.CheckpointInfo | Information about pending and last checkpoint for the job. |
 
 ### ReconciliationState
 **Class**: org.apache.flink.kubernetes.operator.api.status.ReconciliationState
@@ -278,9 +318,9 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | timeStamp | long | Millisecond timestamp at the start of the savepoint operation. |
 | location | java.lang.String | External pointer of the savepoint can be used to recover jobs. |
-| triggerType | org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType | Savepoint trigger mechanism. |
+| triggerType | org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType | Savepoint trigger mechanism. |
 | formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType | Savepoint format. |
-| triggerNonce | java.lang.Long | Nonce value used when the savepoint was triggered manually {@link SavepointTriggerType#MANUAL}, null for other types of savepoints. |
+| triggerNonce | java.lang.Long | Nonce value used when the savepoint was triggered manually {@link SnapshotTriggerType#MANUAL}, null for other types of savepoints. |
 
 ### SavepointFormatType
 **Class**: org.apache.flink.kubernetes.operator.api.status.SavepointFormatType
@@ -303,22 +343,22 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | lastSavepoint | org.apache.flink.kubernetes.operator.api.status.Savepoint | Last completed savepoint by the operator. |
 | triggerId | java.lang.String | Trigger id of a pending savepoint operation. |
 | triggerTimestamp | java.lang.Long | Trigger timestamp of a pending savepoint operation. |
-| triggerType | org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType | Savepoint trigger mechanism. |
+| triggerType | org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType | Savepoint trigger mechanism. |
 | formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType | Savepoint format. |
 | savepointHistory | java.util.List<org.apache.flink.kubernetes.operator.api.status.Savepoint> | List of recent savepoints. |
 | lastPeriodicSavepointTimestamp | long | Trigger timestamp of last periodic savepoint operation. |
 
-### SavepointTriggerType
-**Class**: org.apache.flink.kubernetes.operator.api.status.SavepointTriggerType
+### SnapshotTriggerType
+**Class**: org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType
 
-**Description**: Savepoint trigger mechanism.
+**Description**: Snapshot trigger mechanism.
 
 | Value | Docs |
 | ----- | ---- |
-| MANUAL | Savepoint manually triggered by changing the savepointTriggerNonce. |
-| PERIODIC | Savepoint periodically triggered by the operator. |
-| UPGRADE | Savepoint triggered during stateful upgrade. |
-| UNKNOWN | Savepoint trigger mechanism unknown, such as savepoint retrieved directly from Flink job. |
+| MANUAL | Snapshot manually triggered by changing a triggerNonce. |
+| PERIODIC | Snapshot periodically triggered by the operator. |
+| UPGRADE | Snapshot triggered during stateful upgrade. |
+| UNKNOWN | Snapshot trigger mechanism unknown, such as savepoint retrieved directly from Flink job. |
 
 ### TaskManagerInfo
 **Class**: org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo

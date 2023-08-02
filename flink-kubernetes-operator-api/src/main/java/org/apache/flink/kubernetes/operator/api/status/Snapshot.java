@@ -15,14 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.utils;
+package org.apache.flink.kubernetes.operator.api.status;
 
-/** Enum encapsulating the lifecycle state of a Flink resource. */
-public enum SavepointStatus {
-    /** Savepoint is pending, could be in the retry phase in the case of manual savepoint. */
-    PENDING,
-    /** Savepoint is completed successfully. */
-    SUCCEEDED,
-    /** Manual savepoint is abandoned after defined retries. */
-    ABANDONED
+/** A common interface for {@link Checkpoint} and {@link Savepoint}. */
+public interface Snapshot {
+    long getTimeStamp();
+
+    SnapshotTriggerType getTriggerType();
 }
