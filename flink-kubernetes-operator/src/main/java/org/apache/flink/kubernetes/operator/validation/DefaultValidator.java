@@ -395,14 +395,6 @@ public class DefaultValidator implements FlinkResourceValidator {
             FlinkDeployment deployment, Map<String, String> effectiveConfig) {
         FlinkDeploymentSpec newSpec = deployment.getSpec();
 
-        if (deployment.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
-            if (newSpec.getJob() != null && !newSpec.getJob().getState().equals(JobState.RUNNING)) {
-                return Optional.of("Job must start in running state");
-            }
-
-            return Optional.empty();
-        }
-
         FlinkDeploymentSpec oldSpec =
                 deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
 
@@ -531,24 +523,12 @@ public class DefaultValidator implements FlinkResourceValidator {
     private Optional<String> validateSpecChange(FlinkSessionJob sessionJob) {
         FlinkSessionJobSpec newSpec = sessionJob.getSpec();
 
-        if (sessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
-            // New job
-            if (newSpec.getJob() != null && !newSpec.getJob().getState().equals(JobState.RUNNING)) {
-                return Optional.of("Job must start in running state");
-            }
-
-            return Optional.empty();
-        } else {
-            var lastReconciledSpec =
-                    sessionJob
-                            .getStatus()
-                            .getReconciliationStatus()
-                            .deserializeLastReconciledSpec();
-            if (!lastReconciledSpec
-                    .getDeploymentName()
-                    .equals(sessionJob.getSpec().getDeploymentName())) {
-                return Optional.of("The deploymentName can't be changed");
-            }
+        var lastReconciledSpec =
+                sessionJob.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+        if (!lastReconciledSpec
+                .getDeploymentName()
+                .equals(sessionJob.getSpec().getDeploymentName())) {
+            return Optional.of("The deploymentName can't be changed");
         }
 
         return Optional.empty();

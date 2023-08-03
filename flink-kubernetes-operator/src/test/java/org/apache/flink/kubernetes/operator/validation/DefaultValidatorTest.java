@@ -83,10 +83,6 @@ public class DefaultValidatorTest {
                 "The FlinkDeployment name: session-cluster-1.13 is invalid, must consist of lower case alphanumeric characters or '-', start with an alphabetic character, and end with an alphanumeric character (e.g. 'my-name',  or 'abc-123'), and the length must be no more than 45 characters.");
 
         testError(
-                dep -> dep.getSpec().getJob().setState(JobState.SUSPENDED),
-                "Job must start in running state");
-
-        testError(
                 dep -> dep.getSpec().getJob().setParallelism(0),
                 "Job parallelism must be larger than 0");
 
@@ -614,11 +610,6 @@ public class DefaultValidatorTest {
                 sessionJob -> sessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE),
                 flinkDeployment -> {},
                 "The LAST_STATE upgrade mode is not supported in session job now.");
-
-        testSessionJobValidateWithModifier(
-                sessionJob -> sessionJob.getSpec().getJob().setState(JobState.SUSPENDED),
-                flinkDeployment -> {},
-                "Job must start in running state");
 
         testSessionJobValidateWithModifier(
                 sessionJob ->
