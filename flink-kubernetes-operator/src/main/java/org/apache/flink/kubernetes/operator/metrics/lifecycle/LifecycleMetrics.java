@@ -144,9 +144,13 @@ public class LifecycleMetrics<CR extends AbstractFlinkResource<?, ?>>
                     .gauge(
                             "Count",
                             () ->
-                                    lifecycleTrackers.values().stream()
-                                            .map(ResourceLifecycleMetricTracker::getCurrentState)
-                                            .filter(s -> s == state)
+                                    lifecycleTrackers.entrySet().stream()
+                                            .filter(
+                                                    tracker ->
+                                                            tracker.getKey().f0.equals(namespace)
+                                                                    && tracker.getValue()
+                                                                                    .getCurrentState()
+                                                                            == state)
                                             .count());
         }
     }

@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.metrics;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.metrics.Gauge;
@@ -124,6 +125,24 @@ public class FlinkDeploymentMetricsTest {
                 listener.getNamespaceMetricId(FlinkDeployment.class, namespace2, COUNTER_NAME);
         assertTrue(listener.getGauge(counterId1).isEmpty());
         assertTrue(listener.getGauge(counterId2).isEmpty());
+        var stateCounter1 =
+                listener.getNamespaceMetricId(
+                        FlinkDeployment.class,
+                        namespace1,
+                        "Lifecycle",
+                        "State",
+                        ResourceLifecycleState.CREATED.name(),
+                        "Count");
+        var stateCounter2 =
+                listener.getNamespaceMetricId(
+                        FlinkDeployment.class,
+                        namespace1,
+                        "Lifecycle",
+                        "State",
+                        ResourceLifecycleState.CREATED.name(),
+                        "Count");
+        assertTrue(listener.getGauge(stateCounter1).isEmpty());
+        assertTrue(listener.getGauge(stateCounter2).isEmpty());
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
             var statusId1 =
                     listener.getNamespaceMetricId(
@@ -147,6 +166,8 @@ public class FlinkDeploymentMetricsTest {
         metricManager.onUpdate(deployment2);
         assertEquals(1, listener.getGauge(counterId1).get().getValue());
         assertEquals(1, listener.getGauge(counterId2).get().getValue());
+        assertEquals(1L, listener.getGauge(stateCounter1).get().getValue());
+        assertEquals(1L, listener.getGauge(stateCounter2).get().getValue());
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
             deployment1.getStatus().setJobManagerDeploymentStatus(status);
             deployment2.getStatus().setJobManagerDeploymentStatus(status);
@@ -175,6 +196,8 @@ public class FlinkDeploymentMetricsTest {
 
         assertEquals(0, listener.getGauge(counterId1).get().getValue());
         assertEquals(0, listener.getGauge(counterId2).get().getValue());
+        assertEquals(0L, listener.getGauge(stateCounter1).get().getValue());
+        assertEquals(0L, listener.getGauge(stateCounter2).get().getValue());
         for (JobManagerDeploymentStatus status : JobManagerDeploymentStatus.values()) {
             deployment1.getStatus().setJobManagerDeploymentStatus(status);
             deployment2.getStatus().setJobManagerDeploymentStatus(status);
