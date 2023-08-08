@@ -282,7 +282,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     @Test
     public void triggerSavepoint() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-
         reconciler.reconcile(deployment, context);
         var runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);

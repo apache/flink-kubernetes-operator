@@ -670,12 +670,15 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertEquals(status.getReconciliationStatus().getState(), ReconciliationState.UPGRADING);
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
 
+        // Kubernetes Deployment is not there yet
         observer.observe(deployment, TestUtils.createEmptyContext());
         assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
 
+        // Kubernetes Deployment is there but without the correct label
         observer.observe(deployment, context);
         assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
 
+        // We set the correct generation label on the kubernetes deployment
         kubernetesDeployment
                 .getMetadata()
                 .getAnnotations()
@@ -684,8 +687,28 @@ public class ApplicationObserverTest extends OperatorTestBase {
         deployment.getMetadata().setGeneration(322L);
         deployment.getSpec().getJob().setParallelism(4);
 
+        // Simulate marked for deletion, make sure we don't recognize this as a valid deployment
+        kubernetesDeployment.getMetadata().setDeletionTimestamp(Instant.now().toString());
+        observer.observe(deployment, context);
+        assertEquals(ReconciliationState.UPGRADING, reconStatus.getState());
+        assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
+
+        // Reset deletion flag
+        kubernetesDeployment.getMetadata().setDeletionTimestamp(null);
+
+        // Simulate non-missing deployment, this happens in the middle of savepoint upgrades
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         observer.observe(deployment, context);
 
+        assertEquals(ReconciliationState.UPGRADING, reconStatus.getState());
+        assertEquals(JobManagerDeploymentStatus.READY, status.getJobManagerDeploymentStatus());
+
+        // Reset to missing
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
+
+        // Deployment is missing and kubernetes deployment matches the target generation
+        // should be recognized as deployed
+        observer.observe(deployment, context);
         assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYED_NOT_READY,
