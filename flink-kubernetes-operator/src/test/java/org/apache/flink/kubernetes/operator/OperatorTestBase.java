@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -38,7 +37,7 @@ public abstract class OperatorTestBase {
     protected TestingFlinkService flinkService;
     protected EventCollector eventCollector = new EventCollector();
     protected EventRecorder eventRecorder;
-    protected StatusRecorder statusRecorder = new TestingStatusRecorder();
+    protected TestingStatusRecorder statusRecorder = new TestingStatusRecorder();
     protected KubernetesOperatorMetricGroup operatorMetricGroup;
 
     protected Context<?> context;
