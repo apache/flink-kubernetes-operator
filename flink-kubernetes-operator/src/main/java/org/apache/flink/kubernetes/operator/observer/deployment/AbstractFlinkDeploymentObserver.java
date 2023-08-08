@@ -232,6 +232,11 @@ public abstract class AbstractFlinkDeploymentObserver
         var flinkDep = ctx.getResource();
         var status = flinkDep.getStatus();
 
+        if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.MISSING) {
+            // We know that the current deployment is not missing, nothing to check
+            return false;
+        }
+
         // We are performing a full upgrade
         Optional<Deployment> depOpt = ctx.getJosdkContext().getSecondaryResource(Deployment.class);
 
@@ -241,6 +246,10 @@ public abstract class AbstractFlinkDeploymentObserver
         }
 
         var deployment = depOpt.get();
+        if (deployment.isMarkedForDeletion()) {
+            logger.debug("Deployment already marked for deletion, ignoring...");
+            return false;
+        }
 
         Map<String, String> annotations = deployment.getMetadata().getAnnotations();
         if (annotations == null) {

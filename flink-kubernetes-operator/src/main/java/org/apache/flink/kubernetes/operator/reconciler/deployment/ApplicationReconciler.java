@@ -42,6 +42,7 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
+import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
@@ -162,14 +163,12 @@ public class ApplicationReconciler
         setRandomJobResultStorePath(deployConfig);
 
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.MISSING) {
-            if (!ReconciliationUtils.isJobInTerminalState(status)) {
-                LOG.error("Invalid status for deployment: {}", status);
-                throw new RuntimeException("This indicates a bug...");
-            }
+            Preconditions.checkArgument(ReconciliationUtils.isJobInTerminalState(status));
             LOG.info("Deleting deployment with terminated application before new deployment");
             flinkService.deleteClusterDeployment(
                     relatedResource.getMetadata(), status, deployConfig, true);
             flinkService.waitForClusterShutdown(deployConfig);
+            statusRecorder.patchAndCacheStatus(relatedResource);
         }
 
         setJobIdIfNecessary(spec, relatedResource, deployConfig);
