@@ -321,6 +321,38 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         testSnapshot(deployment, SAVEPOINT);
     }
 
+    @Test
+    public void verifyStatusUpdatedBeforeDeploy() throws Exception {
+        // Bootstrap running deployment status
+        var deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_17);
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        // Suspend job and make sure deployment is not deleted (savepoint upgrade)
+        deployment.getSpec().getJob().setState(JobState.SUSPENDED);
+        reconciler.reconcile(deployment, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                deployment.getStatus().getJobManagerDeploymentStatus());
+
+        // Resume but trigger deploy failure
+        deployment.getSpec().getJob().setState(JobState.RUNNING);
+        flinkService.setDeployFailure(true);
+
+        try {
+            reconciler.reconcile(deployment, context);
+            fail();
+        } catch (Exception expected) {
+            // Make sure deployment deletion is already persisted in k8s
+            deployment.getStatus().setJobManagerDeploymentStatus(null);
+            statusRecorder.updateStatusFromCache(deployment);
+            assertEquals(
+                    JobManagerDeploymentStatus.MISSING,
+                    deployment.getStatus().getJobManagerDeploymentStatus());
+        }
+    }
+
     private void testSnapshot(FlinkDeployment deployment, SnapshotType snapshotType)
             throws Exception {
         final Predicate<JobStatus> isSnapshotInProgress;
