@@ -953,6 +953,43 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     }
 
     @Test
+    public void testTerminalJmTtlDisabled() throws Exception {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        getJobSpec(deployment).setUpgradeMode(UpgradeMode.SAVEPOINT);
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        getJobSpec(deployment).setState(JobState.SUSPENDED);
+        reconciler.reconcile(deployment, context);
+        var status = deployment.getStatus();
+        assertEquals(
+                org.apache.flink.api.common.JobStatus.FINISHED.toString(),
+                status.getJobStatus().getState());
+        assertEquals(JobManagerDeploymentStatus.READY, status.getJobManagerDeploymentStatus());
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(
+                        KubernetesOperatorConfigOptions.OPERATOR_JM_SHUTDOWN_TTL.key(),
+                        String.valueOf(Duration.ofMinutes(5).toMillis()));
+
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.OPERATOR_JM_SHUTDOWN_ENABLED.key(), "false");
+
+        var now = Instant.now();
+        status.getJobStatus().setUpdateTime(String.valueOf(now.toEpochMilli()));
+
+        reconciler
+                .getReconciler()
+                .setClock(Clock.fixed(now.plus(Duration.ofMinutes(6)), ZoneId.systemDefault()));
+        reconciler.reconcile(deployment, context);
+        assertEquals(JobManagerDeploymentStatus.READY, status.getJobManagerDeploymentStatus());
+    }
+
+    @Test
     public void testDeploymentRecoveryEvent() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         reconciler.reconcile(deployment, context);

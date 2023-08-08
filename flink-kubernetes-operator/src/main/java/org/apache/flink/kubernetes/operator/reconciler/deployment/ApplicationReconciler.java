@@ -329,11 +329,13 @@ public class ApplicationReconciler
     private boolean cleanupTerminalJmAfterTtl(
             FlinkService flinkService, FlinkDeployment deployment, Configuration observeConfig) {
         var status = deployment.getStatus();
+        boolean shutdownEnabled =
+                observeConfig.get(KubernetesOperatorConfigOptions.OPERATOR_JM_SHUTDOWN_ENABLED);
         boolean terminal = ReconciliationUtils.isJobInTerminalState(status);
         boolean jmStillRunning =
                 status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.MISSING;
 
-        if (terminal && jmStillRunning) {
+        if (shutdownEnabled && terminal && jmStillRunning) {
             var ttl = observeConfig.get(KubernetesOperatorConfigOptions.OPERATOR_JM_SHUTDOWN_TTL);
             boolean ttlPassed =
                     clock.instant()
