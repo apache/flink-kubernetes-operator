@@ -71,7 +71,7 @@ spec:
   job:
     jarURI: local:///opt/flink/examples/streaming/StateMachineExample.jar
     parallelism: 2
-    upgradeMode: last-state
+    upgradeMode: savepoint
   mode: native
 
 ---

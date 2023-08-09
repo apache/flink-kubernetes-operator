@@ -46,6 +46,7 @@ else
   echo "Verifying inplace scaling triggered"
   wait_for_event FlinkDeployment $CLUSTER_ID .reason==\"Scaling\" ${TIMEOUT} || exit 1
 fi
+wait_for_status $APPLICATION_IDENTIFIER '.status.jobStatus.state' RUNNING ${TIMEOUT} || exit 1
 wait_for_status $APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${TIMEOUT} || exit 1
 
 check_operator_log_for_errors || exit 1
