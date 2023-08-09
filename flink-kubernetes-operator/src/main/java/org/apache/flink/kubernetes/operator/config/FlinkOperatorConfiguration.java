@@ -72,6 +72,7 @@ public class FlinkOperatorConfiguration {
     LeaderElectionConfiguration leaderElectionConfiguration;
     DeletionPropagation deletionPropagation;
     boolean savepointOnDeletion;
+    boolean drainJobOnSavepointDeletion;
 
     public static FlinkOperatorConfiguration fromConfiguration(Configuration operatorConfig) {
         Duration reconcileInterval =
@@ -185,6 +186,9 @@ public class FlinkOperatorConfiguration {
         boolean savepointOnDeletion =
                 operatorConfig.get(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION);
 
+        boolean drainJobOnSavepointDeletion =
+                operatorConfig.get(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION);
+
         return new FlinkOperatorConfiguration(
                 reconcileInterval,
                 reconcilerMaxParallelism,
@@ -212,7 +216,8 @@ public class FlinkOperatorConfiguration {
                 labelSelector,
                 getLeaderElectionConfig(operatorConfig),
                 deletionPropagation,
-                savepointOnDeletion);
+                savepointOnDeletion,
+                drainJobOnSavepointDeletion);
     }
 
     private static LeaderElectionConfiguration getLeaderElectionConfig(Configuration conf) {
