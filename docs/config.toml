@@ -38,7 +38,7 @@ pygmentsUseClasses = true
 
   # For stable releases, leave the bugfix version out (e.g. 1.2). For snapshot
   # release this should be the same as the regular version
-  VersionTitle = "1.6"
+  VersionTitle = "1.6.0"
 
   # The branch for this version of the Apache Flink Kubernetes Operator
   Branch = "release-1.6"
