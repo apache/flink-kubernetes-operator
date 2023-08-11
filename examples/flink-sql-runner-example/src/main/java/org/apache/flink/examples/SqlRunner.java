@@ -73,12 +73,13 @@ public class SqlRunner {
     }
 
     public static List<String> parseStatements(String script) {
-        var formatted = formatSqlFile(script)
-                .replaceAll(BEGIN_CERTIFICATE, ESCAPED_BEGIN_CERTIFICATE)
-                .replaceAll(END_CERTIFICATE, ESCAPED_END_CERTIFICATE)
-                .replaceAll(COMMENT_PATTERN, "")
-                .replaceAll(ESCAPED_BEGIN_CERTIFICATE, BEGIN_CERTIFICATE)
-                .replaceAll(ESCAPED_END_CERTIFICATE, END_CERTIFICATE);
+        var formatted =
+                formatSqlFile(script)
+                        .replaceAll(BEGIN_CERTIFICATE, ESCAPED_BEGIN_CERTIFICATE)
+                        .replaceAll(END_CERTIFICATE, ESCAPED_END_CERTIFICATE)
+                        .replaceAll(COMMENT_PATTERN, "")
+                        .replaceAll(ESCAPED_BEGIN_CERTIFICATE, BEGIN_CERTIFICATE)
+                        .replaceAll(ESCAPED_END_CERTIFICATE, END_CERTIFICATE);
 
         var statements = new ArrayList<String>();
 
