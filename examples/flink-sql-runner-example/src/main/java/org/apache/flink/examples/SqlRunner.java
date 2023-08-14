@@ -43,6 +43,11 @@ public class SqlRunner {
     private static final Pattern SET_STATEMENT_PATTERN =
             Pattern.compile("SET\\s+'(\\S+)'\\s+=\\s+'(.*)';", Pattern.CASE_INSENSITIVE);
 
+    private static final String BEGIN_CERTIFICATE = "-----BEGIN CERTIFICATE-----";
+    private static final String END_CERTIFICATE = "-----END CERTIFICATE-----";
+    private static final String ESCAPED_BEGIN_CERTIFICATE = "======BEGIN CERTIFICATE=====";
+    private static final String ESCAPED_END_CERTIFICATE = "=====END CERTIFICATE=====";
+
     public static void main(String[] args) throws Exception {
         if (args.length != 1) {
             throw new Exception("Exactly one argument is expected.");
@@ -68,7 +73,14 @@ public class SqlRunner {
     }
 
     public static List<String> parseStatements(String script) {
-        var formatted = formatSqlFile(script).replaceAll(COMMENT_PATTERN, "");
+        var formatted =
+                formatSqlFile(script)
+                        .replaceAll(BEGIN_CERTIFICATE, ESCAPED_BEGIN_CERTIFICATE)
+                        .replaceAll(END_CERTIFICATE, ESCAPED_END_CERTIFICATE)
+                        .replaceAll(COMMENT_PATTERN, "")
+                        .replaceAll(ESCAPED_BEGIN_CERTIFICATE, BEGIN_CERTIFICATE)
+                        .replaceAll(ESCAPED_END_CERTIFICATE, END_CERTIFICATE);
+
         var statements = new ArrayList<String>();
 
         StringBuilder current = null;
