@@ -109,7 +109,7 @@ public class AutoScalerOptions {
     public static final ConfigOption<Duration> CATCH_UP_DURATION =
             autoScalerConfig("catch-up.duration")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(5))
+                    .defaultValue(Duration.ofMinutes(15))
                     .withDescription(
                             "The target duration for fully processing any backlog after a scaling operation. Set to 0 to disable backlog based scaling.");
 
