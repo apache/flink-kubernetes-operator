@@ -85,6 +85,10 @@ public class FlinkUtilsZookeeperHATest {
         jobGraph.setJobID(jobID);
         jobGraphStore.putJobGraph(jobGraph);
         jobGraphStore.stop();
+
+        // Create jobs znode
+        curator.create().forPath(ZooKeeperUtils.getJobsPath());
+        curator.create().forPath(ZooKeeperUtils.getLeaderPathForJob(new JobID()));
     }
 
     @AfterEach
