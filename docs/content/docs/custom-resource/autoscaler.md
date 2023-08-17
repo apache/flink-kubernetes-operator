@@ -87,7 +87,7 @@ jobmanager.scheduler: adaptive
 
 ### Requirements
 
-The autoscaler currently only works with the latest [Flink 1.17](https://hub.docker.com/_/flink) or after backporting the following fixes to your 1.15/1.16 Flink image:
+The autoscaler currently only works with [Flink 1.17](https://hub.docker.com/_/flink) and later flink images, or after backporting the following fixes to your 1.15/1.16 Flink images:
 
  - Job vertex parallelism overrides (must have)
    - [Add option to override job vertex parallelisms during job submission](https://github.com/apache/flink/commit/23ce2281a0bb4047c64def9af7ddd5f19d88e2a9)
