@@ -268,8 +268,13 @@ public class FlinkUtils {
 
     public static boolean isZookeeperHaMetadataAvailable(Configuration conf) {
         try (var curator = ZooKeeperUtils.startCuratorFramework(conf, exception -> {})) {
-            if (curator.asCuratorFramework().checkExists().forPath("/") != null) {
-                return curator.asCuratorFramework().getChildren().forPath("/").size() != 0;
+            if (curator.asCuratorFramework().checkExists().forPath(ZooKeeperUtils.getJobsPath())
+                    != null) {
+                return curator.asCuratorFramework()
+                                .getChildren()
+                                .forPath(ZooKeeperUtils.getJobsPath())
+                                .size()
+                        != 0;
             }
             return false;
         } catch (Exception e) {
@@ -277,7 +282,8 @@ public class FlinkUtils {
                     "Could not check whether the HA metadata exists at path {} in Zookeeper",
                     ZooKeeperUtils.generateZookeeperPath(
                             conf.get(HighAvailabilityOptions.HA_ZOOKEEPER_ROOT),
-                            conf.get(HighAvailabilityOptions.HA_CLUSTER_ID)),
+                            conf.get(HighAvailabilityOptions.HA_CLUSTER_ID),
+                            ZooKeeperUtils.getJobsPath()),
                     e);
         }
 
