@@ -33,9 +33,9 @@ import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 
 /**
- * Example pipeline which simulates load fluctuating load from zero to a defined max, and
- * vice-versa. The goal is to simulate a fluctuating traffic pattern which traverses all possible
- * stages between peak and zero load. The load curve is computed using a sine function.
+ * Example pipeline which simulates fluctuating load from zero to a defined max, and vice-versa. The
+ * goal is to simulate a traffic pattern which traverses all possible stages between zero load and
+ * peak load. The load curve is computed using a sine function.
  *
  * <p>The pipeline has defaults but can be parameterized as follows:
  *
@@ -99,7 +99,7 @@ public class LoadSimulationPipeline {
 
     private static class ImpulseSource implements SourceFunction<Long> {
         private final int maxSleepTimeMs;
-        boolean canceled;
+        volatile boolean canceled;
 
         public ImpulseSource(int samplingInterval) {
             this.maxSleepTimeMs = samplingInterval / 10;
@@ -108,7 +108,9 @@ public class LoadSimulationPipeline {
         @Override
         public void run(SourceContext<Long> sourceContext) throws Exception {
             while (!canceled) {
-                sourceContext.collect(42L);
+                synchronized (sourceContext.getCheckpointLock()) {
+                    sourceContext.collect(42L);
+                }
                 // Provide an impulse to keep the load simulation active
                 Thread.sleep(maxSleepTimeMs);
             }

@@ -19,7 +19,7 @@
 apiVersion: flink.apache.org/v1beta1
 kind: FlinkDeployment
 metadata:
-  name: autoscaling-canary
+  name: autoscaling-dynamic
 spec:
   image: autoscaling-example
   flinkVersion: v1_18
