@@ -40,13 +40,13 @@ import java.time.temporal.ChronoUnit;
  * <p>The pipeline has defaults but can be parameterized as follows:
  *
  * <pre>
- *  repeatsAfterMs => The period length after which the initial load will be reached again.
- *  maxLoadPerTask => Each task's max load is presented by a double which is similar to the Unix CPU load
- *                    in the sense that at least maxLoad amount of subtasks are needed to sustain the load.
- *                    For example, a max load of 1 represents 100% load on a single subtask, 50% load on two subtasks.
- *                    Similarly, a max load of 2 represents 100% load on two tasks, 50% load on 4 subtasks.
+ *  repeatsAfterMs:  The period length after which the initial load will be reached again.
+ *  maxLoadPerTask:  Each task's max load is presented by a double which is similar to the Unix CPU load
+ *                     in the sense that at least maxLoad amount of subtasks are needed to sustain the load.
+ *                     For example, a max load of 1 represents 100% load on a single subtask, 50% load on two subtasks.
+ *                     Similarly, a max load of 2 represents 100% load on two tasks, 50% load on 4 subtasks.
  *
- *                    Multiple tasks and branches can be defined to test Flink Autoscaling. The format is as follows:
+ *                     Multiple tasks and branches can be defined to test Flink Autoscaling. The format is as follows:
  *                       maxLoadTask1Branch1[;maxLoadTask2Branch1...[\n maxLoadTask1Branch2[;maxLoadTask2Branch2...]...]
  *
  *                    A concrete example: "1;2;4\n4;2;1"
