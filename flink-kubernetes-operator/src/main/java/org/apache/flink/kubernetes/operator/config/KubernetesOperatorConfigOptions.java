@@ -305,7 +305,22 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Interval at which periodic savepoints will be triggered. "
                                     + "The triggering schedule is not guaranteed, savepoints will be "
-                                    + "triggered as part of the regular reconcile loop.");
+                                    + "triggered as part of the regular reconcile loop. "
+                                    + "WARNING: not intended to be used together with the cron-based "
+                                    + "periodic savepoint triggering");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<String> PERIODIC_SAVEPOINT_CRON =
+            operatorConfig("periodic.savepoint.cron")
+                    .stringType()
+                    .defaultValue(
+                            "0 0 0 29 2 ? 1999") // Default value that is guaranteed not to trigger
+                    .withDescription(
+                            "A cron expression that defines when to automatically trigger savepoints."
+                                    + "The precise triggering schedule is not guaranteed, savepoints will be "
+                                    + "triggered as part of the regular reconcile loop. "
+                                    + "WARNING: not intended to be used together with the interval-based "
+                                    + "periodic savepoint triggering");
 
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Duration> PERIODIC_CHECKPOINT_INTERVAL =
@@ -321,7 +336,32 @@ public class KubernetesOperatorConfigOptions {
                                     + "but to complement them in special cases. For instance, a "
                                     + "full checkpoint might need to be occasionally triggered to "
                                     + "break the chain of incremental checkpoints and consolidate "
-                                    + "the partial incremental files.");
+                                    + "the partial incremental files. "
+                                    + "WARNING: not intended to be used together with the cron-based "
+                                    + "periodic checkpoint triggering");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<String> PERIODIC_CHECKPOINT_CRON =
+            operatorConfig("periodic.checkpoint.cron")
+                    .stringType()
+                    .defaultValue(
+                            "0 0 0 29 2 ? 1999") // Default value that is guaranteed not to trigger (not a leap year)
+                    .withDescription(
+                            "A cron expression that defines when to automatically trigger checkpoints. "
+                                    + "The precise triggering schedule is not guaranteed, checkpoints will "
+                                    + "be triggered as part of the regular reconcile loop. Periodic triggering "
+                                    + "with frequency higher than the reconciliation loop "
+                                    + "("
+                                    + OPERATOR_RECONCILE_INTERVAL.key()
+                                    + ") will lead to trigger omissions. "
+                                    + "NOTE: checkpoints are generally managed by Flink. This "
+                                    + "setting isn't meant to replace Flink's checkpoint settings, "
+                                    + "but to complement them in special cases. For instance, a "
+                                    + "full checkpoint might need to be occasionally triggered to "
+                                    + "break the chain of incremental checkpoints and consolidate "
+                                    + "the partial incremental files. "
+                                    + "WARNING: not intended to be used together with the interval-based "
+                                    + "periodic checkpoint triggering");
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<String> OPERATOR_WATCHED_NAMESPACES =

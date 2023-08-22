@@ -123,16 +123,28 @@
             <td>Max allowed checkpoint age for initiating last-state upgrades on running jobs. If a checkpoint is not available within the desired age (and nothing in progress) a savepoint will be triggered.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.periodic.checkpoint.cron</h5></td>
+            <td style="word-wrap: break-word;">"0 0 0 29 2 ? 1999"</td>
+            <td>String</td>
+            <td>A cron expression that defines when to automatically trigger checkpoints. The precise triggering schedule is not guaranteed, checkpoints will be triggered as part of the regular reconcile loop. Periodic triggering with frequency higher than the reconciliation loop (kubernetes.operator.reconcile.interval) will lead to trigger omissions. NOTE: checkpoints are generally managed by Flink. This setting isn't meant to replace Flink's checkpoint settings, but to complement them in special cases. For instance, a full checkpoint might need to be occasionally triggered to break the chain of incremental checkpoints and consolidate the partial incremental files. WARNING: not intended to be used together with the interval-based periodic checkpoint triggering</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.periodic.checkpoint.interval</h5></td>
             <td style="word-wrap: break-word;">0 ms</td>
             <td>Duration</td>
-            <td>Interval at which periodic checkpoints will be triggered. The triggering schedule is not guaranteed, checkpoints will be triggered as part of the regular reconcile loop. NOTE: checkpoints are generally managed by Flink. This setting isn't meant to replace Flink's checkpoint settings, but to complement them in special cases. For instance, a full checkpoint might need to be occasionally triggered to break the chain of incremental checkpoints and consolidate the partial incremental files.</td>
+            <td>Interval at which periodic checkpoints will be triggered. The triggering schedule is not guaranteed, checkpoints will be triggered as part of the regular reconcile loop. NOTE: checkpoints are generally managed by Flink. This setting isn't meant to replace Flink's checkpoint settings, but to complement them in special cases. For instance, a full checkpoint might need to be occasionally triggered to break the chain of incremental checkpoints and consolidate the partial incremental files. WARNING: not intended to be used together with the cron-based periodic checkpoint triggering</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.periodic.savepoint.cron</h5></td>
+            <td style="word-wrap: break-word;">"0 0 0 29 2 ? 1999"</td>
+            <td>String</td>
+            <td>A cron expression that defines when to automatically trigger savepoints.The precise triggering schedule is not guaranteed, savepoints will be triggered as part of the regular reconcile loop. WARNING: not intended to be used together with the interval-based periodic savepoint triggering</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.periodic.savepoint.interval</h5></td>
             <td style="word-wrap: break-word;">0 ms</td>
             <td>Duration</td>
-            <td>Interval at which periodic savepoints will be triggered. The triggering schedule is not guaranteed, savepoints will be triggered as part of the regular reconcile loop.</td>
+            <td>Interval at which periodic savepoints will be triggered. The triggering schedule is not guaranteed, savepoints will be triggered as part of the regular reconcile loop. WARNING: not intended to be used together with the cron-based periodic savepoint triggering</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.pod-template.merge-arrays-by-name</h5></td>

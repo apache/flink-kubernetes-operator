@@ -31,11 +31,14 @@ import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.core.util.CronExpression;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Date;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -195,6 +198,7 @@ public class SnapshotUtils {
         boolean inProgress;
         SnapshotInfo snapshotInfo;
         Duration interval;
+        String cronExpression;
 
         switch (snapshotType) {
             case SAVEPOINT:
@@ -203,6 +207,7 @@ public class SnapshotUtils {
                 inProgress = savepointInProgress(jobStatus);
                 snapshotInfo = jobStatus.getSavepointInfo();
                 interval = conf.get(KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL);
+                cronExpression = conf.get(KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_CRON);
                 break;
             case CHECKPOINT:
                 triggerNonce = jobSpec.getCheckpointTriggerNonce();
@@ -210,13 +215,7 @@ public class SnapshotUtils {
                 inProgress = checkpointInProgress(jobStatus);
                 snapshotInfo = jobStatus.getCheckpointInfo();
                 interval = conf.get(KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL);
-                if (!isCheckpointsTriggeringSupported(conf)) {
-                    LOG.warn(
-                            "Periodic checkpoints triggering every {} is configured, "
-                                    + "but not supported (requires Flink 1.17+)",
-                            interval);
-                    return Optional.empty();
-                }
+                cronExpression = conf.get(KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_CRON);
                 break;
             default:
                 throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
@@ -229,33 +228,85 @@ public class SnapshotUtils {
         var triggerNonceChanged =
                 triggerNonce != null && !triggerNonce.equals(reconciledTriggerNonce);
         if (triggerNonceChanged) {
-            return Optional.of(SnapshotTriggerType.MANUAL);
-        }
-
-        if (interval.isZero()) {
-            return Optional.empty();
+            if (snapshotType == CHECKPOINT && !isSnapshotTriggeringSupported(conf)) {
+                LOG.warn(
+                        "Manual checkpoint triggering is attempted, but is not supported (requires Flink 1.17+)");
+                return Optional.empty();
+            } else {
+                return Optional.of(SnapshotTriggerType.MANUAL);
+            }
         }
 
         var lastTriggerTs = snapshotInfo.getLastPeriodicTriggerTimestamp();
-
         // When the resource is first created/periodic snapshotting enabled we have to compare
         // against the creation timestamp for triggering the first periodic savepoint
         var lastTrigger =
                 lastTriggerTs == 0
                         ? Instant.parse(resource.getMetadata().getCreationTimestamp())
                         : Instant.ofEpochMilli(lastTriggerTs);
+
+        if (shouldTriggerIntervalBasedSnapshot(snapshotType, interval, lastTrigger)
+                || shouldTriggerCronBasedSnapshot(
+                        snapshotType, cronExpression, lastTrigger, Instant.now())) {
+            if (snapshotType == CHECKPOINT && !isSnapshotTriggeringSupported(conf)) {
+                LOG.warn(
+                        "Periodic checkpoints triggering is configured but is not supported (requires Flink 1.17+)");
+                return Optional.empty();
+            } else {
+                return Optional.of(SnapshotTriggerType.PERIODIC);
+            }
+        }
+        return Optional.empty();
+    }
+
+    @VisibleForTesting
+    static boolean shouldTriggerCronBasedSnapshot(
+            SnapshotType snapshotType,
+            String cronExpressionString,
+            Instant lastTriggerDateInstant,
+            Instant nowInstant) {
+        try {
+            CronExpression cronExpression = new CronExpression(cronExpressionString);
+            Date now = Date.from(nowInstant);
+            Date lastTrigger = Date.from(lastTriggerDateInstant);
+
+            Date nextValidTimeAfterLastTrigger = cronExpression.getNextValidTimeAfter(lastTrigger);
+
+            if (nextValidTimeAfterLastTrigger != null
+                    && nextValidTimeAfterLastTrigger.before(now)) {
+                LOG.info(
+                        "Triggering new periodic {} based on cron schedule '{}' due at {}",
+                        snapshotType.toString().toLowerCase(),
+                        cronExpressionString,
+                        nextValidTimeAfterLastTrigger);
+                return true;
+            } else {
+                return false;
+            }
+        } catch (ParseException e) {
+            LOG.warn("Invalid cron expression: " + cronExpressionString);
+            return false;
+        }
+    }
+
+    private static boolean shouldTriggerIntervalBasedSnapshot(
+            SnapshotType snapshotType, Duration interval, Instant lastTrigger) {
+        if (interval.isZero()) {
+            return false;
+        }
         var now = Instant.now();
         if (lastTrigger.plus(interval).isBefore(Instant.now())) {
             LOG.info(
                     "Triggering new periodic {} after {}",
                     snapshotType.toString().toLowerCase(),
                     Duration.between(lastTrigger, now));
-            return Optional.of(SnapshotTriggerType.PERIODIC);
+            return true;
+        } else {
+            return false;
         }
-        return Optional.empty();
     }
 
-    public static boolean isCheckpointsTriggeringSupported(Configuration conf) {
+    public static boolean isSnapshotTriggeringSupported(Configuration conf) {
         // Flink REST API supports triggering checkpoints externally starting with 1.17
         return conf.get(FLINK_VERSION) != null
                 && conf.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_16);

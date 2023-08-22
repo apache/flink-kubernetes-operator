@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.utils;
 
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -25,16 +26,24 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
-import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Calendar;
 import java.util.Optional;
 
+import static org.apache.flink.kubernetes.operator.TestUtils.reconcileSpec;
+import static org.apache.flink.kubernetes.operator.TestUtils.setupCronTrigger;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link SnapshotUtils}. */
 public class SnapshotUtilsTest {
@@ -43,37 +52,19 @@ public class SnapshotUtilsTest {
 
     @Test
     public void testSavepointTriggering() {
-        SnapshotType snapshotType = SnapshotType.SAVEPOINT;
         FlinkDeployment deployment = initDeployment(FlinkVersion.v1_15);
-        reconcileSpec(deployment);
+        testSnapshotTriggering(deployment, SAVEPOINT, PERIODIC_SAVEPOINT_INTERVAL);
+    }
 
-        assertEquals(
-                Optional.empty(),
-                SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
-
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL.key(), "10m");
-        reconcileSpec(deployment);
-
-        assertEquals(
-                Optional.of(SnapshotTriggerType.PERIODIC),
-                SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
-        deployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
-
-        deployment.getSpec().getJob().setSavepointTriggerNonce(123L);
-        assertEquals(
-                Optional.of(SnapshotTriggerType.MANUAL),
-                SnapshotUtils.shouldTriggerSnapshot(
-                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+    @Test
+    public void testCheckpointTriggeringPost1_17() {
+        FlinkDeployment deployment = initDeployment(FlinkVersion.v1_17);
+        testSnapshotTriggering(deployment, CHECKPOINT, PERIODIC_CHECKPOINT_INTERVAL);
     }
 
     @Test
     public void testCheckpointTriggeringPre1_17() {
-        SnapshotType snapshotType = SnapshotType.CHECKPOINT;
+        SnapshotType snapshotType = CHECKPOINT;
         FlinkDeployment deployment = initDeployment(FlinkVersion.v1_16);
         reconcileSpec(deployment);
 
@@ -83,31 +74,35 @@ public class SnapshotUtilsTest {
                 SnapshotUtils.shouldTriggerSnapshot(
                         deployment, configManager.getObserveConfig(deployment), snapshotType));
 
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL.key(), "10m");
+        deployment.getSpec().getFlinkConfiguration().put(PERIODIC_CHECKPOINT_INTERVAL.key(), "10m");
         reconcileSpec(deployment);
 
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
                         deployment, configManager.getObserveConfig(deployment), snapshotType));
-        deployment.getStatus().getJobStatus().getCheckpointInfo().resetTrigger();
+        resetTrigger(deployment, snapshotType);
 
-        deployment.getSpec().getJob().setCheckpointTriggerNonce(123L);
+        setTriggerNonce(deployment, snapshotType, 123L);
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
                         deployment, configManager.getObserveConfig(deployment), snapshotType));
+        resetTrigger(deployment, snapshotType);
+
+        setupCronTrigger(snapshotType, deployment);
+        assertEquals(
+                Optional.empty(),
+                SnapshotUtils.shouldTriggerSnapshot(
+                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+        resetTrigger(deployment, snapshotType);
     }
 
-    @Test
-    public void testCheckpointTriggeringPost1_17() {
-        SnapshotType snapshotType = SnapshotType.CHECKPOINT;
-        FlinkDeployment deployment = initDeployment(FlinkVersion.v1_17);
+    private void testSnapshotTriggering(
+            FlinkDeployment deployment,
+            SnapshotType snapshotType,
+            ConfigOption<Duration> periodicSnapshotIntervalOption) {
         reconcileSpec(deployment);
-
         assertEquals(
                 Optional.empty(),
                 SnapshotUtils.shouldTriggerSnapshot(
@@ -116,20 +111,119 @@ public class SnapshotUtilsTest {
         deployment
                 .getSpec()
                 .getFlinkConfiguration()
-                .put(KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL.key(), "10m");
+                .put(periodicSnapshotIntervalOption.key(), "10m");
         reconcileSpec(deployment);
 
         assertEquals(
                 Optional.of(SnapshotTriggerType.PERIODIC),
                 SnapshotUtils.shouldTriggerSnapshot(
                         deployment, configManager.getObserveConfig(deployment), snapshotType));
-        deployment.getStatus().getJobStatus().getCheckpointInfo().resetTrigger();
+        resetTrigger(deployment, snapshotType);
+        deployment.getSpec().getFlinkConfiguration().put(periodicSnapshotIntervalOption.key(), "0");
+        reconcileSpec(deployment);
 
-        deployment.getSpec().getJob().setCheckpointTriggerNonce(123L);
+        setTriggerNonce(deployment, snapshotType, 123L);
         assertEquals(
                 Optional.of(SnapshotTriggerType.MANUAL),
                 SnapshotUtils.shouldTriggerSnapshot(
                         deployment, configManager.getObserveConfig(deployment), snapshotType));
+        resetTrigger(deployment, snapshotType);
+        reconcileSpec(deployment);
+
+        setupCronTrigger(snapshotType, deployment);
+        assertEquals(
+                Optional.of(SnapshotTriggerType.PERIODIC),
+                SnapshotUtils.shouldTriggerSnapshot(
+                        deployment, configManager.getObserveConfig(deployment), snapshotType));
+    }
+
+    @Test
+    public void testShouldTriggerCronBasedSnapshot_NextValidTimeBeforeCurrent() {
+        String cronExpression = "0 */10 * * * ?"; // Every 10th minute
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(2022, Calendar.JUNE, 5, 11, 5); // 11:05
+
+        Instant now = calendar.getTime().toInstant();
+        Instant lastTrigger =
+                now.minus(Duration.ofMinutes(10)); // 10:05, should have fired at 11:00
+
+        boolean result =
+                SnapshotUtils.shouldTriggerCronBasedSnapshot(
+                        CHECKPOINT, cronExpression, lastTrigger, now);
+
+        assertTrue(result);
+    }
+
+    @Test
+    public void testShouldTriggerCronBasedSnapshot_NextValidTimeAfterCurrent() {
+        String cronExpression = "0 */10 * * * ?"; // Every 10th minute
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(2022, Calendar.JUNE, 5, 11, 5);
+
+        Instant now = calendar.getTime().toInstant(); // 11:05
+        Instant lastTrigger = now.minus(Duration.ofMinutes(4)); // 11:01, next trigger at 11:10
+
+        boolean result =
+                SnapshotUtils.shouldTriggerCronBasedSnapshot(
+                        CHECKPOINT, cronExpression, lastTrigger, now);
+
+        assertFalse(result);
+    }
+
+    @Test
+    public void testShouldTriggerCronBasedSnapshot_NoNextValidTime() {
+        String cronExpression =
+                "0 0 0 29 2 ? 1999"; // An impossible time (Feb 29, 1999 was not a leap year)
+
+        Instant now = Instant.now();
+        Instant lastTrigger = now.minus(Duration.ofDays(365));
+
+        boolean result =
+                SnapshotUtils.shouldTriggerCronBasedSnapshot(
+                        CHECKPOINT, cronExpression, lastTrigger, now);
+
+        assertFalse(result);
+    }
+
+    @Test
+    public void testShouldTriggerCronBasedSnapshot_InvalidCron() {
+        String cronExpression = "invalidCron";
+
+        Instant now = Instant.now();
+        Instant lastTrigger = now.minus(Duration.ofDays(365));
+
+        boolean result =
+                SnapshotUtils.shouldTriggerCronBasedSnapshot(
+                        CHECKPOINT, cronExpression, lastTrigger, now);
+
+        assertFalse(result);
+    }
+
+    private static void resetTrigger(FlinkDeployment deployment, SnapshotType snapshotType) {
+        switch (snapshotType) {
+            case SAVEPOINT:
+                deployment.getStatus().getJobStatus().getSavepointInfo().resetTrigger();
+                break;
+            case CHECKPOINT:
+                deployment.getStatus().getJobStatus().getCheckpointInfo().resetTrigger();
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
+        }
+    }
+
+    private static void setTriggerNonce(
+            FlinkDeployment deployment, SnapshotType snapshotType, long nonce) {
+        switch (snapshotType) {
+            case SAVEPOINT:
+                deployment.getSpec().getJob().setSavepointTriggerNonce(nonce);
+                break;
+            case CHECKPOINT:
+                deployment.getSpec().getJob().setCheckpointTriggerNonce(nonce);
+                break;
+            default:
+                throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
+        }
     }
 
     private static FlinkDeployment initDeployment(FlinkVersion flinkVersion) {
@@ -140,13 +234,7 @@ public class SnapshotUtilsTest {
 
         deployment.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        reconcileSpec(deployment);
         return deployment;
-    }
-
-    private static void reconcileSpec(FlinkDeployment deployment) {
-        deployment
-                .getStatus()
-                .getReconciliationStatus()
-                .serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);
     }
 }
