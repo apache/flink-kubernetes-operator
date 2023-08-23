@@ -362,8 +362,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         final Function<JobSpec, Long> getTriggerNonce;
         final Consumer<FlinkDeployment> updateLastSnapshot;
         final BiConsumer<FlinkDeployment, Long> setLastSnapshotTime;
-        final ConfigOption<Duration> periodicSnapshotIntervalOption;
-        final ConfigOption<String> cronExpressionOption;
+        final ConfigOption<String> triggerSnapshotExpression;
         final String triggerPrefix;
 
         switch (snapshotType) {
@@ -391,9 +390,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                                     .getSavepointInfo()
                                     .updateLastSavepoint(lastSavepoint);
                         };
-                periodicSnapshotIntervalOption =
+                triggerSnapshotExpression =
                         KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL;
-                cronExpressionOption = KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_CRON;
                 triggerPrefix = "savepoint_";
                 break;
             case CHECKPOINT:
@@ -421,9 +419,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                                     .getCheckpointInfo()
                                     .updateLastCheckpoint(lastCheckpoint);
                         };
-                periodicSnapshotIntervalOption =
+                triggerSnapshotExpression =
                         KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL;
-                cronExpressionOption = KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_CRON;
                 triggerPrefix = "checkpoint_";
                 break;
             default:
@@ -506,17 +503,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         assertFalse(isSnapshotInProgress.test(getJobStatus(snDeployment)));
 
         // trigger by periodic interval settings
-        snDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(periodicSnapshotIntervalOption.key(), "1");
+        snDeployment.getSpec().getFlinkConfiguration().put(triggerSnapshotExpression.key(), "1");
         reconciler.reconcile(snDeployment, context);
         assertTrue(isSnapshotInProgress.test(getJobStatus(snDeployment)));
         assertEquals(SnapshotStatus.PENDING, getLastSnapshotStatus(snDeployment, snapshotType));
-        snDeployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(periodicSnapshotIntervalOption.key(), "0");
+        snDeployment.getSpec().getFlinkConfiguration().put(triggerSnapshotExpression.key(), "0");
 
         // trigger by cron expression
         updateLastSnapshot.accept(snDeployment); // Ensures no snapshot is considered to be running
@@ -531,14 +522,14 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         snDeployment
                 .getSpec()
                 .getFlinkConfiguration()
-                .put(cronExpressionOption.key(), "0 0 12 5 6 ? 2022");
+                .put(triggerSnapshotExpression.key(), "0 0 12 5 6 ? 2022");
         reconciler.reconcile(snDeployment, context);
         assertTrue(isSnapshotInProgress.test(getJobStatus(snDeployment)));
         assertEquals(SnapshotStatus.PENDING, getLastSnapshotStatus(snDeployment, snapshotType));
         snDeployment
                 .getSpec()
                 .getFlinkConfiguration()
-                .put(cronExpressionOption.key(), cronExpressionOption.defaultValue());
+                .put(triggerSnapshotExpression.key(), triggerSnapshotExpression.defaultValue());
     }
 
     @NotNull

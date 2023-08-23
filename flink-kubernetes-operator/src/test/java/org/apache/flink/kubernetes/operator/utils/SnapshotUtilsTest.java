@@ -101,7 +101,7 @@ public class SnapshotUtilsTest {
     private void testSnapshotTriggering(
             FlinkDeployment deployment,
             SnapshotType snapshotType,
-            ConfigOption<Duration> periodicSnapshotIntervalOption) {
+            ConfigOption<String> periodicSnapshotIntervalOption) {
         reconcileSpec(deployment);
         assertEquals(
                 Optional.empty(),

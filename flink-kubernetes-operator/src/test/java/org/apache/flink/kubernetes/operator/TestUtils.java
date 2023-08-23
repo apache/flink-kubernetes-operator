@@ -357,7 +357,7 @@ public class TestUtils extends BaseTestUtils {
                         .getJobStatus()
                         .getSavepointInfo()
                         .updateLastSavepoint(lastSavepoint);
-                cronOptionKey = KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_CRON.key();
+                cronOptionKey = KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL.key();
                 break;
             case CHECKPOINT:
                 Checkpoint lastCheckpoint =
@@ -367,7 +367,7 @@ public class TestUtils extends BaseTestUtils {
                         .getJobStatus()
                         .getCheckpointInfo()
                         .updateLastCheckpoint(lastCheckpoint);
-                cronOptionKey = KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_CRON.key();
+                cronOptionKey = KubernetesOperatorConfigOptions.PERIODIC_CHECKPOINT_INTERVAL.key();
                 break;
             default:
                 throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
