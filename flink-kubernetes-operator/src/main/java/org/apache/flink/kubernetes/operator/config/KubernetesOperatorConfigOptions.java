@@ -304,7 +304,9 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue("")
                     .withDescription(
                             "Option to enable automatic savepoint triggering. Can be specified "
-                                    + "either as a Duration type (i.e. '10m') or as a cron expression."
+                                    + "either as a Duration type (i.e. '10m') or as a cron expression "
+                                    + "in Quartz format (6 or 7 positions, see "
+                                    + "http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html)."
                                     + "The triggering schedule is not guaranteed, savepoints will be "
                                     + "triggered as part of the regular reconcile loop. "
                                     + "WARNING: not intended to be used together with the cron-based "
@@ -317,7 +319,9 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue("")
                     .withDescription(
                             "Option to enable automatic checkpoint triggering. Can be specified "
-                                    + "either as a Duration type (i.e. '10m') or as a cron expression."
+                                    + "either as a Duration type (i.e. '10m') or as a cron expression "
+                                    + "in Quartz format (6 or 7 positions, see "
+                                    + "http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html)."
                                     + "The triggering schedule is not guaranteed, checkpoints will "
                                     + "be triggered as part of the regular reconcile loop. "
                                     + "NOTE: checkpoints are generally managed by Flink. This "

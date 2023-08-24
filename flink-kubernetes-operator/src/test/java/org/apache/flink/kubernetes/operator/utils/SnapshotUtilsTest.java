@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 
 import org.junit.jupiter.api.Test;
 
+import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Calendar;
@@ -41,8 +42,10 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.PERIODIC_SAVEPOINT_INTERVAL;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
+import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.shouldTriggerAutomaticSnapshot;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link SnapshotUtils}. */
@@ -138,7 +141,52 @@ public class SnapshotUtilsTest {
     }
 
     @Test
-    public void testShouldTriggerCronBasedSnapshot_NextValidTimeBeforeCurrent() {
+    public void testShouldTriggerIntervalBasedSnapshot_InvalidExpression() {
+        assertThrows(
+                ParseException.class,
+                () ->
+                        SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
+                                SnapshotType.CHECKPOINT, "INVALID_DURATION", Instant.now()));
+    }
+
+    @Test
+    public void testShouldTriggerIntervalBasedSnapshot_EmptyExpression() {
+        assertThrows(
+                ParseException.class,
+                () ->
+                        SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
+                                SnapshotType.CHECKPOINT, "", Instant.now()));
+    }
+
+    @Test
+    public void testShouldTriggerIntervalBasedSnapshot_ZeroDurationReturnsFalse()
+            throws ParseException {
+        assertFalse(
+                SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
+                        SnapshotType.CHECKPOINT, "0", Instant.now()));
+    }
+
+    @Test
+    public void testShouldTriggerIntervalBasedSnapshot_NextValidTimeBeforeCurrent()
+            throws ParseException {
+        Instant lastTrigger = Instant.now().minus(Duration.ofMinutes(5));
+        assertFalse(
+                SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
+                        SnapshotType.CHECKPOINT, "10M", lastTrigger));
+    }
+
+    @Test
+    public void testShouldTriggerIntervalBasedSnapshot_NextValidTimeAfterCurrent()
+            throws ParseException {
+        Instant lastTrigger = Instant.now().minus(Duration.ofMinutes(11));
+        assertTrue(
+                SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
+                        SnapshotType.CHECKPOINT, "10M", lastTrigger));
+    }
+
+    @Test
+    public void testShouldTriggerCronBasedSnapshot_NextValidTimeBeforeCurrent()
+            throws ParseException {
         String cronExpression = "0 */10 * * * ?"; // Every 10th minute
         Calendar calendar = Calendar.getInstance();
         calendar.set(2022, Calendar.JUNE, 5, 11, 5); // 11:05
@@ -155,7 +203,8 @@ public class SnapshotUtilsTest {
     }
 
     @Test
-    public void testShouldTriggerCronBasedSnapshot_NextValidTimeAfterCurrent() {
+    public void testShouldTriggerCronBasedSnapshot_NextValidTimeAfterCurrent()
+            throws ParseException {
         String cronExpression = "0 */10 * * * ?"; // Every 10th minute
         Calendar calendar = Calendar.getInstance();
         calendar.set(2022, Calendar.JUNE, 5, 11, 5);
@@ -171,7 +220,7 @@ public class SnapshotUtilsTest {
     }
 
     @Test
-    public void testShouldTriggerCronBasedSnapshot_NoNextValidTime() {
+    public void testShouldTriggerCronBasedSnapshot_NoNextValidTime() throws ParseException {
         String cronExpression =
                 "0 0 0 29 2 ? 1999"; // An impossible time (Feb 29, 1999 was not a leap year)
 
@@ -186,17 +235,49 @@ public class SnapshotUtilsTest {
     }
 
     @Test
-    public void testShouldTriggerCronBasedSnapshot_InvalidCron() {
+    public void testShouldTriggerCronBasedSnapshot_InvalidCron() throws ParseException {
         String cronExpression = "invalidCron";
 
         Instant now = Instant.now();
         Instant lastTrigger = now.minus(Duration.ofDays(365));
 
-        boolean result =
-                SnapshotUtils.shouldTriggerCronBasedSnapshot(
-                        CHECKPOINT, cronExpression, lastTrigger, now);
+        assertThrows(
+                ParseException.class,
+                () ->
+                        SnapshotUtils.shouldTriggerCronBasedSnapshot(
+                                CHECKPOINT, cronExpression, lastTrigger, now));
+    }
 
-        assertFalse(result);
+    @Test
+    public void shouldTriggerAutomaticSnapshot_EmptyExpression() {
+        boolean shouldTrigger =
+                shouldTriggerAutomaticSnapshot(
+                        CHECKPOINT, "", Instant.now().minus(Duration.ofDays(365)));
+        assertFalse(shouldTrigger);
+    }
+
+    @Test
+    public void shouldTriggerAutomaticSnapshot_InvalidExpression() {
+        boolean shouldTrigger =
+                shouldTriggerAutomaticSnapshot(
+                        CHECKPOINT, "-1", Instant.now().minus(Duration.ofDays(365)));
+        assertFalse(shouldTrigger);
+    }
+
+    @Test
+    public void shouldTriggerAutomaticSnapshot_ValidIntervalExpression() {
+        boolean shouldTrigger =
+                shouldTriggerAutomaticSnapshot(
+                        CHECKPOINT, "10m", Instant.now().minus(Duration.ofDays(365)));
+        assertTrue(shouldTrigger);
+    }
+
+    @Test
+    public void shouldTriggerAutomaticSnapshot_ValidCronExpression() {
+        boolean shouldTrigger =
+                shouldTriggerAutomaticSnapshot(
+                        CHECKPOINT, "0 */10 * * * ?", Instant.now().minus(Duration.ofDays(365)));
+        assertTrue(shouldTrigger);
     }
 
     private static void resetTrigger(FlinkDeployment deployment, SnapshotType snapshotType) {

@@ -257,29 +257,54 @@ public class SnapshotUtils {
         return Optional.empty();
     }
 
-    private static boolean shouldTriggerAutomaticSnapshot(
+    @VisibleForTesting
+    static boolean shouldTriggerAutomaticSnapshot(
             SnapshotType snapshotType, String automaticTriggerExpression, Instant lastTrigger) {
         if (StringUtils.isBlank(automaticTriggerExpression)) {
             return false;
+        } // automaticTriggerExpression was configured by the user
+
+        // Try to interpret as an interval (Duration).
+        boolean expressionIsAnInterval = true;
+        boolean shouldTriggerInterval = false;
+        try {
+            shouldTriggerInterval =
+                    shouldTriggerIntervalBasedSnapshot(
+                            snapshotType, automaticTriggerExpression, lastTrigger);
+        } catch (ParseException e) {
+            expressionIsAnInterval = false;
         }
 
-        boolean shouldTrigger =
-                shouldTriggerIntervalBasedSnapshot(
-                                snapshotType, automaticTriggerExpression, lastTrigger)
-                        || shouldTriggerCronBasedSnapshot(
-                                snapshotType,
-                                automaticTriggerExpression,
-                                lastTrigger,
-                                Instant.now());
+        // Try to interpret as a cron expression.
+        boolean expressionIsACron = true;
+        boolean shouldTriggerCron = false;
+        try {
+            shouldTriggerCron =
+                    shouldTriggerCronBasedSnapshot(
+                            snapshotType, automaticTriggerExpression, lastTrigger, Instant.now());
+        } catch (ParseException e) {
+            expressionIsACron = false;
+        }
 
-        if (!shouldTrigger) {
+        if (!expressionIsAnInterval && !expressionIsACron) {
             LOG.warn(
-                    "Automatic {} triggering is configured, but the trigger expression '{}' is neither a valid Duration (including 0), nor a cron expression.",
+                    "Automatic {} triggering is configured, but the trigger expression '{}' is neither a valid Duration, nor a cron expression.",
                     snapshotType,
                     automaticTriggerExpression);
+            return false;
         }
 
-        return shouldTrigger;
+        // This should never happen. The string cannot be both a valid Duration and a cron
+        // expression at the same time.
+        if (expressionIsAnInterval && expressionIsACron) {
+            LOG.error(
+                    "Something went wrong with the automatic {} trigger expression {}. This setting cannot be simultaneously a valid Duration and a cron expression.",
+                    snapshotType,
+                    automaticTriggerExpression);
+            return false;
+        }
+
+        return shouldTriggerInterval || shouldTriggerCron;
     }
 
     @VisibleForTesting
@@ -287,38 +312,38 @@ public class SnapshotUtils {
             SnapshotType snapshotType,
             String cronExpressionString,
             Instant lastTriggerDateInstant,
-            Instant nowInstant) {
-        try {
-            CronExpression cronExpression = new CronExpression(cronExpressionString);
-            Date now = Date.from(nowInstant);
-            Date lastTrigger = Date.from(lastTriggerDateInstant);
+            Instant nowInstant)
+            throws ParseException {
+        CronExpression cronExpression = new CronExpression(cronExpressionString);
+        Date now = Date.from(nowInstant);
+        Date lastTrigger = Date.from(lastTriggerDateInstant);
 
-            Date nextValidTimeAfterLastTrigger = cronExpression.getNextValidTimeAfter(lastTrigger);
+        Date nextValidTimeAfterLastTrigger = cronExpression.getNextValidTimeAfter(lastTrigger);
 
-            if (nextValidTimeAfterLastTrigger != null
-                    && nextValidTimeAfterLastTrigger.before(now)) {
-                LOG.info(
-                        "Triggering new automatic {} based on cron schedule '{}' due at {}",
-                        snapshotType.toString().toLowerCase(),
-                        cronExpressionString,
-                        nextValidTimeAfterLastTrigger);
-                return true;
-            } else {
-                return false;
-            }
-        } catch (ParseException e) {
+        if (nextValidTimeAfterLastTrigger != null && nextValidTimeAfterLastTrigger.before(now)) {
+            LOG.info(
+                    "Triggering new automatic {} based on cron schedule '{}' due at {}",
+                    snapshotType.toString().toLowerCase(),
+                    cronExpressionString,
+                    nextValidTimeAfterLastTrigger);
+            return true;
+        } else {
             return false;
         }
     }
 
-    private static boolean shouldTriggerIntervalBasedSnapshot(
-            SnapshotType snapshotType, String triggerExpression, Instant lastTrigger) {
+    @VisibleForTesting
+    static boolean shouldTriggerIntervalBasedSnapshot(
+            SnapshotType snapshotType, String triggerExpression, Instant lastTrigger)
+            throws ParseException {
 
         Duration interval;
         try {
             interval = ConfigurationUtils.convertValue(triggerExpression, Duration.class);
-        } catch (IllegalArgumentException exception) {
-            return false;
+        } catch (Exception exception) {
+            throw new ParseException(
+                    "Trigger expression " + triggerExpression + " cannot be parsed as Duration.",
+                    -1);
         }
 
         if (interval.isZero()) {
