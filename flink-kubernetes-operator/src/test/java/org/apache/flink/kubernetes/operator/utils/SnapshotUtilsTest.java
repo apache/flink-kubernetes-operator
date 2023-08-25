@@ -45,7 +45,6 @@ import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEP
 import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.shouldTriggerAutomaticSnapshot;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for {@link SnapshotUtils}. */
@@ -142,20 +141,18 @@ public class SnapshotUtilsTest {
 
     @Test
     public void testShouldTriggerIntervalBasedSnapshot_InvalidExpression() {
-        assertThrows(
-                ParseException.class,
-                () ->
-                        SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
-                                SnapshotType.CHECKPOINT, "INVALID_DURATION", Instant.now()));
+        Instant lastTrigger = Instant.now().minus(Duration.ofMinutes(5));
+        assertFalse(
+                SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
+                        SnapshotType.CHECKPOINT, "INVALID_DURATION", Instant.now()));
     }
 
     @Test
     public void testShouldTriggerIntervalBasedSnapshot_EmptyExpression() {
-        assertThrows(
-                ParseException.class,
-                () ->
-                        SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
-                                SnapshotType.CHECKPOINT, "", Instant.now()));
+        Instant lastTrigger = Instant.now().minus(Duration.ofMinutes(5));
+        assertFalse(
+                SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
+                        SnapshotType.CHECKPOINT, "", lastTrigger));
     }
 
     @Test
@@ -241,11 +238,9 @@ public class SnapshotUtilsTest {
         Instant now = Instant.now();
         Instant lastTrigger = now.minus(Duration.ofDays(365));
 
-        assertThrows(
-                ParseException.class,
-                () ->
-                        SnapshotUtils.shouldTriggerCronBasedSnapshot(
-                                CHECKPOINT, cronExpression, lastTrigger, now));
+        assertFalse(
+                SnapshotUtils.shouldTriggerCronBasedSnapshot(
+                        CHECKPOINT, cronExpression, lastTrigger, now));
     }
 
     @Test
