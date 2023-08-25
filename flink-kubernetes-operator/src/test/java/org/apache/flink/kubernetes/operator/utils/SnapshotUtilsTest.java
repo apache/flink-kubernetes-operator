@@ -28,9 +28,9 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 
+import org.apache.logging.log4j.core.util.CronExpression;
 import org.junit.jupiter.api.Test;
 
-import java.text.ParseException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Calendar;
@@ -140,51 +140,49 @@ public class SnapshotUtilsTest {
     }
 
     @Test
-    public void testShouldTriggerIntervalBasedSnapshot_InvalidExpression() {
+    public void testInterpretAsInterval_InvalidExpression() {
+        Optional<Duration> interval = SnapshotUtils.interpretAsInterval("INVALID_DURATION");
+        assertTrue(interval.isEmpty());
+    }
+
+    @Test
+    public void testInterpretAsInterval_EmptyExpression() {
+        Optional<Duration> interval = SnapshotUtils.interpretAsInterval("");
+        assertTrue(interval.isEmpty());
+    }
+
+    @Test
+    public void testShouldTriggerIntervalBasedSnapshot_ZeroDurationReturnsFalse() {
+        Duration interval = SnapshotUtils.interpretAsInterval("0").get();
+
+        assertFalse(
+                SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
+                        SnapshotType.CHECKPOINT, interval, Instant.now()));
+    }
+
+    @Test
+    public void testShouldTriggerIntervalBasedSnapshot_NextValidTimeBeforeCurrent() {
+        Duration interval = SnapshotUtils.interpretAsInterval("10M").get();
         Instant lastTrigger = Instant.now().minus(Duration.ofMinutes(5));
         assertFalse(
                 SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
-                        SnapshotType.CHECKPOINT, "INVALID_DURATION", Instant.now()));
+                        SnapshotType.CHECKPOINT, interval, lastTrigger));
     }
 
     @Test
-    public void testShouldTriggerIntervalBasedSnapshot_EmptyExpression() {
-        Instant lastTrigger = Instant.now().minus(Duration.ofMinutes(5));
-        assertFalse(
-                SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
-                        SnapshotType.CHECKPOINT, "", lastTrigger));
-    }
-
-    @Test
-    public void testShouldTriggerIntervalBasedSnapshot_ZeroDurationReturnsFalse()
-            throws ParseException {
-        assertFalse(
-                SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
-                        SnapshotType.CHECKPOINT, "0", Instant.now()));
-    }
-
-    @Test
-    public void testShouldTriggerIntervalBasedSnapshot_NextValidTimeBeforeCurrent()
-            throws ParseException {
-        Instant lastTrigger = Instant.now().minus(Duration.ofMinutes(5));
-        assertFalse(
-                SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
-                        SnapshotType.CHECKPOINT, "10M", lastTrigger));
-    }
-
-    @Test
-    public void testShouldTriggerIntervalBasedSnapshot_NextValidTimeAfterCurrent()
-            throws ParseException {
+    public void testShouldTriggerIntervalBasedSnapshot_NextValidTimeAfterCurrent() {
+        Duration interval = SnapshotUtils.interpretAsInterval("10M").get();
         Instant lastTrigger = Instant.now().minus(Duration.ofMinutes(11));
         assertTrue(
                 SnapshotUtils.shouldTriggerIntervalBasedSnapshot(
-                        SnapshotType.CHECKPOINT, "10M", lastTrigger));
+                        SnapshotType.CHECKPOINT, interval, lastTrigger));
     }
 
     @Test
-    public void testShouldTriggerCronBasedSnapshot_NextValidTimeBeforeCurrent()
-            throws ParseException {
-        String cronExpression = "0 */10 * * * ?"; // Every 10th minute
+    public void testShouldTriggerCronBasedSnapshot_NextValidTimeBeforeCurrent() {
+        String cronExpressionString = "0 */10 * * * ?"; // Every 10th minute
+        CronExpression cronExpression = SnapshotUtils.interpretAsCron(cronExpressionString).get();
+
         Calendar calendar = Calendar.getInstance();
         calendar.set(2022, Calendar.JUNE, 5, 11, 5); // 11:05
 
@@ -200,9 +198,10 @@ public class SnapshotUtilsTest {
     }
 
     @Test
-    public void testShouldTriggerCronBasedSnapshot_NextValidTimeAfterCurrent()
-            throws ParseException {
-        String cronExpression = "0 */10 * * * ?"; // Every 10th minute
+    public void testShouldTriggerCronBasedSnapshot_NextValidTimeAfterCurrent() {
+        String cronExpressionString = "0 */10 * * * ?"; // Every 10th minute
+        CronExpression cronExpression = SnapshotUtils.interpretAsCron(cronExpressionString).get();
+
         Calendar calendar = Calendar.getInstance();
         calendar.set(2022, Calendar.JUNE, 5, 11, 5);
 
@@ -217,9 +216,10 @@ public class SnapshotUtilsTest {
     }
 
     @Test
-    public void testShouldTriggerCronBasedSnapshot_NoNextValidTime() throws ParseException {
-        String cronExpression =
+    public void testShouldTriggerCronBasedSnapshot_NoNextValidTime() {
+        String cronExpressionString =
                 "0 0 0 29 2 ? 1999"; // An impossible time (Feb 29, 1999 was not a leap year)
+        CronExpression cronExpression = SnapshotUtils.interpretAsCron(cronExpressionString).get();
 
         Instant now = Instant.now();
         Instant lastTrigger = now.minus(Duration.ofDays(365));
@@ -232,15 +232,17 @@ public class SnapshotUtilsTest {
     }
 
     @Test
-    public void testShouldTriggerCronBasedSnapshot_InvalidCron() throws ParseException {
-        String cronExpression = "invalidCron";
+    public void testInterpretAsCron_InvalidCron() {
+        Optional<CronExpression> cronExpression = SnapshotUtils.interpretAsCron("INVALID_CRON");
 
-        Instant now = Instant.now();
-        Instant lastTrigger = now.minus(Duration.ofDays(365));
+        assertTrue(cronExpression.isEmpty());
+    }
 
-        assertFalse(
-                SnapshotUtils.shouldTriggerCronBasedSnapshot(
-                        CHECKPOINT, cronExpression, lastTrigger, now));
+    @Test
+    public void testInterpretAsCron_EmptyCron() {
+        Optional<CronExpression> cronExpression = SnapshotUtils.interpretAsCron("");
+
+        assertTrue(cronExpression.isEmpty());
     }
 
     @Test
