@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.NoopJobAutoscalerFactory;
@@ -102,8 +103,10 @@ public class SessionJobReconciler
             String jobID = ctx.getResource().getStatus().getJobStatus().getJobId();
             if (jobID != null) {
                 try {
+                    var observeConfig = ctx.getObserveConfig();
                     UpgradeMode upgradeMode =
-                            ctx.getOperatorConfig().isSavepointOnDeletion()
+                            observeConfig.getBoolean(
+                                            KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
                                     ? UpgradeMode.SAVEPOINT
                                     : UpgradeMode.STATELESS;
                     cancelJob(ctx, upgradeMode);

@@ -361,8 +361,9 @@ public class ApplicationReconciler
             ctx.getFlinkService()
                     .deleteClusterDeployment(deployment.getMetadata(), status, conf, true);
         } else {
+            var observeConfig = ctx.getObserveConfig();
             UpgradeMode upgradeMode =
-                    ctx.getOperatorConfig().isSavepointOnDeletion()
+                    observeConfig.getBoolean(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION)
                             ? UpgradeMode.SAVEPOINT
                             : UpgradeMode.STATELESS;
             cancelJob(ctx, upgradeMode);
