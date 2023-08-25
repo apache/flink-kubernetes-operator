@@ -123,6 +123,32 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     }
 
     @Test
+    public void testSubmitAndCleanUpWithSavepointOnResource() throws Exception {
+        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        sessionJob
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
+
+        // session ready
+        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(1, flinkService.listJobs().size());
+        verifyAndSetRunningJobsToStatus(
+                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
+
+        // clean up
+        reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        assertEquals(
+                "savepoint_0",
+                sessionJob
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
+    }
+
+    @Test
     public void testSubmitAndCleanUp() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
 
