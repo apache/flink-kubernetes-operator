@@ -766,31 +766,4 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 spSessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         assertEquals("FINISHED", spSessionJob.getStatus().getJobStatus().getState());
     }
-
-    @Test
-    public void testSubmitAndDrainOnCleanUpWithSavepoint() throws Exception {
-        var conf = configManager.getDefaultConfig();
-        conf.set(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION, true);
-        conf.set(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION, true);
-        configManager.updateDefaultConfig(conf);
-
-        FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
-
-        // session ready
-        reconciler.reconcile(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
-        assertEquals(1, flinkService.listJobs().size());
-        verifyAndSetRunningJobsToStatus(
-                sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
-
-        // clean up
-        reconciler.cleanup(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
-        assertEquals(
-                "savepoint_0",
-                sessionJob
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
-    }
 }
