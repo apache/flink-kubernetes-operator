@@ -340,6 +340,115 @@ public class AbstractFlinkServiceTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void cancelJobWithDrainOnSavepointUpgradeModeTest(boolean drainOnSavepoint)
+            throws Exception {
+        var testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        CompletableFuture<Tuple3<JobID, Boolean, String>> stopWithSavepointFuture =
+                new CompletableFuture<>();
+        var savepointPath = "file:///path/of/svp-1";
+        configuration.set(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointPath);
+        if (drainOnSavepoint) {
+            configuration.set(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION, true);
+            configuration.set(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION, true);
+            operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);
+        }
+
+        testingClusterClient.setStopWithSavepointFunction(
+                (jobID, advanceToEndOfEventTime, savepointDir) -> {
+                    stopWithSavepointFuture.complete(
+                            new Tuple3<>(jobID, advanceToEndOfEventTime, savepointDir));
+                    return CompletableFuture.completedFuture(savepointPath);
+                });
+
+        var flinkService = new TestingService(testingClusterClient);
+
+        JobID jobID = JobID.generate();
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), savepointPath);
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        JobStatus jobStatus = deployment.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        flinkService.cancelJob(
+                deployment,
+                UpgradeMode.SAVEPOINT,
+                configManager.getObserveConfig(deployment),
+                true);
+        assertTrue(stopWithSavepointFuture.isDone());
+        assertEquals(jobID, stopWithSavepointFuture.get().f0);
+        assertEquals(savepointPath, jobStatus.getSavepointInfo().getLastSavepoint().getLocation());
+        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED.name());
+
+        if (drainOnSavepoint) {
+            assertTrue(stopWithSavepointFuture.get().f1);
+        } else {
+            assertFalse(stopWithSavepointFuture.get().f1);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void cancelSessionJobWithDrainOnSavepointUpgradeModeTest(boolean drainOnSavepoint)
+            throws Exception {
+        var testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        CompletableFuture<Tuple3<JobID, Boolean, String>> stopWithSavepointFuture =
+                new CompletableFuture<>();
+        var savepointPath = "file:///path/of/svp-1";
+        configuration.set(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointPath);
+        if (drainOnSavepoint) {
+            configuration.set(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION, true);
+            configuration.set(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION, true);
+            operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);
+        }
+
+        testingClusterClient.setStopWithSavepointFunction(
+                (jobID, advanceToEndOfEventTime, savepointDir) -> {
+                    stopWithSavepointFuture.complete(
+                            new Tuple3<>(jobID, advanceToEndOfEventTime, savepointDir));
+                    return CompletableFuture.completedFuture(savepointPath);
+                });
+
+        var flinkService = new TestingService(testingClusterClient);
+
+        JobID jobID = JobID.generate();
+        var session = TestUtils.buildSessionCluster(configuration.get(FLINK_VERSION));
+        session.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+        var job = TestUtils.buildSessionJob();
+        var deployConf = configManager.getSessionJobConfig(session, job.getSpec());
+
+        job.getSpec()
+                .getFlinkConfiguration()
+                .put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), savepointPath);
+
+        JobStatus jobStatus = job.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
+
+        flinkService.cancelSessionJob(job, UpgradeMode.SAVEPOINT, deployConf);
+        assertTrue(stopWithSavepointFuture.isDone());
+        assertEquals(jobID, stopWithSavepointFuture.get().f0);
+        assertEquals(savepointPath, jobStatus.getSavepointInfo().getLastSavepoint().getLocation());
+        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED.name());
+
+        if (drainOnSavepoint) {
+            assertTrue(stopWithSavepointFuture.get().f1);
+        } else {
+            assertFalse(stopWithSavepointFuture.get().f1);
+        }
+    }
+
     @Test
     public void cancelJobWithLastStateUpgradeModeTest() throws Exception {
         var deployment = TestUtils.buildApplicationCluster();

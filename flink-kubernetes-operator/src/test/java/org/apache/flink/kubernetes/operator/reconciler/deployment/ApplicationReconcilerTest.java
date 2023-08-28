@@ -1070,33 +1070,4 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         .getMetadata()
                         .getGeneration());
     }
-
-    @ParameterizedTest
-    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
-    public void testSubmitAndDrainOnCleanUpWithSavepoint(FlinkVersion flinkVersion)
-            throws Exception {
-        var conf = configManager.getDefaultConfig();
-        conf.set(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION, true);
-        conf.set(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION, true);
-        configManager.updateDefaultConfig(conf);
-
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster(flinkVersion);
-
-        // session ready
-        reconciler.reconcile(deployment, TestUtils.createContextWithReadyFlinkDeployment());
-        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
-
-        // clean up
-        assertEquals(
-                null, deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
-        reconciler.cleanup(deployment, TestUtils.createContextWithReadyFlinkDeployment());
-        assertEquals(
-                "savepoint_0",
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
-    }
 }
