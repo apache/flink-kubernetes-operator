@@ -350,11 +350,6 @@ public class AbstractFlinkServiceTest {
                 new CompletableFuture<>();
         var savepointPath = "file:///path/of/svp-1";
         configuration.set(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointPath);
-        if (drainOnSavepoint) {
-            configuration.set(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION, true);
-            configuration.set(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION, true);
-            operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);
-        }
 
         testingClusterClient.setStopWithSavepointFunction(
                 (jobID, advanceToEndOfEventTime, savepointDir) -> {
@@ -376,6 +371,17 @@ public class AbstractFlinkServiceTest {
         jobStatus.setJobId(jobID.toHexString());
         jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
+
+        if (drainOnSavepoint) {
+            deployment
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
+            deployment
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION.key(), "true");
+        }
 
         flinkService.cancelJob(
                 deployment,
@@ -404,11 +410,6 @@ public class AbstractFlinkServiceTest {
                 new CompletableFuture<>();
         var savepointPath = "file:///path/of/svp-1";
         configuration.set(CheckpointingOptions.SAVEPOINT_DIRECTORY, savepointPath);
-        if (drainOnSavepoint) {
-            configuration.set(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION, true);
-            configuration.set(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION, true);
-            operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);
-        }
 
         testingClusterClient.setStopWithSavepointFunction(
                 (jobID, advanceToEndOfEventTime, savepointDir) -> {
@@ -425,7 +426,6 @@ public class AbstractFlinkServiceTest {
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(session.getSpec(), session);
         var job = TestUtils.buildSessionJob();
-        var deployConf = configManager.getSessionJobConfig(session, job.getSpec());
 
         job.getSpec()
                 .getFlinkConfiguration()
@@ -435,6 +435,16 @@ public class AbstractFlinkServiceTest {
         jobStatus.setJobId(jobID.toHexString());
         jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
         ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
+
+        if (drainOnSavepoint) {
+            job.getSpec()
+                    .getFlinkConfiguration()
+                    .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
+            job.getSpec()
+                    .getFlinkConfiguration()
+                    .put(KubernetesOperatorConfigOptions.DRAIN_ON_SAVEPOINT_DELETION.key(), "true");
+        }
+        var deployConf = configManager.getSessionJobConfig(session, job.getSpec());
 
         flinkService.cancelSessionJob(job, UpgradeMode.SAVEPOINT, deployConf);
         assertTrue(stopWithSavepointFuture.isDone());
