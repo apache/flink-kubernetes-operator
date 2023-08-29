@@ -298,22 +298,30 @@ public class KubernetesOperatorConfigOptions {
                                     + "Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
 
     @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<Duration> PERIODIC_SAVEPOINT_INTERVAL =
+    public static final ConfigOption<String> PERIODIC_SAVEPOINT_INTERVAL =
             operatorConfig("periodic.savepoint.interval")
-                    .durationType()
-                    .defaultValue(Duration.ZERO)
+                    .stringType()
+                    .defaultValue("")
                     .withDescription(
-                            "Interval at which periodic savepoints will be triggered. "
+                            "Option to enable automatic savepoint triggering. Can be specified "
+                                    + "either as a Duration type (i.e. '10m') or as a cron expression "
+                                    + "in Quartz format (6 or 7 positions, see "
+                                    + "http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html)."
                                     + "The triggering schedule is not guaranteed, savepoints will be "
-                                    + "triggered as part of the regular reconcile loop.");
+                                    + "triggered as part of the regular reconcile loop. "
+                                    + "WARNING: not intended to be used together with the cron-based "
+                                    + "periodic savepoint triggering");
 
     @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<Duration> PERIODIC_CHECKPOINT_INTERVAL =
+    public static final ConfigOption<String> PERIODIC_CHECKPOINT_INTERVAL =
             operatorConfig("periodic.checkpoint.interval")
-                    .durationType()
-                    .defaultValue(Duration.ZERO)
+                    .stringType()
+                    .defaultValue("")
                     .withDescription(
-                            "Interval at which periodic checkpoints will be triggered. "
+                            "Option to enable automatic checkpoint triggering. Can be specified "
+                                    + "either as a Duration type (i.e. '10m') or as a cron expression "
+                                    + "in Quartz format (6 or 7 positions, see "
+                                    + "http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html)."
                                     + "The triggering schedule is not guaranteed, checkpoints will "
                                     + "be triggered as part of the regular reconcile loop. "
                                     + "NOTE: checkpoints are generally managed by Flink. This "
@@ -321,7 +329,9 @@ public class KubernetesOperatorConfigOptions {
                                     + "but to complement them in special cases. For instance, a "
                                     + "full checkpoint might need to be occasionally triggered to "
                                     + "break the chain of incremental checkpoints and consolidate "
-                                    + "the partial incremental files.");
+                                    + "the partial incremental files. "
+                                    + "WARNING: not intended to be used together with the cron-based "
+                                    + "periodic checkpoint triggering");
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<String> OPERATOR_WATCHED_NAMESPACES =

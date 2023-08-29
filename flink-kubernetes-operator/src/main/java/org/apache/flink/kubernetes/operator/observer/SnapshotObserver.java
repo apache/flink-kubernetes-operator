@@ -45,7 +45,7 @@ import java.util.List;
 
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
-import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.isCheckpointsTriggeringSupported;
+import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.isSnapshotTriggeringSupported;
 
 /** An observer of savepoint progress. */
 public class SnapshotObserver<
@@ -81,7 +81,7 @@ public class SnapshotObserver<
     }
 
     public void observeCheckpointStatus(FlinkResourceContext<CR> ctx) {
-        if (!isCheckpointsTriggeringSupported(ctx.getObserveConfig())) {
+        if (!isSnapshotTriggeringSupported(ctx.getObserveConfig())) {
             return;
         }
         var resource = ctx.getResource();
