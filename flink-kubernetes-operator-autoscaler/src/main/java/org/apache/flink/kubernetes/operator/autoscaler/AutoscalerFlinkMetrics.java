@@ -27,10 +27,9 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Supplier;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.PARALLELISM;
@@ -52,7 +51,7 @@ public class AutoscalerFlinkMetrics {
 
     private final MetricGroup metricGroup;
 
-    private final Set<JobVertexID> vertexMetrics = new HashSet<>();
+    private boolean scalingMetricsInitialized;
 
     public AutoscalerFlinkMetrics(MetricGroup metricGroup) {
         this.numScalings = metricGroup.counter("scalings");
@@ -62,54 +61,49 @@ public class AutoscalerFlinkMetrics {
     }
 
     public void registerScalingMetrics(
+            Supplier<List<JobVertexID>> jobVerticesSupplier,
             Supplier<Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
-                    currentVertexMetrics) {
-        currentVertexMetrics
-                .get()
-                .forEach(
-                        (jobVertexID, evaluated) -> {
-                            if (!vertexMetrics.add(jobVertexID)) {
-                                return;
-                            }
-                            LOG.info("Registering scaling metrics for job vertex {}", jobVertexID);
-                            var jobVertexMg =
-                                    metricGroup.addGroup(JOB_VERTEX_ID, jobVertexID.toHexString());
+                    metricsSupplier) {
+        if (scalingMetricsInitialized) {
+            // It is important that we only initialize these metrics once because the Flink API does
+            // not support registering counters / gauges multiple times.
+            // The metrics will be updated via the provided metricsSupplier.
+            return;
+        }
+        scalingMetricsInitialized = true;
 
-                            evaluated.forEach(
-                                    (sm, esm) -> {
-                                        var smGroup = jobVertexMg.addGroup(sm.name());
+        LOG.info("Registering scaling metrics");
+        for (JobVertexID jobVertexID : jobVerticesSupplier.get()) {
 
-                                        smGroup.gauge(
-                                                CURRENT,
-                                                () ->
-                                                        Optional.ofNullable(
-                                                                        currentVertexMetrics.get())
-                                                                .map(m -> m.get(jobVertexID))
-                                                                .map(metrics -> metrics.get(sm))
-                                                                .map(
-                                                                        EvaluatedScalingMetric
-                                                                                ::getCurrent)
-                                                                .orElse(Double.NaN));
+            MetricGroup jobVertexGroup =
+                    metricGroup.addGroup(JOB_VERTEX_ID, jobVertexID.toHexString());
 
-                                        if (sm.isCalculateAverage()) {
-                                            smGroup.gauge(
-                                                    AVERAGE,
-                                                    () ->
-                                                            Optional.ofNullable(
-                                                                            currentVertexMetrics
-                                                                                    .get())
-                                                                    .map(m -> m.get(jobVertexID))
-                                                                    .map(metrics -> metrics.get(sm))
-                                                                    .map(
-                                                                            EvaluatedScalingMetric
-                                                                                    ::getAverage)
-                                                                    .orElse(Double.NaN));
-                                        }
-                                    });
-                        });
+            for (ScalingMetric scalingMetric : ScalingMetric.values()) {
+                MetricGroup scalingMetricGroup = jobVertexGroup.addGroup(scalingMetric.name());
+
+                scalingMetricGroup.gauge(
+                        CURRENT,
+                        () ->
+                                Optional.ofNullable(metricsSupplier.get())
+                                        .map(m -> m.get(jobVertexID))
+                                        .map(metrics -> metrics.get(scalingMetric))
+                                        .map(EvaluatedScalingMetric::getCurrent)
+                                        .orElse(Double.NaN));
+
+                if (scalingMetric.isCalculateAverage()) {
+                    scalingMetricGroup.gauge(
+                            AVERAGE,
+                            () ->
+                                    Optional.ofNullable(metricsSupplier.get())
+                                            .map(m -> m.get(jobVertexID))
+                                            .map(metrics -> metrics.get(scalingMetric))
+                                            .map(EvaluatedScalingMetric::getAverage)
+                                            .orElse(Double.NaN));
+                }
+            }
+        }
     }
 
-    @VisibleForTesting
     static void initRecommendedParallelism(
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
         evaluatedMetrics.forEach(
