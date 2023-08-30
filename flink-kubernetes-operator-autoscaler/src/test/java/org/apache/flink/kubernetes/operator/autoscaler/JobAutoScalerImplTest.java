@@ -18,14 +18,25 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
+import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
+import org.apache.flink.kubernetes.operator.autoscaler.topology.VertexInfo;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.metrics.Gauge;
+import org.apache.flink.metrics.Metric;
+import org.apache.flink.metrics.MetricGroup;
+import org.apache.flink.mock.Whitebox;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.metrics.groups.GenericMetricGroup;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -36,7 +47,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
@@ -66,7 +79,62 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
         configManager = new FlinkConfigManager(defaultConf);
         ReconciliationUtils.updateStatusForDeployedSpec(
                 app, configManager.getDeployConfig(app.getMetadata(), app.getSpec()));
+        app.getStatus().getJobStatus().setState(JobStatus.RUNNING.name());
         app.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+    }
+
+    @Test
+    void testMetricReporting() {
+        JobVertexID jobVertexID = new JobVertexID();
+        JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Set.of(), 1, 10));
+
+        TestingMetricsCollector metricsCollector = new TestingMetricsCollector(jobTopology);
+        metricsCollector.setCurrentMetrics(
+                Map.of(
+                        jobVertexID,
+                        Map.of(
+                                FlinkMetric.BUSY_TIME_PER_SEC,
+                                new AggregatedMetric("load", 0., 420., 0., 0.))));
+        metricsCollector.setJobUpdateTs(Instant.ofEpochMilli(0));
+
+        ScalingMetricEvaluator evaluator = new ScalingMetricEvaluator();
+        ScalingExecutor scalingExecutor = new ScalingExecutor(eventRecorder);
+
+        var autoscaler =
+                new JobAutoScalerImpl(
+                        kubernetesClient,
+                        metricsCollector,
+                        evaluator,
+                        scalingExecutor,
+                        eventRecorder);
+        FlinkResourceContext<FlinkDeployment> resourceContext = getResourceContext(app);
+        ResourceID resourceId = ResourceID.fromResource(app);
+
+        autoscaler.scale(resourceContext);
+
+        MetricGroup metricGroup = autoscaler.flinkMetrics.get(resourceId).metricGroup;
+        assertEquals(
+                0.42,
+                getGaugeValue(
+                        metricGroup,
+                        AutoscalerFlinkMetrics.CURRENT,
+                        AutoscalerFlinkMetrics.JOB_VERTEX_ID,
+                        jobVertexID.toHexString(),
+                        ScalingMetric.LOAD.name()),
+                "Expected scaling metric LOAD was not reported. Reporting is broken");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static double getGaugeValue(
+            MetricGroup metricGroup, String gaugeName, String... nestedMetricGroupNames) {
+        for (String nestedMetricGroupName : nestedMetricGroupNames) {
+            metricGroup =
+                    ((Map<String, GenericMetricGroup>)
+                                    Whitebox.getInternalState(metricGroup, "groups"))
+                            .get(nestedMetricGroupName);
+        }
+        var metrics = (Map<String, Metric>) Whitebox.getInternalState(metricGroup, "metrics");
+        return ((Gauge<Double>) metrics.get(gaugeName)).getValue();
     }
 
     @Test

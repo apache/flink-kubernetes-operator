@@ -49,7 +49,7 @@ public class AutoscalerFlinkMetrics {
 
     final Counter numBalanced;
 
-    private final MetricGroup metricGroup;
+    final MetricGroup metricGroup;
 
     private boolean scalingMetricsInitialized;
 
