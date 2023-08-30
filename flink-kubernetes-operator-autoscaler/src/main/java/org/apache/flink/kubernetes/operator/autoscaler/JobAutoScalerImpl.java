@@ -148,7 +148,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
 
             initRecommendedParallelism(evaluatedMetrics);
             autoscalerMetrics.registerScalingMetrics(
-                    () -> collectedMetrics.getJobTopology().getVerticesInTopologicalOrder(),
+                    collectedMetrics.getJobTopology().getVerticesInTopologicalOrder(),
                     () -> lastEvaluatedMetrics.get(resourceId));
 
             if (!collectedMetrics.isFullyCollected()) {

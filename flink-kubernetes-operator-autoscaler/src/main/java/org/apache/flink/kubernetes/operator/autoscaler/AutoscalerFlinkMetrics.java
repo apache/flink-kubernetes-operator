@@ -61,7 +61,7 @@ public class AutoscalerFlinkMetrics {
     }
 
     public void registerScalingMetrics(
-            Supplier<List<JobVertexID>> jobVerticesSupplier,
+            List<JobVertexID> jobVertices,
             Supplier<Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
                     metricsSupplier) {
         if (scalingMetricsInitialized) {
@@ -73,7 +73,7 @@ public class AutoscalerFlinkMetrics {
         scalingMetricsInitialized = true;
 
         LOG.info("Registering scaling metrics");
-        for (JobVertexID jobVertexID : jobVerticesSupplier.get()) {
+        for (JobVertexID jobVertexID : jobVertices) {
 
             MetricGroup jobVertexGroup =
                     metricGroup.addGroup(JOB_VERTEX_ID, jobVertexID.toHexString());

@@ -52,6 +52,8 @@ public class JobTopology {
     @Getter private final Map<JobVertexID, Integer> maxParallelisms;
     @Getter private final Set<JobVertexID> finishedVertices;
 
+    @Getter private final List<JobVertexID> verticesInTopologicalOrder;
+
     public JobTopology(VertexInfo... vertexInfo) {
         this(Set.of(vertexInfo));
     }
@@ -94,6 +96,8 @@ public class JobTopology {
         this.parallelisms = ImmutableMap.copyOf(vertexParallelism);
         this.originalMaxParallelism = ImmutableMap.copyOf(maxParallelisms);
         this.finishedVertices = finishedVertices.build();
+
+        this.verticesInTopologicalOrder = returnVerticesInTopologicalOrder();
     }
 
     public boolean isSource(JobVertexID jobVertexID) {
@@ -105,7 +109,7 @@ public class JobTopology {
                 vertexID, Math.min(originalMaxParallelism.get(vertexID), maxParallelism));
     }
 
-    public List<JobVertexID> getVerticesInTopologicalOrder() {
+    private List<JobVertexID> returnVerticesInTopologicalOrder() {
         List<JobVertexID> sorted = new ArrayList<>(inputs.size());
 
         Map<JobVertexID, List<JobVertexID>> remainingInputs = new HashMap<>(inputs.size());
