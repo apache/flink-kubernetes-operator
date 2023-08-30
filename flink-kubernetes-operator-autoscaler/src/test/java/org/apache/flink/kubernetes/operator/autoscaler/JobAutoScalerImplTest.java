@@ -117,8 +117,8 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
                 0.42,
                 getGaugeValue(
                         metricGroup,
-                        AutoscalerFlinkMetrics.CURRENT,
-                        AutoscalerFlinkMetrics.JOB_VERTEX_ID,
+                        AutoscalerMetrics.CURRENT,
+                        AutoscalerMetrics.JOB_VERTEX_ID,
                         jobVertexID.toHexString(),
                         ScalingMetric.LOAD.name()),
                 "Expected scaling metric LOAD was not reported. Reporting is broken");

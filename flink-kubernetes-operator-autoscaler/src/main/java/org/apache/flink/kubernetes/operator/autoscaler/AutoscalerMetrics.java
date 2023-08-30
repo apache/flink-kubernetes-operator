@@ -36,9 +36,9 @@ import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMet
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.RECOMMENDED_PARALLELISM;
 
 /** Autoscaler metrics for observability. */
-public class AutoscalerFlinkMetrics {
+public class AutoscalerMetrics {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AutoscalerFlinkMetrics.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AutoscalerMetrics.class);
     @VisibleForTesting static final String CURRENT = "Current";
     @VisibleForTesting static final String AVERAGE = "Average";
     @VisibleForTesting static final String JOB_VERTEX_ID = "jobVertexID";
@@ -53,7 +53,7 @@ public class AutoscalerFlinkMetrics {
 
     private boolean scalingMetricsInitialized;
 
-    public AutoscalerFlinkMetrics(MetricGroup metricGroup) {
+    public AutoscalerMetrics(MetricGroup metricGroup) {
         this.numScalings = metricGroup.counter("scalings");
         this.numErrors = metricGroup.counter("errors");
         this.numBalanced = metricGroup.counter("balanced");

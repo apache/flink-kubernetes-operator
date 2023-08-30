@@ -36,8 +36,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFlinkMetrics.initRecommendedParallelism;
-import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFlinkMetrics.resetRecommendedParallelism;
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerMetrics.initRecommendedParallelism;
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerMetrics.resetRecommendedParallelism;
 import static org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
 
 /** Application and SessionJob autoscaler. */
@@ -56,7 +56,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             lastEvaluatedMetrics = new ConcurrentHashMap<>();
 
     @VisibleForTesting
-    final Map<ResourceID, AutoscalerFlinkMetrics> flinkMetrics = new ConcurrentHashMap<>();
+    final Map<ResourceID, AutoscalerMetrics> flinkMetrics = new ConcurrentHashMap<>();
 
     @VisibleForTesting final AutoscalerInfoManager infoManager;
 
@@ -182,12 +182,12 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         }
     }
 
-    private AutoscalerFlinkMetrics getOrInitAutoscalerFlinkMetrics(
+    private AutoscalerMetrics getOrInitAutoscalerFlinkMetrics(
             FlinkResourceContext<? extends AbstractFlinkResource<?, ?>> ctx, ResourceID resouceId) {
         return this.flinkMetrics.computeIfAbsent(
                 resouceId,
                 id ->
-                        new AutoscalerFlinkMetrics(
+                        new AutoscalerMetrics(
                                 ctx.getResourceMetricGroup().addGroup("AutoScaler")));
     }
 }
