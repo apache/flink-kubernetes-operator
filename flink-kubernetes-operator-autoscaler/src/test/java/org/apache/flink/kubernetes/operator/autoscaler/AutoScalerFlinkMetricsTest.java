@@ -32,29 +32,29 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerMetrics.AVERAGE;
-import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerMetrics.CURRENT;
-import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerMetrics.JOB_VERTEX_ID;
-import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerMetrics.initRecommendedParallelism;
-import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerMetrics.resetRecommendedParallelism;
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFlinkMetrics.AVERAGE;
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFlinkMetrics.CURRENT;
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFlinkMetrics.JOB_VERTEX_ID;
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFlinkMetrics.initRecommendedParallelism;
+import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFlinkMetrics.resetRecommendedParallelism;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.RECOMMENDED_PARALLELISM;
 import static org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** {@link AutoscalerMetrics} tests. */
+/** {@link AutoscalerFlinkMetrics} tests. */
 public class AutoScalerFlinkMetricsTest {
 
     private final Configuration configuration = new Configuration();
     private final JobVertexID jobVertexID = new JobVertexID();
     private ResourceID resourceID;
     private TestingMetricListener listener;
-    private AutoscalerMetrics metrics;
+    private AutoscalerFlinkMetrics metrics;
 
     @BeforeEach
     public void init() {
         listener = new TestingMetricListener(configuration);
-        metrics = new AutoscalerMetrics(listener.getMetricGroup());
+        metrics = new AutoscalerFlinkMetrics(listener.getMetricGroup());
         resourceID = ResourceID.fromResource(TestUtils.buildApplicationCluster());
     }
 

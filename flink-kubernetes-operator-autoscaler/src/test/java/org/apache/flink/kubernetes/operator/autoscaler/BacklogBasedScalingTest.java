@@ -438,10 +438,10 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
 
     private void assertFlinkMetricsCount(
             int scalingCount, int balancedCount, TestUtils.TestingContext<HasMetadata> ctx) {
-        AutoscalerMetrics autoscalerMetrics =
+        AutoscalerFlinkMetrics autoscalerFlinkMetrics =
                 autoscaler.flinkMetrics.get(
                         ResourceID.fromResource(getResourceContext(app, ctx).getResource()));
-        assertEquals(scalingCount, autoscalerMetrics.numScalings.getCount());
-        assertEquals(balancedCount, autoscalerMetrics.numBalanced.getCount());
+        assertEquals(scalingCount, autoscalerFlinkMetrics.numScalings.getCount());
+        assertEquals(balancedCount, autoscalerFlinkMetrics.numBalanced.getCount());
     }
 }
