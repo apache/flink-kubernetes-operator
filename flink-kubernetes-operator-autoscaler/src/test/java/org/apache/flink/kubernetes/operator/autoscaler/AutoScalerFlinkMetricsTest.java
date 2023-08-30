@@ -79,6 +79,21 @@ public class AutoScalerFlinkMetricsTest {
     }
 
     @Test
+    public void testAllScalingMetricsAreRegistered() {
+        int numMetricsAlreadyRegistered = listener.size();
+        metrics.registerScalingMetrics(() -> List.of(jobVertexID), () -> null);
+        int numScalingMetrics = 0;
+        for (ScalingMetric scalingMetric : ScalingMetric.values()) {
+            if (scalingMetric.isCalculateAverage()) {
+                numScalingMetrics += 2;
+            } else {
+                numScalingMetrics += 1;
+            }
+        }
+        assertEquals(numMetricsAlreadyRegistered + numScalingMetrics, listener.size());
+    }
+
+    @Test
     public void testMetricsCleanup() {
         var evaluatedMetrics = Map.of(jobVertexID, testMetrics());
         var lastEvaluatedMetrics =
