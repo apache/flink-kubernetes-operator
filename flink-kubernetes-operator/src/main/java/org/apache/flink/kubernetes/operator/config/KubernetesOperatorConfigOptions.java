@@ -583,5 +583,5 @@ public class KubernetesOperatorConfigOptions {
                     .booleanType()
                     .defaultValue(false)
                     .withDescription(
-                            "Indicate whether a job should be drained before deleting a FlinkDeployment or FlinkSessionJob, only if savepoint on deletion is enabled.");
+                            "Indicate whether the job should be drained when stopping with savepoint.");
 }
