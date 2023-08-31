@@ -576,4 +576,12 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(false)
                     .withDescription(
                             "Indicate whether a savepoint must be taken when deleting a FlinkDeployment or FlinkSessionJob.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> DRAIN_ON_SAVEPOINT_DELETION =
+            operatorConfig("job.drain-on-savepoint-deletion")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Indicate whether the job should be drained when stopping with savepoint.");
 }

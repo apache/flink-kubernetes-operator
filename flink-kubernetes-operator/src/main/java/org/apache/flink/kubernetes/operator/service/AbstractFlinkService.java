@@ -309,7 +309,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     clusterClient
                                             .stopWithSavepoint(
                                                     Preconditions.checkNotNull(jobId),
-                                                    false,
+                                                    conf.getBoolean(
+                                                            KubernetesOperatorConfigOptions
+                                                                    .DRAIN_ON_SAVEPOINT_DELETION),
                                                     savepointDirectory,
                                                     conf.get(FLINK_VERSION)
                                                                     .isNewerVersionThan(
@@ -416,7 +418,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                         clusterClient
                                                 .stopWithSavepoint(
                                                         jobId,
-                                                        false,
+                                                        conf.getBoolean(
+                                                                KubernetesOperatorConfigOptions
+                                                                        .DRAIN_ON_SAVEPOINT_DELETION),
                                                         savepointDirectory,
                                                         conf.get(FLINK_VERSION)
                                                                         .isNewerVersionThan(
