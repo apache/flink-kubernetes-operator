@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFlinkMetrics.AVERAGE;
@@ -66,13 +67,30 @@ public class AutoScalerFlinkMetricsTest {
         initRecommendedParallelism(evaluatedMetrics);
         lastEvaluatedMetrics.put(resourceID, evaluatedMetrics);
 
-        metrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceID));
-        metrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceID));
+        metrics.registerScalingMetrics(
+                List.of(jobVertexID), () -> lastEvaluatedMetrics.get(resourceID));
+        metrics.registerScalingMetrics(
+                List.of(jobVertexID), () -> lastEvaluatedMetrics.get(resourceID));
 
         assertEquals(1.0, getCurrentMetricValue(PARALLELISM));
         assertEquals(1.0, getCurrentMetricValue(RECOMMENDED_PARALLELISM));
         assertEquals(1000., getCurrentMetricValue(TRUE_PROCESSING_RATE));
         assertEquals(2000., getAverageMetricValue(TRUE_PROCESSING_RATE));
+    }
+
+    @Test
+    public void testAllScalingMetricsAreRegistered() {
+        int numMetricsAlreadyRegistered = listener.size();
+        metrics.registerScalingMetrics(List.of(jobVertexID), () -> null);
+        int numScalingMetrics = 0;
+        for (ScalingMetric scalingMetric : ScalingMetric.values()) {
+            if (scalingMetric.isCalculateAverage()) {
+                numScalingMetrics += 2;
+            } else {
+                numScalingMetrics += 1;
+            }
+        }
+        assertEquals(numMetricsAlreadyRegistered + numScalingMetrics, listener.size());
     }
 
     @Test
@@ -83,7 +101,8 @@ public class AutoScalerFlinkMetricsTest {
                         ResourceID, Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>();
         initRecommendedParallelism(evaluatedMetrics);
         lastEvaluatedMetrics.put(resourceID, evaluatedMetrics);
-        metrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceID));
+        metrics.registerScalingMetrics(
+                List.of(jobVertexID), () -> lastEvaluatedMetrics.get(resourceID));
 
         assertEquals(1.0, getCurrentMetricValue(PARALLELISM));
         assertEquals(1.0, getCurrentMetricValue(RECOMMENDED_PARALLELISM));
@@ -107,7 +126,8 @@ public class AutoScalerFlinkMetricsTest {
         resetRecommendedParallelism(evaluatedMetrics);
         lastEvaluatedMetrics.put(resourceID, evaluatedMetrics);
 
-        metrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceID));
+        metrics.registerScalingMetrics(
+                List.of(jobVertexID), () -> lastEvaluatedMetrics.get(resourceID));
         assertEquals(1.0, getCurrentMetricValue(PARALLELISM));
         assertEquals(Double.NaN, getCurrentMetricValue(RECOMMENDED_PARALLELISM));
         assertEquals(1000., getCurrentMetricValue(TRUE_PROCESSING_RATE));
@@ -123,7 +143,8 @@ public class AutoScalerFlinkMetricsTest {
         initRecommendedParallelism(evaluatedMetrics);
         lastEvaluatedMetrics.put(resourceID, evaluatedMetrics);
 
-        metrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceID));
+        metrics.registerScalingMetrics(
+                List.of(jobVertexID), () -> lastEvaluatedMetrics.get(resourceID));
         assertEquals(1.0, getCurrentMetricValue(PARALLELISM));
         assertEquals(1.0, getCurrentMetricValue(RECOMMENDED_PARALLELISM));
         assertEquals(1000., getCurrentMetricValue(TRUE_PROCESSING_RATE));

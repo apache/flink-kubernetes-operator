@@ -112,8 +112,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         var conf = ctx.getObserveConfig();
         var resource = ctx.getResource();
         var resourceId = ResourceID.fromResource(resource);
-        var flinkMetrics = getOrInitAutoscalerFlinkMetrics(ctx, resourceId);
-        Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics = null;
+        var autoscalerMetrics = getOrInitAutoscalerFlinkMetrics(ctx, resourceId);
 
         try {
             if (resource.getSpec().getJob() == null || !conf.getBoolean(AUTOSCALER_ENABLED)) {
@@ -141,11 +140,16 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                 autoScalerInfo.replaceInKubernetes(kubernetesClient);
                 return false;
             }
-
             LOG.debug("Collected metrics: {}", collectedMetrics);
-            evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
+
+            var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
             LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
+            lastEvaluatedMetrics.put(resourceId, evaluatedMetrics);
+
             initRecommendedParallelism(evaluatedMetrics);
+            autoscalerMetrics.registerScalingMetrics(
+                    collectedMetrics.getJobTopology().getVerticesInTopologicalOrder(),
+                    () -> lastEvaluatedMetrics.get(resourceId));
 
             if (!collectedMetrics.isFullyCollected()) {
                 // We have done an upfront evaluation, but we are not ready for scaling.
@@ -158,16 +162,16 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                     scalingExecutor.scaleResource(resource, autoScalerInfo, conf, evaluatedMetrics);
 
             if (specAdjusted) {
-                flinkMetrics.numScalings.inc();
+                autoscalerMetrics.numScalings.inc();
             } else {
-                flinkMetrics.numBalanced.inc();
+                autoscalerMetrics.numBalanced.inc();
             }
 
             autoScalerInfo.replaceInKubernetes(kubernetesClient);
             return specAdjusted;
         } catch (Throwable e) {
             LOG.error("Error while scaling resource", e);
-            flinkMetrics.numErrors.inc();
+            autoscalerMetrics.numErrors.inc();
             eventRecorder.triggerEvent(
                     resource,
                     EventRecorder.Type.Warning,
@@ -175,11 +179,6 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                     EventRecorder.Component.Operator,
                     e.getMessage());
             return false;
-        } finally {
-            if (evaluatedMetrics != null) {
-                lastEvaluatedMetrics.put(resourceId, evaluatedMetrics);
-                flinkMetrics.registerScalingMetrics(() -> lastEvaluatedMetrics.get(resourceId));
-            }
         }
     }
 
