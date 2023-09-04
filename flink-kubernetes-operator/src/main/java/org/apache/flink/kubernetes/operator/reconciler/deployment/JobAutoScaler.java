@@ -19,8 +19,6 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 
-import java.util.Map;
-
 /** Per-job Autoscaler instance. */
 public interface JobAutoScaler {
 
@@ -30,6 +28,6 @@ public interface JobAutoScaler {
     /** Called when the custom resource is deleted. */
     void cleanup(FlinkResourceContext<?> ctx);
 
-    /** Get the current parallelism overrides for the job. */
-    Map<String, String> getParallelismOverrides(FlinkResourceContext<?> ctx);
+    /** Apply current parallelism overrides. */
+    void applyParallelismOverrides(FlinkResourceContext<?> ctx);
 }

@@ -20,9 +20,11 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
@@ -48,6 +50,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -195,5 +198,75 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
         app.getSpec().getFlinkConfiguration().put(AUTOSCALER_ENABLED.key(), "asd");
         ctx = getResourceContext(app);
         assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));
+    }
+
+    @Test
+    public void testApplyAutoscalerParallelism() {
+        var overrides = new HashMap<String, String>();
+        var autoscaler =
+                new JobAutoScalerImpl(null, null, null, eventRecorder) {
+                    public Map<String, String> getParallelismOverrides(
+                            FlinkResourceContext<?> ctx) {
+                        return new HashMap<>(overrides);
+                    }
+                };
+
+        var deployment = TestUtils.buildApplicationCluster();
+        var specClone = ReconciliationUtils.clone(deployment.getSpec());
+
+        // Verify no spec change if overrides are empty
+        autoscaler.applyParallelismOverrides(getResourceContext(deployment));
+        assertEquals(specClone, deployment.getSpec());
+
+        // Make sure overrides are applied to the spec
+        var v1 = new JobVertexID();
+        overrides.put(v1.toHexString(), "2");
+
+        // Verify no upgrades if overrides are empty
+        autoscaler.applyParallelismOverrides(getResourceContext(deployment));
+        assertEquals(
+                Map.of(v1.toHexString(), "2"),
+                getResourceContext(deployment)
+                        .getDeployConfig(deployment.getSpec())
+                        .get(PipelineOptions.PARALLELISM_OVERRIDES));
+
+        // We set a user override for v1, it should be ignored and the autoscaler override should
+        // take precedence
+        specClone = ReconciliationUtils.clone(deployment.getSpec());
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":1");
+        autoscaler.applyParallelismOverrides(getResourceContext(deployment));
+        assertEquals(specClone, deployment.getSpec());
+
+        // Define partly overlapping overrides, user overrides for new vertices should be applied
+        var v2 = new JobVertexID();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":1," + v2 + ":4");
+        autoscaler.applyParallelismOverrides(getResourceContext(deployment));
+        assertEquals(
+                Map.of(v1.toString(), "2", v2.toString(), "4"),
+                getResourceContext(deployment)
+                        .getDeployConfig(deployment.getSpec())
+                        .get(PipelineOptions.PARALLELISM_OVERRIDES));
+
+        // Make sure user overrides apply to excluded vertices
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(AutoScalerOptions.VERTEX_EXCLUDE_IDS.key(), v1.toString());
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":1," + v2 + ":4");
+        autoscaler.applyParallelismOverrides(getResourceContext(deployment));
+        assertEquals(
+                Map.of(v1.toString(), "1", v2.toString(), "4"),
+                getResourceContext(deployment)
+                        .getDeployConfig(deployment.getSpec())
+                        .get(PipelineOptions.PARALLELISM_OVERRIDES));
     }
 }

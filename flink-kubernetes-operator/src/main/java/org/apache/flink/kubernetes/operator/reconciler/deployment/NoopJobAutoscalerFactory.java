@@ -20,8 +20,6 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
-import java.util.Map;
-
 /** An autoscaler implementation which does nothing. */
 public class NoopJobAutoscalerFactory implements JobAutoScalerFactory, JobAutoScaler {
 
@@ -39,7 +37,5 @@ public class NoopJobAutoscalerFactory implements JobAutoScalerFactory, JobAutoSc
     public void cleanup(FlinkResourceContext<?> ctx) {}
 
     @Override
-    public Map<String, String> getParallelismOverrides(FlinkResourceContext<?> ctx) {
-        return Map.of();
-    }
+    public void applyParallelismOverrides(FlinkResourceContext<?> ctx) {}
 }
