@@ -147,7 +147,6 @@ public class StandaloneFlinkServiceTest {
         flinkDeployment.getSpec().getTaskManager().setReplicas(5);
         var ctx =
                 new FlinkResourceContextFactory(
-                                kubernetesClient,
                                 configManager,
                                 TestUtils.createTestMetricGroup(new Configuration()),
                                 null)
@@ -176,7 +175,6 @@ public class StandaloneFlinkServiceTest {
                 .serializeAndSetLastReconciledSpec(flinkDeployment.getSpec(), flinkDeployment);
         ctx =
                 new FlinkResourceContextFactory(
-                                kubernetesClient,
                                 configManager,
                                 TestUtils.createTestMetricGroup(new Configuration()),
                                 null)
@@ -209,7 +207,6 @@ public class StandaloneFlinkServiceTest {
 
         var ctx =
                 new FlinkResourceContextFactory(
-                                kubernetesClient,
                                 configManager,
                                 TestUtils.createTestMetricGroup(new Configuration()),
                                 null)

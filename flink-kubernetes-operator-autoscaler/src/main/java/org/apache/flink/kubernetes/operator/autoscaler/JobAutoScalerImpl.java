@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScaler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +44,6 @@ public class JobAutoScalerImpl implements JobAutoScaler {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobAutoScalerImpl.class);
 
-    private final KubernetesClient kubernetesClient;
     private final ScalingMetricCollector metricsCollector;
     private final ScalingMetricEvaluator evaluator;
     private final ScalingExecutor scalingExecutor;
@@ -61,17 +59,15 @@ public class JobAutoScalerImpl implements JobAutoScaler {
     @VisibleForTesting final AutoscalerInfoManager infoManager;
 
     public JobAutoScalerImpl(
-            KubernetesClient kubernetesClient,
             ScalingMetricCollector metricsCollector,
             ScalingMetricEvaluator evaluator,
             ScalingExecutor scalingExecutor,
             EventRecorder eventRecorder) {
-        this.kubernetesClient = kubernetesClient;
         this.metricsCollector = metricsCollector;
         this.evaluator = evaluator;
         this.scalingExecutor = scalingExecutor;
         this.eventRecorder = eventRecorder;
-        this.infoManager = new AutoscalerInfoManager(kubernetesClient);
+        this.infoManager = new AutoscalerInfoManager();
     }
 
     @Override
@@ -89,13 +85,13 @@ public class JobAutoScalerImpl implements JobAutoScaler {
     public Map<String, String> getParallelismOverrides(FlinkResourceContext<?> ctx) {
         var conf = ctx.getObserveConfig();
         try {
-            var infoOpt = infoManager.getInfo(ctx.getResource());
+            var infoOpt = infoManager.getInfo(ctx.getResource(), ctx.getKubernetesClient());
             if (infoOpt.isPresent()) {
                 var info = infoOpt.get();
                 // If autoscaler was disabled need to delete the overrides
                 if (!conf.getBoolean(AUTOSCALER_ENABLED) && !info.getCurrentOverrides().isEmpty()) {
                     info.removeCurrentOverrides();
-                    info.replaceInKubernetes(kubernetesClient);
+                    info.replaceInKubernetes(ctx.getKubernetesClient());
                 } else {
                     return info.getCurrentOverrides();
                 }
@@ -130,14 +126,14 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                 return false;
             }
 
-            var autoScalerInfo = infoManager.getOrCreateInfo(resource);
+            var autoScalerInfo = infoManager.getOrCreateInfo(resource, ctx.getKubernetesClient());
 
             var collectedMetrics =
                     metricsCollector.updateMetrics(
                             resource, autoScalerInfo, ctx.getFlinkService(), conf);
 
             if (collectedMetrics.getMetricHistory().isEmpty()) {
-                autoScalerInfo.replaceInKubernetes(kubernetesClient);
+                autoScalerInfo.replaceInKubernetes(ctx.getKubernetesClient());
                 return false;
             }
             LOG.debug("Collected metrics: {}", collectedMetrics);
@@ -154,12 +150,17 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             if (!collectedMetrics.isFullyCollected()) {
                 // We have done an upfront evaluation, but we are not ready for scaling.
                 resetRecommendedParallelism(evaluatedMetrics);
-                autoScalerInfo.replaceInKubernetes(kubernetesClient);
+                autoScalerInfo.replaceInKubernetes(ctx.getKubernetesClient());
                 return false;
             }
 
             var specAdjusted =
-                    scalingExecutor.scaleResource(resource, autoScalerInfo, conf, evaluatedMetrics);
+                    scalingExecutor.scaleResource(
+                            resource,
+                            autoScalerInfo,
+                            conf,
+                            evaluatedMetrics,
+                            ctx.getKubernetesClient());
 
             if (specAdjusted) {
                 autoscalerMetrics.numScalings.inc();
@@ -167,7 +168,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                 autoscalerMetrics.numBalanced.inc();
             }
 
-            autoScalerInfo.replaceInKubernetes(kubernetesClient);
+            autoScalerInfo.replaceInKubernetes(ctx.getKubernetesClient());
             return specAdjusted;
         } catch (Throwable e) {
             LOG.error("Error while scaling resource", e);
@@ -177,7 +178,8 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                     EventRecorder.Type.Warning,
                     EventRecorder.Reason.AutoscalerError,
                     EventRecorder.Component.Operator,
-                    e.getMessage());
+                    e.getMessage(),
+                    ctx.getKubernetesClient());
             return false;
         }
     }

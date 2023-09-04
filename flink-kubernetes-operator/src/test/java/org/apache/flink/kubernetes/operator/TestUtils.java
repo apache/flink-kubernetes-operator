@@ -147,33 +147,55 @@ public class TestUtils extends BaseTestUtils {
     }
 
     public static <T extends HasMetadata> Context<T> createContextWithDeployment(
-            @Nullable Deployment deployment) {
+            @Nullable Deployment deployment, KubernetesClient client) {
         return new TestingContext<>() {
             @Override
             public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
                 return (Optional<T>) Optional.ofNullable(deployment);
             }
+
+            @Override
+            public KubernetesClient getClient() {
+                return client;
+            }
         };
     }
 
     public static <T extends HasMetadata> Context<T> createEmptyContext() {
-        return createContextWithDeployment(null);
+        return createContextWithDeployment(null, null);
     }
 
-    public static <T extends HasMetadata> Context<T> createContextWithReadyJobManagerDeployment() {
-        return createContextWithDeployment(createDeployment(true));
+    public static <T extends HasMetadata> Context<T> createEmptyContextWithClient(
+            KubernetesClient client) {
+        return createContextWithDeployment(null, client);
     }
 
-    public static <T extends HasMetadata> Context<T> createContextWithInProgressDeployment() {
-        return createContextWithDeployment(createDeployment(false));
+    public static <T extends HasMetadata> Context<T> createContextWithReadyJobManagerDeployment(
+            KubernetesClient client) {
+        return createContextWithDeployment(createDeployment(true), client);
+    }
+
+    public static <T extends HasMetadata> Context<T> createContextWithInProgressDeployment(
+            KubernetesClient client) {
+        return createContextWithDeployment(createDeployment(false), client);
     }
 
     public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment() {
-        return createContextWithReadyFlinkDeployment(new HashMap<>());
+        return createContextWithReadyFlinkDeployment(new HashMap<>(), null);
+    }
+
+    public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment(
+            KubernetesClient client) {
+        return createContextWithReadyFlinkDeployment(new HashMap<>(), client);
     }
 
     public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment(
             Map<String, String> flinkDepConfig) {
+        return createContextWithReadyFlinkDeployment(flinkDepConfig, null);
+    }
+
+    public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment(
+            Map<String, String> flinkDepConfig, KubernetesClient client) {
         return new TestingContext<>() {
             @Override
             public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
@@ -184,6 +206,11 @@ public class TestUtils extends BaseTestUtils {
                         .getReconciliationStatus()
                         .serializeAndSetLastReconciledSpec(session.getSpec(), session);
                 return (Optional<T>) Optional.of(session);
+            }
+
+            @Override
+            public KubernetesClient getClient() {
+                return client;
             }
         };
     }
@@ -202,7 +229,8 @@ public class TestUtils extends BaseTestUtils {
 
     public static final String DEPLOYMENT_ERROR = "test deployment error message";
 
-    public static <T extends HasMetadata> Context<T> createContextWithFailedJobManagerDeployment() {
+    public static <T extends HasMetadata> Context<T> createContextWithFailedJobManagerDeployment(
+            KubernetesClient client) {
         return new TestingContext<>() {
             @Override
             public Optional getSecondaryResource(Class expectedType, String eventSourceName) {
@@ -225,6 +253,11 @@ public class TestUtils extends BaseTestUtils {
                 deployment.setSpec(spec);
                 deployment.setStatus(status);
                 return Optional.of(deployment);
+            }
+
+            @Override
+            public KubernetesClient getClient() {
+                return client;
             }
         };
     }

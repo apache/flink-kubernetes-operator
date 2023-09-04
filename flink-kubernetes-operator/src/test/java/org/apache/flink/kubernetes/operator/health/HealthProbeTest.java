@@ -182,31 +182,31 @@ public class HealthProbeTest {
 
         var canaryManager =
                 new CanaryResourceManager<FlinkDeployment>(
-                        new FlinkConfigManager(new Configuration()), client);
+                        new FlinkConfigManager(new Configuration()));
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryManager);
 
         // No canary resources
         assertTrue(HealthProbe.INSTANCE.isHealthy());
 
         var canary = TestUtils.createCanaryDeployment();
-        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary));
+        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary), client);
 
         // Canary resource healthy before health check
         assertTrue(HealthProbe.INSTANCE.isHealthy());
 
         // No reconciliation before health check
-        canaryManager.checkHealth(ResourceID.fromResource(canary));
+        canaryManager.checkHealth(ResourceID.fromResource(canary), client);
         assertFalse(HealthProbe.INSTANCE.isHealthy());
 
         // Healthy again
         canary.getMetadata().setGeneration(2L);
-        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary));
-        canaryManager.checkHealth(ResourceID.fromResource(canary));
+        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary), client);
+        canaryManager.checkHealth(ResourceID.fromResource(canary), client);
         assertTrue(HealthProbe.INSTANCE.isHealthy());
 
         canary.getMetadata().setGeneration(3L);
-        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary));
-        canaryManager.checkHealth(ResourceID.fromResource(canary));
+        canaryManager.handleCanaryResourceReconciliation(ReconciliationUtils.clone(canary), client);
+        canaryManager.checkHealth(ResourceID.fromResource(canary), client);
         assertTrue(HealthProbe.INSTANCE.isHealthy());
     }
 

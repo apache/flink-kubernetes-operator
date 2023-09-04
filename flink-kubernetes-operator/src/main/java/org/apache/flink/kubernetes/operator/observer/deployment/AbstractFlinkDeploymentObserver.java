@@ -224,7 +224,8 @@ public abstract class AbstractFlinkDeploymentObserver
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.Missing,
                 EventRecorder.Component.JobManagerDeployment,
-                err);
+                err,
+                ctx.getKubernetesClient());
     }
 
     @Override

@@ -171,6 +171,11 @@ public class TestingFlinkService extends AbstractFlinkService {
                 }
                 return (Optional<T>) Optional.of(TestUtils.createDeployment(jobManagerReady));
             }
+
+            @Override
+            public KubernetesClient getClient() {
+                return kubernetesClient;
+            }
         };
     }
 

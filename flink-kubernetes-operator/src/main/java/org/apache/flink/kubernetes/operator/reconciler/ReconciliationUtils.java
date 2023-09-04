@@ -444,7 +444,7 @@ public class ReconciliationUtils {
 
         statusRecorder.updateStatusFromCache(ctx.getResource());
         ReconciliationUtils.updateForReconciliationError(ctx, e);
-        statusRecorder.patchAndCacheStatus(ctx.getResource());
+        statusRecorder.patchAndCacheStatus(ctx.getResource(), ctx.getKubernetesClient());
 
         // Status was updated already, no need to return anything
         return ErrorStatusUpdateControl.noStatusUpdate();

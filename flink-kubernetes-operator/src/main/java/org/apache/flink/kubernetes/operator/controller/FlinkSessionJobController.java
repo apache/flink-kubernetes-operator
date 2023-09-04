@@ -87,7 +87,8 @@ public class FlinkSessionJobController
     public UpdateControl<FlinkSessionJob> reconcile(
             FlinkSessionJob flinkSessionJob, Context josdkContext) {
 
-        if (canaryResourceManager.handleCanaryResourceReconciliation(flinkSessionJob)) {
+        if (canaryResourceManager.handleCanaryResourceReconciliation(
+                flinkSessionJob, josdkContext.getClient())) {
             return UpdateControl.noUpdate();
         }
 
@@ -99,13 +100,13 @@ public class FlinkSessionJobController
 
         observer.observe(ctx);
         if (!validateSessionJob(ctx)) {
-            statusRecorder.patchAndCacheStatus(flinkSessionJob);
+            statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
             return ReconciliationUtils.toUpdateControl(
                     ctx.getOperatorConfig(), flinkSessionJob, previousJob, false);
         }
 
         try {
-            statusRecorder.patchAndCacheStatus(flinkSessionJob);
+            statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
             reconciler.reconcile(ctx);
         } catch (Exception e) {
             eventRecorder.triggerEvent(
@@ -113,10 +114,11 @@ public class FlinkSessionJobController
                     EventRecorder.Type.Warning,
                     "SessionJobException",
                     e.getMessage(),
-                    EventRecorder.Component.Job);
+                    EventRecorder.Component.Job,
+                    josdkContext.getClient());
             throw new ReconciliationException(e);
         }
-        statusRecorder.patchAndCacheStatus(flinkSessionJob);
+        statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
         return ReconciliationUtils.toUpdateControl(
                 ctx.getOperatorConfig(), flinkSessionJob, previousJob, true);
     }
@@ -135,7 +137,8 @@ public class FlinkSessionJobController
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.Cleanup,
                 EventRecorder.Component.Operator,
-                msg);
+                msg,
+                josdkContext.getClient());
         statusRecorder.removeCachedStatus(sessionJob);
         var ctx = ctxFactory.getResourceContext(sessionJob, josdkContext);
         return reconciler.cleanup(ctx);
@@ -168,7 +171,8 @@ public class FlinkSessionJobController
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.ValidationError,
                         EventRecorder.Component.Operator,
-                        validationError.get());
+                        validationError.get(),
+                        ctx.getKubernetesClient());
                 return ReconciliationUtils.applyValidationErrorAndResetSpec(
                         ctx, validationError.get());
             }

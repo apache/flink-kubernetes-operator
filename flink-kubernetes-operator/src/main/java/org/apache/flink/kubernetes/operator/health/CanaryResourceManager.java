@@ -49,13 +49,12 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
     private final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(3);
 
     private final FlinkConfigManager configManager;
-    private final KubernetesClient kubernetesClient;
 
     public boolean allCanariesHealthy() {
         return canaryResources.values().stream().allMatch(cr -> cr.isHealthy);
     }
 
-    public boolean handleCanaryResourceReconciliation(CR resource) {
+    public boolean handleCanaryResourceReconciliation(CR resource, KubernetesClient client) {
         if (!isCanaryResource(resource)) {
             return false;
         }
@@ -74,7 +73,7 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
                     }
                     previousState.onReconcile(resource);
                     if (firstReconcile) {
-                        updateSpecAndScheduleHealthCheck(resourceId, previousState);
+                        updateSpecAndScheduleHealthCheck(resourceId, previousState, client);
                     }
                     return previousState;
                 });
@@ -93,7 +92,8 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
         return true;
     }
 
-    private void updateSpecAndScheduleHealthCheck(ResourceID resourceID, CanaryResourceState crs) {
+    private void updateSpecAndScheduleHealthCheck(
+            ResourceID resourceID, CanaryResourceState crs, KubernetesClient client) {
         var canaryTimeout =
                 configManager
                         .getDefaultConfig()
@@ -106,17 +106,19 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
         LOG.info("Scheduling canary check for {} in {}s", resourceID, canaryTimeout.toSeconds());
 
         try {
-            kubernetesClient.resource(ReconciliationUtils.clone(crs.resource)).replace();
+            client.resource(ReconciliationUtils.clone(crs.resource)).replace();
         } catch (Throwable t) {
             LOG.warn("Could not bump canary deployment, it may have been deleted", t);
         }
 
         executorService.schedule(
-                () -> checkHealth(resourceID), canaryTimeout.toMillis(), TimeUnit.MILLISECONDS);
+                () -> checkHealth(resourceID, client),
+                canaryTimeout.toMillis(),
+                TimeUnit.MILLISECONDS);
     }
 
     @VisibleForTesting
-    protected void checkHealth(ResourceID resourceID) {
+    protected void checkHealth(ResourceID resourceID, KubernetesClient client) {
         CanaryResourceState crs = canaryResources.get(resourceID);
         if (crs == null) {
             LOG.info("Canary resource {} not found. Stopping health checks", resourceID);
@@ -137,7 +139,7 @@ public class CanaryResourceManager<CR extends AbstractFlinkResource<?, ?>> {
         }
 
         // Update spec and reschedule health check
-        updateSpecAndScheduleHealthCheck(resourceID, crs);
+        updateSpecAndScheduleHealthCheck(resourceID, crs, client);
     }
 
     @VisibleForTesting

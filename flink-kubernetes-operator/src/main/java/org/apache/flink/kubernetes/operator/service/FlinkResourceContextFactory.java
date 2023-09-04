@@ -33,7 +33,6 @@ import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
@@ -49,7 +48,6 @@ public class FlinkResourceContextFactory {
 
     private static final Logger LOG = LoggerFactory.getLogger(FlinkResourceContextFactory.class);
 
-    private final KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager;
     private final ArtifactManager artifactManager;
     private final ExecutorService clientExecutorService;
@@ -60,11 +58,9 @@ public class FlinkResourceContextFactory {
             resourceMetricGroups = new ConcurrentHashMap<>();
 
     public FlinkResourceContextFactory(
-            KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
             KubernetesOperatorMetricGroup operatorMetricGroup,
             EventRecorder eventRecorder) {
-        this.kubernetesClient = kubernetesClient;
         this.configManager = configManager;
         this.operatorMetricGroup = operatorMetricGroup;
         this.eventRecorder = eventRecorder;
@@ -109,14 +105,14 @@ public class FlinkResourceContextFactory {
         switch (deploymentMode) {
             case NATIVE:
                 return new NativeFlinkService(
-                        kubernetesClient,
+                        ctx.getKubernetesClient(),
                         artifactManager,
                         clientExecutorService,
                         ctx.getOperatorConfig(),
                         eventRecorder);
             case STANDALONE:
                 return new StandaloneFlinkService(
-                        kubernetesClient,
+                        ctx.getKubernetesClient(),
                         artifactManager,
                         clientExecutorService,
                         ctx.getOperatorConfig());

@@ -101,7 +101,7 @@ public class FlinkOperator {
         this.listeners = ListenerUtils.discoverListeners(configManager);
         this.eventRecorder = EventRecorder.create(client, listeners);
         this.ctxFactory =
-                new FlinkResourceContextFactory(client, configManager, metricGroup, eventRecorder);
+                new FlinkResourceContextFactory(configManager, metricGroup, eventRecorder);
         PluginManager pluginManager = PluginUtils.createPluginManagerFromRootFolder(baseConfig);
         FileSystem.initialize(baseConfig, pluginManager);
         this.operatorHealthService = OperatorHealthService.fromConfig(configManager);
@@ -163,10 +163,9 @@ public class FlinkOperator {
         var autoscalerFactory = AutoscalerLoader.loadJobAutoscalerFactory();
         var reconcilerFactory =
                 new ReconcilerFactory(
-                        client, configManager, eventRecorder, statusRecorder, autoscalerFactory);
+                        configManager, eventRecorder, statusRecorder, autoscalerFactory);
         var observerFactory = new FlinkDeploymentObserverFactory(eventRecorder);
-        var canaryResourceManager =
-                new CanaryResourceManager<FlinkDeployment>(configManager, client);
+        var canaryResourceManager = new CanaryResourceManager<FlinkDeployment>(configManager);
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
 
         var controller =
@@ -187,10 +186,9 @@ public class FlinkOperator {
         var metricManager =
                 MetricManager.createFlinkSessionJobMetricManager(baseConfig, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
-        var reconciler = new SessionJobReconciler(client, eventRecorder, statusRecorder);
+        var reconciler = new SessionJobReconciler(eventRecorder, statusRecorder);
         var observer = new FlinkSessionJobObserver(eventRecorder);
-        var canaryResourceManager =
-                new CanaryResourceManager<FlinkSessionJob>(configManager, client);
+        var canaryResourceManager = new CanaryResourceManager<FlinkSessionJob>(configManager);
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);
 
         var controller =

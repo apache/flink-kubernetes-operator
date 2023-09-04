@@ -76,8 +76,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
     @BeforeEach
     public void setup() {
         evaluator = new ScalingMetricEvaluator();
-        scalingExecutor =
-                new ScalingExecutor(new EventRecorder(kubernetesClient, new EventCollector()));
+        scalingExecutor = new ScalingExecutor(new EventRecorder(new EventCollector()));
 
         app = TestUtils.buildApplicationCluster();
         app.getMetadata().setGeneration(1L);
@@ -113,11 +112,10 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
 
         autoscaler =
                 new JobAutoScalerImpl(
-                        kubernetesClient,
                         metricsCollector,
                         evaluator,
                         scalingExecutor,
-                        new EventRecorder(kubernetesClient, eventCollector));
+                        new EventRecorder(eventCollector));
 
         // Reset custom window size to default
         metricsCollector.setTestMetricWindowSize(null);
@@ -428,10 +426,17 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
     @NotNull
     private TestUtils.TestingContext<HasMetadata> createAutoscalerTestContext() {
         return new TestUtils.TestingContext<>() {
+
+            @Override
             public <T1> Set<T1> getSecondaryResources(Class<T1> aClass) {
                 return (Set)
                         kubernetesClient.configMaps().inAnyNamespace().list().getItems().stream()
                                 .collect(Collectors.toSet());
+            }
+
+            @Override
+            public KubernetesClient getClient() {
+                return kubernetesClient;
             }
         };
     }

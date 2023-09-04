@@ -48,7 +48,7 @@ public abstract class OperatorTestBase {
         getKubernetesClient().resource(TestUtils.buildSessionJob()).createOrReplace();
         flinkService = new TestingFlinkService(getKubernetesClient());
         context = flinkService.getContext();
-        eventRecorder = new EventRecorder(getKubernetesClient(), eventCollector);
+        eventRecorder = new EventRecorder(eventCollector);
         operatorMetricGroup = TestUtils.createTestMetricGroup(configManager.getDefaultConfig());
         setup();
     }
@@ -66,11 +66,7 @@ public abstract class OperatorTestBase {
             CR cr, Context josdkContext) {
         var ctxFactory =
                 new TestingFlinkResourceContextFactory(
-                        getKubernetesClient(),
-                        configManager,
-                        operatorMetricGroup,
-                        flinkService,
-                        eventRecorder);
+                        configManager, operatorMetricGroup, flinkService, eventRecorder);
         return ctxFactory.getResourceContext(cr, josdkContext);
     }
 }

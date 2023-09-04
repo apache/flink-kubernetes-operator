@@ -78,10 +78,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                 new TestReconcilerAdapter<>(
                         this,
                         new ApplicationReconciler(
-                                kubernetesClient,
-                                eventRecorder,
-                                statusRecorder,
-                                new NoopJobAutoscalerFactory()));
+                                eventRecorder, statusRecorder, new NoopJobAutoscalerFactory()));
     }
 
     @ParameterizedTest

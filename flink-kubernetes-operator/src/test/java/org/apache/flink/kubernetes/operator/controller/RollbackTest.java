@@ -70,9 +70,7 @@ public class RollbackTest {
         context = flinkService.getContext();
         testController =
                 new TestingFlinkDeploymentController(
-                        new FlinkConfigManager(new Configuration()),
-                        kubernetesClient,
-                        flinkService);
+                        new FlinkConfigManager(new Configuration()), flinkService);
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
     }
 

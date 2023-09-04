@@ -87,8 +87,7 @@ public class MetricsCollectionAndEvaluationTest {
     @BeforeEach
     public void setup() {
         evaluator = new ScalingMetricEvaluator();
-        scalingExecutor =
-                new ScalingExecutor(new EventRecorder(kubernetesClient, new EventCollector()));
+        scalingExecutor = new ScalingExecutor(new EventRecorder(new EventCollector()));
         service = new TestingFlinkService();
 
         app = TestUtils.buildApplicationCluster();
@@ -176,7 +175,7 @@ public class MetricsCollectionAndEvaluationTest {
         assertTrue(collectedMetrics.isFullyCollected());
 
         var evaluation = evaluator.evaluate(conf, collectedMetrics);
-        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
+        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation, kubernetesClient);
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(scalingInfo);
         assertEquals(4, scaledParallelism.size());
@@ -190,7 +189,7 @@ public class MetricsCollectionAndEvaluationTest {
         conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
 
         evaluation = evaluator.evaluate(conf, collectedMetrics);
-        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
+        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation, kubernetesClient);
 
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(scalingInfo);
         assertEquals(4, scaledParallelism.get(source1));
@@ -398,7 +397,7 @@ public class MetricsCollectionAndEvaluationTest {
                 500.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
 
-        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
+        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation, kubernetesClient);
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(scalingInfo);
         assertEquals(1, scaledParallelism.get(source1));
     }
@@ -478,7 +477,7 @@ public class MetricsCollectionAndEvaluationTest {
                 0.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
 
-        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation);
+        scalingExecutor.scaleResource(app, scalingInfo, conf, evaluation, kubernetesClient);
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(scalingInfo);
         assertEquals(1, scaledParallelism.get(source1));
     }

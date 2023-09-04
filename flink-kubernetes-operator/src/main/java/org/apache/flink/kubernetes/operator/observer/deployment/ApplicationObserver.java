@@ -111,7 +111,8 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
                     EventRecorder.Type.Warning,
                     EventRecorder.Reason.Missing,
                     EventRecorder.Component.Job,
-                    err);
+                    err,
+                    ctx.getKubernetesClient());
         }
     }
 }

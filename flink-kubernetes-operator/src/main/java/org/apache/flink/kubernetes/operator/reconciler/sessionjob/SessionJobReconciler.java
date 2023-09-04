@@ -33,7 +33,6 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.messages.FlinkJobNotFoundException;
 import org.apache.flink.runtime.messages.FlinkJobTerminatedWithoutCancellationException;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,10 +47,9 @@ public class SessionJobReconciler
     private static final Logger LOG = LoggerFactory.getLogger(SessionJobReconciler.class);
 
     public SessionJobReconciler(
-            KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder) {
-        super(kubernetesClient, eventRecorder, statusRecorder, new NoopJobAutoscalerFactory());
+        super(eventRecorder, statusRecorder, new NoopJobAutoscalerFactory());
     }
 
     @Override

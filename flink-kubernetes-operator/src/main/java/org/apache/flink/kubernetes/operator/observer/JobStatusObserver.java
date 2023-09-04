@@ -178,7 +178,8 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
                     EventRecorder.Type.Normal,
                     EventRecorder.Reason.JobStatusChanged,
                     EventRecorder.Component.Job,
-                    message);
+                    message,
+                    ctx.getKubernetesClient());
         }
     }
 

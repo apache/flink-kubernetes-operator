@@ -64,8 +64,7 @@ public class ScalingExecutorTest {
     @BeforeEach
     public void setup() {
         eventCollector = new EventCollector();
-        scalingDecisionExecutor =
-                new ScalingExecutor(new EventRecorder(kubernetesClient, eventCollector));
+        scalingDecisionExecutor = new ScalingExecutor(new EventRecorder(eventCollector));
         conf = new Configuration();
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
@@ -158,10 +157,14 @@ public class ScalingExecutorTest {
                         evaluated(10, 80, 100));
         // filter operator should not scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of(filterOperatorHexString));
-        assertFalse(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, kubernetesClient));
         // filter operator should scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of());
-        assertTrue(scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+        assertTrue(
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, kubernetesClient));
     }
 
     @ParameterizedTest
@@ -173,7 +176,8 @@ public class ScalingExecutorTest {
         var scalingInfo = new AutoScalerInfo(new HashMap<>());
         assertEquals(
                 scalingEnabled,
-                scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, kubernetesClient));
         assertEquals(1, eventCollector.events.size());
         var event = eventCollector.events.poll();
         assertTrue(
@@ -198,7 +202,8 @@ public class ScalingExecutorTest {
         metrics = Map.of(jobVertexID, evaluated(1, 110, 101));
         assertEquals(
                 scalingEnabled,
-                scalingDecisionExecutor.scaleResource(flinkDep, scalingInfo, conf, metrics));
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, kubernetesClient));
         var event2 = eventCollector.events.poll();
         assertEquals(event.getMetadata().getUid(), event2.getMetadata().getUid());
         assertEquals(2, event2.getCount());

@@ -65,11 +65,10 @@ public class ApplicationReconciler
     static final String MSG_RESTART_UNHEALTHY = "Restarting unhealthy job";
 
     public ApplicationReconciler(
-            KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
             JobAutoScalerFactory autoscalerFactory) {
-        super(kubernetesClient, eventRecorder, statusRecorder, autoscalerFactory);
+        super(eventRecorder, statusRecorder, autoscalerFactory);
     }
 
     @Override
@@ -168,27 +167,31 @@ public class ApplicationReconciler
             flinkService.deleteClusterDeployment(
                     relatedResource.getMetadata(), status, deployConfig, true);
             flinkService.waitForClusterShutdown(deployConfig);
-            statusRecorder.patchAndCacheStatus(relatedResource);
+            statusRecorder.patchAndCacheStatus(relatedResource, ctx.getKubernetesClient());
         }
 
-        setJobIdIfNecessary(spec, relatedResource, deployConfig);
+        setJobIdIfNecessary(spec, relatedResource, deployConfig, ctx.getKubernetesClient());
 
         eventRecorder.triggerEvent(
                 relatedResource,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.Submit,
                 EventRecorder.Component.JobManagerDeployment,
-                MSG_SUBMIT);
+                MSG_SUBMIT,
+                ctx.getKubernetesClient());
         flinkService.submitApplicationCluster(spec.getJob(), deployConfig, requireHaMetadata);
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
 
         IngressUtils.updateIngressRules(
-                relatedResource.getMetadata(), spec, deployConfig, kubernetesClient);
+                relatedResource.getMetadata(), spec, deployConfig, ctx.getKubernetesClient());
     }
 
     private void setJobIdIfNecessary(
-            FlinkDeploymentSpec spec, FlinkDeployment resource, Configuration deployConfig) {
+            FlinkDeploymentSpec spec,
+            FlinkDeployment resource,
+            Configuration deployConfig,
+            KubernetesClient client) {
         // The jobId assigned by Flink would be constant,
         // overwrite to avoid checkpoint path conflicts.
         // https://issues.apache.org/jira/browse/FLINK-19358
@@ -207,7 +210,7 @@ public class ApplicationReconciler
             // record before first deployment to ensure we use it on any retry
             status.getJobStatus().setJobId(jobId);
             LOG.info("Assigning JobId override to {}", jobId);
-            statusRecorder.patchAndCacheStatus(resource);
+            statusRecorder.patchAndCacheStatus(resource, client);
         }
 
         String jobId = status.getJobStatus().getJobId();
@@ -268,7 +271,8 @@ public class ApplicationReconciler
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.RecoverDeployment,
                         EventRecorder.Component.Job,
-                        MSG_RECOVERY);
+                        MSG_RECOVERY,
+                        ctx.getKubernetesClient());
             }
 
             if (shouldRestartJobBecauseUnhealthy) {
@@ -277,7 +281,8 @@ public class ApplicationReconciler
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.RestartUnhealthyJob,
                         EventRecorder.Component.Job,
-                        MSG_RESTART_UNHEALTHY);
+                        MSG_RESTART_UNHEALTHY,
+                        ctx.getKubernetesClient());
                 cleanupAfterFailedJob(ctx);
             }
 

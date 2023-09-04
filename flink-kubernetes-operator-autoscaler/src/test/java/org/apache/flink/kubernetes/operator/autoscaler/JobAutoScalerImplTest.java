@@ -101,12 +101,7 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
         ScalingExecutor scalingExecutor = new ScalingExecutor(eventRecorder);
 
         var autoscaler =
-                new JobAutoScalerImpl(
-                        kubernetesClient,
-                        metricsCollector,
-                        evaluator,
-                        scalingExecutor,
-                        eventRecorder);
+                new JobAutoScalerImpl(metricsCollector, evaluator, scalingExecutor, eventRecorder);
         FlinkResourceContext<FlinkDeployment> resourceContext = getResourceContext(app);
         ResourceID resourceId = ResourceID.fromResource(app);
 
@@ -139,7 +134,7 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
 
     @Test
     void testErrorReporting() {
-        var autoscaler = new JobAutoScalerImpl(kubernetesClient, null, null, null, eventRecorder);
+        var autoscaler = new JobAutoScalerImpl(null, null, null, eventRecorder);
         FlinkResourceContext<FlinkDeployment> resourceContext = getResourceContext(app);
         ResourceID resourceId = ResourceID.fromResource(app);
 
@@ -154,14 +149,15 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
 
     @Test
     void testParallelismOverrides() throws Exception {
-        var autoscaler = new JobAutoScalerImpl(kubernetesClient, null, null, null, eventRecorder);
+        var autoscaler = new JobAutoScalerImpl(null, null, null, eventRecorder);
         var ctx = getResourceContext(app);
 
         // Initially we should return empty overrides, do not crate any CM
         assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));
-        assertFalse(autoscaler.infoManager.getInfoFromKubernetes(app).isPresent());
+        assertFalse(
+                autoscaler.infoManager.getInfoFromKubernetes(app, kubernetesClient).isPresent());
 
-        var autoscalerInfo = autoscaler.infoManager.getOrCreateInfo(app);
+        var autoscalerInfo = autoscaler.infoManager.getOrCreateInfo(app, kubernetesClient);
 
         var v1 = new JobVertexID().toString();
         var v2 = new JobVertexID().toString();
@@ -175,7 +171,7 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
         ctx = getResourceContext(app);
         assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));
         // But not clear the autoscaler info
-        assertTrue(autoscaler.infoManager.getInfoFromKubernetes(app).isPresent());
+        assertTrue(autoscaler.infoManager.getInfoFromKubernetes(app, kubernetesClient).isPresent());
 
         int requestCount = mockWebServer.getRequestCount();
         // Make sure we don't update in kubernetes once removed

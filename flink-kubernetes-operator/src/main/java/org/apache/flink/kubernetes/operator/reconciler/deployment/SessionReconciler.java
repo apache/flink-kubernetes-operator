@@ -29,7 +29,6 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,10 +48,9 @@ public class SessionReconciler
     private static final Logger LOG = LoggerFactory.getLogger(SessionReconciler.class);
 
     public SessionReconciler(
-            KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder) {
-        super(kubernetesClient, eventRecorder, statusRecorder, new NoopJobAutoscalerFactory());
+        super(eventRecorder, statusRecorder, new NoopJobAutoscalerFactory());
     }
 
     @Override
@@ -69,7 +67,7 @@ public class SessionReconciler
 
         // We record the target spec into an upgrading state before deploying
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(deployment, deployConfig, clock);
-        statusRecorder.patchAndCacheStatus(deployment);
+        statusRecorder.patchAndCacheStatus(deployment, ctx.getKubernetesClient());
 
         deploy(ctx, deployment.getSpec(), deployConfig, Optional.empty(), false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, deployConfig, clock);
@@ -97,7 +95,8 @@ public class SessionReconciler
         setOwnerReference(cr, deployConfig);
         ctx.getFlinkService().submitSessionCluster(deployConfig);
         cr.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-        IngressUtils.updateIngressRules(cr.getMetadata(), spec, deployConfig, kubernetesClient);
+        IngressUtils.updateIngressRules(
+                cr.getMetadata(), spec, deployConfig, ctx.getKubernetesClient());
     }
 
     @Override
@@ -134,7 +133,8 @@ public class SessionReconciler
                     EventRecorder.Type.Warning,
                     EventRecorder.Reason.CleanupFailed,
                     EventRecorder.Component.Operator,
-                    error)) {
+                    error,
+                    ctx.getKubernetesClient())) {
                 LOG.warn(error);
             }
             return DeleteControl.noFinalizerRemoval()

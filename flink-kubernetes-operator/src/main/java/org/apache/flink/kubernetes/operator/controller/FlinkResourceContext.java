@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -106,5 +107,14 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
         return operatorConfig =
                 configManager.getOperatorConfiguration(
                         getResource().getMetadata().getNamespace(), getFlinkVersion());
+    }
+
+    /**
+     * Get KubernetesClient available from JOSDK Context.
+     *
+     * @return KubernetesClient.
+     */
+    public KubernetesClient getKubernetesClient() {
+        return getJosdkContext().getClient();
     }
 }

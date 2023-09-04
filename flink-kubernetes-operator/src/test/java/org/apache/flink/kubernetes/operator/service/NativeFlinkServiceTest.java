@@ -97,7 +97,7 @@ public class NativeFlinkServiceTest {
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
         configuration.set(FLINK_VERSION, FlinkVersion.v1_15);
-        eventRecorder = new EventRecorder(client, eventCollector);
+        eventRecorder = new EventRecorder(eventCollector);
         operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);
         executorService = Executors.newDirectExecutorService();
     }
@@ -247,7 +247,7 @@ public class NativeFlinkServiceTest {
                 service.scale(
                         new FlinkDeploymentContext(
                                 flinkDep,
-                                TestUtils.createEmptyContext(),
+                                TestUtils.createEmptyContextWithClient(client),
                                 null,
                                 configManager,
                                 ctx -> service),
@@ -445,7 +445,7 @@ public class NativeFlinkServiceTest {
                 service.scale(
                         new FlinkDeploymentContext(
                                 depCopy,
-                                TestUtils.createEmptyContext(),
+                                TestUtils.createEmptyContextWithClient(client),
                                 null,
                                 configManager,
                                 c -> service),

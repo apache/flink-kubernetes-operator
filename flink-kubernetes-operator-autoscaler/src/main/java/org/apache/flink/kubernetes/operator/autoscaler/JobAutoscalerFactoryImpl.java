@@ -22,7 +22,6 @@ import org.apache.flink.kubernetes.operator.reconciler.deployment.JobAutoScalerF
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
 import com.google.auto.service.AutoService;
-import io.fabric8.kubernetes.client.KubernetesClient;
 
 /**
  * Factory for loading JobAutoScalerImpl included in this module. This class will be dynamically
@@ -31,9 +30,8 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 @AutoService(JobAutoScalerFactory.class)
 public class JobAutoscalerFactoryImpl implements JobAutoScalerFactory {
     @Override
-    public JobAutoScaler create(KubernetesClient kubernetesClient, EventRecorder eventRecorder) {
+    public JobAutoScaler create(EventRecorder eventRecorder) {
         return new JobAutoScalerImpl(
-                kubernetesClient,
                 new RestApiMetricsCollector(),
                 new ScalingMetricEvaluator(),
                 new ScalingExecutor(eventRecorder),
