@@ -135,10 +135,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     public void setup() {
         appReconciler =
                 new ApplicationReconciler(
-                        kubernetesClient,
-                        eventRecorder,
-                        statusRecorder,
-                        new NoopJobAutoscalerFactory());
+                        eventRecorder, statusRecorder, new NoopJobAutoscalerFactory());
         reconciler = new TestReconcilerAdapter<>(this, appReconciler);
         operatorConfig = configManager.getOperatorConfiguration();
         executorService = Executors.newDirectExecutorService();
@@ -154,13 +151,15 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster(flinkVersion);
 
         // session ready
-        reconciler.reconcile(deployment, TestUtils.createContextWithReadyFlinkDeployment());
+        reconciler.reconcile(
+                deployment, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         // clean up
         assertEquals(
                 null, deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
-        reconciler.cleanup(deployment, TestUtils.createContextWithReadyFlinkDeployment());
+        reconciler.cleanup(
+                deployment, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         assertEquals(
                 "savepoint_0",
                 deployment
@@ -182,13 +181,15 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
 
         // session ready
-        reconciler.reconcile(deployment, TestUtils.createContextWithReadyFlinkDeployment());
+        reconciler.reconcile(
+                deployment, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         // clean up
         assertEquals(
                 null, deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
-        reconciler.cleanup(deployment, TestUtils.createContextWithReadyFlinkDeployment());
+        reconciler.cleanup(
+                deployment, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         assertEquals(
                 "savepoint_0",
                 deployment
@@ -793,11 +794,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         var ctxFactory =
                 new TestingFlinkResourceContextFactory(
-                        getKubernetesClient(),
-                        configManager,
-                        operatorMetricGroup,
-                        nativeService,
-                        eventRecorder);
+                        configManager, operatorMetricGroup, nativeService, eventRecorder);
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
 
         // Set all the properties required by the rescale api
@@ -879,14 +876,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     public void testApplyAutoscalerParallelism() throws Exception {
         var ctxFactory =
                 new TestingFlinkResourceContextFactory(
-                        getKubernetesClient(),
-                        configManager,
-                        operatorMetricGroup,
-                        flinkService,
-                        eventRecorder);
+                        configManager, operatorMetricGroup, flinkService, eventRecorder);
         var overrides = new HashMap<String, String>();
         JobAutoScalerFactory autoscalerFactory =
-                (k, r) ->
+                (r) ->
                         new NoopJobAutoscalerFactory() {
                             @Override
                             public Map<String, String> getParallelismOverrides(
@@ -900,9 +893,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                             }
                         };
 
-        appReconciler =
-                new ApplicationReconciler(
-                        kubernetesClient, eventRecorder, statusRecorder, autoscalerFactory);
+        appReconciler = new ApplicationReconciler(eventRecorder, statusRecorder, autoscalerFactory);
 
         var deployment = TestUtils.buildApplicationCluster();
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));

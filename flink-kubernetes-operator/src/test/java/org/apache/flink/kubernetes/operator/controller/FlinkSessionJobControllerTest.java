@@ -58,7 +58,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 class FlinkSessionJobControllerTest {
     private KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
-    private final Context context = TestUtils.createContextWithReadyFlinkDeployment();
+    private Context context;
 
     private TestingFlinkService flinkService = new TestingFlinkService();
     private TestingFlinkSessionJobController testController;
@@ -68,11 +68,11 @@ class FlinkSessionJobControllerTest {
     @BeforeEach
     public void before() {
         flinkService = new TestingFlinkService();
-        testController =
-                new TestingFlinkSessionJobController(configManager, kubernetesClient, flinkService);
+        testController = new TestingFlinkSessionJobController(configManager, flinkService);
         sessionJob = TestUtils.buildSessionJob();
         suspendedSessionJob = TestUtils.buildSessionJob(JobState.SUSPENDED);
         kubernetesClient.resource(sessionJob).createOrReplace();
+        context = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
     }
 
     @Test

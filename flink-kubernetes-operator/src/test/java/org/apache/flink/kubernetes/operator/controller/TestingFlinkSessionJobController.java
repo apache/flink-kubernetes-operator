@@ -37,7 +37,6 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
 import io.fabric8.kubernetes.api.model.Event;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
@@ -73,29 +72,25 @@ public class TestingFlinkSessionJobController
     private Map<ResourceID, Tuple2<FlinkSessionJobSpec, Long>> currentGenerations = new HashMap<>();
 
     public TestingFlinkSessionJobController(
-            FlinkConfigManager configManager,
-            KubernetesClient kubernetesClient,
-            TestingFlinkService flinkService) {
+            FlinkConfigManager configManager, TestingFlinkService flinkService) {
         var ctxFactory =
                 new TestingFlinkResourceContextFactory(
-                        kubernetesClient,
                         configManager,
                         TestUtils.createTestMetricGroup(new Configuration()),
                         flinkService,
                         eventRecorder);
 
-        eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
+        eventRecorder = new EventRecorder(eventCollector);
 
-        statusRecorder =
-                new StatusRecorder<>(kubernetesClient, new MetricManager<>(), statusUpdateCounter);
+        statusRecorder = new StatusRecorder<>(new MetricManager<>(), statusUpdateCounter);
 
-        canaryResourceManager = new CanaryResourceManager<>(configManager, kubernetesClient);
+        canaryResourceManager = new CanaryResourceManager<>(configManager);
 
         flinkSessionJobController =
                 new FlinkSessionJobController(
                         ValidatorUtils.discoverValidators(configManager),
                         ctxFactory,
-                        new SessionJobReconciler(kubernetesClient, eventRecorder, statusRecorder),
+                        new SessionJobReconciler(eventRecorder, statusRecorder),
                         new FlinkSessionJobObserver(eventRecorder),
                         statusRecorder,
                         eventRecorder,

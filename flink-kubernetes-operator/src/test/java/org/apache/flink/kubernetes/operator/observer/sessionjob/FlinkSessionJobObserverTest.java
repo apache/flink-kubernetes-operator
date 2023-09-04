@@ -66,14 +66,13 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         observer = new TestObserverAdapter<>(this, new FlinkSessionJobObserver(eventRecorder));
         reconciler =
                 new TestReconcilerAdapter<>(
-                        this,
-                        new SessionJobReconciler(kubernetesClient, eventRecorder, statusRecorder));
+                        this, new SessionJobReconciler(eventRecorder, statusRecorder));
     }
 
     @Test
     public void testBasicObserve() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
-        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
 
         // observe the brand new job, nothing to do.
         observer.observe(sessionJob, readyContext);
@@ -167,7 +166,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         final var sessionJob = TestUtils.buildSessionJob();
         final var readyContext =
                 TestUtils.createContextWithReadyFlinkDeployment(
-                        Map.of(RestOptions.PORT.key(), "8088"));
+                        Map.of(RestOptions.PORT.key(), "8088"), kubernetesClient);
 
         // submit job
         reconciler.reconcile(sessionJob, readyContext);
@@ -187,7 +186,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
     @Test
     public void testObserveSavepoint() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
-        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
         // submit job
         reconciler.reconcile(sessionJob, readyContext);
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
@@ -233,7 +232,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
     @Test
     public void testObserveCheckpoint() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
-        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
         // submit job
         reconciler.reconcile(sessionJob, readyContext);
         var jobID = sessionJob.getStatus().getJobStatus().getJobId();
@@ -273,7 +272,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
     public void testObserveAlreadySubmitted() {
         final var sessionJob = TestUtils.buildSessionJob();
         sessionJob.getMetadata().setGeneration(10L);
-        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
 
         flinkService.setSessionJobSubmittedCallback(
                 () -> {
@@ -303,7 +302,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
     public void testObserveAlreadyUpgraded() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
         sessionJob.getMetadata().setGeneration(10L);
-        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
 
         reconciler.reconcile(sessionJob, readyContext);
         observer.observe(sessionJob, readyContext);
@@ -354,7 +353,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
     public void testOrphanedJob() throws Exception {
         final var sessionJob = TestUtils.buildSessionJob();
         sessionJob.getMetadata().setGeneration(10L);
-        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment();
+        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
 
         reconciler.reconcile(sessionJob, readyContext);
         observer.observe(sessionJob, readyContext);
@@ -419,7 +418,8 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(sessionJob, new Configuration());
 
         assertFalse(sessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment());
-        observer.observe(sessionJob, TestUtils.createContextWithReadyFlinkDeployment());
+        observer.observe(
+                sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
         assertTrue(sessionJob.getStatus().getReconciliationStatus().isBeforeFirstDeployment());
     }
 }

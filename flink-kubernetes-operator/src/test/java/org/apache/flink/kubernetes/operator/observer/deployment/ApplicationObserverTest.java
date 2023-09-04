@@ -72,13 +72,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class ApplicationObserverTest extends OperatorTestBase {
     @Getter private KubernetesClient kubernetesClient;
 
-    private final Context<FlinkDeployment> readyContext =
-            TestUtils.createContextWithReadyJobManagerDeployment();
+    private Context<FlinkDeployment> readyContext;
     private TestObserverAdapter<FlinkDeployment> observer;
 
     @Override
     public void setup() {
         observer = new TestObserverAdapter<>(this, new ApplicationObserver(eventRecorder));
+        readyContext = TestUtils.createContextWithReadyJobManagerDeployment(kubernetesClient);
     }
 
     @Test
@@ -769,7 +769,8 @@ public class ApplicationObserverTest extends OperatorTestBase {
                         () ->
                                 observer.observe(
                                         deployment,
-                                        TestUtils.createContextWithInProgressDeployment()));
+                                        TestUtils.createContextWithInProgressDeployment(
+                                                kubernetesClient)));
         assertEquals(podFailedMessage, exception.getMessage());
     }
 
@@ -778,7 +779,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         var kubernetesDeployment = TestUtils.createDeployment(true);
         kubernetesDeployment.getMetadata().setAnnotations(new HashMap<>());
 
-        var context = TestUtils.createContextWithDeployment(kubernetesDeployment);
+        var context = TestUtils.createContextWithDeployment(kubernetesDeployment, kubernetesClient);
 
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getMetadata().setGeneration(123L);

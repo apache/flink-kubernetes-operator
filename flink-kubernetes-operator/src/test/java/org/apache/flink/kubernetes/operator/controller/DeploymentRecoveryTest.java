@@ -54,8 +54,7 @@ public class DeploymentRecoveryTest {
     public void setup() {
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
-        testController =
-                new TestingFlinkDeploymentController(configManager, kubernetesClient, flinkService);
+        testController = new TestingFlinkDeploymentController(configManager, flinkService);
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
     }
 
@@ -80,9 +79,11 @@ public class DeploymentRecoveryTest {
 
         // Make sure we do not try to recover JM deployment errors (only missing)
         testController.reconcile(
-                appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+                appCluster,
+                TestUtils.createContextWithFailedJobManagerDeployment(kubernetesClient));
         testController.reconcile(
-                appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+                appCluster,
+                TestUtils.createContextWithFailedJobManagerDeployment(kubernetesClient));
         assertEquals(
                 JobManagerDeploymentStatus.ERROR,
                 appCluster.getStatus().getJobManagerDeploymentStatus());

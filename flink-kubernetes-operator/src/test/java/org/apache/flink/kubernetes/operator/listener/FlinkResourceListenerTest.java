@@ -72,12 +72,12 @@ public class FlinkResourceListenerTest {
         assertEquals(deployment, listener1.updates.get(0).getFlinkResource());
 
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
-        statusRecorder.patchAndCacheStatus(deployment);
+        statusRecorder.patchAndCacheStatus(deployment, kubernetesClient);
         assertEquals(2, listener1.updates.size());
         assertEquals(deployment, listener1.updates.get(1).getFlinkResource());
 
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
-        statusRecorder.patchAndCacheStatus(deployment);
+        statusRecorder.patchAndCacheStatus(deployment, kubernetesClient);
         assertEquals(3, listener1.updates.size());
         assertEquals(deployment, listener1.updates.get(2).getFlinkResource());
 
@@ -105,14 +105,16 @@ public class FlinkResourceListenerTest {
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.SavepointError,
                 EventRecorder.Component.Operator,
-                "err");
+                "err",
+                kubernetesClient);
         assertEquals(1, listener1.events.size());
         eventRecorder.triggerEvent(
                 deployment,
                 EventRecorder.Type.Warning,
                 EventRecorder.Reason.SavepointError,
                 EventRecorder.Component.Operator,
-                "err");
+                "err",
+                kubernetesClient);
         assertEquals(2, listener1.events.size());
 
         for (int i = 0; i < listener1.events.size(); i++) {

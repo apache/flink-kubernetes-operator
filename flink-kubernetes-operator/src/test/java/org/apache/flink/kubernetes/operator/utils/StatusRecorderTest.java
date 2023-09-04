@@ -41,23 +41,23 @@ public class StatusRecorderTest {
     public void testPatchOnlyWhenChanged() throws InterruptedException {
         var helper =
                 new StatusRecorder<FlinkDeployment, FlinkDeploymentStatus>(
-                        kubernetesClient, new MetricManager<>(), (e, s) -> {});
+                        new MetricManager<>(), (e, s) -> {});
         var deployment = TestUtils.buildApplicationCluster();
         kubernetesClient.resource(deployment).createOrReplace();
         var lastRequest = mockServer.getLastRequest();
 
-        helper.patchAndCacheStatus(deployment);
+        helper.patchAndCacheStatus(deployment, kubernetesClient);
         assertTrue(mockServer.getLastRequest() != lastRequest);
         lastRequest = mockServer.getLastRequest();
         deployment.getStatus().getReconciliationStatus().setState(ReconciliationState.ROLLING_BACK);
-        helper.patchAndCacheStatus(deployment);
+        helper.patchAndCacheStatus(deployment, kubernetesClient);
 
         // We intentionally compare references
         assertTrue(mockServer.getLastRequest() != lastRequest);
         lastRequest = mockServer.getLastRequest();
 
         // No update
-        helper.patchAndCacheStatus(deployment);
+        helper.patchAndCacheStatus(deployment, kubernetesClient);
         assertTrue(mockServer.getLastRequest() == lastRequest);
     }
 }

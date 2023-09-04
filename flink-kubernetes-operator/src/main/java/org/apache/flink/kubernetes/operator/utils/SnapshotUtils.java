@@ -31,6 +31,7 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.core.util.CronExpression;
 import org.slf4j.Logger;
@@ -363,7 +364,9 @@ public class SnapshotUtils {
     }
 
     public static void resetSnapshotTriggers(
-            AbstractFlinkResource<?, ?> resource, EventRecorder eventRecorder) {
+            AbstractFlinkResource<?, ?> resource,
+            EventRecorder eventRecorder,
+            KubernetesClient client) {
         var status = resource.getStatus();
         var jobStatus = status.getJobStatus();
 
@@ -380,7 +383,8 @@ public class SnapshotUtils {
                         EventRecorder.Reason.SavepointError,
                         EventRecorder.Component.Operator,
                         savepointInfo.formatErrorMessage(
-                                resource.getSpec().getJob().getSavepointTriggerNonce()));
+                                resource.getSpec().getJob().getSavepointTriggerNonce()),
+                        client);
             }
             if (SnapshotUtils.checkpointInProgress(jobStatus)) {
                 var checkpointInfo = jobStatus.getCheckpointInfo();
@@ -394,7 +398,8 @@ public class SnapshotUtils {
                         EventRecorder.Reason.CheckpointError,
                         EventRecorder.Component.Operator,
                         checkpointInfo.formatErrorMessage(
-                                resource.getSpec().getJob().getCheckpointTriggerNonce()));
+                                resource.getSpec().getJob().getCheckpointTriggerNonce()),
+                        client);
             }
         }
     }

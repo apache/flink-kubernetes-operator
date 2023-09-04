@@ -35,7 +35,6 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
 import lombok.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,11 +59,10 @@ public abstract class AbstractJobReconciler<
     private static final Logger LOG = LoggerFactory.getLogger(AbstractJobReconciler.class);
 
     public AbstractJobReconciler(
-            KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
             StatusRecorder<CR, STATUS> statusRecorder,
             JobAutoScalerFactory autoscalerFactory) {
-        super(kubernetesClient, eventRecorder, statusRecorder, autoscalerFactory);
+        super(eventRecorder, statusRecorder, autoscalerFactory);
     }
 
     @Override
@@ -112,7 +110,8 @@ public abstract class AbstractJobReconciler<
                     EventRecorder.Type.Normal,
                     EventRecorder.Reason.Suspended,
                     EventRecorder.Component.JobManagerDeployment,
-                    MSG_SUSPENDED);
+                    MSG_SUSPENDED,
+                    ctx.getKubernetesClient());
 
             UpgradeMode upgradeMode = availableUpgradeMode.getUpgradeMode().get();
 
@@ -137,7 +136,7 @@ public abstract class AbstractJobReconciler<
             }
             // We record the target spec into an upgrading state before deploying
             ReconciliationUtils.updateStatusBeforeDeploymentAttempt(resource, deployConfig, clock);
-            statusRecorder.patchAndCacheStatus(resource);
+            statusRecorder.patchAndCacheStatus(resource, ctx.getKubernetesClient());
 
             restoreJob(
                     ctx,

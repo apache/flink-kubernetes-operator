@@ -20,15 +20,13 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
-
 import java.util.Map;
 
 /** An autoscaler implementation which does nothing. */
 public class NoopJobAutoscalerFactory implements JobAutoScalerFactory, JobAutoScaler {
 
     @Override
-    public JobAutoScaler create(KubernetesClient kubernetesClient, EventRecorder eventRecorder) {
+    public JobAutoScaler create(EventRecorder eventRecorder) {
         return this;
     }
 

@@ -230,7 +230,8 @@ public class NativeFlinkService extends AbstractFlinkService {
                         EventRecorder.Type.Normal,
                         EventRecorder.Reason.Scaling,
                         EventRecorder.Component.Job,
-                        "In-place scaling triggered");
+                        "In-place scaling triggered",
+                        ctx.getKubernetesClient());
             }
             return result;
         } catch (Throwable t) {

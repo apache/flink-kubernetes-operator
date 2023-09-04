@@ -54,8 +54,7 @@ public class FailedDeploymentRestartTest {
         configManager = new FlinkConfigManager(configuration);
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
-        testController =
-                new TestingFlinkDeploymentController(configManager, kubernetesClient, flinkService);
+        testController = new TestingFlinkDeploymentController(configManager, flinkService);
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
     }
 

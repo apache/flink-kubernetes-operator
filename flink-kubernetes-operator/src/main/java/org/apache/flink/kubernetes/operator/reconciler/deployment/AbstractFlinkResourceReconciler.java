@@ -76,7 +76,6 @@ public abstract class AbstractFlinkResourceReconciler<
 
     protected final EventRecorder eventRecorder;
     protected final StatusRecorder<CR, STATUS> statusRecorder;
-    protected final KubernetesClient kubernetesClient;
     protected final JobAutoScaler resourceScaler;
 
     public static final String MSG_SUSPENDED = "Suspending existing deployment.";
@@ -88,14 +87,12 @@ public abstract class AbstractFlinkResourceReconciler<
     protected Clock clock = Clock.systemDefaultZone();
 
     public AbstractFlinkResourceReconciler(
-            KubernetesClient kubernetesClient,
             EventRecorder eventRecorder,
             StatusRecorder<CR, STATUS> statusRecorder,
             JobAutoScalerFactory autoscalerFactory) {
-        this.kubernetesClient = kubernetesClient;
         this.eventRecorder = eventRecorder;
         this.statusRecorder = statusRecorder;
-        this.resourceScaler = autoscalerFactory.create(kubernetesClient, eventRecorder);
+        this.resourceScaler = autoscalerFactory.create(eventRecorder);
     }
 
     @Override
@@ -122,7 +119,8 @@ public abstract class AbstractFlinkResourceReconciler<
 
             LOG.info("Deploying for the first time");
             var deployConfig = ctx.getDeployConfig(spec);
-            updateStatusBeforeFirstDeployment(cr, spec, deployConfig, status);
+            updateStatusBeforeFirstDeployment(
+                    cr, spec, deployConfig, status, ctx.getKubernetesClient());
             deploy(
                     ctx,
                     spec,
@@ -160,7 +158,7 @@ public abstract class AbstractFlinkResourceReconciler<
             if (checkNewSpecAlreadyDeployed(cr, deployConfig)) {
                 return;
             }
-            triggerSpecChangeEvent(cr, specDiff);
+            triggerSpecChangeEvent(cr, specDiff, ctx.getKubernetesClient());
 
             // Try scaling if this is not an upgrade change
             boolean scaled = diffType != DiffType.UPGRADE && scale(ctx, deployConfig);
@@ -186,7 +184,8 @@ public abstract class AbstractFlinkResourceReconciler<
                     EventRecorder.Type.Normal,
                     EventRecorder.Reason.Rollback,
                     EventRecorder.Component.JobManagerDeployment,
-                    MSG_ROLLBACK);
+                    MSG_ROLLBACK,
+                    ctx.getKubernetesClient());
         } else if (!reconcileOtherChanges(ctx)) {
             if (resourceScaler.scale(ctx)) {
                 LOG.info(
@@ -198,14 +197,15 @@ public abstract class AbstractFlinkResourceReconciler<
         }
     }
 
-    private void triggerSpecChangeEvent(CR cr, DiffResult<SPEC> specDiff) {
+    private void triggerSpecChangeEvent(CR cr, DiffResult<SPEC> specDiff, KubernetesClient client) {
         eventRecorder.triggerEventOnce(
                 cr,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.SpecChanged,
                 EventRecorder.Component.JobManagerDeployment,
                 String.format(MSG_SPEC_CHANGED, specDiff.getType(), specDiff),
-                "SpecChange: " + cr.getMetadata().getGeneration());
+                "SpecChange: " + cr.getMetadata().getGeneration(),
+                client);
     }
 
     /**
@@ -218,7 +218,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param status Resource status
      */
     private void updateStatusBeforeFirstDeployment(
-            CR cr, SPEC spec, Configuration deployConfig, STATUS status) {
+            CR cr, SPEC spec, Configuration deployConfig, STATUS status, KubernetesClient client) {
         if (spec.getJob() != null) {
             var initialUpgradeMode = UpgradeMode.STATELESS;
             var initialSp = spec.getJob().getInitialSavepointPath();
@@ -235,7 +235,7 @@ public abstract class AbstractFlinkResourceReconciler<
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(cr, deployConfig, clock);
         // Before we try to submit the job we record the current spec in the status so we can
         // handle subsequent deployment and status update errors
-        statusRecorder.patchAndCacheStatus(cr);
+        statusRecorder.patchAndCacheStatus(cr, client);
     }
 
     /**

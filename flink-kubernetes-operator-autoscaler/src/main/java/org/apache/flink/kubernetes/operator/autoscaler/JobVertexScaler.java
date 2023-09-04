@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,7 +71,8 @@ public class JobVertexScaler {
             Configuration conf,
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
-            SortedMap<Instant, ScalingSummary> history) {
+            SortedMap<Instant, ScalingSummary> history,
+            KubernetesClient client) {
 
         var currentParallelism = (int) evaluatedMetrics.get(PARALLELISM).getCurrent();
         double averageTrueProcessingRate = evaluatedMetrics.get(TRUE_PROCESSING_RATE).getAverage();
@@ -131,7 +133,8 @@ public class JobVertexScaler {
                         evaluatedMetrics,
                         history,
                         currentParallelism,
-                        newParallelism)) {
+                        newParallelism,
+                        client)) {
             return currentParallelism;
         }
 
@@ -149,7 +152,8 @@ public class JobVertexScaler {
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             SortedMap<Instant, ScalingSummary> history,
             int currentParallelism,
-            int newParallelism) {
+            int newParallelism,
+            KubernetesClient client) {
 
         // If we don't have past scaling actions for this vertex, there is nothing to do
         if (history.isEmpty()) {
@@ -163,7 +167,7 @@ public class JobVertexScaler {
         if (currentParallelism == lastSummary.getNewParallelism() && lastSummary.isScaledUp()) {
             if (scaledUp) {
                 return detectIneffectiveScaleUp(
-                        resource, vertex, conf, evaluatedMetrics, lastSummary);
+                        resource, vertex, conf, evaluatedMetrics, lastSummary, client);
             } else {
                 return detectImmediateScaleDownAfterScaleUp(vertex, conf, lastScalingTs);
             }
@@ -190,7 +194,8 @@ public class JobVertexScaler {
             JobVertexID vertex,
             Configuration conf,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
-            ScalingSummary lastSummary) {
+            ScalingSummary lastSummary,
+            KubernetesClient client) {
 
         double lastProcRate = lastSummary.getMetrics().get(TRUE_PROCESSING_RATE).getAverage();
         double lastExpectedProcRate =
@@ -218,7 +223,8 @@ public class JobVertexScaler {
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.IneffectiveScaling,
                 EventRecorder.Component.Operator,
-                message);
+                message,
+                client);
 
         if (conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED)) {
             LOG.warn(

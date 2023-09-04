@@ -27,15 +27,12 @@ import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
-import io.fabric8.kubernetes.client.KubernetesClient;
-
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** The factory to create reconciler based on app mode. */
 public class ReconcilerFactory {
 
-    private final KubernetesClient kubernetesClient;
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
     private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder;
@@ -44,12 +41,10 @@ public class ReconcilerFactory {
             reconcilerMap;
 
     public ReconcilerFactory(
-            KubernetesClient kubernetesClient,
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder,
             JobAutoScalerFactory autoscalerFactory) {
-        this.kubernetesClient = kubernetesClient;
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
         this.deploymentStatusRecorder = deploymentStatusRecorder;
@@ -65,14 +60,10 @@ public class ReconcilerFactory {
                 modes -> {
                     switch (modes.f0) {
                         case SESSION:
-                            return new SessionReconciler(
-                                    kubernetesClient, eventRecorder, deploymentStatusRecorder);
+                            return new SessionReconciler(eventRecorder, deploymentStatusRecorder);
                         case APPLICATION:
                             return new ApplicationReconciler(
-                                    kubernetesClient,
-                                    eventRecorder,
-                                    deploymentStatusRecorder,
-                                    autoscalerFactory);
+                                    eventRecorder, deploymentStatusRecorder, autoscalerFactory);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", modes.f0));

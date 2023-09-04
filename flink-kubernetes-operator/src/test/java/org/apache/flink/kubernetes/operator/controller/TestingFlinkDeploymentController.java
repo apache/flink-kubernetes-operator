@@ -38,7 +38,6 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
 import io.fabric8.kubernetes.api.model.Event;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
@@ -80,29 +79,24 @@ public class TestingFlinkDeploymentController
     private Map<ResourceID, Tuple2<FlinkDeploymentSpec, Long>> currentGenerations = new HashMap<>();
 
     public TestingFlinkDeploymentController(
-            FlinkConfigManager configManager,
-            KubernetesClient kubernetesClient,
-            TestingFlinkService flinkService) {
+            FlinkConfigManager configManager, TestingFlinkService flinkService) {
 
         contextFactory =
                 new TestingFlinkResourceContextFactory(
-                        kubernetesClient,
                         configManager,
                         TestUtils.createTestMetricGroup(new Configuration()),
                         flinkService,
                         eventRecorder);
 
-        eventRecorder = new EventRecorder(kubernetesClient, eventCollector);
-        statusRecorder =
-                new StatusRecorder<>(kubernetesClient, new MetricManager<>(), statusUpdateCounter);
+        eventRecorder = new EventRecorder(eventCollector);
+        statusRecorder = new StatusRecorder<>(new MetricManager<>(), statusUpdateCounter);
         reconcilerFactory =
                 new ReconcilerFactory(
-                        kubernetesClient,
                         configManager,
                         eventRecorder,
                         statusRecorder,
                         new NoopJobAutoscalerFactory());
-        canaryResourceManager = new CanaryResourceManager<>(configManager, kubernetesClient);
+        canaryResourceManager = new CanaryResourceManager<>(configManager);
         flinkDeploymentController =
                 new FlinkDeploymentController(
                         ValidatorUtils.discoverValidators(configManager),

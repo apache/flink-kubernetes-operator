@@ -48,7 +48,8 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
         // Trigger resource specific observe logic
         observeInternal(ctx);
 
-        SnapshotUtils.resetSnapshotTriggers(ctx.getResource(), eventRecorder);
+        SnapshotUtils.resetSnapshotTriggers(
+                ctx.getResource(), eventRecorder, ctx.getKubernetesClient());
     }
 
     /**

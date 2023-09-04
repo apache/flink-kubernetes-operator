@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,12 +72,13 @@ public class ScalingExecutor {
             AbstractFlinkResource<?, ?> resource,
             AutoScalerInfo scalingInformation,
             Configuration conf,
-            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
+            KubernetesClient client) {
 
         var now = Instant.now();
         var scalingHistory = scalingInformation.getScalingHistory(now, conf);
         var scalingSummaries =
-                computeScalingSummary(resource, conf, evaluatedMetrics, scalingHistory);
+                computeScalingSummary(resource, conf, evaluatedMetrics, scalingHistory, client);
 
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
@@ -98,7 +100,8 @@ public class ScalingExecutor {
                 EventRecorder.Reason.ScalingReport,
                 EventRecorder.Component.Operator,
                 scalingReport,
-                "ScalingExecutor");
+                "ScalingExecutor",
+                client);
 
         if (!scalingEnabled) {
             return false;
@@ -183,7 +186,8 @@ public class ScalingExecutor {
             AbstractFlinkResource<?, ?> resource,
             Configuration conf,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
-            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
+            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
+            KubernetesClient client) {
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
         var excludeVertexIdList = conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
@@ -203,7 +207,8 @@ public class ScalingExecutor {
                                         v,
                                         metrics,
                                         scalingHistory.getOrDefault(
-                                                v, Collections.emptySortedMap()));
+                                                v, Collections.emptySortedMap()),
+                                        client);
                         if (currentParallelism != newParallelism) {
                             out.put(
                                     v,

@@ -47,46 +47,54 @@ public class AutoscalerInfoManagerTest {
         var cr2 = TestUtils.buildApplicationCluster();
         cr2.getMetadata().setName("cr2");
 
-        var manager = new AutoscalerInfoManager(kubernetesClient);
+        var manager = new AutoscalerInfoManager();
         assertEquals(0, mockWebServer.getRequestCount());
 
-        assertTrue(manager.getInfo(cr1).isEmpty());
+        assertTrue(manager.getInfo(cr1, kubernetesClient).isEmpty());
         assertEquals(1, mockWebServer.getRequestCount());
 
         // Further gets should not go to K8s
-        assertTrue(manager.getInfo(cr1).isEmpty());
-        assertTrue(manager.getInfo(cr1).isEmpty());
+        assertTrue(manager.getInfo(cr1, kubernetesClient).isEmpty());
+        assertTrue(manager.getInfo(cr1, kubernetesClient).isEmpty());
         assertEquals(1, mockWebServer.getRequestCount());
 
-        assertTrue(manager.getInfoFromKubernetes(cr1).isEmpty());
+        assertTrue(manager.getInfoFromKubernetes(cr1, kubernetesClient).isEmpty());
         assertEquals(2, mockWebServer.getRequestCount());
 
-        var info1 = manager.getOrCreateInfo(cr1);
+        var info1 = manager.getOrCreateInfo(cr1, kubernetesClient);
         assertEquals(4, mockWebServer.getRequestCount());
 
-        assertTrue(info1 == manager.getOrCreateInfo(cr1));
+        assertTrue(info1 == manager.getOrCreateInfo(cr1, kubernetesClient));
         assertEquals(4, mockWebServer.getRequestCount());
 
-        assertFalse(manager.getInfoFromKubernetes(cr1).isEmpty());
-        assertTrue(manager.getInfoFromKubernetes(cr2).isEmpty());
+        assertFalse(manager.getInfoFromKubernetes(cr1, kubernetesClient).isEmpty());
+        assertTrue(manager.getInfoFromKubernetes(cr2, kubernetesClient).isEmpty());
 
-        assertFalse(manager.getInfo(cr1).isEmpty());
-        assertTrue(manager.getInfo(cr2).isEmpty());
+        assertFalse(manager.getInfo(cr1, kubernetesClient).isEmpty());
+        assertTrue(manager.getInfo(cr2, kubernetesClient).isEmpty());
 
-        var info2 = manager.getOrCreateInfo(cr2);
+        var info2 = manager.getOrCreateInfo(cr2, kubernetesClient);
         info1.setCurrentOverrides(Map.of("a", "1"));
         info1.replaceInKubernetes(kubernetesClient);
         info2.setCurrentOverrides(Map.of("b", "1"));
         info2.replaceInKubernetes(kubernetesClient);
 
-        manager = new AutoscalerInfoManager(kubernetesClient);
-        assertEquals(Map.of("a", "1"), manager.getInfo(cr1).get().getCurrentOverrides());
-        assertEquals(Map.of("b", "1"), manager.getOrCreateInfo(cr2).getCurrentOverrides());
+        manager = new AutoscalerInfoManager();
+        assertEquals(
+                Map.of("a", "1"),
+                manager.getInfo(cr1, kubernetesClient).get().getCurrentOverrides());
+        assertEquals(
+                Map.of("b", "1"),
+                manager.getOrCreateInfo(cr2, kubernetesClient).getCurrentOverrides());
 
         // Removing from the cache should not affect the results
         manager.removeInfoFromCache(cr1);
-        assertEquals(Map.of("a", "1"), manager.getInfo(cr1).get().getCurrentOverrides());
-        assertEquals(Map.of("b", "1"), manager.getOrCreateInfo(cr2).getCurrentOverrides());
+        assertEquals(
+                Map.of("a", "1"),
+                manager.getInfo(cr1, kubernetesClient).get().getCurrentOverrides());
+        assertEquals(
+                Map.of("b", "1"),
+                manager.getOrCreateInfo(cr2, kubernetesClient).getCurrentOverrides());
     }
 
     @Test
@@ -94,10 +102,10 @@ public class AutoscalerInfoManagerTest {
         var cr1 = TestUtils.buildApplicationCluster();
         cr1.getMetadata().setName("cr1");
 
-        var manager = new AutoscalerInfoManager(kubernetesClient);
+        var manager = new AutoscalerInfoManager();
         assertEquals(0, mockWebServer.getRequestCount());
 
-        var info1 = manager.getOrCreateInfo(cr1);
+        var info1 = manager.getOrCreateInfo(cr1, kubernetesClient);
         assertTrue(info1.isValid());
         assertEquals(2, mockWebServer.getRequestCount());
 
@@ -114,7 +122,11 @@ public class AutoscalerInfoManagerTest {
         assertFalse(info1.isValid());
 
         // Make sure we can get the new version
-        assertEquals(Map.of("a", "3"), manager.getInfo(cr1).get().getCurrentOverrides());
-        assertEquals(Map.of("a", "3"), manager.getOrCreateInfo(cr1).getCurrentOverrides());
+        assertEquals(
+                Map.of("a", "3"),
+                manager.getInfo(cr1, kubernetesClient).get().getCurrentOverrides());
+        assertEquals(
+                Map.of("a", "3"),
+                manager.getOrCreateInfo(cr1, kubernetesClient).getCurrentOverrides());
     }
 }

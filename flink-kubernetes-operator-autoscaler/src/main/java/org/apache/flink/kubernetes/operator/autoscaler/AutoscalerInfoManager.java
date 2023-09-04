@@ -42,13 +42,11 @@ public class AutoscalerInfoManager {
 
     private final ConcurrentHashMap<ResourceID, Optional<AutoScalerInfo>> cache =
             new ConcurrentHashMap<>();
-    private final KubernetesClient kubernetesClient;
 
-    public AutoscalerInfoManager(KubernetesClient kubernetesClient) {
-        this.kubernetesClient = kubernetesClient;
-    }
+    public AutoscalerInfoManager() {}
 
-    public AutoScalerInfo getOrCreateInfo(AbstractFlinkResource<?, ?> cr) {
+    public AutoScalerInfo getOrCreateInfo(
+            AbstractFlinkResource<?, ?> cr, KubernetesClient kubernetesClient) {
         return cache.compute(
                         ResourceID.fromResource(cr),
                         (id, infOpt) -> {
@@ -58,12 +56,13 @@ public class AutoscalerInfoManager {
                                 return infOpt;
                             }
                             // Otherwise get or create
-                            return Optional.of(getOrCreateInternal(cr));
+                            return Optional.of(getOrCreateInternal(cr, kubernetesClient));
                         })
                 .get();
     }
 
-    public Optional<AutoScalerInfo> getInfo(AbstractFlinkResource<?, ?> cr) {
+    public Optional<AutoScalerInfo> getInfo(
+            AbstractFlinkResource<?, ?> cr, KubernetesClient kubernetesClient) {
         return cache.compute(
                 ResourceID.fromResource(cr),
                 (id, infOpt) -> {
@@ -73,7 +72,9 @@ public class AutoscalerInfoManager {
                     }
 
                     // Otherwise get
-                    return getScalingInfoConfigMap(createCmObjectMeta(ResourceID.fromResource(cr)))
+                    return getScalingInfoConfigMap(
+                                    createCmObjectMeta(ResourceID.fromResource(cr)),
+                                    kubernetesClient)
                             .map(AutoScalerInfo::new);
                 });
     }
@@ -84,18 +85,23 @@ public class AutoscalerInfoManager {
     }
 
     @VisibleForTesting
-    protected Optional<ConfigMap> getInfoFromKubernetes(AbstractFlinkResource<?, ?> cr) {
-        return getScalingInfoConfigMap(createCmObjectMeta(ResourceID.fromResource(cr)));
+    protected Optional<ConfigMap> getInfoFromKubernetes(
+            AbstractFlinkResource<?, ?> cr, KubernetesClient kubernetesClient) {
+        return getScalingInfoConfigMap(
+                createCmObjectMeta(ResourceID.fromResource(cr)), kubernetesClient);
     }
 
-    private AutoScalerInfo getOrCreateInternal(HasMetadata cr) {
+    private AutoScalerInfo getOrCreateInternal(HasMetadata cr, KubernetesClient kubernetesClient) {
         var meta = createCmObjectMeta(ResourceID.fromResource(cr));
-        var info = getScalingInfoConfigMap(meta).orElseGet(() -> createConfigMap(cr, meta));
+        var info =
+                getScalingInfoConfigMap(meta, kubernetesClient)
+                        .orElseGet(() -> createConfigMap(cr, meta, kubernetesClient));
 
         return new AutoScalerInfo(info);
     }
 
-    private ConfigMap createConfigMap(HasMetadata cr, ObjectMeta meta) {
+    private ConfigMap createConfigMap(
+            HasMetadata cr, ObjectMeta meta, KubernetesClient kubernetesClient) {
         LOG.info("Creating scaling info config map");
         var cm = new ConfigMap();
         cm.setMetadata(meta);
@@ -117,7 +123,8 @@ public class AutoscalerInfoManager {
         return objectMeta;
     }
 
-    private Optional<ConfigMap> getScalingInfoConfigMap(ObjectMeta objectMeta) {
+    private Optional<ConfigMap> getScalingInfoConfigMap(
+            ObjectMeta objectMeta, KubernetesClient kubernetesClient) {
         return Optional.ofNullable(
                 kubernetesClient
                         .configMaps()

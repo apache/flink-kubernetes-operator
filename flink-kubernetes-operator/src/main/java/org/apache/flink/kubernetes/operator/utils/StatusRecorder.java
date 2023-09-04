@@ -55,15 +55,11 @@ public class StatusRecorder<
     protected final ConcurrentHashMap<ResourceID, ObjectNode> statusCache =
             new ConcurrentHashMap<>();
 
-    private final KubernetesClient client;
     private final MetricManager<CR> metricManager;
     private final BiConsumer<CR, STATUS> statusUpdateListener;
 
     public StatusRecorder(
-            KubernetesClient client,
-            MetricManager<CR> metricManager,
-            BiConsumer<CR, STATUS> statusUpdateListener) {
-        this.client = client;
+            MetricManager<CR> metricManager, BiConsumer<CR, STATUS> statusUpdateListener) {
         this.statusUpdateListener = statusUpdateListener;
         this.metricManager = metricManager;
     }
@@ -77,7 +73,7 @@ public class StatusRecorder<
      * @param resource Resource for which status update should be performed
      */
     @SneakyThrows
-    public void patchAndCacheStatus(CR resource) {
+    public void patchAndCacheStatus(CR resource, KubernetesClient client) {
         ObjectNode newStatusNode =
                 objectMapper.convertValue(resource.getStatus(), ObjectNode.class);
         var resourceId = ResourceID.fromResource(resource);
@@ -98,7 +94,7 @@ public class StatusRecorder<
         for (int i = 0; i < 3; i++) {
             // We retry the status update 3 times to avoid some intermittent connectivity errors
             try {
-                replaceStatus(resource, prevStatus);
+                replaceStatus(resource, prevStatus, client);
                 err = null;
             } catch (KubernetesClientException e) {
                 LOG.error("Error while patching status, retrying {}/3...", (i + 1), e);
@@ -116,7 +112,8 @@ public class StatusRecorder<
         metricManager.onUpdate(resource);
     }
 
-    private void replaceStatus(CR resource, STATUS prevStatus) throws JsonProcessingException {
+    private void replaceStatus(CR resource, STATUS prevStatus, KubernetesClient client)
+            throws JsonProcessingException {
         int retries = 0;
         while (true) {
             try {
@@ -251,6 +248,6 @@ public class StatusRecorder<
                     AuditUtils.logContext(ctx);
                 };
 
-        return new StatusRecorder<>(kubernetesClient, metricManager, consumer);
+        return new StatusRecorder<>(metricManager, consumer);
     }
 }

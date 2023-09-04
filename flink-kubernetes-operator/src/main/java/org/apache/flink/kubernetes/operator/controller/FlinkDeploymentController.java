@@ -99,7 +99,8 @@ public class FlinkDeploymentController
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.Cleanup,
                 EventRecorder.Component.Operator,
-                msg);
+                msg,
+                josdkContext.getClient());
         statusRecorder.updateStatusFromCache(flinkApp);
         var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
         try {
@@ -116,7 +117,8 @@ public class FlinkDeploymentController
     public UpdateControl<FlinkDeployment> reconcile(FlinkDeployment flinkApp, Context josdkContext)
             throws Exception {
 
-        if (canaryResourceManager.handleCanaryResourceReconciliation(flinkApp)) {
+        if (canaryResourceManager.handleCanaryResourceReconciliation(
+                flinkApp, josdkContext.getClient())) {
             return UpdateControl.noUpdate();
         }
 
@@ -128,11 +130,11 @@ public class FlinkDeploymentController
         try {
             observerFactory.getOrCreate(flinkApp).observe(ctx);
             if (!validateDeployment(ctx)) {
-                statusRecorder.patchAndCacheStatus(flinkApp);
+                statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
                 return ReconciliationUtils.toUpdateControl(
                         ctx.getOperatorConfig(), flinkApp, previousDeployment, false);
             }
-            statusRecorder.patchAndCacheStatus(flinkApp);
+            statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
             reconcilerFactory.getOrCreate(flinkApp).reconcile(ctx);
         } catch (RecoveryFailureException rfe) {
             handleRecoveryFailed(ctx, rfe);
@@ -144,12 +146,13 @@ public class FlinkDeploymentController
                     EventRecorder.Type.Warning,
                     "ClusterDeploymentException",
                     e.getMessage(),
-                    EventRecorder.Component.JobManagerDeployment);
+                    EventRecorder.Component.JobManagerDeployment,
+                    josdkContext.getClient());
             throw new ReconciliationException(e);
         }
 
         LOG.debug("End of reconciliation");
-        statusRecorder.patchAndCacheStatus(flinkApp);
+        statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
         return ReconciliationUtils.toUpdateControl(
                 ctx.getOperatorConfig(), flinkApp, previousDeployment, true);
     }
@@ -166,7 +169,8 @@ public class FlinkDeploymentController
                 EventRecorder.Type.Warning,
                 dfe.getReason(),
                 dfe.getMessage(),
-                EventRecorder.Component.JobManagerDeployment);
+                EventRecorder.Component.JobManagerDeployment,
+                ctx.getKubernetesClient());
     }
 
     private void handleRecoveryFailed(
@@ -179,7 +183,8 @@ public class FlinkDeploymentController
                 EventRecorder.Type.Warning,
                 rfe.getReason(),
                 rfe.getMessage(),
-                EventRecorder.Component.JobManagerDeployment);
+                EventRecorder.Component.JobManagerDeployment,
+                ctx.getKubernetesClient());
     }
 
     @Override
@@ -207,7 +212,8 @@ public class FlinkDeploymentController
                         EventRecorder.Type.Warning,
                         EventRecorder.Reason.ValidationError,
                         EventRecorder.Component.Operator,
-                        validationError.get());
+                        validationError.get(),
+                        ctx.getKubernetesClient());
                 return ReconciliationUtils.applyValidationErrorAndResetSpec(
                         ctx, validationError.get());
             }

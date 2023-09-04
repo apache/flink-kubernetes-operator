@@ -28,6 +28,6 @@ public class AutoscalerTestUtils {
     @SneakyThrows
     public static AutoScalerInfo getOrCreateInfo(
             AbstractFlinkResource<?, ?> cr, KubernetesClient client) {
-        return new AutoscalerInfoManager(client).getOrCreateInfo(cr);
+        return new AutoscalerInfoManager().getOrCreateInfo(cr, client);
     }
 }

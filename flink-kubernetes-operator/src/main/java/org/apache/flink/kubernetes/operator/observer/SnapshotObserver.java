@@ -132,7 +132,8 @@ public class SnapshotObserver<
                     EventRecorder.Reason.SavepointError,
                     EventRecorder.Component.Operator,
                     savepointInfo.formatErrorMessage(
-                            resource.getSpec().getJob().getSavepointTriggerNonce()));
+                            resource.getSpec().getJob().getSavepointTriggerNonce()),
+                    ctx.getKubernetesClient());
             savepointInfo.resetTrigger();
             return;
         }
@@ -190,7 +191,8 @@ public class SnapshotObserver<
                     EventRecorder.Reason.CheckpointError,
                     EventRecorder.Component.Operator,
                     checkpointInfo.formatErrorMessage(
-                            resource.getSpec().getJob().getCheckpointTriggerNonce()));
+                            resource.getSpec().getJob().getCheckpointTriggerNonce()),
+                    ctx.getKubernetesClient());
             checkpointInfo.resetTrigger();
             return;
         }

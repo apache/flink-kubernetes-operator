@@ -193,7 +193,8 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
                     EventRecorder.Type.Warning,
                     EventRecorder.Reason.Missing,
                     EventRecorder.Component.Job,
-                    MISSING_SESSION_JOB_ERR);
+                    MISSING_SESSION_JOB_ERR,
+                    ctx.getKubernetesClient());
         }
     }
 }

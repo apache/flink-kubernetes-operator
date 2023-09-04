@@ -100,8 +100,7 @@ public class FlinkDeploymentControllerTest {
     public void setup() {
         flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
-        testController =
-                new TestingFlinkDeploymentController(configManager, kubernetesClient, flinkService);
+        testController = new TestingFlinkDeploymentController(configManager, flinkService);
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
     }
 
@@ -250,7 +249,8 @@ public class FlinkDeploymentControllerTest {
         testController.reconcile(appCluster, context);
         updateControl =
                 testController.reconcile(
-                        appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+                        appCluster,
+                        TestUtils.createContextWithFailedJobManagerDeployment(kubernetesClient));
         submittedEventValidatingResponseProvider.assertValidated();
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
@@ -270,7 +270,8 @@ public class FlinkDeploymentControllerTest {
         // next cycle should not create another event
         updateControl =
                 testController.reconcile(
-                        appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+                        appCluster,
+                        TestUtils.createContextWithFailedJobManagerDeployment(kubernetesClient));
         assertEquals(
                 JobManagerDeploymentStatus.ERROR,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
@@ -334,7 +335,8 @@ public class FlinkDeploymentControllerTest {
         testController.reconcile(appCluster, context);
         updateControl =
                 testController.reconcile(
-                        appCluster, TestUtils.createContextWithInProgressDeployment());
+                        appCluster,
+                        TestUtils.createContextWithInProgressDeployment(kubernetesClient));
         submittedEventValidatingResponseProvider.assertValidated();
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
@@ -355,7 +357,8 @@ public class FlinkDeploymentControllerTest {
         // next cycle should not create another event
         updateControl =
                 testController.reconcile(
-                        appCluster, TestUtils.createContextWithFailedJobManagerDeployment());
+                        appCluster,
+                        TestUtils.createContextWithFailedJobManagerDeployment(kubernetesClient));
         assertEquals(
                 JobManagerDeploymentStatus.ERROR,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
@@ -582,7 +585,8 @@ public class FlinkDeploymentControllerTest {
                         .getJob()
                         .getState());
         appCluster.getSpec().setLogConfiguration(Map.of("invalid", "conf"));
-        testController.reconcile(appCluster, TestUtils.createEmptyContext());
+        testController.reconcile(
+                appCluster, TestUtils.createEmptyContextWithClient(kubernetesClient));
         assertEquals(2, testController.events().size());
         testController.events().remove();
         assertEquals(
@@ -910,7 +914,8 @@ public class FlinkDeploymentControllerTest {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
 
         testController.reconcile(appCluster, context);
-        testController.reconcile(appCluster, TestUtils.createContextWithInProgressDeployment());
+        testController.reconcile(
+                appCluster, TestUtils.createContextWithInProgressDeployment(kubernetesClient));
 
         assertNull(appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
 
