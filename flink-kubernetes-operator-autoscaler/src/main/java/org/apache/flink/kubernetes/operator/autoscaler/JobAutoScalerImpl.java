@@ -19,8 +19,11 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.configuration.ConfigurationUtils;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
+import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -32,6 +35,7 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -81,8 +85,8 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         infoManager.removeInfoFromCache(cr);
     }
 
-    @Override
-    public Map<String, String> getParallelismOverrides(FlinkResourceContext<?> ctx) {
+    @VisibleForTesting
+    protected Map<String, String> getParallelismOverrides(FlinkResourceContext<?> ctx) {
         var conf = ctx.getObserveConfig();
         try {
             var infoOpt = infoManager.getInfo(ctx.getResource(), ctx.getKubernetesClient());
@@ -100,6 +104,40 @@ public class JobAutoScalerImpl implements JobAutoScaler {
             LOG.error("Error while getting parallelism overrides", e);
         }
         return Map.of();
+    }
+
+    /**
+     * If there are any parallelism overrides by the {@link JobAutoScaler} apply them to the spec.
+     *
+     * @param ctx Resource context
+     */
+    @Override
+    public void applyParallelismOverrides(FlinkResourceContext<?> ctx) {
+        var overrides = getParallelismOverrides(ctx);
+        if (overrides.isEmpty()) {
+            return;
+        }
+
+        LOG.debug("Applying parallelism overrides: {}", overrides);
+
+        var spec = ctx.getResource().getSpec();
+        var conf = ctx.getDeployConfig(spec);
+        var userOverrides = new HashMap<>(conf.get(PipelineOptions.PARALLELISM_OVERRIDES));
+        var exclusions = conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
+
+        overrides.forEach(
+                (k, v) -> {
+                    // Respect user override for excluded vertices
+                    if (exclusions.contains(k)) {
+                        userOverrides.putIfAbsent(k, v);
+                    } else {
+                        userOverrides.put(k, v);
+                    }
+                });
+        spec.getFlinkConfiguration()
+                .put(
+                        PipelineOptions.PARALLELISM_OVERRIDES.key(),
+                        ConfigurationUtils.convertValue(userOverrides, String.class));
     }
 
     @Override

@@ -34,6 +34,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
@@ -86,13 +87,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Calendar;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -877,19 +878,14 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         var ctxFactory =
                 new TestingFlinkResourceContextFactory(
                         configManager, operatorMetricGroup, flinkService, eventRecorder);
-        var overrides = new HashMap<String, String>();
+
+        var overrideFunction = new AtomicReference<Consumer<AbstractFlinkSpec>>(s -> {});
         JobAutoScalerFactory autoscalerFactory =
                 (r) ->
                         new NoopJobAutoscalerFactory() {
                             @Override
-                            public Map<String, String> getParallelismOverrides(
-                                    FlinkResourceContext<?> ctx) {
-                                return new HashMap<>(overrides);
-                            }
-
-                            @Override
-                            public boolean scale(FlinkResourceContext<?> ctx) {
-                                return true;
+                            public void applyParallelismOverrides(FlinkResourceContext<?> ctx) {
+                                overrideFunction.get().accept(ctx.getResource().getSpec());
                             }
                         };
 
@@ -906,65 +902,20 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 ReconciliationState.DEPLOYED,
                 deployment.getStatus().getReconciliationStatus().getState());
         assertEquals("RUNNING", deployment.getStatus().getJobStatus().getState());
-        assertTrue(deployment.getStatus().isImmediateReconciliationNeeded());
 
-        // Test when there are only overrides by the autoscaler
+        // Test overrides are applied correctly
         var v1 = new JobVertexID();
-        overrides.put(v1.toHexString(), "2");
+        overrideFunction.set(
+                s ->
+                        s.getFlinkConfiguration()
+                                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":2"));
 
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
         assertEquals(
                 ReconciliationState.UPGRADING,
                 deployment.getStatus().getReconciliationStatus().getState());
-        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
-        assertEquals(
-                ReconciliationState.DEPLOYED,
-                deployment.getStatus().getReconciliationStatus().getState());
-        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
-
         assertEquals(
                 Map.of(v1.toHexString(), "2"),
-                ctxFactory
-                        .getResourceContext(deployment, context)
-                        .getObserveConfig()
-                        .get(PipelineOptions.PARALLELISM_OVERRIDES));
-
-        // Test when there are also user overrides, autoscaler should take precedence
-
-        // This should be ignored
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":1");
-        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
-        assertEquals(
-                ReconciliationState.DEPLOYED,
-                deployment.getStatus().getReconciliationStatus().getState());
-        assertEquals(
-                Map.of(v1.toHexString(), "2"),
-                ctxFactory
-                        .getResourceContext(deployment, context)
-                        .getObserveConfig()
-                        .get(PipelineOptions.PARALLELISM_OVERRIDES));
-
-        // Define partly overlapping overrides
-        var v2 = new JobVertexID();
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), v1 + ":1," + v2 + ":4");
-        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
-        assertEquals(
-                ReconciliationState.UPGRADING,
-                deployment.getStatus().getReconciliationStatus().getState());
-        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
-        assertEquals(
-                ReconciliationState.DEPLOYED,
-                deployment.getStatus().getReconciliationStatus().getState());
-        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
-
-        assertEquals(
-                Map.of(v1.toString(), "2", v2.toString(), "4"),
                 ctxFactory
                         .getResourceContext(deployment, context)
                         .getObserveConfig()

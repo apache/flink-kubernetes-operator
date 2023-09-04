@@ -19,8 +19,6 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.ConfigurationUtils;
-import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -56,7 +54,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -135,8 +132,7 @@ public abstract class AbstractFlinkResourceReconciler<
         SPEC lastReconciledSpec =
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();
-        applyAutoscalerParallelismOverrides(
-                resourceScaler.getParallelismOverrides(ctx), currentDeploySpec);
+        resourceScaler.applyParallelismOverrides(ctx);
 
         var specDiff =
                 new ReflectiveDiffBuilder<>(
@@ -325,35 +321,6 @@ public abstract class AbstractFlinkResourceReconciler<
             return true;
         }
         return false;
-    }
-
-    /**
-     * If there are any parallelism overrides by the {@link JobAutoScaler} apply them to the spec.
-     *
-     * @param autoscalerOverrides Parallelism overrides initiated by the autoscaler
-     * @param spec Current user spec
-     */
-    private void applyAutoscalerParallelismOverrides(
-            Map<String, String> autoscalerOverrides, SPEC spec) {
-
-        if (autoscalerOverrides.isEmpty()) {
-            return;
-        }
-
-        LOG.debug("Applying autoscaler parallelism overrides: {}", autoscalerOverrides);
-
-        var configMap = spec.getFlinkConfiguration();
-        var userOverridesStr =
-                configMap.getOrDefault(PipelineOptions.PARALLELISM_OVERRIDES.key(), "");
-        var userOverrides =
-                new HashMap<>(
-                        ConfigurationUtils.<Map<String, String>>convertValue(
-                                userOverridesStr, Map.class));
-
-        autoscalerOverrides.forEach(userOverrides::put);
-        configMap.put(
-                PipelineOptions.PARALLELISM_OVERRIDES.key(),
-                ConfigurationUtils.convertValue(userOverrides, String.class));
     }
 
     /**
