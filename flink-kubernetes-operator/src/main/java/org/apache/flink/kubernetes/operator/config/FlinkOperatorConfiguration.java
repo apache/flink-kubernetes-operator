@@ -25,7 +25,7 @@ import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
-import io.javaoperatorsdk.operator.api.config.RetryConfiguration;
+import io.javaoperatorsdk.operator.processing.retry.GenericRetry;
 import lombok.Value;
 import org.apache.commons.lang3.StringUtils;
 
@@ -62,7 +62,7 @@ public class FlinkOperatorConfiguration {
     String artifactsBaseDir;
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
-    RetryConfiguration retryConfiguration;
+    GenericRetry retryConfiguration;
     boolean exceptionStackTraceEnabled;
     int exceptionStackTraceLengthThreshold;
     int exceptionFieldLengthThreshold;
@@ -173,7 +173,7 @@ public class FlinkOperatorConfiguration {
                 operatorConfig.get(
                         KubernetesOperatorMetricOptions.OPERATOR_METRICS_HISTOGRAM_SAMPLE_SIZE);
 
-        RetryConfiguration retryConfiguration = new FlinkOperatorRetryConfiguration(operatorConfig);
+        GenericRetry retryConfiguration = getRetryConfig(operatorConfig);
 
         String labelSelector =
                 operatorConfig.getString(KubernetesOperatorConfigOptions.OPERATOR_LABEL_SELECTOR);
@@ -210,6 +210,20 @@ public class FlinkOperatorConfiguration {
                 deletionPropagation);
     }
 
+    private static GenericRetry getRetryConfig(Configuration conf) {
+        return new GenericRetry()
+                .setMaxAttempts(
+                        conf.getInteger(
+                                KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_ATTEMPTS))
+                .setInitialInterval(
+                        conf.get(KubernetesOperatorConfigOptions.OPERATOR_RETRY_INITIAL_INTERVAL)
+                                .toMillis())
+                .setIntervalMultiplier(
+                        conf.getDouble(
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_RETRY_INTERVAL_MULTIPLIER));
+    }
+
     private static LeaderElectionConfiguration getLeaderElectionConfig(Configuration conf) {
         if (!conf.get(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_ENABLED)) {
             return null;
@@ -230,46 +244,6 @@ public class FlinkOperatorConfiguration {
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_RENEW_DEADLINE),
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_RETRY_PERIOD),
                 null);
-    }
-
-    /** Enables configurable retry mechanism for reconciliation errors. */
-    protected static class FlinkOperatorRetryConfiguration implements RetryConfiguration {
-        private final int maxAttempts;
-        private final long initialInterval;
-        private final double intervalMultiplier;
-
-        public FlinkOperatorRetryConfiguration(Configuration operatorConfig) {
-            maxAttempts =
-                    operatorConfig.getInteger(
-                            KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_ATTEMPTS);
-            initialInterval =
-                    operatorConfig
-                            .get(KubernetesOperatorConfigOptions.OPERATOR_RETRY_INITIAL_INTERVAL)
-                            .toMillis();
-            intervalMultiplier =
-                    operatorConfig.getDouble(
-                            KubernetesOperatorConfigOptions.OPERATOR_RETRY_INTERVAL_MULTIPLIER);
-        }
-
-        @Override
-        public int getMaxAttempts() {
-            return maxAttempts;
-        }
-
-        @Override
-        public long getInitialInterval() {
-            return initialInterval;
-        }
-
-        @Override
-        public double getIntervalMultiplier() {
-            return intervalMultiplier;
-        }
-
-        @Override
-        public long getMaxInterval() {
-            return (long) (initialInterval * Math.pow(intervalMultiplier, maxAttempts));
-        }
     }
 
     private static Optional<String> getEnv(String key) {

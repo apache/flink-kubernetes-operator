@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 
 import io.fabric8.kubernetes.client.Config;
 import io.javaoperatorsdk.operator.RegisteredController;
-import io.javaoperatorsdk.operator.api.config.ConfigurationServiceProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -64,13 +63,14 @@ public class FlinkOperatorTest {
         operatorConfig.set(
                 KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_LEASE_NAME, testLeaseName);
 
-        ConfigurationServiceProvider.reset();
         var testOperator = new FlinkOperator(operatorConfig);
         testOperator.registerDeploymentController();
         testOperator.registerSessionJobController();
 
+        var configService = testOperator.getOperator().getConfigurationService();
+
         // Test parallelism being passed
-        var executorService = ConfigurationServiceProvider.instance().getExecutorService();
+        var executorService = configService.getExecutorService();
         Assertions.assertInstanceOf(ThreadPoolExecutor.class, executorService);
         ThreadPoolExecutor threadPoolExecutor = (ThreadPoolExecutor) executorService;
         Assertions.assertEquals(threadPoolExecutor.getMaximumPoolSize(), testParallelism);
@@ -83,11 +83,9 @@ public class FlinkOperatorTest {
                         .map(ControllerConfiguration::getLabelSelector);
 
         labelSelectors.forEach(selector -> Assertions.assertEquals(testSelector, selector));
-        Assertions.assertFalse(
-                ConfigurationServiceProvider.instance().stopOnInformerErrorDuringStartup());
+        Assertions.assertFalse(configService.stopOnInformerErrorDuringStartup());
 
-        var leaderElectionConfiguration =
-                ConfigurationServiceProvider.instance().getLeaderElectionConfiguration().get();
+        var leaderElectionConfiguration = configService.getLeaderElectionConfiguration().get();
 
         Assertions.assertEquals(testLeaseName, leaderElectionConfiguration.getLeaseName());
         Assertions.assertFalse(leaderElectionConfiguration.getLeaseNamespace().isPresent());
@@ -100,7 +98,6 @@ public class FlinkOperatorTest {
         operatorConfig.set(KubernetesOperatorConfigOptions.OPERATOR_LEADER_ELECTION_ENABLED, true);
 
         try {
-            ConfigurationServiceProvider.reset();
             new FlinkOperator(operatorConfig);
         } catch (IllegalConfigurationException ice) {
             assertTrue(
@@ -109,10 +106,13 @@ public class FlinkOperatorTest {
                                     "kubernetes.operator.leader-election.lease-name must be defined"));
         }
 
-        ConfigurationServiceProvider.reset();
-        new FlinkOperator(new Configuration());
+        var flinkOperator = new FlinkOperator(new Configuration());
 
         assertTrue(
-                ConfigurationServiceProvider.instance().getLeaderElectionConfiguration().isEmpty());
+                flinkOperator
+                        .getOperator()
+                        .getConfigurationService()
+                        .getLeaderElectionConfiguration()
+                        .isEmpty());
     }
 }
