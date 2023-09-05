@@ -78,6 +78,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -492,6 +493,11 @@ public class TestUtils extends BaseTestUtils {
 
         @Override
         public KubernetesClient getClient() {
+            throw new UnsupportedOperationException("Not implemented");
+        }
+
+        @Override
+        public ExecutorService getWorkflowExecutorService() {
             throw new UnsupportedOperationException("Not implemented");
         }
     }

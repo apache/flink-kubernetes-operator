@@ -17,11 +17,13 @@ spec:
     - description: Last observed state of the job.
       jsonPath: .status.jobStatus.state
       name: Job Status
+      priority: 0
       type: string
     - description: "Lifecycle state of the Flink resource (including being rolled\
         \ back, failed etc.)."
       jsonPath: .status.lifecycleState
       name: Lifecycle State
+      priority: 0
       type: string
     name: v1beta1
     schema:
@@ -186,7 +188,6 @@ spec:
                             - FULL
                             - INCREMENTAL
                             - UNKNOWN
-                            - description
                             type: string
                           triggerNonce:
                             type: integer
@@ -207,7 +208,6 @@ spec:
                         - FULL
                         - INCREMENTAL
                         - UNKNOWN
-                        - description
                         type: string
                       lastPeriodicCheckpointTimestamp:
                         type: integer

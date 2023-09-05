@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-/** {@link FlinkOperatorConfiguration.FlinkOperatorRetryConfiguration} tests. */
+/** Operator retry config tests. */
 public class FlinkOperatorRetryConfigurationTest {
 
     @Test
@@ -78,8 +78,5 @@ public class FlinkOperatorRetryConfigurationTest {
         Assertions.assertEquals(
                 3,
                 configManager.getOperatorConfiguration().getRetryConfiguration().getMaxAttempts());
-        Assertions.assertEquals(
-                8000L,
-                configManager.getOperatorConfiguration().getRetryConfiguration().getMaxInterval());
     }
 }
