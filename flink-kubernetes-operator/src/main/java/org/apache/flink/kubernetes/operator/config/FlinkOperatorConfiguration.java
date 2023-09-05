@@ -57,6 +57,7 @@ public class FlinkOperatorConfiguration {
     int metricsHistogramSampleSize;
     boolean kubernetesClientMetricsEnabled;
     boolean kubernetesClientMetricsHttpResponseCodeGroupsEnabled;
+    boolean kubernetesClientVerifyHostnameEnabled;
     Duration flinkCancelJobTimeout;
     Duration flinkShutdownClusterTimeout;
     String artifactsBaseDir;
@@ -169,6 +170,10 @@ public class FlinkOperatorConfiguration {
                         KubernetesOperatorMetricOptions
                                 .OPERATOR_KUBERNETES_CLIENT_METRICS_HTTP_RESPONSE_CODE_GROUPS_ENABLED);
 
+        boolean kubernetesClientVerifyHostnameEnabled =
+                operatorConfig.get(
+                        KubernetesOperatorConfigOptions.KUBERNETES_CLIENT_VERIFY_HOSTNAME_ENABLED);
+
         int metricsHistogramSampleSize =
                 operatorConfig.get(
                         KubernetesOperatorMetricOptions.OPERATOR_METRICS_HISTOGRAM_SAMPLE_SIZE);
@@ -194,6 +199,7 @@ public class FlinkOperatorConfiguration {
                 metricsHistogramSampleSize,
                 kubernetesClientMetricsEnabled,
                 kubernetesClientMetricsHttpResponseCodeGroupsEnabled,
+                kubernetesClientVerifyHostnameEnabled,
                 flinkCancelJobTimeout,
                 flinkShutdownClusterTimeout,
                 artifactsBaseDir,

@@ -61,6 +61,10 @@ public class KubernetesClientUtils {
                                     builder.addInterceptor(
                                             new KubernetesClientMetrics(
                                                     metricGroup, operatorConfig));
+
+                                    if (!operatorConfig.isKubernetesClientVerifyHostnameEnabled()) {
+                                        builder.hostnameVerifier((hostname, session) -> true);
+                                    }
                                 }
                             });
         }

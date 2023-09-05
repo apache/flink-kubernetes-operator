@@ -341,6 +341,13 @@ public class KubernetesOperatorConfigOptions {
                     .withDescription(
                             "Comma separated list of namespaces the operator monitors for custom resources.");
 
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Boolean> KUBERNETES_CLIENT_VERIFY_HOSTNAME_ENABLED =
+            operatorConfig("kubernetes.client.verify.hostname.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription("Verify host name of Okhttp in Kubernetes client.");
+
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<String> OPERATOR_LABEL_SELECTOR =
             operatorConfig("label.selector")
