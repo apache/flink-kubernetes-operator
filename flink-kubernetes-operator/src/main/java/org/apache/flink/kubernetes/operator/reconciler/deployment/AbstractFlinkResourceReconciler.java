@@ -123,7 +123,8 @@ public abstract class AbstractFlinkResourceReconciler<
                     spec,
                     deployConfig,
                     Optional.ofNullable(spec.getJob()).map(JobSpec::getInitialSavepointPath),
-                    false);
+                    false,
+                    null);
 
             ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig, clock);
             return;
@@ -160,7 +161,7 @@ public abstract class AbstractFlinkResourceReconciler<
             boolean scaled = diffType != DiffType.UPGRADE && scale(ctx, deployConfig);
 
             // Reconcile spec change unless scaling was enough
-            if (scaled || reconcileSpecChange(ctx, deployConfig)) {
+            if (scaled || reconcileSpecChange(ctx, deployConfig, diffType)) {
                 // If we executed a scale or spec upgrade action we return, otherwise we
                 // continue to reconcile other changes
                 return;
@@ -182,7 +183,7 @@ public abstract class AbstractFlinkResourceReconciler<
                     EventRecorder.Component.JobManagerDeployment,
                     MSG_ROLLBACK,
                     ctx.getKubernetesClient());
-        } else if (!reconcileOtherChanges(ctx)) {
+        } else if (!reconcileOtherChanges(ctx, diffType)) {
             if (resourceScaler.scale(ctx)) {
                 LOG.info(
                         "Rescheduling new reconciliation immediately to execute scaling operation.");
@@ -249,21 +250,25 @@ public abstract class AbstractFlinkResourceReconciler<
      *
      * @param ctx Reconciliation context.
      * @param deployConfig Deployment configuration.
+     * @param diffType Spec change type.
      * @throws Exception Error during spec upgrade.
      * @return True if spec change reconciliation was executed
      */
     protected abstract boolean reconcileSpecChange(
-            FlinkResourceContext<CR> ctx, Configuration deployConfig) throws Exception;
+            FlinkResourceContext<CR> ctx, Configuration deployConfig, DiffType diffType)
+            throws Exception;
 
     /**
      * Reconcile any other changes required for this resource that are specific to the reconciler
      * implementation.
      *
      * @param ctx Reconciliation context.
+     * @param diffType Spec change type.
      * @return True if any further reconciliation action was taken.
      * @throws Exception Error during reconciliation.
      */
-    protected abstract boolean reconcileOtherChanges(FlinkResourceContext<CR> ctx) throws Exception;
+    protected abstract boolean reconcileOtherChanges(
+            FlinkResourceContext<CR> ctx, DiffType diffType) throws Exception;
 
     @Override
     public DeleteControl cleanup(FlinkResourceContext<CR> ctx) {
@@ -278,7 +283,8 @@ public abstract class AbstractFlinkResourceReconciler<
      * @param spec Spec that should be deployed to Kubernetes.
      * @param deployConfig Flink conf for the deployment.
      * @param savepoint Optional savepoint path for applications and session jobs.
-     * @param requireHaMetadata Flag used by application deployments to validate HA metadata
+     * @param requireHaMetadata Flag used by application deployments to validate HA metadata.
+     * @param diffType Spec change type.
      * @throws Exception Error during deployment.
      */
     @VisibleForTesting
@@ -287,7 +293,8 @@ public abstract class AbstractFlinkResourceReconciler<
             SPEC spec,
             Configuration deployConfig,
             Optional<String> savepoint,
-            boolean requireHaMetadata)
+            boolean requireHaMetadata,
+            DiffType diffType)
             throws Exception;
 
     /**

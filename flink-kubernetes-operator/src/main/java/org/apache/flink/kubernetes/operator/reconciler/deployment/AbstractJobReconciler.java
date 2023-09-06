@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
@@ -85,7 +86,8 @@ public abstract class AbstractJobReconciler<
     }
 
     @Override
-    protected boolean reconcileSpecChange(FlinkResourceContext<CR> ctx, Configuration deployConfig)
+    protected boolean reconcileSpecChange(
+            FlinkResourceContext<CR> ctx, Configuration deployConfig, DiffType diffType)
             throws Exception {
 
         var resource = ctx.getResource();
@@ -143,7 +145,8 @@ public abstract class AbstractJobReconciler<
                     currentDeploySpec,
                     deployConfig,
                     // We decide to enforce HA based on how job was previously suspended
-                    lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE);
+                    lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.LAST_STATE,
+                    diffType);
 
             ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
         }
@@ -246,7 +249,8 @@ public abstract class AbstractJobReconciler<
             FlinkResourceContext<CR> ctx,
             SPEC spec,
             Configuration deployConfig,
-            boolean requireHaMetadata)
+            boolean requireHaMetadata,
+            DiffType diffType)
             throws Exception {
         Optional<String> savepointOpt = Optional.empty();
 
@@ -261,11 +265,12 @@ public abstract class AbstractJobReconciler<
                             .flatMap(s -> Optional.ofNullable(s.getLocation()));
         }
 
-        deploy(ctx, spec, deployConfig, savepointOpt, requireHaMetadata);
+        deploy(ctx, spec, deployConfig, savepointOpt, requireHaMetadata, diffType);
     }
 
     @Override
-    public boolean reconcileOtherChanges(FlinkResourceContext<CR> ctx) throws Exception {
+    public boolean reconcileOtherChanges(FlinkResourceContext<CR> ctx, DiffType diffType)
+            throws Exception {
         var status = ctx.getResource().getStatus();
         var jobStatus =
                 org.apache.flink.api.common.JobStatus.valueOf(status.getJobStatus().getState());
@@ -274,7 +279,7 @@ public abstract class AbstractJobReconciler<
             LOG.info("Stopping failed Flink job...");
             cleanupAfterFailedJob(ctx);
             status.setError(null);
-            resubmitJob(ctx, false);
+            resubmitJob(ctx, false, diffType);
             return true;
         } else {
             boolean savepointTriggered =
@@ -294,14 +299,15 @@ public abstract class AbstractJobReconciler<
         }
     }
 
-    protected void resubmitJob(FlinkResourceContext<CR> ctx, boolean requireHaMetadata)
+    protected void resubmitJob(
+            FlinkResourceContext<CR> ctx, boolean requireHaMetadata, DiffType diffType)
             throws Exception {
         LOG.info("Resubmitting Flink job...");
         SPEC specToRecover = ReconciliationUtils.getDeployedSpec(ctx.getResource());
         if (requireHaMetadata) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         }
-        restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata);
+        restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata, diffType);
     }
 
     /**

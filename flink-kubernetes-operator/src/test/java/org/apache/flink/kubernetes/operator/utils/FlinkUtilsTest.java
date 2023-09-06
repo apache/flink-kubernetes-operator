@@ -29,10 +29,8 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.utils.Constants;
-import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
-import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.EmptyDirVolumeSource;
@@ -58,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.apache.flink.kubernetes.operator.TestUtils.createHAConfigMapWithData;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -135,7 +134,8 @@ public class FlinkUtilsTest {
         final Map<String, String> data = new HashMap<>();
         data.put(Constants.JOB_GRAPH_STORE_KEY_PREFIX + JobID.generate(), "job-graph-data");
         data.put("leader", "localhost");
-        createHAConfigMapWithData(name, kubernetesClient.getNamespace(), clusterId, data);
+        createHAConfigMapWithData(
+                kubernetesClient, name, kubernetesClient.getNamespace(), clusterId, data);
         assertNotNull(kubernetesClient.configMaps().withName(name).get());
         assertEquals(2, kubernetesClient.configMaps().withName(name).get().getData().size());
 
@@ -158,6 +158,7 @@ public class FlinkUtilsTest {
 
         // Flink 1.15+
         createHAConfigMapWithData(
+                kubernetesClient,
                 cr.getMetadata().getName() + "-cluster-config-map",
                 cr.getMetadata().getNamespace(),
                 cr.getMetadata().getName(),
@@ -168,6 +169,7 @@ public class FlinkUtilsTest {
                         kubernetesClient));
 
         createHAConfigMapWithData(
+                kubernetesClient,
                 cr.getMetadata().getName() + "-000000000000-config-map",
                 cr.getMetadata().getNamespace(),
                 cr.getMetadata().getName(),
@@ -185,6 +187,7 @@ public class FlinkUtilsTest {
                         kubernetesClient));
 
         createHAConfigMapWithData(
+                kubernetesClient,
                 cr.getMetadata().getName() + "-dispatcher-leader",
                 cr.getMetadata().getNamespace(),
                 cr.getMetadata().getName(),
@@ -195,6 +198,7 @@ public class FlinkUtilsTest {
                         kubernetesClient));
 
         createHAConfigMapWithData(
+                kubernetesClient,
                 cr.getMetadata().getName() + "-000000000000-jobmanager-leader",
                 cr.getMetadata().getNamespace(),
                 cr.getMetadata().getName(),
@@ -252,7 +256,8 @@ public class FlinkUtilsTest {
                 .withPath("/api/v1/namespaces/test/configmaps/" + name)
                 .andReturn(HttpURLConnection.HTTP_INTERNAL_ERROR, new ConfigMapBuilder().build())
                 .once();
-        createHAConfigMapWithData(name, kubernetesClient.getNamespace(), clusterId, null);
+        createHAConfigMapWithData(
+                kubernetesClient, name, kubernetesClient.getNamespace(), clusterId, null);
         assertTrue(kubernetesClient.configMaps().withName(name).get().getData().isEmpty());
         FlinkUtils.deleteJobGraphInKubernetesHA(
                 clusterId, kubernetesClient.getNamespace(), kubernetesClient);
@@ -360,23 +365,5 @@ public class FlinkUtilsTest {
         JobID jobID =
                 FlinkUtils.generateSessionJobFixedJobID("ffffffff-ffff-ffff-aaaa-aaaaaaaaaaaa", 2L);
         assertEquals("ffffffffffffffff0000000000000002", jobID.toString());
-    }
-
-    private void createHAConfigMapWithData(
-            String configMapName, String namespace, String clusterId, Map<String, String> data) {
-        final ConfigMap kubernetesConfigMap =
-                new ConfigMapBuilder()
-                        .withNewMetadata()
-                        .withName(configMapName)
-                        .withNamespace(namespace)
-                        .withLabels(
-                                KubernetesUtils.getConfigMapLabels(
-                                        clusterId,
-                                        Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
-                        .endMetadata()
-                        .withData(data)
-                        .build();
-
-        kubernetesClient.configMaps().resource(kubernetesConfigMap).createOrReplace();
     }
 }

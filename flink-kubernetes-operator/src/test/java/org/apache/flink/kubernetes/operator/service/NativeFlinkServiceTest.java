@@ -175,7 +175,8 @@ public class NativeFlinkServiceTest {
 
         var flinkService = (NativeFlinkService) createFlinkService(testingClusterClient);
         var testingService = new TestingNativeFlinkService(flinkService);
-        testingService.submitApplicationCluster(deployment.getSpec().getJob(), deployConfig, false);
+        testingService.submitApplicationCluster(
+                deployment.getSpec().getJob(), deployConfig, false, false);
         assertFalse(
                 testingService.getRuntimeConfig().containsKey(OPERATOR_HEALTH_PROBE_PORT.key()));
     }

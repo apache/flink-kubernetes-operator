@@ -131,7 +131,13 @@ public class SessionReconcilerTest extends OperatorTestBase {
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()
-                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
+                .deploy(
+                        getResourceContext(flinkApp),
+                        spec,
+                        deployConfig,
+                        Optional.empty(),
+                        false,
+                        null);
 
         final List<Map<String, String>> expectedOwnerReferences =
                 List.of(TestUtils.generateTestOwnerReferenceMap(flinkApp));

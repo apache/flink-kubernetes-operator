@@ -90,7 +90,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         observer.observe(deployment, TestUtils.createEmptyContext());
         assertNull(deployment.getStatus().getReconciliationStatus().getLastStableSpec());
 
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
 
         // Validate port check logic
@@ -183,7 +183,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
 
         deployment.setStatus(deployment.initStatus());
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
@@ -216,7 +216,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
 
         deployment.setStatus(deployment.initStatus());
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
@@ -239,7 +239,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         deployment.getSpec().getJob().setSavepointTriggerNonce(timedOutNonce);
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
         bringToReadyStatus(deployment);
         assertTrue(ReconciliationUtils.isJobRunning(deployment.getStatus()));
 
@@ -507,7 +507,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         deployment.getSpec().getJob().setCheckpointTriggerNonce(timedOutNonce);
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
         bringToReadyStatus(deployment);
         assertTrue(ReconciliationUtils.isJobRunning(deployment.getStatus()));
 
@@ -632,7 +632,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
+        flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false, false);
         bringToReadyStatus(deployment);
         assertTrue(ReconciliationUtils.isJobRunning(deployment.getStatus()));
 

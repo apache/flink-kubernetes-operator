@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
@@ -60,7 +61,9 @@ public class SessionReconciler
 
     @Override
     protected boolean reconcileSpecChange(
-            FlinkResourceContext<FlinkDeployment> ctx, Configuration deployConfig)
+            FlinkResourceContext<FlinkDeployment> ctx,
+            Configuration deployConfig,
+            DiffType diffType)
             throws Exception {
         var deployment = ctx.getResource();
         deleteSessionCluster(ctx);
@@ -69,7 +72,7 @@ public class SessionReconciler
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(deployment, deployConfig, clock);
         statusRecorder.patchAndCacheStatus(deployment, ctx.getKubernetesClient());
 
-        deploy(ctx, deployment.getSpec(), deployConfig, Optional.empty(), false);
+        deploy(ctx, deployment.getSpec(), deployConfig, Optional.empty(), false, null);
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, deployConfig, clock);
         return true;
     }
@@ -89,7 +92,8 @@ public class SessionReconciler
             FlinkDeploymentSpec spec,
             Configuration deployConfig,
             Optional<String> savepoint,
-            boolean requireHaMetadata)
+            boolean requireHaMetadata,
+            DiffType diffType)
             throws Exception {
         var cr = ctx.getResource();
         setOwnerReference(cr, deployConfig);
@@ -100,8 +104,8 @@ public class SessionReconciler
     }
 
     @Override
-    public boolean reconcileOtherChanges(FlinkResourceContext<FlinkDeployment> ctx)
-            throws Exception {
+    public boolean reconcileOtherChanges(
+            FlinkResourceContext<FlinkDeployment> ctx, DiffType diffType) throws Exception {
         if (shouldRecoverDeployment(ctx.getObserveConfig(), ctx.getResource())) {
             recoverSession(ctx);
             return true;

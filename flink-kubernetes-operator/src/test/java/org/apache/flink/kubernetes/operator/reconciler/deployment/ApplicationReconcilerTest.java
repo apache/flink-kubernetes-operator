@@ -65,6 +65,8 @@ import org.apache.flink.kubernetes.operator.service.NativeFlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.SnapshotStatus;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
+import org.apache.flink.kubernetes.utils.Constants;
+import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.JobResultStoreOptions;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -87,6 +89,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -99,6 +102,9 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import static org.apache.flink.kubernetes.operator.TestUtils.createHAConfigMapWithData;
+import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_DEPLOYMENT_NAME;
+import static org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils.TEST_NAMESPACE;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getCheckpointInfo;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobSpec;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobStatus;
@@ -664,7 +670,13 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()
-                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
+                .deploy(
+                        getResourceContext(flinkApp),
+                        spec,
+                        deployConfig,
+                        Optional.empty(),
+                        false,
+                        null);
 
         String path1 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path1.startsWith(haStoragePath));
@@ -673,7 +685,13 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()
-                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
+                .deploy(
+                        getResourceContext(flinkApp),
+                        spec,
+                        deployConfig,
+                        Optional.empty(),
+                        false,
+                        null);
         String path2 = deployConfig.get(JobResultStoreOptions.STORAGE_PATH);
         Assertions.assertTrue(path2.startsWith(haStoragePath));
         assertNotEquals(path1, path2);
@@ -874,6 +892,58 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     }
 
     @Test
+    public void testScaleWithJobGraphKeptInHAMetadata() throws Exception {
+        final String jobGraphKey = Constants.JOB_GRAPH_STORE_KEY_PREFIX + JobID.generate();
+        final String jobGraphVal = "job-graph-data";
+        createHAConfigMapWithData(
+                kubernetesClient,
+                "ha-configmap",
+                TEST_NAMESPACE,
+                TEST_DEPLOYMENT_NAME,
+                Collections.singletonMap(jobGraphKey, jobGraphVal));
+        final Map<String, String> configMapLabels =
+                KubernetesUtils.getConfigMapLabels(
+                        TEST_DEPLOYMENT_NAME, Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY);
+        assertEquals(
+                jobGraphVal,
+                kubernetesClient
+                        .configMaps()
+                        .inNamespace(TEST_NAMESPACE)
+                        .withLabels(configMapLabels)
+                        .list()
+                        .getItems()
+                        .get(0)
+                        .getData()
+                        .get(jobGraphKey));
+
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        getJobSpec(deployment).setUpgradeMode(UpgradeMode.LAST_STATE);
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+        getJobSpec(deployment).setParallelism(100);
+        reconciler.reconcile(deployment, context);
+        assertEquals(JobState.SUSPENDED, getReconciledJobState(deployment));
+        assertFalse(deployment.getStatus().getReconciliationStatus().scalingInProgress());
+        getJobSpec(deployment).setState(JobState.SUSPENDED);
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), new JobVertexID() + ":1");
+        reconciler.reconcile(deployment, context);
+        assertEquals(
+                jobGraphVal,
+                kubernetesClient
+                        .configMaps()
+                        .inNamespace(TEST_NAMESPACE)
+                        .withLabels(configMapLabels)
+                        .list()
+                        .getItems()
+                        .get(0)
+                        .getData()
+                        .get(jobGraphKey));
+    }
+
+    @Test
     public void testApplyAutoscalerParallelism() throws Exception {
         var ctxFactory =
                 new TestingFlinkResourceContextFactory(
@@ -952,7 +1022,13 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler
                 .getReconciler()
-                .deploy(getResourceContext(flinkApp), spec, deployConfig, Optional.empty(), false);
+                .deploy(
+                        getResourceContext(flinkApp),
+                        spec,
+                        deployConfig,
+                        Optional.empty(),
+                        false,
+                        null);
 
         final List<Map<String, String>> expectedOwnerReferences =
                 List.of(TestUtils.generateTestOwnerReferenceMap(flinkApp));

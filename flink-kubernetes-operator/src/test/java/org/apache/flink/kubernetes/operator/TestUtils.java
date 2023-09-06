@@ -32,9 +32,13 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
+import org.apache.flink.kubernetes.utils.Constants;
+import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.util.TestingMetricRegistry;
 
+import io.fabric8.kubernetes.api.model.ConfigMap;
+import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.ContainerStatusBuilder;
 import io.fabric8.kubernetes.api.model.HasMetadata;
@@ -409,6 +413,28 @@ public class TestUtils extends BaseTestUtils {
 
         deployment.getSpec().getFlinkConfiguration().put(cronOptionKey, "0 0 12 5 6 ? 2022");
         reconcileSpec(deployment);
+    }
+
+    public static void createHAConfigMapWithData(
+            KubernetesClient kubernetesClient,
+            String configMapName,
+            String namespace,
+            String clusterId,
+            Map<String, String> data) {
+        final ConfigMap kubernetesConfigMap =
+                new ConfigMapBuilder()
+                        .withNewMetadata()
+                        .withName(configMapName)
+                        .withNamespace(namespace)
+                        .withLabels(
+                                KubernetesUtils.getConfigMapLabels(
+                                        clusterId,
+                                        Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY))
+                        .endMetadata()
+                        .withData(data)
+                        .build();
+
+        kubernetesClient.configMaps().resource(kubernetesConfigMap).createOrReplace();
     }
 
     /** Testing ResponseProvider. */

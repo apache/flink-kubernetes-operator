@@ -194,12 +194,9 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     public void submitApplicationCluster(
-            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
-
-        if (requireHaMetadata) {
-            validateHaMetadataExists(conf);
-        }
-        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
+            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata, boolean deleteJobGraph)
+            throws Exception {
+        super.submitApplicationCluster(jobSpec, conf, requireHaMetadata, deleteJobGraph);
         submittedConf = conf.clone();
     }
 

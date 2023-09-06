@@ -24,6 +24,7 @@ import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
@@ -142,7 +143,8 @@ public class ApplicationReconciler
             FlinkDeploymentSpec spec,
             Configuration deployConfig,
             Optional<String> savepoint,
-            boolean requireHaMetadata)
+            boolean requireHaMetadata,
+            DiffType diffType)
             throws Exception {
 
         var relatedResource = ctx.getResource();
@@ -179,7 +181,11 @@ public class ApplicationReconciler
                 EventRecorder.Component.JobManagerDeployment,
                 MSG_SUBMIT,
                 ctx.getKubernetesClient());
-        flinkService.submitApplicationCluster(spec.getJob(), deployConfig, requireHaMetadata);
+        flinkService.submitApplicationCluster(
+                spec.getJob(),
+                deployConfig,
+                requireHaMetadata,
+                requireHaMetadata && diffType == DiffType.SCALE);
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
         status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
 
@@ -253,9 +259,9 @@ public class ApplicationReconciler
     }
 
     @Override
-    public boolean reconcileOtherChanges(FlinkResourceContext<FlinkDeployment> ctx)
-            throws Exception {
-        if (super.reconcileOtherChanges(ctx)) {
+    public boolean reconcileOtherChanges(
+            FlinkResourceContext<FlinkDeployment> ctx, DiffType diffType) throws Exception {
+        if (super.reconcileOtherChanges(ctx, diffType)) {
             return true;
         }
 
@@ -288,7 +294,8 @@ public class ApplicationReconciler
 
             resubmitJob(
                     ctx,
-                    HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig()));
+                    HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig()),
+                    diffType);
             return true;
         }
 

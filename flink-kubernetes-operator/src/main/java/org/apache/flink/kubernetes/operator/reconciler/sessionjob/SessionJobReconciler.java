@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.reconciler.sessionjob;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
@@ -65,7 +66,8 @@ public class SessionJobReconciler
             FlinkSessionJobSpec sessionJobSpec,
             Configuration deployConfig,
             Optional<String> savepoint,
-            boolean requireHaMetadata)
+            boolean requireHaMetadata,
+            DiffType diffType)
             throws Exception {
         var jobID =
                 ctx.getFlinkService()

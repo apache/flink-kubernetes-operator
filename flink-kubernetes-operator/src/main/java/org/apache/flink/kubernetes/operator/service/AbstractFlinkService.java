@@ -176,23 +176,18 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public void submitApplicationCluster(
-            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata) throws Exception {
+            JobSpec jobSpec, Configuration conf, boolean requireHaMetadata, boolean deleteJobGraph)
+            throws Exception {
         LOG.info(
                 "Deploying application cluster{}",
                 requireHaMetadata ? " requiring last-state from HA metadata" : "");
 
-        // If Kubernetes or Zookeeper HA are activated, delete the job graph in HA storage so that
-        // the newly changed job config (e.g. parallelism) could take effect
-        if (FlinkUtils.isKubernetesHAActivated(conf)) {
-            final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
-            final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
-            FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
-        } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
-            FlinkUtils.deleteJobGraphInZookeeperHA(conf);
-        }
-
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
+            if (!deleteJobGraph) {
+                LOG.info("Deleting job graph from HA metadata");
+                deleteJobGraphInHA(conf);
+            }
         }
 
         deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
@@ -963,6 +958,18 @@ public abstract class AbstractFlinkService implements FlinkService {
             LOG.debug("Adjusting job state from {} to {}", JobStatus.RUNNING, effectiveStatus);
         }
         return effectiveStatus;
+    }
+
+    public void deleteJobGraphInHA(Configuration conf) throws Exception {
+        // If Kubernetes or Zookeeper HA are activated, delete the job graph in HA storage so
+        // that the newly changed job config (e.g. parallelism) could take effect
+        if (FlinkUtils.isKubernetesHAActivated(conf)) {
+            final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
+            final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
+            FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
+        } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
+            FlinkUtils.deleteJobGraphInZookeeperHA(conf);
+        }
     }
 
     private void validateHaMetadataExists(Configuration conf) {
