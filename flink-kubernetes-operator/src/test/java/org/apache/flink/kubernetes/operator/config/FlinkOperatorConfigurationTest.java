@@ -19,36 +19,33 @@ package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.configuration.Configuration;
 
+import io.javaoperatorsdk.operator.processing.event.rate.LinearRateLimiter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 /** Operator retry config tests. */
-public class FlinkOperatorRetryConfigurationTest {
+public class FlinkOperatorConfigurationTest {
 
     @Test
     public void testRetryConfiguration() {
-
         // default values
         FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+        var retryConf = configManager.getOperatorConfiguration().getRetryConfiguration();
+
         Assertions.assertEquals(
                 KubernetesOperatorConfigOptions.OPERATOR_RETRY_INITIAL_INTERVAL
                         .defaultValue()
                         .toMillis(),
-                configManager
-                        .getOperatorConfiguration()
-                        .getRetryConfiguration()
-                        .getInitialInterval());
+                retryConf.getInitialInterval());
         Assertions.assertEquals(
                 KubernetesOperatorConfigOptions.OPERATOR_RETRY_INTERVAL_MULTIPLIER.defaultValue(),
-                configManager
-                        .getOperatorConfiguration()
-                        .getRetryConfiguration()
-                        .getIntervalMultiplier());
+                retryConf.getIntervalMultiplier());
         Assertions.assertEquals(
                 KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_ATTEMPTS.defaultValue(),
-                configManager.getOperatorConfiguration().getRetryConfiguration().getMaxAttempts());
+                retryConf.getMaxAttempts());
+        Assertions.assertEquals(-1, retryConf.getMaxInterval());
 
         // overrides
         var overrides =
@@ -61,22 +58,38 @@ public class FlinkOperatorRetryConfigurationTest {
                                         .key(),
                                 "2.0",
                                 KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_ATTEMPTS.key(),
-                                "3"));
+                                "3",
+                                KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_INTERVAL.key(),
+                                "4"));
         configManager.updateDefaultConfig(overrides);
+        retryConf = configManager.getOperatorConfiguration().getRetryConfiguration();
+        Assertions.assertEquals(1000L, retryConf.getInitialInterval());
+        Assertions.assertEquals(2.0, retryConf.getIntervalMultiplier());
+        Assertions.assertEquals(3, retryConf.getMaxAttempts());
+        Assertions.assertEquals(4, retryConf.getMaxInterval());
+    }
+
+    @Test
+    public void testRateLimiter() {
+        // default values
+        FlinkConfigManager configManager = new FlinkConfigManager(new Configuration());
+        var rateLimiter =
+                (LinearRateLimiter) configManager.getOperatorConfiguration().getRateLimiter();
+
+        Assertions.assertTrue(rateLimiter.isActivated());
         Assertions.assertEquals(
-                1000L,
-                configManager
-                        .getOperatorConfiguration()
-                        .getRetryConfiguration()
-                        .getInitialInterval());
+                KubernetesOperatorConfigOptions.OPERATOR_RATE_LIMITER_PERIOD.defaultValue(),
+                rateLimiter.getRefreshPeriod());
         Assertions.assertEquals(
-                2.0,
-                configManager
-                        .getOperatorConfiguration()
-                        .getRetryConfiguration()
-                        .getIntervalMultiplier());
-        Assertions.assertEquals(
-                3,
-                configManager.getOperatorConfiguration().getRetryConfiguration().getMaxAttempts());
+                KubernetesOperatorConfigOptions.OPERATOR_RATE_LIMITER_LIMIT.defaultValue(),
+                rateLimiter.getLimitForPeriod());
+        configManager.updateDefaultConfig(
+                Configuration.fromMap(
+                        Map.of(
+                                KubernetesOperatorConfigOptions.OPERATOR_RATE_LIMITER_LIMIT.key(),
+                                "0")));
+
+        rateLimiter = (LinearRateLimiter) configManager.getOperatorConfiguration().getRateLimiter();
+        Assertions.assertFalse(rateLimiter.isActivated());
     }
 }

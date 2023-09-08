@@ -362,24 +362,44 @@ public class KubernetesOperatorConfigOptions {
             operatorConfig("retry.initial.interval")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(5))
-                    .withDescription(
-                            "Initial interval of automatic reconcile retries on recoverable errors.");
+                    .withDescription("Initial interval of retries on unhandled controller errors.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Duration> OPERATOR_RETRY_MAX_INTERVAL =
+            operatorConfig("retry.max.interval")
+                    .durationType()
+                    .noDefaultValue()
+                    .withDescription("Max interval of retries on unhandled controller errors.");
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Double> OPERATOR_RETRY_INTERVAL_MULTIPLIER =
             operatorConfig("retry.interval.multiplier")
                     .doubleType()
-                    .defaultValue(2.0)
+                    .defaultValue(1.5)
                     .withDescription(
-                            "Interval multiplier of automatic reconcile retries on recoverable errors.");
+                            "Interval multiplier of retries on unhandled controller errors.");
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Integer> OPERATOR_RETRY_MAX_ATTEMPTS =
             operatorConfig("retry.max.attempts")
                     .intType()
-                    .defaultValue(10)
+                    .defaultValue(15)
+                    .withDescription("Max attempts of retries on unhandled controller errors.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Duration> OPERATOR_RATE_LIMITER_PERIOD =
+            operatorConfig("rate-limiter.refresh-period")
+                    .durationType()
+                    .defaultValue(Duration.ofSeconds(15))
+                    .withDescription("Operator rate limiter refresh period for each resource.");
+
+    @Documentation.Section(SECTION_SYSTEM)
+    public static final ConfigOption<Integer> OPERATOR_RATE_LIMITER_LIMIT =
+            operatorConfig("rate-limiter.limit")
+                    .intType()
+                    .defaultValue(5)
                     .withDescription(
-                            "Max attempts of automatic reconcile retries on recoverable errors.");
+                            "Max number of reconcile loops triggered within the rate limiter refresh period for each resource. Setting the limit <= 0 disables the limiter.");
 
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED =

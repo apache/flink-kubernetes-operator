@@ -25,6 +25,8 @@ import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.javaoperatorsdk.operator.api.config.LeaderElectionConfiguration;
+import io.javaoperatorsdk.operator.processing.event.rate.LinearRateLimiter;
+import io.javaoperatorsdk.operator.processing.event.rate.RateLimiter;
 import io.javaoperatorsdk.operator.processing.retry.GenericRetry;
 import lombok.Value;
 import org.apache.commons.lang3.StringUtils;
@@ -63,6 +65,7 @@ public class FlinkOperatorConfiguration {
     Integer savepointHistoryCountThreshold;
     Duration savepointHistoryAgeThreshold;
     GenericRetry retryConfiguration;
+    RateLimiter<?> rateLimiter;
     boolean exceptionStackTraceEnabled;
     int exceptionStackTraceLengthThreshold;
     int exceptionFieldLengthThreshold;
@@ -174,6 +177,7 @@ public class FlinkOperatorConfiguration {
                         KubernetesOperatorMetricOptions.OPERATOR_METRICS_HISTOGRAM_SAMPLE_SIZE);
 
         GenericRetry retryConfiguration = getRetryConfig(operatorConfig);
+        RateLimiter rateLimiter = getRateLimiter(operatorConfig);
 
         String labelSelector =
                 operatorConfig.getString(KubernetesOperatorConfigOptions.OPERATOR_LABEL_SELECTOR);
@@ -200,6 +204,7 @@ public class FlinkOperatorConfiguration {
                 savepointHistoryCountThreshold,
                 savepointHistoryAgeThreshold,
                 retryConfiguration,
+                rateLimiter,
                 exceptionStackTraceEnabled,
                 exceptionStackTraceLengthThreshold,
                 exceptionFieldLengthThreshold,
@@ -211,17 +216,36 @@ public class FlinkOperatorConfiguration {
     }
 
     private static GenericRetry getRetryConfig(Configuration conf) {
-        return new GenericRetry()
-                .setMaxAttempts(
-                        conf.getInteger(
-                                KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_ATTEMPTS))
-                .setInitialInterval(
-                        conf.get(KubernetesOperatorConfigOptions.OPERATOR_RETRY_INITIAL_INTERVAL)
-                                .toMillis())
-                .setIntervalMultiplier(
-                        conf.getDouble(
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_RETRY_INTERVAL_MULTIPLIER));
+        var genericRetry =
+                new GenericRetry()
+                        .setMaxAttempts(
+                                conf.getInteger(
+                                        KubernetesOperatorConfigOptions
+                                                .OPERATOR_RETRY_MAX_ATTEMPTS))
+                        .setInitialInterval(
+                                conf.get(
+                                                KubernetesOperatorConfigOptions
+                                                        .OPERATOR_RETRY_INITIAL_INTERVAL)
+                                        .toMillis())
+                        .setIntervalMultiplier(
+                                conf.getDouble(
+                                        KubernetesOperatorConfigOptions
+                                                .OPERATOR_RETRY_INTERVAL_MULTIPLIER));
+
+        if (conf.contains(KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_INTERVAL)) {
+            genericRetry.setMaxInterval(
+                    conf.get(KubernetesOperatorConfigOptions.OPERATOR_RETRY_MAX_INTERVAL)
+                            .toMillis());
+        } else {
+            genericRetry.withoutMaxInterval();
+        }
+        return genericRetry;
+    }
+
+    private static RateLimiter<?> getRateLimiter(Configuration conf) {
+        return new LinearRateLimiter(
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_RATE_LIMITER_PERIOD),
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_RATE_LIMITER_LIMIT));
     }
 
     private static LeaderElectionConfiguration getLeaderElectionConfig(Configuration conf) {
