@@ -81,6 +81,18 @@
             <td>Leader election retry period.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.rate-limiter.limit</h5></td>
+            <td style="word-wrap: break-word;">5</td>
+            <td>Integer</td>
+            <td>Max number of reconcile loops triggered within the rate limiter refresh period for each resource. Setting the limit &lt;= 0 disables the limiter.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.rate-limiter.refresh-period</h5></td>
+            <td style="word-wrap: break-word;">15 s</td>
+            <td>Duration</td>
+            <td>Operator rate limiter refresh period for each resource.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.reconcile.interval</h5></td>
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>
@@ -102,19 +114,25 @@
             <td><h5>kubernetes.operator.retry.initial.interval</h5></td>
             <td style="word-wrap: break-word;">5 s</td>
             <td>Duration</td>
-            <td>Initial interval of automatic reconcile retries on recoverable errors.</td>
+            <td>Initial interval of retries on unhandled controller errors.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.retry.interval.multiplier</h5></td>
-            <td style="word-wrap: break-word;">2.0</td>
+            <td style="word-wrap: break-word;">1.5</td>
             <td>Double</td>
-            <td>Interval multiplier of automatic reconcile retries on recoverable errors.</td>
+            <td>Interval multiplier of retries on unhandled controller errors.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.retry.max.attempts</h5></td>
-            <td style="word-wrap: break-word;">10</td>
+            <td style="word-wrap: break-word;">15</td>
             <td>Integer</td>
-            <td>Max attempts of automatic reconcile retries on recoverable errors.</td>
+            <td>Max attempts of retries on unhandled controller errors.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.retry.max.interval</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>Duration</td>
+            <td>Max interval of retries on unhandled controller errors.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.user.artifacts.base.dir</h5></td>

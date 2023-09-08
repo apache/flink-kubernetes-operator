@@ -24,6 +24,7 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import io.fabric8.kubernetes.client.Config;
 import io.javaoperatorsdk.operator.RegisteredController;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
+import io.javaoperatorsdk.operator.processing.event.rate.LinearRateLimiter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -84,6 +85,11 @@ public class FlinkOperatorTest {
 
         labelSelectors.forEach(selector -> Assertions.assertEquals(testSelector, selector));
         Assertions.assertFalse(configService.stopOnInformerErrorDuringStartup());
+
+        testOperator.registeredControllers.stream()
+                .map(RegisteredController::getConfiguration)
+                .map(ControllerConfiguration::getRateLimiter)
+                .forEach(rl -> Assertions.assertTrue(((LinearRateLimiter) rl).isActivated()));
 
         var leaderElectionConfiguration = configService.getLeaderElectionConfiguration().get();
 

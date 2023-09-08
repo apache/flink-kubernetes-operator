@@ -215,6 +215,7 @@ public class FlinkOperator {
         overrider.settingNamespaces(operatorConf.getWatchedNamespaces());
 
         overrider.withRetry(operatorConf.getRetryConfiguration());
+        overrider.withRateLimiter(operatorConf.getRateLimiter());
 
         var labelSelector = operatorConf.getLabelSelector();
         LOG.info(
