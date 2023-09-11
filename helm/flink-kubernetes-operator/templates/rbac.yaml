@@ -90,6 +90,7 @@ rules:
     resources:
       - pods
       - configmaps
+      - services
     verbs:
       - '*'
   - apiGroups:
