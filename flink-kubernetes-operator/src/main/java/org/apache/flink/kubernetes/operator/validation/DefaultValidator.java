@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.api.spec.Resource;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
@@ -367,7 +368,8 @@ public class DefaultValidator implements FlinkResourceValidator {
 
         if (memory != null) {
             try {
-                MemorySize.parse(memory);
+                MemorySize.parse(
+                        FlinkConfigBuilder.parseResourceMemoryString(resource.getMemory()));
             } catch (IllegalArgumentException iae) {
                 builder.append(component + " resource memory parse error: " + iae.getMessage());
             }

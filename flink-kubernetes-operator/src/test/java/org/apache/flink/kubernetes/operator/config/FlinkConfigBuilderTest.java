@@ -429,7 +429,7 @@ public class FlinkConfigBuilderTest {
                         .build();
 
         assertEquals(
-                MemorySize.parse("2048m"),
+                MemorySize.parse("2 gb"),
                 configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
         assertEquals(Double.valueOf(1), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
         assertEquals(
@@ -472,10 +472,228 @@ public class FlinkConfigBuilderTest {
                         .build();
 
         assertEquals(
-                MemorySize.parse("2048m"),
+                MemorySize.parse("2 gb"),
                 configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
         assertEquals(
                 Double.valueOf(1), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
+    }
+
+    @Test
+    public void testApplyJobManagerSpecWithBiByteMemorySetting() {
+        var resource = new Resource(1.0, "1Gi", "20Gi");
+        flinkDeployment.getSpec().getJobManager().setResource(resource);
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyJobManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("1 gb"),
+                configuration.get(JobManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith2048MiSetting() {
+        var resource = new Resource(1.0, "2048Mi", "20Gi");
+        flinkDeployment.getSpec().getTaskManager().setResource(resource);
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2147483648 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith2gSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("2g");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2147483648 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith2giSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("2gi");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2147483648 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith2gbSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("2gb");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2 gb"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith2gibSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("2gib");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2 gb"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith2GSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("2G");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2 gb"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith2GiSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("2Gi");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2147483648 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith2_gSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("2 g");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2 gb"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith2_GiSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("2 Gi");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("2147483648 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith512mSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("512m");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("512 mb"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith512miSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("512mi");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("536870912 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith1024mSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("1024m");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("1 gb"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith1024miSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("1024mi");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("1073741824 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith1000000bSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("1000000b");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("1000000 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith1000000_bSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("1000000 b");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("1000000 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith1e6Setting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("1e6");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("1000000 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Test
+    public void testTaskManagerSpecWith1e6_bSetting() {
+        flinkDeployment.getSpec().getTaskManager().getResource().setMemory("1e6 b");
+        Configuration configuration =
+                new FlinkConfigBuilder(flinkDeployment, new Configuration())
+                        .applyTaskManagerSpec()
+                        .build();
+        assertEquals(
+                MemorySize.parse("1000000 b"),
+                configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
     }
 
     @Test
