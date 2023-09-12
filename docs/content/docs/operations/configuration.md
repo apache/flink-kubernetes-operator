@@ -143,3 +143,11 @@ Operator system metrics configuration. Cannot be overridden on a per-resource ba
 Advanced operator system configuration. Cannot be overridden on a per-resource basis.
 
 {{< generated/system_advanced_section >}}
+
+### IPV6 Configuration
+
+If you run Flink Operator in IPV6 environment, the [host name verification error](https://issues.apache.org/jira/browse/FLINK-32777) will be triggered
+due to a known bug in Okhttp client. As a workaround before new Okhttp 5.0.0 release, the environment variable below needs to be set 
+for both Flink Operator and Flink Deployment Configuration.
+
+KUBERNETES_DISABLE_HOSTNAME_VERIFICATION=true
