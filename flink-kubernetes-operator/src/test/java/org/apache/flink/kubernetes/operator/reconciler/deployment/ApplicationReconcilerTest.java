@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkResourceContextFactory;
+import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
@@ -71,6 +72,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
 import org.apache.flink.util.concurrent.Executors;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -80,6 +82,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.platform.commons.util.StringUtils;
 
 import java.time.Clock;
@@ -92,6 +95,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
@@ -997,6 +1001,44 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 .setClock(Clock.fixed(now.plus(Duration.ofMinutes(6)), ZoneId.systemDefault()));
         reconciler.reconcile(deployment, context);
         assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testClusterCleanupBeforeDeploy(boolean requireMetadata) throws Exception {
+        var flinkApp = TestUtils.buildApplicationCluster();
+        var status = flinkApp.getStatus();
+        var spec = flinkApp.getSpec();
+        var deployConfig = configManager.getDeployConfig(flinkApp.getMetadata(), spec);
+
+        status.getReconciliationStatus().serializeAndSetLastReconciledSpec(spec, flinkApp);
+        status.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.FINISHED.name());
+
+        var deleted = new AtomicBoolean(false);
+
+        flinkService =
+                new TestingFlinkService() {
+                    @Override
+                    protected void deleteClusterInternal(
+                            ObjectMeta meta,
+                            Configuration conf,
+                            boolean deleteHaMeta,
+                            DeletionPropagation deletionPropagation) {
+                        deleted.set(deleteHaMeta);
+                    }
+                };
+
+        reconciler
+                .getReconciler()
+                .deploy(
+                        getResourceContext(flinkApp),
+                        spec,
+                        deployConfig,
+                        Optional.empty(),
+                        requireMetadata);
+        assertEquals(deleted.get(), !requireMetadata);
+        assertEquals(JobManagerDeploymentStatus.DEPLOYING, status.getJobManagerDeploymentStatus());
     }
 
     @Test
