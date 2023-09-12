@@ -166,7 +166,7 @@ public class ApplicationReconciler
             Preconditions.checkArgument(ReconciliationUtils.isJobInTerminalState(status));
             LOG.info("Deleting deployment with terminated application before new deployment");
             flinkService.deleteClusterDeployment(
-                    relatedResource.getMetadata(), status, deployConfig, true);
+                    relatedResource.getMetadata(), status, deployConfig, !requireHaMetadata);
             flinkService.waitForClusterShutdown(deployConfig);
             statusRecorder.patchAndCacheStatus(relatedResource);
         }
