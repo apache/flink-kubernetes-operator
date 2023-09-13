@@ -23,11 +23,8 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 public interface JobAutoScaler {
 
     /** Called as part of the reconciliation loop. Returns true if this call led to scaling. */
-    boolean scale(FlinkResourceContext<?> ctx);
+    void scale(FlinkResourceContext<?> ctx) throws Exception;
 
     /** Called when the custom resource is deleted. */
     void cleanup(FlinkResourceContext<?> ctx);
-
-    /** Apply current parallelism overrides. */
-    void applyParallelismOverrides(FlinkResourceContext<?> ctx);
 }

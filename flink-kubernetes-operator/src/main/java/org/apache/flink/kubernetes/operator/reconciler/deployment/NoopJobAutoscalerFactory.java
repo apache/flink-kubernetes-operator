@@ -29,13 +29,8 @@ public class NoopJobAutoscalerFactory implements JobAutoScalerFactory, JobAutoSc
     }
 
     @Override
-    public boolean scale(FlinkResourceContext<?> ctx) {
-        return false;
-    }
+    public void scale(FlinkResourceContext<?> ctx) {}
 
     @Override
     public void cleanup(FlinkResourceContext<?> ctx) {}
-
-    @Override
-    public void applyParallelismOverrides(FlinkResourceContext<?> ctx) {}
 }

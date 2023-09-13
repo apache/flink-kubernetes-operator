@@ -412,7 +412,7 @@ public class BacklogBasedScalingTest extends OperatorTestBase {
         var now = Instant.ofEpochMilli(0);
         setClocksTo(now);
         metricsCollector.setJobUpdateTs(now);
-        assertFalse(autoscaler.scale(getResourceContext(app, ctx)));
+        autoscaler.scale(getResourceContext(app, ctx));
         assertTrue(getOrCreateInfo(app, kubernetesClient).getMetricHistory().isEmpty());
         assertTrue(eventCollector.events.isEmpty());
     }

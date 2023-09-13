@@ -87,7 +87,7 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
     }
 
     @Test
-    void testMetricReporting() {
+    void testMetricReporting() throws Exception {
         JobVertexID jobVertexID = new JobVertexID();
         JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Set.of(), 1, 10));
 
@@ -136,7 +136,7 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
     }
 
     @Test
-    void testErrorReporting() {
+    void testErrorReporting() throws Exception {
         var autoscaler = new JobAutoScalerImpl(null, null, null, eventRecorder);
         FlinkResourceContext<FlinkDeployment> resourceContext = getResourceContext(app);
         ResourceID resourceId = ResourceID.fromResource(app);
@@ -153,6 +153,8 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
     @Test
     void testParallelismOverrides() throws Exception {
         var autoscaler = new JobAutoScalerImpl(null, null, null, eventRecorder);
+        app.getStatus().getJobStatus().setState(JobStatus.CREATED.name());
+        var appClone = ReconciliationUtils.clone(app);
         var ctx = getResourceContext(app);
 
         // Initially we should return empty overrides, do not crate any CM
@@ -167,37 +169,64 @@ public class JobAutoScalerImplTest extends OperatorTestBase {
         autoscalerInfo.setCurrentOverrides(Map.of(v1, "1", v2, "2"));
         autoscalerInfo.replaceInKubernetes(kubernetesClient);
 
-        assertEquals(Map.of(v1, "1", v2, "2"), autoscaler.getParallelismOverrides(ctx));
+        autoscaler.scale(ctx);
+        assertEquals(
+                Map.of(v1, "1", v2, "2"),
+                ctx.getDeployConfig(app.getSpec()).get(PipelineOptions.PARALLELISM_OVERRIDES));
 
         // Disabling autoscaler should clear overrides
+        ctx = getResourceContext(app = ReconciliationUtils.clone(appClone));
         app.getSpec().getFlinkConfiguration().put(AUTOSCALER_ENABLED.key(), "false");
-        ctx = getResourceContext(app);
+
+        autoscaler.scale(ctx);
         assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));
         // But not clear the autoscaler info
         assertTrue(autoscaler.infoManager.getInfoFromKubernetes(app, kubernetesClient).isPresent());
+        assertEquals(
+                Map.of(),
+                ctx.getDeployConfig(app.getSpec()).get(PipelineOptions.PARALLELISM_OVERRIDES));
 
         int requestCount = mockWebServer.getRequestCount();
         // Make sure we don't update in kubernetes once removed
-        autoscaler.getParallelismOverrides(ctx);
+        ctx = getResourceContext(app = ReconciliationUtils.clone(appClone));
+        autoscaler.scale(ctx);
         assertEquals(requestCount, mockWebServer.getRequestCount());
 
+        ctx = getResourceContext(app = ReconciliationUtils.clone(appClone));
         app.getSpec().getFlinkConfiguration().put(AUTOSCALER_ENABLED.key(), "true");
-        ctx = getResourceContext(app);
+        autoscaler.scale(ctx);
+
         assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));
+        assertEquals(
+                Map.of(),
+                ctx.getDeployConfig(app.getSpec()).get(PipelineOptions.PARALLELISM_OVERRIDES));
 
         autoscalerInfo.setCurrentOverrides(Map.of(v1, "1", v2, "2"));
         autoscalerInfo.replaceInKubernetes(kubernetesClient);
-        assertEquals(Map.of(v1, "1", v2, "2"), autoscaler.getParallelismOverrides(ctx));
+        autoscaler.scale(ctx);
 
-        app.getSpec().getFlinkConfiguration().put(SCALING_ENABLED.key(), "false");
-        ctx = getResourceContext(app);
         assertEquals(Map.of(v1, "1", v2, "2"), autoscaler.getParallelismOverrides(ctx));
+        assertEquals(
+                Map.of(v1, "1", v2, "2"),
+                ctx.getDeployConfig(app.getSpec()).get(PipelineOptions.PARALLELISM_OVERRIDES));
+
+        ctx = getResourceContext(app = ReconciliationUtils.clone(appClone));
+        app.getSpec().getFlinkConfiguration().put(SCALING_ENABLED.key(), "false");
+
+        autoscaler.scale(ctx);
+        assertEquals(Map.of(v1, "1", v2, "2"), autoscaler.getParallelismOverrides(ctx));
+        assertEquals(
+                Map.of(v1, "1", v2, "2"),
+                ctx.getDeployConfig(app.getSpec()).get(PipelineOptions.PARALLELISM_OVERRIDES));
 
         // Test error handling
         // Invalid config
+        ctx = getResourceContext(app = ReconciliationUtils.clone(appClone));
         app.getSpec().getFlinkConfiguration().put(AUTOSCALER_ENABLED.key(), "asd");
-        ctx = getResourceContext(app);
-        assertEquals(Map.of(), autoscaler.getParallelismOverrides(ctx));
+        autoscaler.scale(ctx);
+        assertEquals(
+                Map.of(v1, "1", v2, "2"),
+                ctx.getDeployConfig(app.getSpec()).get(PipelineOptions.PARALLELISM_OVERRIDES));
     }
 
     @Test

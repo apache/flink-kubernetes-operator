@@ -884,7 +884,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 (r) ->
                         new NoopJobAutoscalerFactory() {
                             @Override
-                            public void applyParallelismOverrides(FlinkResourceContext<?> ctx) {
+                            public void scale(FlinkResourceContext<?> ctx) {
                                 overrideFunction.get().accept(ctx.getResource().getSpec());
                             }
                         };
