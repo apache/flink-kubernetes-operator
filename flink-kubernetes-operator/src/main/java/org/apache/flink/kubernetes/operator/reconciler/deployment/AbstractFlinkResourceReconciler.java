@@ -132,7 +132,7 @@ public abstract class AbstractFlinkResourceReconciler<
         SPEC lastReconciledSpec =
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();
-        resourceScaler.applyParallelismOverrides(ctx);
+        resourceScaler.scale(ctx);
 
         var specDiff =
                 new ReflectiveDiffBuilder<>(
@@ -183,13 +183,7 @@ public abstract class AbstractFlinkResourceReconciler<
                     MSG_ROLLBACK,
                     ctx.getKubernetesClient());
         } else if (!reconcileOtherChanges(ctx)) {
-            if (resourceScaler.scale(ctx)) {
-                LOG.info(
-                        "Rescheduling new reconciliation immediately to execute scaling operation.");
-                status.setImmediateReconciliationNeeded(true);
-            } else {
-                LOG.info("Resource fully reconciled, nothing to do...");
-            }
+            LOG.info("Resource fully reconciled, nothing to do...");
         }
     }
 

@@ -19,10 +19,12 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
+import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.metrics.ScalingMetric;
@@ -75,6 +77,22 @@ public class JobAutoScalerImpl implements JobAutoScaler {
     }
 
     @Override
+    public void scale(FlinkResourceContext<?> ctx) {
+        var conf = ctx.getObserveConfig();
+        var resource = ctx.getResource();
+        var resourceId = ResourceID.fromResource(resource);
+        var autoscalerMetrics = getOrInitAutoscalerFlinkMetrics(ctx, resourceId);
+
+        try {
+            runScalingLogic(ctx, conf, resource, resourceId, autoscalerMetrics);
+        } catch (Throwable e) {
+            onError(ctx, resource, autoscalerMetrics, e);
+        } finally {
+            applyParallelismOverrides(ctx);
+        }
+    }
+
+    @Override
     public void cleanup(FlinkResourceContext<?> ctx) {
         LOG.info("Cleaning up autoscaling meta data");
         var cr = ctx.getResource();
@@ -85,25 +103,21 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         infoManager.removeInfoFromCache(cr);
     }
 
+    private void clearParallelismOverrides(FlinkResourceContext<?> ctx) throws Exception {
+        var infoOpt = infoManager.getInfo(ctx.getResource(), ctx.getKubernetesClient());
+        if (infoOpt.isPresent()) {
+            var info = infoOpt.get();
+            info.removeCurrentOverrides();
+            info.replaceInKubernetes(ctx.getKubernetesClient());
+        }
+    }
+
     @VisibleForTesting
     protected Map<String, String> getParallelismOverrides(FlinkResourceContext<?> ctx) {
-        var conf = ctx.getObserveConfig();
-        try {
-            var infoOpt = infoManager.getInfo(ctx.getResource(), ctx.getKubernetesClient());
-            if (infoOpt.isPresent()) {
-                var info = infoOpt.get();
-                // If autoscaler was disabled need to delete the overrides
-                if (!conf.getBoolean(AUTOSCALER_ENABLED) && !info.getCurrentOverrides().isEmpty()) {
-                    info.removeCurrentOverrides();
-                    info.replaceInKubernetes(ctx.getKubernetesClient());
-                } else {
-                    return info.getCurrentOverrides();
-                }
-            }
-        } catch (Exception e) {
-            LOG.error("Error while getting parallelism overrides", e);
-        }
-        return Map.of();
+        return infoManager
+                .getInfo(ctx.getResource(), ctx.getKubernetesClient())
+                .map(AutoScalerInfo::getCurrentOverrides)
+                .orElse(Map.of());
     }
 
     /**
@@ -111,8 +125,8 @@ public class JobAutoScalerImpl implements JobAutoScaler {
      *
      * @param ctx Resource context
      */
-    @Override
-    public void applyParallelismOverrides(FlinkResourceContext<?> ctx) {
+    @VisibleForTesting
+    protected void applyParallelismOverrides(FlinkResourceContext<?> ctx) {
         var overrides = getParallelismOverrides(ctx);
         if (overrides.isEmpty()) {
             return;
@@ -140,86 +154,87 @@ public class JobAutoScalerImpl implements JobAutoScaler {
                         ConfigurationUtils.convertValue(userOverrides, String.class));
     }
 
-    @Override
-    public boolean scale(FlinkResourceContext<?> ctx) {
+    private void runScalingLogic(
+            FlinkResourceContext<?> ctx,
+            Configuration conf,
+            AbstractFlinkResource<?, ?> resource,
+            ResourceID resourceId,
+            AutoscalerFlinkMetrics autoscalerMetrics)
+            throws Exception {
 
-        var conf = ctx.getObserveConfig();
-        var resource = ctx.getResource();
-        var resourceId = ResourceID.fromResource(resource);
-        var autoscalerMetrics = getOrInitAutoscalerFlinkMetrics(ctx, resourceId);
-
-        try {
-            if (resource.getSpec().getJob() == null || !conf.getBoolean(AUTOSCALER_ENABLED)) {
-                LOG.debug("Job autoscaler is disabled");
-                return false;
-            }
-
-            // Initialize metrics only if autoscaler is enabled
-
-            var status = resource.getStatus();
-            if (status.getLifecycleState() != ResourceLifecycleState.STABLE
-                    || !status.getJobStatus().getState().equals(JobStatus.RUNNING.name())) {
-                LOG.info("Job autoscaler is waiting for RUNNING job state");
-                lastEvaluatedMetrics.remove(resourceId);
-                return false;
-            }
-
-            var autoScalerInfo = infoManager.getOrCreateInfo(resource, ctx.getKubernetesClient());
-
-            var collectedMetrics =
-                    metricsCollector.updateMetrics(
-                            resource, autoScalerInfo, ctx.getFlinkService(), conf);
-
-            if (collectedMetrics.getMetricHistory().isEmpty()) {
-                autoScalerInfo.replaceInKubernetes(ctx.getKubernetesClient());
-                return false;
-            }
-            LOG.debug("Collected metrics: {}", collectedMetrics);
-
-            var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
-            LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
-            lastEvaluatedMetrics.put(resourceId, evaluatedMetrics);
-
-            initRecommendedParallelism(evaluatedMetrics);
-            autoscalerMetrics.registerScalingMetrics(
-                    collectedMetrics.getJobTopology().getVerticesInTopologicalOrder(),
-                    () -> lastEvaluatedMetrics.get(resourceId));
-
-            if (!collectedMetrics.isFullyCollected()) {
-                // We have done an upfront evaluation, but we are not ready for scaling.
-                resetRecommendedParallelism(evaluatedMetrics);
-                autoScalerInfo.replaceInKubernetes(ctx.getKubernetesClient());
-                return false;
-            }
-
-            var specAdjusted =
-                    scalingExecutor.scaleResource(
-                            resource,
-                            autoScalerInfo,
-                            conf,
-                            evaluatedMetrics,
-                            ctx.getKubernetesClient());
-
-            if (specAdjusted) {
-                autoscalerMetrics.numScalings.inc();
-            } else {
-                autoscalerMetrics.numBalanced.inc();
-            }
-
-            autoScalerInfo.replaceInKubernetes(ctx.getKubernetesClient());
-            return specAdjusted;
-        } catch (Throwable e) {
-            LOG.error("Error while scaling resource", e);
-            autoscalerMetrics.numErrors.inc();
-            eventRecorder.triggerEvent(
-                    resource,
-                    EventRecorder.Type.Warning,
-                    EventRecorder.Reason.AutoscalerError,
-                    EventRecorder.Component.Operator,
-                    e.getMessage(),
-                    ctx.getKubernetesClient());
-            return false;
+        if (resource.getSpec().getJob() == null || !conf.getBoolean(AUTOSCALER_ENABLED)) {
+            LOG.debug("Autoscaler is disabled");
+            clearParallelismOverrides(ctx);
+            return;
         }
+
+        var status = resource.getStatus();
+        if (status.getLifecycleState() != ResourceLifecycleState.STABLE
+                || !status.getJobStatus().getState().equals(JobStatus.RUNNING.name())) {
+            LOG.info("Autoscaler is waiting for RUNNING job state");
+            lastEvaluatedMetrics.remove(resourceId);
+            return;
+        }
+
+        var autoScalerInfo = infoManager.getOrCreateInfo(resource, ctx.getKubernetesClient());
+
+        var collectedMetrics =
+                metricsCollector.updateMetrics(
+                        resource, autoScalerInfo, ctx.getFlinkService(), conf);
+
+        if (collectedMetrics.getMetricHistory().isEmpty()) {
+            autoScalerInfo.replaceInKubernetes(ctx.getKubernetesClient());
+            return;
+        }
+        LOG.debug("Collected metrics: {}", collectedMetrics);
+
+        var evaluatedMetrics = evaluator.evaluate(conf, collectedMetrics);
+        LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
+        lastEvaluatedMetrics.put(resourceId, evaluatedMetrics);
+
+        initRecommendedParallelism(evaluatedMetrics);
+        autoscalerMetrics.registerScalingMetrics(
+                collectedMetrics.getJobTopology().getVerticesInTopologicalOrder(),
+                () -> lastEvaluatedMetrics.get(resourceId));
+
+        if (!collectedMetrics.isFullyCollected()) {
+            // We have done an upfront evaluation, but we are not ready for scaling.
+            resetRecommendedParallelism(evaluatedMetrics);
+            autoScalerInfo.replaceInKubernetes(ctx.getKubernetesClient());
+            return;
+        }
+
+        var parallelismChanged =
+                scalingExecutor.scaleResource(
+                        resource,
+                        autoScalerInfo,
+                        conf,
+                        evaluatedMetrics,
+                        ctx.getKubernetesClient());
+
+        if (parallelismChanged) {
+            autoscalerMetrics.numScalings.inc();
+        } else {
+            autoscalerMetrics.numBalanced.inc();
+        }
+
+        autoScalerInfo.replaceInKubernetes(ctx.getKubernetesClient());
+    }
+
+    private void onError(
+            FlinkResourceContext<?> ctx,
+            AbstractFlinkResource<?, ? extends CommonStatus<?>> resource,
+            AutoscalerFlinkMetrics autoscalerMetrics,
+            Throwable e) {
+        LOG.error("Error while scaling resource", e);
+        autoscalerMetrics.numErrors.inc();
+        eventRecorder.triggerEvent(
+                resource,
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.AutoscalerError,
+                EventRecorder.Component.Operator,
+                e.getMessage(),
+                ctx.getKubernetesClient());
     }
 
     private AutoscalerFlinkMetrics getOrInitAutoscalerFlinkMetrics(
