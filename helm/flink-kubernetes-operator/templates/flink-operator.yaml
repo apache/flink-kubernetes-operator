@@ -110,9 +110,12 @@ spec:
               value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.operator }}
-            {{- range $k, $v := .Values.operatorPod.env }}
-            - name: {{ $v.name | quote }}
-              value: {{ $v.value | quote }}
+            {{- with .Values.operatorPod.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.operatorPod.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           resources:
             {{- toYaml .Values.operatorPod.resources | nindent 12 }}
@@ -216,7 +219,7 @@ spec:
               {{- toYaml .Values.operatorVolumes.data | nindent 8 }}
         {{- else }}
         - name: flink-artifacts-volume
-          emptyDir: {}            
+          emptyDir: {}
         {{- end }}
         {{- if eq (include "flink-operator.webhook-enabled" .) "true" }}
         - name: keystore
