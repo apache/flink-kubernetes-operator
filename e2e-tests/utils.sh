@@ -160,9 +160,6 @@ function get_flink_version() {
 function check_operator_log_for_errors {
   local ignore=$1
   echo "Checking for operator log errors..."
-  #https://issues.apache.org/jira/browse/FLINK-30310
-  echo "Error checking is temporarily turned off."
-  return 0
 
   operator_pod_namespace=$(get_operator_pod_namespace)
   operator_pod_name=$(get_operator_pod_name)
@@ -170,10 +167,6 @@ function check_operator_log_for_errors {
 
   local cmd="kubectl logs -n ${operator_pod_namespace} ${operator_pod_name}
     | grep -e '\[\s*ERROR\s*\]'
-    | grep -v 'Failed to submit a listener notification task' `#https://issues.apache.org/jira/browse/FLINK-30147`
-    | grep -v 'Failed to submit job to session cluster' `#https://issues.apache.org/jira/browse/FLINK-30148`
-    | grep -v 'Error during event processing' `#https://issues.apache.org/jira/browse/FLINK-30149`
-    | grep -v 'Error while patching status' `#https://issues.apache.org/jira/browse/FLINK-30283`
     ${ignore}"
 
   echo "Filter command: ${cmd}"
