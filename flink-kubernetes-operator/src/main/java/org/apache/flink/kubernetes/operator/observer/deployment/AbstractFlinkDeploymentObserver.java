@@ -84,7 +84,7 @@ public abstract class AbstractFlinkDeploymentObserver
             Map<String, String> clusterInfo =
                     ctx.getFlinkService().getClusterInfo(ctx.getObserveConfig());
             flinkApp.getStatus().getClusterInfo().putAll(clusterInfo);
-            logger.debug("ClusterInfo: {}", flinkApp.getStatus().getClusterInfo());
+            logger.info("ClusterInfo: {}", flinkApp.getStatus().getClusterInfo());
         } catch (Exception e) {
             logger.error("Exception while fetching cluster info", e);
         }
