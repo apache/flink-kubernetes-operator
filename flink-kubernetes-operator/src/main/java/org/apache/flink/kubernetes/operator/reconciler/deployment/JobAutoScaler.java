@@ -22,7 +22,7 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 /** Per-job Autoscaler instance. */
 public interface JobAutoScaler {
 
-    /** Called as part of the reconciliation loop. Returns true if this call led to scaling. */
+    /** Called as part of the reconciliation loop. */
     void scale(FlinkResourceContext<?> ctx) throws Exception;
 
     /** Called when the custom resource is deleted. */
