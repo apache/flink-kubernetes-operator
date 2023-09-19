@@ -15,32 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler.topology;
+package org.apache.flink.autoscaler.metrics;
 
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import lombok.RequiredArgsConstructor;
-import lombok.Value;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import java.util.Set;
+import java.util.Map;
 
-/** Job vertex information. */
-@Value
-@RequiredArgsConstructor
-public class VertexInfo {
-
-    JobVertexID id;
-
-    Set<JobVertexID> inputs;
-
-    int parallelism;
-
-    int maxParallelism;
-
-    boolean finished;
-
-    public VertexInfo(
-            JobVertexID id, Set<JobVertexID> inputs, int parallelism, int maxParallelism) {
-        this(id, inputs, parallelism, maxParallelism, false);
-    }
+/** Collected scaling metrics. */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class CollectedMetrics {
+    private Map<JobVertexID, Map<ScalingMetric, Double>> vertexMetrics;
+    private Map<Edge, Double> outputRatios;
 }

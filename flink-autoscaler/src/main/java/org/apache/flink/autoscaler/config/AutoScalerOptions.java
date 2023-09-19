@@ -15,22 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler.config;
+package org.apache.flink.autoscaler.config;
 
+import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
-import org.apache.flink.kubernetes.operator.autoscaler.metrics.MetricAggregator;
 
 import java.time.Duration;
 import java.util.List;
 
-import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.operatorConfig;
-
 /** Config options related to the autoscaler module. */
 public class AutoScalerOptions {
 
+    public static final String DEPRECATED_K8S_OP_CONF_PREFIX = "kubernetes.operator.";
+    public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
+
+    public static ConfigOptions.OptionBuilder operatorConfig(String key) {
+        return ConfigOptions.key(DEPRECATED_K8S_OP_CONF_PREFIX + key);
+    }
+
     private static ConfigOptions.OptionBuilder autoScalerConfig(String key) {
-        return operatorConfig("job.autoscaler." + key);
+        return operatorConfig(AUTOSCALER_CONF_PREFIX + key);
     }
 
     public static final ConfigOption<Boolean> AUTOSCALER_ENABLED =

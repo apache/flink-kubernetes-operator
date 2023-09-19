@@ -15,20 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler.metrics;
+package org.apache.flink.autoscaler.topology;
 
-import org.apache.flink.kubernetes.operator.autoscaler.topology.JobTopology;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import lombok.Data;
-import lombok.Setter;
+import lombok.RequiredArgsConstructor;
+import lombok.Value;
 
-import java.time.Instant;
-import java.util.SortedMap;
+import java.util.Set;
 
-/** Topology and collected metric history. */
-@Data
-public class CollectedMetricHistory {
-    final JobTopology jobTopology;
-    final SortedMap<Instant, CollectedMetrics> metricHistory;
-    @Setter private boolean fullyCollected;
+/** Job vertex information. */
+@Value
+@RequiredArgsConstructor
+public class VertexInfo {
+
+    JobVertexID id;
+
+    Set<JobVertexID> inputs;
+
+    int parallelism;
+
+    int maxParallelism;
+
+    boolean finished;
+
+    public VertexInfo(
+            JobVertexID id, Set<JobVertexID> inputs, int parallelism, int maxParallelism) {
+        this(id, inputs, parallelism, maxParallelism, false);
+    }
 }

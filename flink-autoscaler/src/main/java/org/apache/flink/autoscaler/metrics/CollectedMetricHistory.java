@@ -15,21 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler.metrics;
+package org.apache.flink.autoscaler.metrics;
 
-import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.autoscaler.topology.JobTopology;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-import java.util.Map;
+import java.time.Instant;
+import java.util.SortedMap;
 
-/** Collected scaling metrics. */
+/** Topology and collected metric history. */
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class CollectedMetrics {
-    private Map<JobVertexID, Map<ScalingMetric, Double>> vertexMetrics;
-    private Map<Edge, Double> outputRatios;
+public class CollectedMetricHistory {
+    final JobTopology jobTopology;
+    final SortedMap<Instant, CollectedMetrics> metricHistory;
+    @Setter private boolean fullyCollected;
 }

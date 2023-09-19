@@ -45,7 +45,7 @@ under the License.
 
         <dependency>
             <groupId>org.apache.flink</groupId>
-            <artifactId>flink-kubernetes-operator-autoscaler</artifactId>
+            <artifactId>flink-autoscaler</artifactId>
             <version>${project.version}</version>
             <scope>provided</scope>
         </dependency>

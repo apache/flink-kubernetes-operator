@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler.metrics;
+package org.apache.flink.autoscaler.metrics;
 
 /**
  * Supported scaling metrics. These represent high level metrics computed from Flink job metrics
