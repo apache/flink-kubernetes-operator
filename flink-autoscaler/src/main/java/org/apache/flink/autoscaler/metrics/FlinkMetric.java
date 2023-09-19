@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler.metrics;
+package org.apache.flink.autoscaler.metrics;
 
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 

@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler.utils;
+package org.apache.flink.autoscaler.utils;
 
-import org.apache.flink.kubernetes.operator.autoscaler.metrics.Edge;
+import org.apache.flink.autoscaler.metrics.Edge;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import com.fasterxml.jackson.core.JsonGenerator;

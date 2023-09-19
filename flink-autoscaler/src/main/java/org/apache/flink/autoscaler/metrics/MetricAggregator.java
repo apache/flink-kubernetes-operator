@@ -15,19 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler.metrics;
+package org.apache.flink.autoscaler.metrics;
 
-import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import java.util.function.Function;
 
-/** Collected scaling metrics. */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class Edge {
-    private JobVertexID from;
-    private JobVertexID to;
+/** Enum specifying which aggregator to use when getting a metric value. */
+public enum MetricAggregator {
+    AVG(AggregatedMetric::getAvg),
+    MAX(AggregatedMetric::getMax),
+    MIN(AggregatedMetric::getMin);
+
+    private final Function<AggregatedMetric, Double> getter;
+
+    MetricAggregator(Function<AggregatedMetric, Double> getter) {
+        this.getter = getter;
+    }
+
+    public double get(AggregatedMetric metric) {
+        if (metric != null) {
+            return getter.apply(metric);
+        } else {
+            return Double.NaN;
+        }
+    }
 }

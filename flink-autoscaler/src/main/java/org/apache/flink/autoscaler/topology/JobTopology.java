@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler.topology;
+package org.apache.flink.autoscaler.topology;
 
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 

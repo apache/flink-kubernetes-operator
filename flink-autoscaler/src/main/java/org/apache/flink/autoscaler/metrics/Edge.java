@@ -15,25 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler.metrics;
+package org.apache.flink.autoscaler.metrics;
 
+import org.apache.flink.runtime.jobgraph.JobVertexID;
+
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Evaluated scaling metric. */
+/** Collected scaling metrics. */
 @Data
 @NoArgsConstructor
-public class EvaluatedScalingMetric {
-    private double current;
-
-    private double average;
-
-    public EvaluatedScalingMetric(double current, double average) {
-        this.current = ScalingMetrics.roundMetric(current);
-        this.average = ScalingMetrics.roundMetric(average);
-    }
-
-    public static EvaluatedScalingMetric of(double value) {
-        return new EvaluatedScalingMetric(value, Double.NaN);
-    }
+@AllArgsConstructor
+public class Edge {
+    private JobVertexID from;
+    private JobVertexID to;
 }
