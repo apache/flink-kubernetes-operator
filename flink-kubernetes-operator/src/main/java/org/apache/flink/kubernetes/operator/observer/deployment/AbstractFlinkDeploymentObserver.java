@@ -86,7 +86,7 @@ public abstract class AbstractFlinkDeploymentObserver
             flinkApp.getStatus().getClusterInfo().putAll(clusterInfo);
             logger.debug("ClusterInfo: {}", flinkApp.getStatus().getClusterInfo());
         } catch (Exception e) {
-            logger.error("Exception while fetching cluster info", e);
+            logger.warn("Exception while fetching cluster info", e);
         }
     }
 
