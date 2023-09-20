@@ -55,7 +55,7 @@ spec:
             claimName: session-cluster-1-pvc
   jobManager:
     resource:
-      memory: "1024m"
+      memory: "1Gi"
       cpu: 0.5
   taskManager:
     resource:

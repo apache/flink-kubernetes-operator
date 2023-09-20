@@ -283,6 +283,10 @@ public class DefaultValidatorTest {
         testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("1G"));
         testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("100"));
 
+        // Test resource validation with k8s specification
+        testSuccess(dep -> dep.getSpec().getJobManager().getResource().setMemory("1Gi"));
+        testSuccess(dep -> dep.getSpec().getTaskManager().getResource().setMemory("1Gi"));
+
         testError(
                 dep -> dep.getSpec().getTaskManager().getResource().setMemory("invalid"),
                 "TaskManager resource memory parse error");

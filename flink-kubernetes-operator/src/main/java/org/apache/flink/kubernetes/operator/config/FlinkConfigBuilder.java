@@ -27,6 +27,7 @@ import org.apache.flink.configuration.DeploymentOptions;
 import org.apache.flink.configuration.DeploymentOptionsInternal;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -420,11 +421,33 @@ public class FlinkConfigBuilder {
                             ? JobManagerOptions.TOTAL_PROCESS_MEMORY
                             : TaskManagerOptions.TOTAL_PROCESS_MEMORY;
             if (resource.getMemory() != null) {
-                effectiveConfig.setString(memoryConfigOption.key(), resource.getMemory());
+                effectiveConfig.setString(
+                        memoryConfigOption.key(), parseResourceMemoryString(resource.getMemory()));
             }
 
             configureCpu(resource, effectiveConfig, isJM);
         }
+    }
+
+    // Using the K8s units specification for the JM and TM memory settings
+    public static String parseResourceMemoryString(String memory) {
+        try {
+            return MemorySize.parse(memory).toString();
+        } catch (IllegalArgumentException e) {
+            var memoryQuantity = formatMemoryStringForK8sSpec(memory);
+            return Quantity.parse(memoryQuantity).getNumericalAmount() + "";
+        }
+    }
+
+    private static String formatMemoryStringForK8sSpec(String memory) {
+        var memoryQuantity = memory.trim().replaceAll("\\s", "").toUpperCase();
+        if (memoryQuantity.endsWith("B")) {
+            memoryQuantity = memoryQuantity.substring(0, memoryQuantity.length() - 1);
+        }
+        if (memoryQuantity.endsWith("I")) {
+            memoryQuantity = memoryQuantity.substring(0, memoryQuantity.length() - 1) + "i";
+        }
+        return memoryQuantity;
     }
 
     private void configureCpu(Resource resource, Configuration conf, boolean isJM) {
