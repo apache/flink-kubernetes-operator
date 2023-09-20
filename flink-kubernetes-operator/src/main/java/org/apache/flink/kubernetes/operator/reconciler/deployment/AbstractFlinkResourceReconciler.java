@@ -47,7 +47,6 @@ import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -134,6 +133,7 @@ public abstract class AbstractFlinkResourceReconciler<
         SPEC currentDeploySpec = cr.getSpec();
         resourceScaler.scale(ctx);
 
+        var reconciliationState = reconciliationStatus.getState();
         var specDiff =
                 new ReflectiveDiffBuilder<>(
                                 ctx.getDeploymentMode(), lastReconciledSpec, currentDeploySpec)
@@ -141,14 +141,14 @@ public abstract class AbstractFlinkResourceReconciler<
         var diffType = specDiff.getType();
 
         boolean specChanged =
-                DiffType.IGNORE != diffType
-                        || reconciliationStatus.getState() == ReconciliationState.UPGRADING;
+                DiffType.IGNORE != diffType || reconciliationState == ReconciliationState.UPGRADING;
 
-        if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
-            specChanged = prepareCrForRollback(ctx, currentDeploySpec, lastReconciledSpec);
+        if (shouldRollBack(ctx, specChanged, lastReconciledSpec)) {
+            prepareCrForRollback(ctx, specChanged, lastReconciledSpec);
+            specChanged = true;
+            diffType = DiffType.UPGRADE;
         }
 
-        var observeConfig = ctx.getObserveConfig();
         if (specChanged) {
             var deployConfig = ctx.getDeployConfig(cr.getSpec());
             if (checkNewSpecAlreadyDeployed(cr, deployConfig)) {
@@ -160,7 +160,7 @@ public abstract class AbstractFlinkResourceReconciler<
             boolean scaled = diffType != DiffType.UPGRADE && scale(ctx, deployConfig);
 
             // Reconcile spec change unless scaling was enough
-            if (scaled || reconcileSpecChange(ctx, deployConfig)) {
+            if (scaled || reconcileSpecChange(ctx, deployConfig, lastReconciledSpec)) {
                 // If we executed a scale or spec upgrade action we return, otherwise we
                 // continue to reconcile other changes
                 return;
@@ -169,20 +169,7 @@ public abstract class AbstractFlinkResourceReconciler<
             ReconciliationUtils.updateReconciliationMetadata(cr);
         }
 
-        if (shouldRollBack(ctx, observeConfig)) {
-            // Rollbacks are executed in two steps, we initiate it first then return
-            if (initiateRollBack(status)) {
-                return;
-            }
-            LOG.warn(MSG_ROLLBACK);
-            eventRecorder.triggerEvent(
-                    cr,
-                    EventRecorder.Type.Normal,
-                    EventRecorder.Reason.Rollback,
-                    EventRecorder.Component.JobManagerDeployment,
-                    MSG_ROLLBACK,
-                    ctx.getKubernetesClient());
-        } else if (!reconcileOtherChanges(ctx)) {
+        if (!reconcileOtherChanges(ctx)) {
             LOG.info("Resource fully reconciled, nothing to do...");
         }
     }
@@ -243,11 +230,13 @@ public abstract class AbstractFlinkResourceReconciler<
      *
      * @param ctx Reconciliation context.
      * @param deployConfig Deployment configuration.
+     * @param lastReconciledSpec Last reconciled spec
      * @throws Exception Error during spec upgrade.
      * @return True if spec change reconciliation was executed
      */
     protected abstract boolean reconcileSpecChange(
-            FlinkResourceContext<CR> ctx, Configuration deployConfig) throws Exception;
+            FlinkResourceContext<CR> ctx, Configuration deployConfig, SPEC lastReconciledSpec)
+            throws Exception;
 
     /**
      * Reconcile any other changes required for this resource that are specific to the reconciler
@@ -347,15 +336,22 @@ public abstract class AbstractFlinkResourceReconciler<
      * <p>Rollbacks are only supported to previously running resource specs with HA enabled.
      *
      * @param ctx Reconciliation context.
-     * @param configuration Flink cluster configuration.
+     * @param specChanged Flag indicating whether the spec changed
      * @return True if the resource should be rolled back.
      */
-    private boolean shouldRollBack(FlinkResourceContext<CR> ctx, Configuration configuration) {
+    private boolean shouldRollBack(
+            FlinkResourceContext<CR> ctx, boolean specChanged, SPEC lastReconciledSpec) {
 
         var resource = ctx.getResource();
         var reconciliationStatus = resource.getStatus().getReconciliationStatus();
+        var configuration = ctx.getObserveConfig();
+
         if (reconciliationStatus.getState() == ReconciliationState.ROLLING_BACK) {
             return true;
+        }
+
+        if (specChanged) {
+            return false;
         }
 
         if (!configuration.get(KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED)
@@ -389,8 +385,8 @@ public abstract class AbstractFlinkResourceReconciler<
             return false;
         }
 
-        if (resource.getSpec().getJob() != null
-                && resource.getSpec().getJob().getUpgradeMode() == UpgradeMode.SAVEPOINT
+        if (lastReconciledSpec.getJob() != null
+                && lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.SAVEPOINT
                 && FlinkUtils.jmPodNeverStarted(ctx.getJosdkContext())) {
             // HA data not available as JM never start and relying on SAVEPOINT upgrade mode
             // Safe to rollback relying on savepoint
@@ -404,47 +400,49 @@ public abstract class AbstractFlinkResourceReconciler<
         return haDataAvailable;
     }
 
-    /**
-     * Initiate rollback process by changing the {@link ReconciliationState} in the status.
-     *
-     * @param status Resource status.
-     * @return True if a new rollback was initiated.
-     */
-    private boolean initiateRollBack(STATUS status) {
-        var reconciliationStatus = status.getReconciliationStatus();
-        if (reconciliationStatus.getState() != ReconciliationState.ROLLING_BACK) {
-            LOG.warn("Preparing to roll back to last stable spec.");
-            if (StringUtils.isEmpty(status.getError())) {
-                status.setError(
-                        "Deployment is not ready within the configured timeout, rolling back.");
-            }
-            reconciliationStatus.setState(ReconciliationState.ROLLING_BACK);
-            return true;
-        }
-        return false;
-    }
-
-    private boolean prepareCrForRollback(
-            FlinkResourceContext<CR> ctx, SPEC currentDeploySpec, SPEC lastReconciledSpec) {
+    private void prepareCrForRollback(
+            FlinkResourceContext<CR> ctx, boolean specChanged, SPEC lastReconciledSpec) {
         var cr = ctx.getResource();
-        var reconciliationStatus = cr.getStatus().getReconciliationStatus();
-        // Spec has changed while rolling back we should apply new spec and move to upgrading
-        // state. Don't take in account changes on job.state as it could be overriden to running if
-        // the current spec is not valid
-        if (lastReconciledSpec.getJob() != null) {
-            lastReconciledSpec.getJob().setState(currentDeploySpec.getJob().getState());
+        var status = cr.getStatus();
+        var reconciliationStatus = status.getReconciliationStatus();
+
+        if (reconciliationStatus.getState() != ReconciliationState.ROLLING_BACK) {
+            // When we initiate rollback we trigger a one time event
+            reconciliationStatus.setState(ReconciliationState.ROLLING_BACK);
+            LOG.warn(MSG_ROLLBACK);
+            eventRecorder.triggerEvent(
+                    ctx.getResource(),
+                    EventRecorder.Type.Normal,
+                    EventRecorder.Reason.Rollback,
+                    EventRecorder.Component.JobManagerDeployment,
+                    MSG_ROLLBACK,
+                    ctx.getKubernetesClient());
+        } else {
+            if (lastReconciledSpec.getJob() != null) {
+                // The rollback SUSPENDED status is not recorded anywhere currently. Since the
+                // reconciler looks at the lastReconciled spec state to decide on the next action
+                // (cancel vs deploy) this is a simple trick to make the rollback flow work
+                // correctly.
+                lastReconciledSpec.getJob().setState(JobState.SUSPENDED);
+            }
         }
-        var specDiffRollingBack =
-                new ReflectiveDiffBuilder<>(
-                                ctx.getDeploymentMode(), lastReconciledSpec, currentDeploySpec)
-                        .build();
-        if (DiffType.IGNORE != specDiffRollingBack.getType()) {
+
+        if (specChanged) {
+            // If spec has changed while rolling back we should apply new spec and move to upgrading
+            // state to break out of the rollback flow.
             reconciliationStatus.setState(ReconciliationState.UPGRADING);
         } else {
-            // Rely on the last stable spec if rolling back and no change in the spec
-            cr.setSpec(cr.getStatus().getReconciliationStatus().deserializeLastStableSpec());
+            cr.setSpec(reconciliationStatus.deserializeLastStableSpec());
+            var job = cr.getSpec().getJob();
+            if (job != null) {
+                // The last stable spec may have a completely different upgrade mode, then what we
+                // used the last time. We set it based on the lastReconciledSpec
+                job.setUpgradeMode(
+                        lastReconciledSpec.getJob().getUpgradeMode() == UpgradeMode.STATELESS
+                                ? UpgradeMode.STATELESS
+                                : UpgradeMode.LAST_STATE);
+            }
         }
-        return true;
     }
 
     /**

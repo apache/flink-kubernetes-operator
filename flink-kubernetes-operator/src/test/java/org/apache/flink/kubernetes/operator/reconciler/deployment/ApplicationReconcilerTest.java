@@ -136,6 +136,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     private FlinkOperatorConfiguration operatorConfig;
     private ExecutorService executorService;
 
+    private Clock testClock = Clock.systemDefaultZone();
+
     @Override
     public void setup() {
         appReconciler =
@@ -1158,5 +1160,84 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         .getMeta()
                         .getMetadata()
                         .getGeneration());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testRollbackUpgradeModeHandling(boolean jmStarted) throws Exception {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        offsetReconcilerClock(deployment, Duration.ZERO);
+
+        var flinkConfiguration = deployment.getSpec().getFlinkConfiguration();
+        flinkConfiguration.put(
+                KubernetesOperatorConfigOptions.DEPLOYMENT_ROLLBACK_ENABLED.key(), "true");
+        flinkConfiguration.put(
+                KubernetesOperatorConfigOptions.DEPLOYMENT_READINESS_TIMEOUT.key(), "10s");
+        flinkConfiguration.put(
+                KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED
+                        .key(),
+                "false");
+
+        // Initial deployment, mark as stable
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+        deployment.getStatus().getReconciliationStatus().markReconciledSpecAsStable();
+
+        // Submit invalid change
+        deployment.getSpec().getJob().setParallelism(9999);
+        reconciler.reconcile(deployment, context);
+        reconciler.reconcile(deployment, context);
+        assertEquals(1, flinkService.listJobs().size());
+        assertEquals(
+                UpgradeMode.STATELESS,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastStableSpec()
+                        .getJob()
+                        .getUpgradeMode());
+        assertEquals(
+                UpgradeMode.SAVEPOINT,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getUpgradeMode());
+
+        // Trigger rollback by delaying the recovery
+        offsetReconcilerClock(deployment, Duration.ofSeconds(15));
+        flinkService.setHaDataAvailable(jmStarted);
+        flinkService.setJobManagerReady(jmStarted);
+        reconciler.reconcile(deployment, context);
+
+        assertEquals(
+                ReconciliationState.ROLLING_BACK,
+                deployment.getStatus().getReconciliationStatus().getState());
+        assertEquals(0, flinkService.listJobs().size());
+        assertEquals("FINISHED", deployment.getStatus().getJobStatus().getState());
+        assertEquals(
+                jmStarted ? UpgradeMode.LAST_STATE : UpgradeMode.SAVEPOINT,
+                deployment
+                        .getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getUpgradeMode());
+
+        flinkService.setJobManagerReady(true);
+        reconciler.reconcile(deployment, context);
+
+        assertEquals(
+                ReconciliationState.ROLLED_BACK,
+                deployment.getStatus().getReconciliationStatus().getState());
+        assertEquals(1, flinkService.listJobs().size());
+        assertEquals("RECONCILING", deployment.getStatus().getJobStatus().getState());
+    }
+
+    private void offsetReconcilerClock(FlinkDeployment dep, Duration offset) {
+        testClock = Clock.offset(testClock, offset);
+        appReconciler.setClock(testClock);
     }
 }

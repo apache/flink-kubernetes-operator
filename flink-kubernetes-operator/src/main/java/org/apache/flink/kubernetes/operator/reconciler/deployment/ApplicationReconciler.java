@@ -85,9 +85,13 @@ public class ApplicationReconciler
         }
         var flinkService = ctx.getFlinkService();
 
-        if (deployConfig.getBoolean(
-                        KubernetesOperatorConfigOptions
-                                .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED)
+        boolean lastStateAllowed =
+                deployment.getSpec().getJob().getUpgradeMode() == UpgradeMode.LAST_STATE
+                        || deployConfig.getBoolean(
+                                KubernetesOperatorConfigOptions
+                                        .OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED);
+
+        if (lastStateAllowed
                 && HighAvailabilityMode.isHighAvailabilityModeActivated(deployConfig)
                 && HighAvailabilityMode.isHighAvailabilityModeActivated(ctx.getObserveConfig())
                 && !flinkVersionChanged(

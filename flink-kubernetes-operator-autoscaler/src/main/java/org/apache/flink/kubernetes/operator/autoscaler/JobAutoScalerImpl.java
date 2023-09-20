@@ -171,7 +171,7 @@ public class JobAutoScalerImpl implements JobAutoScaler {
         var status = resource.getStatus();
         if (status.getLifecycleState() != ResourceLifecycleState.STABLE
                 || !status.getJobStatus().getState().equals(JobStatus.RUNNING.name())) {
-            LOG.info("Autoscaler is waiting for RUNNING job state");
+            LOG.info("Autoscaler is waiting for stable, running state");
             lastEvaluatedMetrics.remove(resourceId);
             return;
         }

@@ -60,7 +60,9 @@ public class SessionReconciler
 
     @Override
     protected boolean reconcileSpecChange(
-            FlinkResourceContext<FlinkDeployment> ctx, Configuration deployConfig)
+            FlinkResourceContext<FlinkDeployment> ctx,
+            Configuration deployConfig,
+            FlinkDeploymentSpec lastReconciledSpec)
             throws Exception {
         var deployment = ctx.getResource();
         deleteSessionCluster(ctx);
