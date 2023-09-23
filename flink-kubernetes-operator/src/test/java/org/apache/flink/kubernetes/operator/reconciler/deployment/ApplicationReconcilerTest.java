@@ -19,6 +19,8 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.autoscaler.JobAutoScaler;
+import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
@@ -53,9 +55,9 @@ import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils;
+import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
-import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
@@ -76,6 +78,7 @@ import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.Getter;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
@@ -141,8 +144,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     @Override
     public void setup() {
         appReconciler =
-                new ApplicationReconciler(
-                        eventRecorder, statusRecorder, new NoopJobAutoscalerFactory());
+                new ApplicationReconciler(eventRecorder, statusRecorder, new NoopJobAutoscaler<>());
         reconciler = new TestReconcilerAdapter<>(this, appReconciler);
         operatorConfig = configManager.getOperatorConfiguration();
         executorService = Executors.newDirectExecutorService();
@@ -886,16 +888,15 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         configManager, operatorMetricGroup, flinkService, eventRecorder);
 
         var overrideFunction = new AtomicReference<Consumer<AbstractFlinkSpec>>(s -> {});
-        JobAutoScalerFactory autoscalerFactory =
-                (r) ->
-                        new NoopJobAutoscalerFactory() {
-                            @Override
-                            public void scale(FlinkResourceContext<?> ctx) {
-                                overrideFunction.get().accept(ctx.getResource().getSpec());
-                            }
-                        };
+        JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler =
+                new NoopJobAutoscaler<>() {
+                    @Override
+                    public void scale(KubernetesJobAutoScalerContext ctx) {
+                        overrideFunction.get().accept(ctx.getResource().getSpec());
+                    }
+                };
 
-        appReconciler = new ApplicationReconciler(eventRecorder, statusRecorder, autoscalerFactory);
+        appReconciler = new ApplicationReconciler(eventRecorder, statusRecorder, autoscaler);
 
         var deployment = TestUtils.buildApplicationCluster();
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));

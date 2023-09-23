@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
+import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
@@ -50,7 +51,7 @@ public class SessionReconciler
     public SessionReconciler(
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder) {
-        super(eventRecorder, statusRecorder, new NoopJobAutoscalerFactory());
+        super(eventRecorder, statusRecorder, new NoopJobAutoscaler<>());
     }
 
     @Override

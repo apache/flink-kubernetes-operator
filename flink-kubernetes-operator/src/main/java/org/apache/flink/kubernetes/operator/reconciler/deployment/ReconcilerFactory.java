@@ -18,14 +18,18 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
+
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,7 +40,7 @@ public class ReconcilerFactory {
     private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
     private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder;
-    private final JobAutoScalerFactory autoscalerFactory;
+    private final JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler;
     private final Map<Tuple2<Mode, KubernetesDeploymentMode>, Reconciler<FlinkDeployment>>
             reconcilerMap;
 
@@ -44,11 +48,11 @@ public class ReconcilerFactory {
             FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder,
-            JobAutoScalerFactory autoscalerFactory) {
+            JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler) {
         this.configManager = configManager;
         this.eventRecorder = eventRecorder;
         this.deploymentStatusRecorder = deploymentStatusRecorder;
-        this.autoscalerFactory = autoscalerFactory;
+        this.autoscaler = autoscaler;
         this.reconcilerMap = new ConcurrentHashMap<>();
     }
 
@@ -63,7 +67,7 @@ public class ReconcilerFactory {
                             return new SessionReconciler(eventRecorder, deploymentStatusRecorder);
                         case APPLICATION:
                             return new ApplicationReconciler(
-                                    eventRecorder, deploymentStatusRecorder, autoscalerFactory);
+                                    eventRecorder, deploymentStatusRecorder, autoscaler);
                         default:
                             throw new UnsupportedOperationException(
                                     String.format("Unsupported running mode: %s", modes.f0));
