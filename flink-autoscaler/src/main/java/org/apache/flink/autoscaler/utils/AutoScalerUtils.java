@@ -74,7 +74,10 @@ public class AutoScalerUtils {
         return Math.round(lagCatchupTargetRate + restartCatchupRate + inputTargetAtUtilization);
     }
 
-    /** Temporarily exclude vertex from scaling for this run. This does not update the spec. */
+    /**
+     * Temporarily exclude vertex from scaling for this run. This does not update the
+     * scalingRealizer.
+     */
     public static boolean excludeVertexFromScaling(Configuration conf, JobVertexID jobVertexId) {
         return excludeVerticesFromScaling(conf, List.of(jobVertexId));
     }

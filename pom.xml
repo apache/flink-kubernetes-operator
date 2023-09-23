@@ -53,7 +53,6 @@ under the License.
     <modules>
         <module>flink-kubernetes-standalone</module>
         <module>flink-kubernetes-operator</module>
-        <module>flink-kubernetes-operator-autoscaler</module>
         <module>flink-kubernetes-operator-api</module>
         <module>flink-kubernetes-webhook</module>
         <module>flink-kubernetes-docs</module>
@@ -94,6 +93,8 @@ under the License.
 
         <okhttp.version>4.11.0</okhttp.version>
         <curator-test.version>5.2.0</curator-test.version>
+
+        <assertj.version>3.21.0</assertj.version>
     </properties>
 
     <dependencyManagement>

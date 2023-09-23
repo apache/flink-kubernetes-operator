@@ -116,7 +116,7 @@ public class EventRecorder {
     public boolean triggerEventByInterval(
             AbstractFlinkResource<?, ?> resource,
             Type type,
-            Reason reason,
+            String reason,
             Component component,
             String message,
             @Nullable String messageKey,
@@ -126,7 +126,7 @@ public class EventRecorder {
                 client,
                 resource,
                 type,
-                reason.toString(),
+                reason,
                 message,
                 component,
                 e -> eventListener.accept(resource, e),

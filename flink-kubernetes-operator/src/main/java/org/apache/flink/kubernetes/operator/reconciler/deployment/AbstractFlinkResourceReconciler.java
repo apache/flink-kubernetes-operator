@@ -18,6 +18,8 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
@@ -33,6 +35,7 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
+import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
@@ -47,6 +50,7 @@ import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +60,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
 
 /**
  * Base class for all Flink resource reconcilers. It contains the general flow of reconciling Flink
@@ -72,7 +78,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
     protected final EventRecorder eventRecorder;
     protected final StatusRecorder<CR, STATUS> statusRecorder;
-    protected final JobAutoScaler resourceScaler;
+    protected final JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler;
 
     public static final String MSG_SUSPENDED = "Suspending existing deployment.";
     public static final String MSG_SPEC_CHANGED =
@@ -85,10 +91,10 @@ public abstract class AbstractFlinkResourceReconciler<
     public AbstractFlinkResourceReconciler(
             EventRecorder eventRecorder,
             StatusRecorder<CR, STATUS> statusRecorder,
-            JobAutoScalerFactory autoscalerFactory) {
+            JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler) {
         this.eventRecorder = eventRecorder;
         this.statusRecorder = statusRecorder;
-        this.resourceScaler = autoscalerFactory.create(eventRecorder);
+        this.autoscaler = autoscaler;
     }
 
     @Override
@@ -131,7 +137,8 @@ public abstract class AbstractFlinkResourceReconciler<
         SPEC lastReconciledSpec =
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();
-        resourceScaler.scale(ctx);
+
+        scaling(ctx);
 
         var reconciliationState = reconciliationStatus.getState();
         var specDiff =
@@ -172,6 +179,23 @@ public abstract class AbstractFlinkResourceReconciler<
         if (!reconcileOtherChanges(ctx)) {
             LOG.info("Resource fully reconciled, nothing to do...");
         }
+    }
+
+    private void scaling(FlinkResourceContext<CR> ctx) throws Exception {
+        KubernetesJobAutoScalerContext autoScalerContext = ctx.getJobAutoScalerContext();
+
+        if (autoscalerDisabled(ctx)) {
+            autoScalerContext.getConfiguration().set(AUTOSCALER_ENABLED, false);
+        } else if (autoScalerContext.getJobStatus() != JobStatus.RUNNING) {
+            LOG.info("Autoscaler is waiting for stable, running state");
+        }
+
+        autoscaler.scale(autoScalerContext);
+    }
+
+    private boolean autoscalerDisabled(FlinkResourceContext<CR> ctx) {
+        return ctx.getResource().getSpec().getJob() == null
+                || !ctx.getObserveConfig().getBoolean(AUTOSCALER_ENABLED);
     }
 
     private void triggerSpecChangeEvent(CR cr, DiffResult<SPEC> specDiff, KubernetesClient client) {
@@ -250,7 +274,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
     @Override
     public DeleteControl cleanup(FlinkResourceContext<CR> ctx) {
-        resourceScaler.cleanup(ctx);
+        autoscaler.cleanup(ResourceID.fromResource(ctx.getResource()));
         return cleanupInternal(ctx);
     }
 

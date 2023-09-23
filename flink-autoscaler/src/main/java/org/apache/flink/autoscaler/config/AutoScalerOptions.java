@@ -30,12 +30,16 @@ public class AutoScalerOptions {
     public static final String DEPRECATED_K8S_OP_CONF_PREFIX = "kubernetes.operator.";
     public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
 
-    public static ConfigOptions.OptionBuilder operatorConfig(String key) {
-        return ConfigOptions.key(DEPRECATED_K8S_OP_CONF_PREFIX + key);
+    private static String operatorConfigKey(String key) {
+        return DEPRECATED_K8S_OP_CONF_PREFIX + key;
+    }
+
+    private static String autoScalerConfigKey(String key) {
+        return operatorConfigKey(AUTOSCALER_CONF_PREFIX + key);
     }
 
     private static ConfigOptions.OptionBuilder autoScalerConfig(String key) {
-        return operatorConfig(AUTOSCALER_CONF_PREFIX + key);
+        return ConfigOptions.key(autoScalerConfigKey(key));
     }
 
     public static final ConfigOption<Boolean> AUTOSCALER_ENABLED =
@@ -179,4 +183,10 @@ public class AutoScalerOptions {
                     .durationType()
                     .defaultValue(Duration.ofSeconds(1800))
                     .withDescription("Time interval to resend the identical event");
+
+    public static final ConfigOption<Duration> FLINK_CLIENT_TIMEOUT =
+            autoScalerConfig("flink.rest-client.timeout")
+                    .durationType()
+                    .defaultValue(Duration.ofSeconds(10))
+                    .withDescription("The timeout for waiting the flink rest client to return.");
 }

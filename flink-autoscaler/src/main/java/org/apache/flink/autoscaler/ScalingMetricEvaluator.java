@@ -155,7 +155,7 @@ public class ScalingMetricEvaluator {
     }
 
     @VisibleForTesting
-    public static void computeProcessingRateThresholds(
+    protected static void computeProcessingRateThresholds(
             Map<ScalingMetric, EvaluatedScalingMetric> metrics,
             Configuration conf,
             boolean processingBacklog) {
