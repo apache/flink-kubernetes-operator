@@ -374,11 +374,10 @@ public class RollbackTest {
 
         assertFalse(deployment.getStatus().getReconciliationStatus().isLastReconciledSpecStable());
         assertEquals(
-                ReconciliationState.ROLLING_BACK,
+                deployment.getSpec().getJob() != null
+                        ? ReconciliationState.ROLLING_BACK
+                        : ReconciliationState.ROLLED_BACK,
                 deployment.getStatus().getReconciliationStatus().getState());
-        assertEquals(
-                "Deployment is not ready within the configured timeout, rolling back.",
-                deployment.getStatus().getError());
 
         if (injectValidationError) {
             deployment.getSpec().setLogConfiguration(Map.of("invalid", "entry"));

@@ -85,13 +85,12 @@ public abstract class AbstractJobReconciler<
     }
 
     @Override
-    protected boolean reconcileSpecChange(FlinkResourceContext<CR> ctx, Configuration deployConfig)
+    protected boolean reconcileSpecChange(
+            FlinkResourceContext<CR> ctx, Configuration deployConfig, SPEC lastReconciledSpec)
             throws Exception {
 
         var resource = ctx.getResource();
         STATUS status = resource.getStatus();
-        var reconciliationStatus = status.getReconciliationStatus();
-        SPEC lastReconciledSpec = reconciliationStatus.deserializeLastReconciledSpec();
         SPEC currentDeploySpec = resource.getSpec();
 
         JobState currentJobState = lastReconciledSpec.getJob().getState();
