@@ -123,7 +123,7 @@ The defaults might work reasonably well for many applications, but some tuning m
 The autoscaler also supports a passive/metrics-only mode where it only collects and evaluates scaling related performance metrics but does not trigger any job upgrades.
 This can be used to gain confidence in the module without any impact on the running applications.
 
-To disable scaling actions, set: `kubernetes.operator.job.autoscaler.scaling.enabled: "false"`
+To disable scaling actions, set: `job.autoscaler.scaling.enabled: "false"`
 {{< /hint >}}
 
 ### Job and per operator max parallelism
@@ -140,30 +140,30 @@ It is also possible to set maxParallelism on a per operator level, which can be 
 
 ### Stabilization and metrics collection intervals
 
-The autoscaler always looks at average metrics in the collection time window defined by `kubernetes.operator.job.autoscaler.metrics.window`.
+The autoscaler always looks at average metrics in the collection time window defined by `job.autoscaler.metrics.window`.
 The size of this window determines how small fluctuations will affect the autoscaler. The larger the window, the more smoothing and stability we get, but we may be slower to react to sudden load changes.
 We suggest you experiment with setting this anywhere between 3-60 minutes for best experience.
 
-To allow jobs to stabilize after recovery users can configure a stabilization window by setting `kubernetes.operator.job.autoscaler.stabilization.interval`.
+To allow jobs to stabilize after recovery users can configure a stabilization window by setting `job.autoscaler.stabilization.interval`.
 During this time period no metrics will be collected and no scaling actions will be taken.
 
 ### Target utilization and flexible boundaries
 
-In order to provide stable job performance and some buffer for load fluctuations, the autoscaler allows users to set a target utilization level for the job (`kubernetes.operator.job.autoscaler.target.utilization`).
+In order to provide stable job performance and some buffer for load fluctuations, the autoscaler allows users to set a target utilization level for the job (`job.autoscaler.target.utilization`).
 A target of `0.6` means we are targeting 60% utilization/load for the job vertexes.
 
 In general, it's not recommended to set target utilization close to 100% as performance usually degrades as we reach capacity limits in most real world systems.
 
 In addition to the utilization target we can set a utilization boundary, that serves as extra buffer to avoid immediate scaling on load fluctuations.
-Setting `kubernetes.operator.job.autoscaler.target.utilization.boundary: "0.2"` means that we allow 20% deviation from the target utilization before triggering a scaling action.
+Setting `job.autoscaler.target.utilization.boundary: "0.2"` means that we allow 20% deviation from the target utilization before triggering a scaling action.
 
 ### Target catch-up duration and restart time
 
 When taking scaling decisions the operator need to account for the extra capacity required to catch up the backlog created during scaling operations.
 The amount of extra capacity is determined automatically by the following 2 configs:
 
- - `kubernetes.operator.job.autoscaler.restart.time` : Time it usually takes to restart the application
- - `kubernetes.operator.job.autoscaler.catch-up.duration` : Time to job is expected to catch up after scaling
+ - `job.autoscaler.restart.time` : Time it usually takes to restart the application
+ - `job.autoscaler.catch-up.duration` : Time to job is expected to catch up after scaling
 
 In the future the autoscaler may be able to automatically determine the restart time, but the target catch-up duration depends on the users SLO.
 
@@ -175,13 +175,13 @@ We suggest setting this based on your actual objective, such us 10,30,60 minutes
 ...
 flinkVersion: v1_17
 flinkConfiguration:
-    kubernetes.operator.job.autoscaler.enabled: "true"
-    kubernetes.operator.job.autoscaler.stabilization.interval: 1m
-    kubernetes.operator.job.autoscaler.metrics.window: 5m
-    kubernetes.operator.job.autoscaler.target.utilization: "0.6"
-    kubernetes.operator.job.autoscaler.target.utilization.boundary: "0.2"
-    kubernetes.operator.job.autoscaler.restart.time: 2m
-    kubernetes.operator.job.autoscaler.catch-up.duration: 5m
+    job.autoscaler.enabled: "true"
+    job.autoscaler.stabilization.interval: 1m
+    job.autoscaler.metrics.window: 5m
+    job.autoscaler.target.utilization: "0.6"
+    job.autoscaler.target.utilization.boundary: "0.2"
+    job.autoscaler.restart.time: 2m
+    job.autoscaler.catch-up.duration: 5m
     pipeline.max-parallelism: "720"
 ```
 

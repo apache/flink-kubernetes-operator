@@ -24,11 +24,11 @@ spec:
   image: autoscaling-example
   flinkVersion: v1_18
   flinkConfiguration:
-    kubernetes.operator.job.autoscaler.enabled: "true"
-    kubernetes.operator.job.autoscaler.stabilization.interval: "1m"
-    kubernetes.operator.job.autoscaler.metrics.window: "15m"
-    kubernetes.operator.job.autoscaler.target.utilization: "0.5"
-    kubernetes.operator.job.autoscaler.target.utilization.boundary: "0.3"
+    job.autoscaler.enabled: "true"
+    job.autoscaler.stabilization.interval: "1m"
+    job.autoscaler.metrics.window: "15m"
+    job.autoscaler.target.utilization: "0.5"
+    job.autoscaler.target.utilization.boundary: "0.3"
     pipeline.max-parallelism: "32"
     taskmanager.numberOfTaskSlots: "4"
   serviceAccount: flink
