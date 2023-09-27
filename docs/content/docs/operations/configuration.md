@@ -130,6 +130,8 @@ These options can be configured on both an operator and a per-resource level. Wh
 
 Like other resource options these can be configured on both an operator and a per-resource level. When set under `spec.flinkConfiguration` for the Flink resources it will override the default value provided in the operator default configuration (`flink-conf.yaml`).
 
+> Note: The option prefix `kubernetes.operator.` was removed in FLIP-334, because the autoscaler module was decoupled from flink-kubernetes-operator.
+
 {{< generated/auto_scaler_configuration >}}
 
 ### System Metrics Configuration

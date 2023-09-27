@@ -30,12 +30,12 @@ public class AutoScalerOptions {
     public static final String DEPRECATED_K8S_OP_CONF_PREFIX = "kubernetes.operator.";
     public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
 
-    private static String operatorConfigKey(String key) {
-        return DEPRECATED_K8S_OP_CONF_PREFIX + key;
+    private static String deprecatedOperatorConfigKey(String key) {
+        return DEPRECATED_K8S_OP_CONF_PREFIX + AUTOSCALER_CONF_PREFIX + key;
     }
 
     private static String autoScalerConfigKey(String key) {
-        return operatorConfigKey(AUTOSCALER_CONF_PREFIX + key);
+        return AUTOSCALER_CONF_PREFIX + key;
     }
 
     private static ConfigOptions.OptionBuilder autoScalerConfig(String key) {
@@ -46,12 +46,14 @@ public class AutoScalerOptions {
             autoScalerConfig("enabled")
                     .booleanType()
                     .defaultValue(false)
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("enabled"))
                     .withDescription("Enable job autoscaler module.");
 
     public static final ConfigOption<Boolean> SCALING_ENABLED =
             autoScalerConfig("scaling.enabled")
                     .booleanType()
                     .defaultValue(true)
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("scaling.enabled"))
                     .withDescription(
                             "Enable vertex scaling execution by the autoscaler. If disabled, the autoscaler will only collect metrics and evaluate the suggested parallelism for each vertex but will not upgrade the jobs.");
 
@@ -59,12 +61,14 @@ public class AutoScalerOptions {
             autoScalerConfig("metrics.window")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(10))
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("metrics.window"))
                     .withDescription("Scaling metrics aggregation window size.");
 
     public static final ConfigOption<Duration> STABILIZATION_INTERVAL =
             autoScalerConfig("stabilization.interval")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(5))
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("stabilization.interval"))
                     .withDescription(
                             "Stabilization period in which no new scaling will be executed");
 
@@ -72,12 +76,14 @@ public class AutoScalerOptions {
             autoScalerConfig("target.utilization")
                     .doubleType()
                     .defaultValue(0.7)
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("target.utilization"))
                     .withDescription("Target vertex utilization");
 
     public static final ConfigOption<Double> TARGET_UTILIZATION_BOUNDARY =
             autoScalerConfig("target.utilization.boundary")
                     .doubleType()
                     .defaultValue(0.4)
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("target.utilization.boundary"))
                     .withDescription(
                             "Target vertex utilization boundary. Scaling won't be performed if the current processing rate is within [target_rate / (target_utilization - boundary), (target_rate / (target_utilization + boundary)]");
 
@@ -85,6 +91,7 @@ public class AutoScalerOptions {
             autoScalerConfig("scale-up.grace-period")
                     .durationType()
                     .defaultValue(Duration.ofHours(1))
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("scale-up.grace-period"))
                     .withDescription(
                             "Duration in which no scale down of a vertex is allowed after it has been scaled up.");
 
@@ -92,12 +99,14 @@ public class AutoScalerOptions {
             autoScalerConfig("vertex.min-parallelism")
                     .intType()
                     .defaultValue(1)
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("vertex.min-parallelism"))
                     .withDescription("The minimum parallelism the autoscaler can use.");
 
     public static final ConfigOption<Integer> VERTEX_MAX_PARALLELISM =
             autoScalerConfig("vertex.max-parallelism")
                     .intType()
                     .defaultValue(200)
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("vertex.max-parallelism"))
                     .withDescription(
                             "The maximum parallelism the autoscaler can use. Note that this limit will be ignored if it is higher than the max parallelism configured in the Flink config or directly on each operator.");
 
@@ -105,6 +114,7 @@ public class AutoScalerOptions {
             autoScalerConfig("scale-down.max-factor")
                     .doubleType()
                     .defaultValue(0.6)
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("scale-down.max-factor"))
                     .withDescription(
                             "Max scale down factor. 1 means no limit on scale down, 0.6 means job can only be scaled down with 60% of the original parallelism.");
 
@@ -112,6 +122,7 @@ public class AutoScalerOptions {
             autoScalerConfig("scale-up.max-factor")
                     .doubleType()
                     .defaultValue(100000.)
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("scale-up.max-factor"))
                     .withDescription(
                             "Max scale up factor. 2.0 means job can only be scaled up with 200% of the current parallelism.");
 
@@ -119,6 +130,7 @@ public class AutoScalerOptions {
             autoScalerConfig("catch-up.duration")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(15))
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("catch-up.duration"))
                     .withDescription(
                             "The target duration for fully processing any backlog after a scaling operation. Set to 0 to disable backlog based scaling.");
 
@@ -126,6 +138,7 @@ public class AutoScalerOptions {
             autoScalerConfig("restart.time")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(3))
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("restart.time"))
                     .withDescription(
                             "Expected restart time to be used until the operator can determine it reliably from history.");
 
@@ -133,6 +146,8 @@ public class AutoScalerOptions {
             autoScalerConfig("backlog-processing.lag-threshold")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(5))
+                    .withDeprecatedKeys(
+                            deprecatedOperatorConfigKey("backlog-processing.lag-threshold"))
                     .withDescription(
                             "Lag threshold which will prevent unnecessary scalings while removing the pending messages responsible for the lag.");
 
@@ -140,6 +155,8 @@ public class AutoScalerOptions {
             autoScalerConfig("scaling.effectiveness.detection.enabled")
                     .booleanType()
                     .defaultValue(false)
+                    .withDeprecatedKeys(
+                            deprecatedOperatorConfigKey("scaling.effectiveness.detection.enabled"))
                     .withDescription(
                             "Whether to enable detection of ineffective scaling operations and allowing the autoscaler to block further scale ups.");
 
@@ -147,6 +164,8 @@ public class AutoScalerOptions {
             autoScalerConfig("scaling.effectiveness.threshold")
                     .doubleType()
                     .defaultValue(0.1)
+                    .withDeprecatedKeys(
+                            deprecatedOperatorConfigKey("scaling.effectiveness.threshold"))
                     .withDescription(
                             "Processing rate increase threshold for detecting ineffective scaling threshold. 0.1 means if we do not accomplish at least 10% of the desired capacity increase with scaling, the action is marked ineffective.");
 
@@ -154,6 +173,7 @@ public class AutoScalerOptions {
             autoScalerConfig("history.max.count")
                     .intType()
                     .defaultValue(3)
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("history.max.count"))
                     .withDescription(
                             "Maximum number of past scaling decisions to retain per vertex.");
 
@@ -161,12 +181,14 @@ public class AutoScalerOptions {
             autoScalerConfig("history.max.age")
                     .durationType()
                     .defaultValue(Duration.ofHours(24))
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("history.max.age"))
                     .withDescription("Maximum age for past scaling decisions to retain.");
 
     public static final ConfigOption<MetricAggregator> BUSY_TIME_AGGREGATOR =
             autoScalerConfig("metrics.busy-time.aggregator")
                     .enumType(MetricAggregator.class)
                     .defaultValue(MetricAggregator.MAX)
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("metrics.busy-time.aggregator"))
                     .withDescription(
                             "Metric aggregator to use for busyTime metrics. This affects how true processing/output rate will be computed. Using max allows us to handle jobs with data skew more robustly, while avg may provide better stability when we know that the load distribution is even.");
 
@@ -175,6 +197,7 @@ public class AutoScalerOptions {
                     .stringType()
                     .asList()
                     .defaultValues()
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("vertex.exclude.ids"))
                     .withDescription(
                             "A (semicolon-separated) list of vertex ids in hexstring for which to disable scaling. Caution: For non-sink vertices this will still scale their downstream operators until https://issues.apache.org/jira/browse/FLINK-31215 is implemented.");
 

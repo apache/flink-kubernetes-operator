@@ -36,10 +36,10 @@ spec:
     state.checkpoints.dir: file:///opt/flink/volume/flink-cp
     state.savepoints.dir: file:///opt/flink/volume/flink-sp
 
-    kubernetes.operator.job.autoscaler.enabled: "true"
-    kubernetes.operator.job.autoscaler.scaling.enabled: "true"
-    kubernetes.operator.job.autoscaler.stabilization.interval: "5s"
-    kubernetes.operator.job.autoscaler.metrics.window: "1m"
+    job.autoscaler.enabled: "true"
+    job.autoscaler.scaling.enabled: "true"
+    job.autoscaler.stabilization.interval: "5s"
+    job.autoscaler.metrics.window: "1m"
 
     jobmanager.scheduler: adaptive
   serviceAccount: flink
