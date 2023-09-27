@@ -17,7 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
@@ -60,6 +62,7 @@ import java.util.regex.Pattern;
 
 /** Default validator implementation for {@link FlinkDeployment}. */
 public class DefaultValidator implements FlinkResourceValidator {
+
     private static final Pattern DEPLOYMENT_NAME_PATTERN =
             Pattern.compile("[a-z]([-a-z\\d]{0,43}[a-z\\d])?");
     private static final String[] FORBIDDEN_CONF_KEYS =
@@ -102,7 +105,8 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateJmSpec(spec.getJobManager(), effectiveConfig),
                 validateTmSpec(spec.getTaskManager(), effectiveConfig),
                 validateSpecChange(deployment, effectiveConfig),
-                validateServiceAccount(spec.getServiceAccount()));
+                validateServiceAccount(spec.getServiceAccount()),
+                validateAutoScalerFlinkConfiguration(effectiveConfig));
     }
 
     @SafeVarargs
@@ -487,7 +491,8 @@ public class DefaultValidator implements FlinkResourceValidator {
         return firstPresent(
                 validateNotApplicationCluster(sessionCluster),
                 validateSessionClusterId(sessionJob, sessionCluster),
-                validateJobSpec(sessionJob.getSpec().getJob(), null, effectiveConfig));
+                validateJobSpec(sessionJob.getSpec().getJob(), null, effectiveConfig),
+                validateAutoScalerFlinkConfiguration(effectiveConfig));
     }
 
     private Optional<String> validateJobNotEmpty(FlinkSessionJob sessionJob) {
@@ -553,5 +558,53 @@ public class DefaultValidator implements FlinkResourceValidator {
                     "spec.serviceAccount must be defined. If you use helm, its value should be the same with the name of jobServiceAccount.");
         }
         return Optional.empty();
+    }
+
+    public static Optional<String> validateAutoScalerFlinkConfiguration(
+            Map<String, String> effectiveConfig) {
+        if (effectiveConfig == null) {
+            return Optional.empty();
+        }
+        Configuration flinkConfiguration = Configuration.fromMap(effectiveConfig);
+        if (!flinkConfiguration.getBoolean(AutoScalerOptions.AUTOSCALER_ENABLED)) {
+            return Optional.empty();
+        }
+        return firstPresent(
+                validateNumber(flinkConfiguration, AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 0.0d),
+                validateNumber(flinkConfiguration, AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.0d),
+                validateNumber(flinkConfiguration, AutoScalerOptions.TARGET_UTILIZATION, 0.0d),
+                validateNumber(
+                        flinkConfiguration, AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d));
+    }
+
+    private static <T extends Number> Optional<String> validateNumber(
+            Configuration flinkConfiguration,
+            ConfigOption<T> autoScalerConfig,
+            Double min,
+            Double max) {
+        try {
+            var configValue = flinkConfiguration.get(autoScalerConfig);
+            if (configValue != null) {
+                double value = configValue.doubleValue();
+                if ((min != null && value < min) || (max != null && value > max)) {
+                    return Optional.of(
+                            String.format(
+                                    "The AutoScalerOption %s is invalid, it should be a value within the range [%s, %s]",
+                                    autoScalerConfig.key(),
+                                    min != null ? min.toString() : "-Infinity",
+                                    max != null ? max.toString() : "+Infinity"));
+                }
+            }
+            return Optional.empty();
+        } catch (IllegalArgumentException e) {
+            return Optional.of(
+                    String.format(
+                            "Invalid value in the autoscaler config %s", autoScalerConfig.key()));
+        }
+    }
+
+    private static <T extends Number> Optional<String> validateNumber(
+            Configuration flinkConfiguration, ConfigOption<T> autoScalerConfig, Double min) {
+        return validateNumber(flinkConfiguration, autoScalerConfig, min, null);
     }
 }
