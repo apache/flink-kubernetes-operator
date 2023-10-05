@@ -112,6 +112,27 @@ public class EventRecorder {
                 messageKey);
     }
 
+    public boolean triggerEventByInterval(
+            AbstractFlinkResource<?, ?> resource,
+            Type type,
+            Reason reason,
+            Component component,
+            String message,
+            @Nullable String messageKey,
+            KubernetesClient client,
+            long interval) {
+        return EventUtils.createByInterval(
+                client,
+                resource,
+                type,
+                reason.toString(),
+                message,
+                component,
+                e -> eventListener.accept(resource, e),
+                messageKey,
+                interval);
+    }
+
     public boolean triggerEvent(
             AbstractFlinkResource<?, ?> resource,
             Type type,

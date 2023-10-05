@@ -94,14 +94,15 @@ public class ScalingExecutor {
         var scalingEnabled = conf.get(SCALING_ENABLED);
 
         var scalingReport = scalingReport(scalingSummaries, scalingEnabled);
-        eventRecorder.triggerEvent(
+        eventRecorder.triggerEventByInterval(
                 resource,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.ScalingReport,
                 EventRecorder.Component.Operator,
                 scalingReport,
                 "ScalingExecutor",
-                client);
+                client,
+                conf.get(AutoScalerOptions.SCALING_REPORT_INTERVAL));
 
         if (!scalingEnabled) {
             return false;

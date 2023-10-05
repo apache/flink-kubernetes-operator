@@ -169,16 +169,43 @@ public class ScalingExecutorTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testScalingEvents(boolean scalingEnabled) {
+    public void testScalingEventsWith0Interval(boolean scalingEnabled) {
+        testScalingEvents(scalingEnabled, Long.valueOf(0));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testScalingEventsWithInterval(boolean scalingEnabled) {
+        testScalingEvents(scalingEnabled, Long.valueOf(1800));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testScalingEventsWithDefaultInterval(boolean scalingEnabled) {
+        testScalingEvents(scalingEnabled, null);
+    }
+
+    private void testScalingEvents(boolean scalingEnabled, Long interval) {
         var jobVertexID = new JobVertexID();
         conf.set(AutoScalerOptions.SCALING_ENABLED, scalingEnabled);
+
         var metrics = Map.of(jobVertexID, evaluated(1, 110, 100));
+
+        if (interval != null) {
+            conf.set(AutoScalerOptions.SCALING_REPORT_INTERVAL, interval);
+        }
+
         var scalingInfo = new AutoScalerInfo(new HashMap<>());
         assertEquals(
                 scalingEnabled,
                 scalingDecisionExecutor.scaleResource(
                         flinkDep, scalingInfo, conf, metrics, kubernetesClient));
-        assertEquals(1, eventCollector.events.size());
+        assertEquals(
+                scalingEnabled,
+                scalingDecisionExecutor.scaleResource(
+                        flinkDep, scalingInfo, conf, metrics, kubernetesClient));
+        assertEquals(
+                interval == null || interval.longValue() > 0 ? 1 : 2, eventCollector.events.size());
         var event = eventCollector.events.poll();
         assertTrue(
                 event.getMessage()
@@ -200,6 +227,9 @@ public class ScalingExecutorTest {
         assertEquals(EventRecorder.Reason.ScalingReport.name(), event.getReason());
 
         metrics = Map.of(jobVertexID, evaluated(1, 110, 101));
+
+        assertEquals(1, event.getCount());
+
         assertEquals(
                 scalingEnabled,
                 scalingDecisionExecutor.scaleResource(

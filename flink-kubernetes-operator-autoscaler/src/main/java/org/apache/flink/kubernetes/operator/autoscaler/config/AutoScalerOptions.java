@@ -168,4 +168,10 @@ public class AutoScalerOptions {
                     .defaultValues()
                     .withDescription(
                             "A (semicolon-separated) list of vertex ids in hexstring for which to disable scaling. Caution: For non-sink vertices this will still scale their downstream operators until https://issues.apache.org/jira/browse/FLINK-31215 is implemented.");
+
+    public static final ConfigOption<Long> SCALING_REPORT_INTERVAL =
+            autoScalerConfig("scaling.report.interval")
+                    .longType()
+                    .defaultValue(Long.valueOf(1800))
+                    .withDescription("Time interval to resend the identical event");
 }
