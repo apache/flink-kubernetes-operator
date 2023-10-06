@@ -25,6 +25,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -63,7 +64,15 @@ public class EventUtils {
             Consumer<Event> eventListener,
             @Nullable String messageKey) {
         return createByInterval(
-                client, target, type, reason, message, component, eventListener, messageKey, 0);
+                client,
+                target,
+                type,
+                reason,
+                message,
+                component,
+                eventListener,
+                messageKey,
+                Duration.ofSeconds(0));
     }
 
     private static Event findExistingEvent(
@@ -108,7 +117,7 @@ public class EventUtils {
             EventRecorder.Component component,
             Consumer<Event> eventListener,
             @Nullable String messageKey,
-            long interval) {
+            Duration interval) {
 
         String eventName =
                 generateEventName(
@@ -120,7 +129,7 @@ public class EventUtils {
                     && Instant.now()
                             .isBefore(
                                     Instant.parse(existing.getLastTimestamp())
-                                            .plusSeconds(interval))) {
+                                            .plusMillis(interval.toMillis()))) {
                 return false;
             } else {
                 createUpdatedEvent(existing, client, message, eventListener);

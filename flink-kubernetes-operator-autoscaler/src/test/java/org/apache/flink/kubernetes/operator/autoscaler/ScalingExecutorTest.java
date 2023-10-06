@@ -170,13 +170,13 @@ public class ScalingExecutorTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     public void testScalingEventsWith0Interval(boolean scalingEnabled) {
-        testScalingEvents(scalingEnabled, Long.valueOf(0));
+        testScalingEvents(scalingEnabled, Duration.ofSeconds(0));
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     public void testScalingEventsWithInterval(boolean scalingEnabled) {
-        testScalingEvents(scalingEnabled, Long.valueOf(1800));
+        testScalingEvents(scalingEnabled, Duration.ofSeconds(1800));
     }
 
     @ParameterizedTest
@@ -185,7 +185,7 @@ public class ScalingExecutorTest {
         testScalingEvents(scalingEnabled, null);
     }
 
-    private void testScalingEvents(boolean scalingEnabled, Long interval) {
+    private void testScalingEvents(boolean scalingEnabled, Duration interval) {
         var jobVertexID = new JobVertexID();
         conf.set(AutoScalerOptions.SCALING_ENABLED, scalingEnabled);
 
@@ -205,7 +205,11 @@ public class ScalingExecutorTest {
                 scalingDecisionExecutor.scaleResource(
                         flinkDep, scalingInfo, conf, metrics, kubernetesClient));
         assertEquals(
-                interval == null || interval.longValue() > 0 ? 1 : 2, eventCollector.events.size());
+                (interval == null || (!interval.isNegative() && !interval.isZero()))
+                                && !scalingEnabled
+                        ? 1
+                        : 2,
+                eventCollector.events.size());
         var event = eventCollector.events.poll();
         assertTrue(
                 event.getMessage()

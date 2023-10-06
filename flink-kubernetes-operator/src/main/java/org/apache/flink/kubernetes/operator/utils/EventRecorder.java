@@ -28,6 +28,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.function.BiConsumer;
 
@@ -120,7 +121,7 @@ public class EventRecorder {
             String message,
             @Nullable String messageKey,
             KubernetesClient client,
-            long interval) {
+            Duration interval) {
         return EventUtils.createByInterval(
                 client,
                 resource,

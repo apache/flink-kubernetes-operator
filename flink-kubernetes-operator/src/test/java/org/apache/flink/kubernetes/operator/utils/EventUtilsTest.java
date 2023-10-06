@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.function.Consumer;
 
 /** Test for {@link EventUtils}. */
@@ -140,7 +141,7 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         null,
-                        1800));
+                        Duration.ofSeconds(1800)));
         var event =
                 kubernetesClient
                         .v1()
@@ -164,7 +165,7 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         null,
-                        1800));
+                        Duration.ofSeconds(1800)));
         event =
                 kubernetesClient
                         .v1()
@@ -186,7 +187,7 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         null,
-                        1800));
+                        Duration.ofSeconds(1800)));
     }
 
     @Test
@@ -282,7 +283,7 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         "mk",
-                        1800));
+                        Duration.ofSeconds(1800)));
         var event =
                 kubernetesClient
                         .v1()
@@ -306,7 +307,7 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         "mk",
-                        1800));
+                        Duration.ofSeconds(1800)));
 
         event =
                 kubernetesClient
@@ -331,7 +332,7 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         "mk",
-                        1800));
+                        Duration.ofSeconds(1800)));
 
         event =
                 kubernetesClient
@@ -354,7 +355,7 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         "mk2",
-                        1800));
+                        Duration.ofSeconds(1800)));
         eventName =
                 EventUtils.generateEventName(
                         flinkApp,
