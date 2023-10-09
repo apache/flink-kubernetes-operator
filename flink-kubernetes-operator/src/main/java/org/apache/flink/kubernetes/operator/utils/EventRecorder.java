@@ -28,6 +28,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.util.Collection;
 import java.util.function.BiConsumer;
 
@@ -110,6 +111,27 @@ public class EventRecorder {
                 component,
                 e -> eventListener.accept(resource, e),
                 messageKey);
+    }
+
+    public boolean triggerEventByInterval(
+            AbstractFlinkResource<?, ?> resource,
+            Type type,
+            Reason reason,
+            Component component,
+            String message,
+            @Nullable String messageKey,
+            KubernetesClient client,
+            Duration interval) {
+        return EventUtils.createByInterval(
+                client,
+                resource,
+                type,
+                reason.toString(),
+                message,
+                component,
+                e -> eventListener.accept(resource, e),
+                messageKey,
+                interval);
     }
 
     public boolean triggerEvent(

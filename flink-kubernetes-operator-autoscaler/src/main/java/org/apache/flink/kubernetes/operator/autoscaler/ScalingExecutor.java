@@ -94,17 +94,27 @@ public class ScalingExecutor {
         var scalingEnabled = conf.get(SCALING_ENABLED);
 
         var scalingReport = scalingReport(scalingSummaries, scalingEnabled);
-        eventRecorder.triggerEvent(
-                resource,
-                EventRecorder.Type.Normal,
-                EventRecorder.Reason.ScalingReport,
-                EventRecorder.Component.Operator,
-                scalingReport,
-                "ScalingExecutor",
-                client);
 
         if (!scalingEnabled) {
+            eventRecorder.triggerEventByInterval(
+                    resource,
+                    EventRecorder.Type.Normal,
+                    EventRecorder.Reason.ScalingReport,
+                    EventRecorder.Component.Operator,
+                    scalingReport,
+                    "ScalingExecutor",
+                    client,
+                    conf.get(AutoScalerOptions.SCALING_REPORT_INTERVAL));
             return false;
+        } else {
+            eventRecorder.triggerEvent(
+                    resource,
+                    EventRecorder.Type.Normal,
+                    EventRecorder.Reason.ScalingReport,
+                    EventRecorder.Component.Operator,
+                    scalingReport,
+                    "ScalingExecutor",
+                    client);
         }
 
         scalingInformation.addToScalingHistory(clock.instant(), scalingSummaries, conf);
