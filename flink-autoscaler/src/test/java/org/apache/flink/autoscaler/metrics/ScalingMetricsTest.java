@@ -38,6 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Tests for scaling metrics computation logic. */
 public class ScalingMetricsTest {
 
+    private static final double PREV_TPR = 123;
+    private static final JobVertexID SOURCE = new JobVertexID();
+
     @Test
     public void testProcessingAndOutputMetrics() {
         var source = new JobVertexID();
@@ -55,7 +58,7 @@ public class ScalingMetricsTest {
                 source,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, 100., Double.NaN, Double.NaN),
+                        new AggregatedMetric("", Double.NaN, 900., Double.NaN, Double.NaN),
                         FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                         aggSum(1000.),
                         FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
@@ -63,12 +66,15 @@ public class ScalingMetricsTest {
                 scalingMetrics,
                 topology,
                 15.,
-                new Configuration());
+                new Configuration(),
+                () -> PREV_TPR);
 
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
-                        10000.,
+                        1000. / 0.9,
+                        ScalingMetric.OBSERVED_TPR,
+                        PREV_TPR,
                         ScalingMetric.SOURCE_DATA_RATE,
                         1015.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
@@ -89,12 +95,15 @@ public class ScalingMetricsTest {
                 scalingMetrics,
                 topology,
                 -50.,
-                new Configuration());
+                new Configuration(),
+                () -> PREV_TPR);
 
         assertEquals(
                 Map.of(
                         ScalingMetric.TRUE_PROCESSING_RATE,
                         10000.,
+                        ScalingMetric.OBSERVED_TPR,
+                        PREV_TPR,
                         ScalingMetric.SOURCE_DATA_RATE,
                         950.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
@@ -114,7 +123,8 @@ public class ScalingMetricsTest {
                 scalingMetrics,
                 topology,
                 0.,
-                new Configuration());
+                new Configuration(),
+                () -> 0.);
 
         assertEquals(
                 Map.of(
@@ -140,7 +150,8 @@ public class ScalingMetricsTest {
                 scalingMetrics,
                 topology,
                 0.,
-                conf);
+                conf,
+                () -> 0.);
 
         assertEquals(
                 Map.of(
@@ -179,7 +190,8 @@ public class ScalingMetricsTest {
                 scalingMetrics,
                 topology,
                 0.,
-                conf);
+                conf,
+                () -> PREV_TPR);
 
         // Make sure vertex won't be scaled
         assertTrue(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS).contains(source.toHexString()));
@@ -239,8 +251,6 @@ public class ScalingMetricsTest {
                         ScalingMetric.TRUE_PROCESSING_RATE,
                         // When not busy at all, we have infinite processing power
                         Double.POSITIVE_INFINITY,
-                        ScalingMetric.SOURCE_DATA_RATE,
-                        dataRate,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
                         10.),
                 scalingMetrics);
@@ -256,8 +266,6 @@ public class ScalingMetricsTest {
                         ScalingMetric.TRUE_PROCESSING_RATE,
                         // When no records are coming in, we assume infinite processing power
                         Double.POSITIVE_INFINITY,
-                        ScalingMetric.SOURCE_DATA_RATE,
-                        0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
                         0.),
                 scalingMetrics);
@@ -272,8 +280,6 @@ public class ScalingMetricsTest {
                         ScalingMetric.TRUE_PROCESSING_RATE,
                         // When no records are coming in, we assume infinite processing power
                         Double.POSITIVE_INFINITY,
-                        ScalingMetric.SOURCE_DATA_RATE,
-                        0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
                         0.),
                 scalingMetrics);
@@ -287,8 +293,6 @@ public class ScalingMetricsTest {
                         ScalingMetric.TRUE_PROCESSING_RATE,
                         // Nothing is coming in, we must assume infinite processing power
                         Double.POSITIVE_INFINITY,
-                        ScalingMetric.SOURCE_DATA_RATE,
-                        0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
                         0.),
                 scalingMetrics);
@@ -308,11 +312,11 @@ public class ScalingMetricsTest {
 
         Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
         ScalingMetrics.computeDataRateMetrics(
-                source,
+                op,
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
                         new AggregatedMetric("", Double.NaN, busyness, Double.NaN, Double.NaN),
-                        FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
+                        FlinkMetric.NUM_RECORDS_IN_PER_SEC,
                         new AggregatedMetric(
                                 "", Double.NaN, Double.NaN, Double.NaN, processingRate),
                         FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
@@ -320,7 +324,8 @@ public class ScalingMetricsTest {
                 scalingMetrics,
                 topology,
                 0.,
-                new Configuration());
+                new Configuration(),
+                () -> 0.);
 
         return scalingMetrics;
     }
@@ -405,6 +410,74 @@ public class ScalingMetricsTest {
                         new Edge(source1, op2), 2.,
                         new Edge(source2, op2), 0.5),
                 ScalingMetrics.computeOutputRatios(allMetrics, topology));
+    }
+
+    @Test
+    public void testComputeTprWithBackpressure() {
+        assertEquals(Double.NaN, ScalingMetrics.computeObservedTprWithBackpressure(100, 1000));
+        assertEquals(500, ScalingMetrics.computeObservedTprWithBackpressure(500., 0));
+        assertEquals(1000, ScalingMetrics.computeObservedTprWithBackpressure(250, 750));
+    }
+
+    @Test
+    public void computeObservedTpr() {
+        // Without lag we cannot compute observed tpr, we compare against old
+        assertEquals(PREV_TPR, computeObservedTpr(500, 1000, 500, 500));
+
+        assertEquals(PREV_TPR, computeObservedTpr(0, 1000, 500, 500));
+
+        // When there is enough lag, observed rate is computed. Switch to busyness because diff is
+        // within limit
+        assertEquals(900 / 0.9, computeObservedTpr(10000000, 900, 850, 100));
+
+        // Should stay with busyness after switching as diff is still small
+        assertEquals(900 / 0.91, computeObservedTpr(10000000, 900, 900, 90));
+
+        // Use observed when diff is large and switch to observed
+        assertEquals(1000 / 0.8, computeObservedTpr(10000000, 1000, 500, 200));
+        assertEquals(1000 / 0.81, computeObservedTpr(10000000, 1000, 500, 190));
+
+        // When no incoming records observed TPR should be infinity
+        assertEquals(Double.POSITIVE_INFINITY, computeObservedTpr(500, 0, 100, 100));
+    }
+
+    public static double computeObservedTpr(
+            double lag, double processingRate, double busyness, double backpressure) {
+        return computeObservedTpr(lag, processingRate, busyness, backpressure, new Configuration());
+    }
+
+    public static double computeObservedTpr(
+            double lag,
+            double processingRate,
+            double busyness,
+            double backpressure,
+            Configuration conf) {
+        var sink = new JobVertexID();
+        var topology =
+                new JobTopology(
+                        new VertexInfo(SOURCE, Collections.emptySet(), 1, 1),
+                        new VertexInfo(sink, Set.of(SOURCE), 1, 1));
+
+        Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
+        scalingMetrics.put(ScalingMetric.LAG, lag);
+        ScalingMetrics.computeDataRateMetrics(
+                SOURCE,
+                Map.of(
+                        FlinkMetric.BUSY_TIME_PER_SEC,
+                        new AggregatedMetric("", Double.NaN, busyness, Double.NaN, Double.NaN),
+                        FlinkMetric.BACKPRESSURE_TIME_PER_SEC,
+                        new AggregatedMetric("", Double.NaN, Double.NaN, backpressure, Double.NaN),
+                        FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
+                        new AggregatedMetric(
+                                "", Double.NaN, Double.NaN, Double.NaN, processingRate),
+                        FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
+                        aggSum(0)),
+                scalingMetrics,
+                topology,
+                0.,
+                conf,
+                () -> PREV_TPR);
+        return scalingMetrics.get(ScalingMetric.OBSERVED_TPR);
     }
 
     private static AggregatedMetric aggSum(double sum) {

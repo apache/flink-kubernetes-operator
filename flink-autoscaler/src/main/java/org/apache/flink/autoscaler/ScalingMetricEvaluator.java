@@ -48,6 +48,7 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.CURRENT_PROCESSI
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.LAG;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.LOAD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.OBSERVED_TPR;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
@@ -135,9 +136,7 @@ public class ScalingMetricEvaluator {
 
         evaluatedMetrics.put(
                 TRUE_PROCESSING_RATE,
-                new EvaluatedScalingMetric(
-                        latestVertexMetrics.get(TRUE_PROCESSING_RATE),
-                        getAverage(TRUE_PROCESSING_RATE, vertex, metricsHistory)));
+                evaluateTpr(metricsHistory, vertex, latestVertexMetrics, conf));
 
         evaluatedMetrics.put(
                 LOAD,
@@ -152,6 +151,56 @@ public class ScalingMetricEvaluator {
                 EvaluatedScalingMetric.of(topology.getMaxParallelisms().get(vertex)));
         computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog);
         return evaluatedMetrics;
+    }
+
+    private static EvaluatedScalingMetric evaluateTpr(
+            SortedMap<Instant, CollectedMetrics> metricsHistory,
+            JobVertexID vertex,
+            Map<ScalingMetric, Double> latestVertexMetrics,
+            Configuration conf) {
+
+        var busyTimeTprAvg = getAverage(TRUE_PROCESSING_RATE, vertex, metricsHistory);
+        var observedTprAvg =
+                getAverage(
+                        OBSERVED_TPR,
+                        vertex,
+                        metricsHistory,
+                        conf.get(AutoScalerOptions.OBSERVED_TPR_MIN_OBSERVATIONS));
+
+        var tprMetric = selectTprMetric(vertex, conf, busyTimeTprAvg, observedTprAvg);
+        return new EvaluatedScalingMetric(
+                latestVertexMetrics.getOrDefault(tprMetric, Double.NaN),
+                tprMetric == OBSERVED_TPR ? observedTprAvg : busyTimeTprAvg);
+    }
+
+    private static ScalingMetric selectTprMetric(
+            JobVertexID jobVertexID,
+            Configuration conf,
+            double busyTimeTprAvg,
+            double observedTprAvg) {
+
+        if (Double.isInfinite(busyTimeTprAvg) || Double.isNaN(busyTimeTprAvg)) {
+            return OBSERVED_TPR;
+        }
+
+        if (Double.isNaN(observedTprAvg)) {
+            return TRUE_PROCESSING_RATE;
+        }
+
+        double switchThreshold = conf.get(AutoScalerOptions.OBSERVED_TPR_SWITCH_THRESHOLD);
+        // If we could measure the observed tpr we decide whether to switch to using it
+        // instead of busy time based on the error / difference between the two
+        if (busyTimeTprAvg > observedTprAvg * (1 + switchThreshold)) {
+            LOG.debug(
+                    "Using observed tpr {} for {} as busy time based seems too large ({})",
+                    observedTprAvg,
+                    jobVertexID,
+                    busyTimeTprAvg);
+            return OBSERVED_TPR;
+        } else {
+            LOG.debug("Using busy time based tpr {} for {}.", busyTimeTprAvg, jobVertexID);
+            return TRUE_PROCESSING_RATE;
+        }
     }
 
     @VisibleForTesting
@@ -241,25 +290,40 @@ public class ScalingMetricEvaluator {
         }
     }
 
-    private static double getAverage(
+    public static double getAverage(
             ScalingMetric metric,
             JobVertexID jobVertexId,
             SortedMap<Instant, CollectedMetrics> metricsHistory) {
-        double[] metricValues =
-                metricsHistory.values().stream()
-                        .map(m -> m.getVertexMetrics().get(jobVertexId))
-                        .filter(m -> m.containsKey(metric))
-                        .mapToDouble(m -> m.get(metric))
-                        .filter(d -> !Double.isNaN(d))
-                        .toArray();
-        for (double metricValue : metricValues) {
-            if (Double.isInfinite(metricValue)) {
-                // As long as infinite values are present, we can't properly average. We need to
-                // wait until they are evicted.
-                return metricValue;
+        return getAverage(metric, jobVertexId, metricsHistory, 1);
+    }
+
+    public static double getAverage(
+            ScalingMetric metric,
+            JobVertexID jobVertexId,
+            SortedMap<Instant, CollectedMetrics> metricsHistory,
+            int minElements) {
+
+        double sum = 0;
+        int n = 0;
+        boolean anyInfinite = false;
+        for (var collectedMetrics : metricsHistory.values()) {
+            var metrics = collectedMetrics.getVertexMetrics().get(jobVertexId);
+            double num = metrics.getOrDefault(metric, Double.NaN);
+            if (Double.isNaN(num)) {
+                continue;
             }
+            if (Double.isInfinite(num)) {
+                anyInfinite = true;
+                continue;
+            }
+
+            sum += num;
+            n++;
         }
-        return StatUtils.mean(metricValues);
+        if (n == 0) {
+            return anyInfinite ? Double.POSITIVE_INFINITY : Double.NaN;
+        }
+        return n < minElements ? Double.NaN : sum / n;
     }
 
     private static double getAverageOutputRatio(

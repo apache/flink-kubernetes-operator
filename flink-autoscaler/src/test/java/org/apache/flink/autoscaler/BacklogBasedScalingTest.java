@@ -392,7 +392,7 @@ public class BacklogBasedScalingTest {
         setClocksTo(now);
         metricsCollector.setJobUpdateTs(now);
         autoscaler.scale(context);
-        assertTrue(stateStore.getEvaluatedMetrics(context).isEmpty());
+        assertTrue(autoscaler.lastEvaluatedMetrics.isEmpty());
         assertTrue(eventCollector.events.isEmpty());
     }
 

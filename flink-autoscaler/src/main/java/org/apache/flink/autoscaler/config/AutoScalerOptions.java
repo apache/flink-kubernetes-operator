@@ -151,6 +151,31 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Lag threshold which will prevent unnecessary scalings while removing the pending messages responsible for the lag.");
 
+    public static final ConfigOption<Duration> OBSERVE_TPR_LAG_THRESHOLD =
+            autoScalerConfig("observed-tpr.lag-threshold")
+                    .durationType()
+                    .defaultValue(Duration.ofSeconds(30))
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("observed-tpr.lag-threshold"))
+                    .withDescription("Lag threshold for enabling observed tpr measurements.");
+
+    public static final ConfigOption<Double> OBSERVED_TPR_SWITCH_THRESHOLD =
+            autoScalerConfig("observed-tpr.switch-threshold")
+                    .doubleType()
+                    .defaultValue(0.15)
+                    .withDeprecatedKeys(
+                            deprecatedOperatorConfigKey("observed-tpr.switch-threshold"))
+                    .withDescription(
+                            "Percentage threshold for switching to observed from busy time based true processing rate  if the measurement is off by at least the configured fraction. For example 0.15 means we switch to observed TPR if the busy time based one is at least 15% higher during catchup.");
+
+    public static final ConfigOption<Integer> OBSERVED_TPR_MIN_OBSERVATIONS =
+            autoScalerConfig("observed-tpr.min-observations")
+                    .intType()
+                    .defaultValue(2)
+                    .withDeprecatedKeys(
+                            deprecatedOperatorConfigKey("observed-tpr.min-observations"))
+                    .withDescription(
+                            "Minimum nr of observations used when estimating / switching to observed tpr");
+
     public static final ConfigOption<Boolean> SCALING_EFFECTIVENESS_DETECTION_ENABLED =
             autoScalerConfig("scaling.effectiveness.detection.enabled")
                     .booleanType()

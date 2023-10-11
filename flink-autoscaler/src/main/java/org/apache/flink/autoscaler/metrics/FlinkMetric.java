@@ -38,7 +38,8 @@ public enum FlinkMetric {
             s -> s.startsWith("Source__") && s.endsWith(".numRecordsOutPerSecond")),
     SOURCE_TASK_NUM_RECORDS_IN_PER_SEC(
             s -> s.startsWith("Source__") && s.endsWith(".numRecordsInPerSecond")),
-    PENDING_RECORDS(s -> s.endsWith(".pendingRecords"));
+    PENDING_RECORDS(s -> s.endsWith(".pendingRecords")),
+    BACKPRESSURE_TIME_PER_SEC(s -> s.equals("backPressuredTimeMsPerSecond"));
 
     public static final Map<FlinkMetric, AggregatedMetric> FINISHED_METRICS =
             Map.of(

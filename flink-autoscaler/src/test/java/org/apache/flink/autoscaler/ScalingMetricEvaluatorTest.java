@@ -316,6 +316,125 @@ public class ScalingMetricEvaluatorTest {
         assertFalse(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
     }
 
+    @Test
+    public void testObservedTprEvaluation() {
+        var source = new JobVertexID();
+        var conf = new Configuration();
+
+        var topology = new JobTopology(new VertexInfo(source, Collections.emptySet(), 1, 1));
+        var evaluator = new ScalingMetricEvaluator();
+
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+        metricHistory.put(
+                Instant.ofEpochMilli(100),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG,
+                                        0.,
+                                        ScalingMetric.TRUE_PROCESSING_RATE,
+                                        300.,
+                                        ScalingMetric.OBSERVED_TPR,
+                                        200.,
+                                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                                        100.,
+                                        ScalingMetric.SOURCE_DATA_RATE,
+                                        50.,
+                                        ScalingMetric.LOAD,
+                                        10.)),
+                        Map.of()));
+        metricHistory.put(
+                Instant.ofEpochMilli(200),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG,
+                                        0.,
+                                        ScalingMetric.TRUE_PROCESSING_RATE,
+                                        400.,
+                                        ScalingMetric.OBSERVED_TPR,
+                                        400.,
+                                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                                        100.,
+                                        ScalingMetric.SOURCE_DATA_RATE,
+                                        50.,
+                                        ScalingMetric.LOAD,
+                                        10.)),
+                        Map.of()));
+
+        // Observed TPR average : 300
+        // Bust Time TPR average: 350
+
+        // Set diff threshold to 20% -> within threshold
+        conf.set(AutoScalerOptions.OBSERVED_TPR_SWITCH_THRESHOLD, 0.2);
+
+        // Test that we used busy time based TPR
+        assertEquals(
+                new EvaluatedScalingMetric(400., 350.),
+                evaluator
+                        .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
+                        .get(source)
+                        .get(ScalingMetric.TRUE_PROCESSING_RATE));
+
+        // Set diff threshold to 10% -> outside threshold
+        conf.set(AutoScalerOptions.OBSERVED_TPR_SWITCH_THRESHOLD, 0.1);
+
+        // Test that we used the observed TPR
+        assertEquals(
+                new EvaluatedScalingMetric(400, 300.),
+                evaluator
+                        .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
+                        .get(source)
+                        .get(ScalingMetric.TRUE_PROCESSING_RATE));
+
+        // Test that observed tpr min observations are respected. If less, use busy time
+        conf.set(AutoScalerOptions.OBSERVED_TPR_MIN_OBSERVATIONS, 3);
+        assertEquals(
+                new EvaluatedScalingMetric(400., 350.),
+                evaluator
+                        .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
+                        .get(source)
+                        .get(ScalingMetric.TRUE_PROCESSING_RATE));
+    }
+
+    @Test
+    public void testMissingObservedTpr() {
+        var source = new JobVertexID();
+        var conf = new Configuration();
+
+        var topology = new JobTopology(new VertexInfo(source, Collections.emptySet(), 1, 1));
+        var evaluator = new ScalingMetricEvaluator();
+
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+        metricHistory.put(
+                Instant.ofEpochMilli(100),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG,
+                                        0.,
+                                        ScalingMetric.TRUE_PROCESSING_RATE,
+                                        300.,
+                                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                                        100.,
+                                        ScalingMetric.SOURCE_DATA_RATE,
+                                        50.,
+                                        ScalingMetric.LOAD,
+                                        10.)),
+                        Map.of()));
+
+        // Test that we used busy time based TPR
+        assertEquals(
+                new EvaluatedScalingMetric(300., 300.),
+                evaluator
+                        .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
+                        .get(source)
+                        .get(ScalingMetric.TRUE_PROCESSING_RATE));
+    }
+
     private Tuple2<Double, Double> getThresholds(
             double inputTargetRate, double catchUpRate, Configuration conf) {
         return getThresholds(inputTargetRate, catchUpRate, conf, false);

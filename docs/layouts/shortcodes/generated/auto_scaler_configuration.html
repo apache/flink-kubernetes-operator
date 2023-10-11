@@ -57,6 +57,24 @@
             <td>Scaling metrics aggregation window size.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.observed-tpr.lag-threshold</h5></td>
+            <td style="word-wrap: break-word;">30 s</td>
+            <td>Duration</td>
+            <td>Lag threshold for enabling observed tpr measurements.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.observed-tpr.min-observations</h5></td>
+            <td style="word-wrap: break-word;">2</td>
+            <td>Integer</td>
+            <td>Minimum nr of observations used when estimating / switching to observed tpr</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.observed-tpr.switch-threshold</h5></td>
+            <td style="word-wrap: break-word;">0.15</td>
+            <td>Double</td>
+            <td>Percentage threshold for switching to observed from busy time based true processing rate  if the measurement is off by at least the configured fraction. For example 0.15 means we switch to observed TPR if the busy time based one is at least 15% higher during catchup.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.restart.time</h5></td>
             <td style="word-wrap: break-word;">3 min</td>
             <td>Duration</td>

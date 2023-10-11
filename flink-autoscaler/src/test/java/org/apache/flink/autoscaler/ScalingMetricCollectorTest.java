@@ -36,11 +36,10 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -90,30 +89,66 @@ public class ScalingMetricCollectorTest {
 
     @Test
     public void testQueryNamesOnTopologyChange() {
-        var metricNameQueryCounter = new AtomicInteger(0);
-        RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>> collector =
-                new RestApiMetricsCollector<>() {
+        var metricNameQueryCounter = new HashMap<JobVertexID, Integer>();
+        var collector =
+                new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>() {
                     @Override
                     protected Map<String, FlinkMetric> getFilteredVertexMetricNames(
                             RestClusterClient<?> rc, JobID id, JobVertexID jvi, JobTopology t) {
-                        metricNameQueryCounter.incrementAndGet();
+                        metricNameQueryCounter.compute(jvi, (j, c) -> c + 1);
                         return Map.of();
                     }
                 };
 
-        var t1 = new JobTopology(new VertexInfo(new JobVertexID(), Collections.emptySet(), 1, 1));
-        var t2 = new JobTopology(new VertexInfo(new JobVertexID(), Collections.emptySet(), 1, 1));
+        var source = new JobVertexID();
+        var source2 = new JobVertexID();
+        var sink = new JobVertexID();
+        metricNameQueryCounter.put(source, 0);
+        metricNameQueryCounter.put(source2, 0);
+        metricNameQueryCounter.put(sink, 0);
+
+        var t1 =
+                new JobTopology(
+                        new VertexInfo(source, Set.of(), 1, 1),
+                        new VertexInfo(sink, Set.of(source), 1, 1));
+
+        var t2 =
+                new JobTopology(
+                        new VertexInfo(source2, Set.of(), 1, 1),
+                        new VertexInfo(sink, Set.of(source2), 1, 1));
 
         collector.queryFilteredMetricNames(context, t1);
-        assertEquals(1, metricNameQueryCounter.get());
+        assertEquals(1, metricNameQueryCounter.get(source));
+        assertEquals(0, metricNameQueryCounter.get(source2));
+        assertEquals(1, metricNameQueryCounter.get(sink));
+
         collector.queryFilteredMetricNames(context, t1);
         collector.queryFilteredMetricNames(context, t1);
-        assertEquals(1, metricNameQueryCounter.get());
+        // Make sure source metrics are refreshed
+        assertEquals(3, metricNameQueryCounter.get(source));
+        assertEquals(0, metricNameQueryCounter.get(source2));
+        assertEquals(1, metricNameQueryCounter.get(sink));
+
+        // Topology change
         collector.queryFilteredMetricNames(context, t2);
-        assertEquals(2, metricNameQueryCounter.get());
+        assertEquals(3, metricNameQueryCounter.get(source));
+        assertEquals(1, metricNameQueryCounter.get(source2));
+        assertEquals(2, metricNameQueryCounter.get(sink));
+
         collector.queryFilteredMetricNames(context, t2);
+        assertEquals(3, metricNameQueryCounter.get(source));
+        assertEquals(2, metricNameQueryCounter.get(source2));
+        assertEquals(2, metricNameQueryCounter.get(sink));
+
+        // Mark source finished, should not be queried again
+        t2 =
+                new JobTopology(
+                        new VertexInfo(source2, Set.of(), 1, 1, true),
+                        new VertexInfo(sink, Set.of(source2), 1, 1));
         collector.queryFilteredMetricNames(context, t2);
-        assertEquals(2, metricNameQueryCounter.get());
+        assertEquals(3, metricNameQueryCounter.get(source));
+        assertEquals(2, metricNameQueryCounter.get(source2));
+        assertEquals(2, metricNameQueryCounter.get(sink));
     }
 
     @Test

@@ -75,6 +75,7 @@ public class JobVertexScalerTest {
 
     @Test
     public void testParallelismScaling() {
+        System.out.println("" + (-2 & 0x7FFFFFFF));
         var op = new JobVertexID();
         conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.);
         assertEquals(
