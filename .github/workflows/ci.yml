@@ -73,6 +73,7 @@ jobs:
         test:
           - test_application_kubernetes_ha.sh
           - test_application_operations.sh
+          - test_dynamic_config.sh
           - test_sessionjob_kubernetes_ha.sh
           - test_sessionjob_operations.sh
           - test_multi_sessionjob.sh
@@ -97,16 +98,30 @@ jobs:
             test: test_multi_sessionjob.sh
           - namespace: default
             test: test_autoscaler.sh
+          - namespace: default
+            test: test_dynamic_config.sh
           - mode: standalone
             test: test_autoscaler.sh
+          - mode: standalone
+            test: test_dynamic_config.sh
           - version: v1_13
             test: test_autoscaler.sh
+          - version: v1_13
+            test: test_dynamic_config.sh
           - version: v1_14
             test: test_autoscaler.sh
+          - version: v1_14
+            test: test_dynamic_config.sh
           - version: v1_15
             test: test_autoscaler.sh
+          - version: v1_15
+            test: test_dynamic_config.sh
           - version: v1_16
             test: test_autoscaler.sh
+          - version: v1_16
+            test: test_dynamic_config.sh
+          - version: v1_17
+            test: test_dynamic_config.sh
     name: e2e_ci
     steps:
       - uses: actions/checkout@v2
