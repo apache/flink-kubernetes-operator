@@ -214,12 +214,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         var message = String.format(INEFFECTIVE_MESSAGE_FORMAT, vertex);
 
         autoScalerEventHandler.handleEvent(
-                context,
-                AutoScalerEventHandler.Type.Normal,
-                INEFFECTIVE_SCALING,
-                message,
-                null,
-                null);
+                context, AutoScalerEventHandler.Type.Normal, INEFFECTIVE_SCALING, message, null);
 
         if (conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED)) {
             LOG.warn(

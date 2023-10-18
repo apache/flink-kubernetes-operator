@@ -37,8 +37,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.autoscaler.ScalingExecutor.SCALING_SUMMARY_ENTRY;
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_REPORT_REASON;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_ENTRY;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_DISABLED;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_ENABLED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -208,9 +211,9 @@ public class ScalingExecutorTest {
                 event.getMessage()
                         .contains(
                                 scalingEnabled
-                                        ? ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_ENABLED
-                                        : ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_DISABLED));
-        assertEquals(ScalingExecutor.SCALING_REPORT_REASON, event.getReason());
+                                        ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
+                                        : SCALING_SUMMARY_HEADER_SCALING_DISABLED));
+        assertEquals(SCALING_REPORT_REASON, event.getReason());
 
         metrics = Map.of(jobVertexID, evaluated(1, 110, 101));
 

@@ -26,11 +26,14 @@ import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import java.time.Duration;
+import java.time.Instant;
 import java.util.Collection;
+import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
 
 /** Helper class for creating Kubernetes events for Flink resources. */
 public class EventRecorder {
@@ -113,16 +116,17 @@ public class EventRecorder {
                 messageKey);
     }
 
-    public boolean triggerEventByInterval(
+    public boolean triggerEventWithLabels(
             AbstractFlinkResource<?, ?> resource,
             Type type,
             String reason,
-            Component component,
             String message,
+            Component component,
             @Nullable String messageKey,
             KubernetesClient client,
-            Duration interval) {
-        return EventUtils.createByInterval(
+            @Nonnull BiPredicate<Map<String, String>, Instant> suppressionPredicate,
+            @Nonnull Map<String, String> labels) {
+        return EventUtils.createOrUpdateEventWithLabels(
                 client,
                 resource,
                 type,
@@ -131,7 +135,8 @@ public class EventRecorder {
                 component,
                 e -> eventListener.accept(resource, e),
                 messageKey,
-                interval);
+                suppressionPredicate,
+                labels);
     }
 
     public boolean triggerEvent(

@@ -20,15 +20,18 @@ package org.apache.flink.autoscaler.event;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 
 import lombok.Getter;
+import lombok.Setter;
 
 import javax.annotation.Nullable;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_REPORT_INTERVAL;
 
 /** Testing {@link AutoScalerEventHandler} implementation. */
 public class TestingEventCollector<KEY, Context extends JobAutoScalerContext<KEY>>
@@ -44,18 +47,19 @@ public class TestingEventCollector<KEY, Context extends JobAutoScalerContext<KEY
             Type type,
             String reason,
             String message,
-            @Nullable String messageKey,
-            @Nullable Duration interval) {
+            @Nullable String messageKey) {
         String eventKey =
                 generateEventKey(context, type, reason, messageKey != null ? messageKey : message);
         Event<KEY, Context> event = eventMap.get(eventKey);
+        var interval = context.getConfiguration().get(SCALING_REPORT_INTERVAL);
+        var scaleEnabled = context.getConfiguration().get(SCALING_ENABLED);
         if (event == null) {
-            Event<KEY, Context> newEvent = new Event<>(context, type, reason, message, messageKey);
+            Event<KEY, Context> newEvent = new Event<>(context, reason, message, messageKey);
             events.add(newEvent);
             eventMap.put(eventKey, newEvent);
             return;
-        }
-        if (Objects.equals(event.getMessage(), message)
+        } else if (!scaleEnabled
+                && Objects.equals(event.getMessage(), message)
                 && interval != null
                 && Instant.now()
                         .isBefore(event.getLastUpdateTimestamp().plusMillis(interval.toMillis()))) {
@@ -63,6 +67,8 @@ public class TestingEventCollector<KEY, Context extends JobAutoScalerContext<KEY
             return;
         }
         event.incrementCount();
+        event.setMessage(message);
+        event.setLastUpdateTimestamp(Instant.now());
         events.add(event);
     }
 
@@ -73,29 +79,21 @@ public class TestingEventCollector<KEY, Context extends JobAutoScalerContext<KEY
     /** The collected event. */
     public static class Event<KEY, Context extends JobAutoScalerContext<KEY>> {
 
-        @Getter private Instant lastUpdateTimestamp;
+        @Getter @Setter private Instant lastUpdateTimestamp;
 
         @Getter private final Context context;
 
-        @Getter private final Type type;
-
         @Getter private final String reason;
 
-        @Getter private final String message;
+        @Getter @Setter private String message;
 
         @Getter @Nullable private final String messageKey;
 
         @Getter private int count;
 
-        public Event(
-                Context context,
-                Type type,
-                String reason,
-                String message,
-                @Nullable String messageKey) {
+        public Event(Context context, String reason, String message, @Nullable String messageKey) {
             this.lastUpdateTimestamp = Instant.now();
             this.context = context;
-            this.type = type;
             this.reason = reason;
             this.message = message;
             this.messageKey = messageKey;

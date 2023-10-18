@@ -1,0 +1,268 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.flink.kubernetes.operator.autoscaler;
+
+import org.apache.flink.autoscaler.ScalingSummary;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
+import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.utils.EventCollector;
+import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
+
+import io.fabric8.kubernetes.api.model.Event;
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+import java.time.Duration;
+import java.util.Map;
+
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_ENTRY;
+import static org.apache.flink.kubernetes.operator.autoscaler.KubernetesAutoScalerEventHandler.PARALLELISM_MAP_KEY;
+import static org.apache.flink.kubernetes.operator.autoscaler.TestingKubernetesAutoscalerUtils.createContext;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** Test for {@link KubernetesAutoScalerStateStore}. */
+@EnableKubernetesMockClient(crud = true)
+public class KubernetesAutoScalerEventHandlerTest {
+
+    private KubernetesClient kubernetesClient;
+
+    private KubernetesAutoScalerEventHandler eventHandler;
+
+    private KubernetesJobAutoScalerContext ctx;
+
+    ConfigMapStore configMapStore;
+
+    KubernetesAutoScalerStateStore stateStore;
+
+    private EventCollector eventCollector;
+
+    @BeforeEach
+    void setup() {
+        eventCollector = new EventCollector();
+        var eventRecorder = new EventRecorder(eventCollector);
+        ctx = createContext("cr1", kubernetesClient);
+        eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
+        stateStore = new KubernetesAutoScalerStateStore(configMapStore);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testHandleScalingEventsWith0Interval(boolean scalingEnabled) {
+        testHandleScalingEvents(scalingEnabled, Duration.ofSeconds(0));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testHandleScalingEventsWithInterval(boolean scalingEnabled) {
+        testHandleScalingEvents(scalingEnabled, Duration.ofSeconds(1800));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testHandleScalingEventsWithDefaultInterval(boolean scalingEnabled) {
+        testHandleScalingEvents(scalingEnabled, null);
+    }
+
+    private void testHandleScalingEvents(boolean scalingEnabled, Duration interval) {
+        var jobVertexID = JobVertexID.fromHexString("1b51e99e55e89e404d9a0443fd98d9e2");
+        var conf = ctx.getConfiguration();
+        conf.set(AutoScalerOptions.SCALING_ENABLED, scalingEnabled);
+        if (interval != null) {
+            conf.set(AutoScalerOptions.SCALING_REPORT_INTERVAL, interval);
+        }
+
+        var evaluatedScalingMetric = new EvaluatedScalingMetric();
+        evaluatedScalingMetric.setAverage(1);
+        evaluatedScalingMetric.setCurrent(2);
+        Map<JobVertexID, ScalingSummary> scalingSummaries1 =
+                Map.of(
+                        jobVertexID,
+                        new ScalingSummary(
+                                1,
+                                2,
+                                Map.of(
+                                        ScalingMetric.TRUE_PROCESSING_RATE,
+                                        evaluatedScalingMetric,
+                                        ScalingMetric.EXPECTED_PROCESSING_RATE,
+                                        evaluatedScalingMetric,
+                                        ScalingMetric.TARGET_DATA_RATE,
+                                        evaluatedScalingMetric)));
+
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1);
+        var event = eventCollector.events.poll();
+        assertTrue(
+                event.getMessage()
+                        .contains(
+                                String.format(
+                                        SCALING_SUMMARY_ENTRY,
+                                        jobVertexID,
+                                        1,
+                                        2,
+                                        1.00,
+                                        2.00,
+                                        1.00)));
+
+        assertEquals(EventRecorder.Reason.ScalingReport.name(), event.getReason());
+        assertEquals(
+                scalingEnabled ? null : "1286380436",
+                event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
+        assertEquals(1, event.getCount());
+
+        // Parallelism map doesn't change.
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1);
+        Event newEvent;
+        if ((interval == null || (!interval.isNegative() && !interval.isZero()))
+                && !scalingEnabled) {
+            assertEquals(0, eventCollector.events.size());
+        } else {
+            assertEquals(1, eventCollector.events.size());
+            newEvent = eventCollector.events.poll();
+            assertEquals(event.getMetadata().getUid(), newEvent.getMetadata().getUid());
+            assertEquals(2, newEvent.getCount());
+        }
+
+        // Parallelism map changes. New recommendation
+        Map<JobVertexID, ScalingSummary> scalingSummaries2 =
+                Map.of(
+                        jobVertexID,
+                        new ScalingSummary(
+                                1,
+                                3,
+                                Map.of(
+                                        ScalingMetric.TRUE_PROCESSING_RATE,
+                                        evaluatedScalingMetric,
+                                        ScalingMetric.EXPECTED_PROCESSING_RATE,
+                                        evaluatedScalingMetric,
+                                        ScalingMetric.TARGET_DATA_RATE,
+                                        evaluatedScalingMetric)));
+        eventHandler.handleScalingEvent(ctx, scalingSummaries2);
+
+        assertEquals(1, eventCollector.events.size());
+
+        newEvent = eventCollector.events.poll();
+        assertEquals(event.getMetadata().getUid(), newEvent.getMetadata().getUid());
+        assertEquals(
+                (interval == null || (!interval.isNegative() && !interval.isZero()))
+                                && !scalingEnabled
+                        ? 2
+                        : 3,
+                newEvent.getCount());
+
+        // Parallelism map doesn't change but metrics changed.
+        evaluatedScalingMetric.setCurrent(3);
+        Map<JobVertexID, ScalingSummary> scalingSummaries3 =
+                Map.of(
+                        jobVertexID,
+                        new ScalingSummary(
+                                1,
+                                3,
+                                Map.of(
+                                        ScalingMetric.TRUE_PROCESSING_RATE,
+                                        evaluatedScalingMetric,
+                                        ScalingMetric.EXPECTED_PROCESSING_RATE,
+                                        evaluatedScalingMetric,
+                                        ScalingMetric.TARGET_DATA_RATE,
+                                        evaluatedScalingMetric)));
+        eventHandler.handleScalingEvent(ctx, scalingSummaries2);
+
+        if ((interval == null || (!interval.isNegative() && !interval.isZero()))
+                && !scalingEnabled) {
+            assertEquals(0, eventCollector.events.size());
+        } else {
+            assertEquals(1, eventCollector.events.size());
+            newEvent = eventCollector.events.poll();
+            assertEquals(4, newEvent.getCount());
+        }
+    }
+
+    @Test
+    public void testSwitchingScalingEnabled() {
+        var jobVertexID = JobVertexID.fromHexString("1b51e99e55e89e404d9a0443fd98d9e2");
+        var evaluatedScalingMetric = new EvaluatedScalingMetric();
+        evaluatedScalingMetric.setAverage(1);
+        evaluatedScalingMetric.setCurrent(2);
+        Map<JobVertexID, ScalingSummary> scalingSummaries1 =
+                Map.of(
+                        jobVertexID,
+                        new ScalingSummary(
+                                1,
+                                2,
+                                Map.of(
+                                        ScalingMetric.TRUE_PROCESSING_RATE,
+                                        evaluatedScalingMetric,
+                                        ScalingMetric.EXPECTED_PROCESSING_RATE,
+                                        evaluatedScalingMetric,
+                                        ScalingMetric.TARGET_DATA_RATE,
+                                        evaluatedScalingMetric)));
+
+        ctx.getConfiguration().set(AutoScalerOptions.SCALING_ENABLED, true);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1);
+        var event = eventCollector.events.poll();
+        assertEquals(null, event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
+        assertEquals(1, event.getCount());
+
+        // Get recommendation event even parallelism map doesn't change and within supression
+        // interval
+        ctx.getConfiguration().set(AutoScalerOptions.SCALING_ENABLED, false);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1);
+        assertEquals(1, eventCollector.events.size());
+        event = eventCollector.events.poll();
+        assertTrue(
+                event.getMessage()
+                        .contains(
+                                String.format(
+                                        SCALING_SUMMARY_ENTRY,
+                                        jobVertexID,
+                                        1,
+                                        2,
+                                        1.00,
+                                        2.00,
+                                        1.00)));
+
+        assertEquals("1286380436", event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
+        assertEquals(2, event.getCount());
+
+        // Get recommendation event even parallelism map doesn't change and within supression
+        // interval
+        ctx.getConfiguration().set(AutoScalerOptions.SCALING_ENABLED, true);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1);
+        assertEquals(1, eventCollector.events.size());
+        event = eventCollector.events.poll();
+        assertTrue(
+                event.getMessage()
+                        .contains(
+                                String.format(
+                                        SCALING_SUMMARY_ENTRY,
+                                        jobVertexID,
+                                        1,
+                                        2,
+                                        1.00,
+                                        2.00,
+                                        1.00)));
+
+        assertEquals(null, event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
+        assertEquals(3, event.getCount());
+    }
+}

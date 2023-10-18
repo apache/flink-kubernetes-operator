@@ -19,10 +19,17 @@ package org.apache.flink.autoscaler.event;
 
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
+import org.apache.flink.autoscaler.ScalingSummary;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nullable;
 
-import java.time.Duration;
+import java.util.Map;
+
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /**
  * Handler for autoscaler events.
@@ -32,20 +39,45 @@ import java.time.Duration;
  */
 @Experimental
 public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>> {
+    String SCALING_SUMMARY_ENTRY =
+            " Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f";
+    String SCALING_SUMMARY_HEADER_SCALING_DISABLED = "Recommended parallelism change:";
+    String SCALING_SUMMARY_HEADER_SCALING_ENABLED = "Scaling vertices:";
+    String SCALING_REPORT_REASON = "ScalingReport";
+    String EVENT_MESSAGE_KEY = "ScalingExecutor";
 
-    /**
-     * Handle the event.
-     *
-     * @param interval When interval is great than 0, events that repeat within the interval will be
-     *     ignored.
-     */
+    /** Handle the event. */
     void handleEvent(
-            Context context,
-            Type type,
-            String reason,
-            String message,
-            @Nullable String messageKey,
-            @Nullable Duration interval);
+            Context context, Type type, String reason, String message, @Nullable String messageKey);
+
+    default void handleScalingEvent(
+            Context context, Map<JobVertexID, ScalingSummary> scalingSummaries) {
+        // Provide default implementation without proper deduplication
+        var scalingReport =
+                scalingReport(scalingSummaries, context.getConfiguration().get(SCALING_ENABLED));
+        handleEvent(context, Type.Normal, SCALING_REPORT_REASON, scalingReport, EVENT_MESSAGE_KEY);
+    }
+
+    static String scalingReport(
+            Map<JobVertexID, ScalingSummary> scalingSummaries, boolean scalingEnabled) {
+        StringBuilder sb =
+                new StringBuilder(
+                        scalingEnabled
+                                ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
+                                : SCALING_SUMMARY_HEADER_SCALING_DISABLED);
+        scalingSummaries.forEach(
+                (v, s) ->
+                        sb.append(
+                                String.format(
+                                        SCALING_SUMMARY_ENTRY,
+                                        v,
+                                        s.getCurrentParallelism(),
+                                        s.getNewParallelism(),
+                                        s.getMetrics().get(TRUE_PROCESSING_RATE).getAverage(),
+                                        s.getMetrics().get(EXPECTED_PROCESSING_RATE).getCurrent(),
+                                        s.getMetrics().get(TARGET_DATA_RATE).getAverage())));
+        return sb.toString();
+    }
 
     /** The type of the events. */
     enum Type {
