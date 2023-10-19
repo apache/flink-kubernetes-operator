@@ -23,7 +23,8 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import java.util.Map;
 
 /**
- * The Scaling Realizer is responsible for managing scaling actions.
+ * The Scaling Realizer is responsible for applying scaling actions, i.e. actually rescaling the
+ * jobs.
  *
  * @param <KEY> The job key.
  * @param <Context> Instance of JobAutoScalerContext.

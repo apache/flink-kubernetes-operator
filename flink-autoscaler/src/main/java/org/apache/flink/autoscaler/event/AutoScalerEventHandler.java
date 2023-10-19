@@ -25,7 +25,7 @@ import javax.annotation.Nullable;
 import java.time.Duration;
 
 /**
- * Handler all loggable events during scaling.
+ * Handler for autoscaler events.
  *
  * @param <KEY> The job key.
  * @param <Context> Instance of JobAutoScalerContext.

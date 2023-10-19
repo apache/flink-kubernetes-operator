@@ -44,12 +44,11 @@ public class ConfigMapStore {
 
     private final KubernetesClient kubernetesClient;
 
-    // The cache for each resourceId may be in three situations:
-    // 1. The resourceId isn't exist : ConfigMap isn't loaded from kubernetes, or it's removed.
-    // 2. The resourceId is exist, and value is the Optional.empty() : We have loaded the ConfigMap
-    // from kubernetes, but the ConfigMap isn't created at kubernetes side.
-    // 3. The resourceId is exist, and the Optional isn't empty : We have loaded the ConfigMap from
-    // kubernetes, it may be not same with kubernetes side due to it's not flushed after updating.
+    // The cache for each resourceId may be in three states:
+    // 1. The resourceId doesn't exist : ConfigMap isn't loaded from kubernetes, or it's deleted
+    // 2  Exists, Optional.empty() : The ConfigMap doesn't exist in Kubernetes
+    // 3. Exists, Not Empty : We have loaded the ConfigMap from kubernetes, it may not be the same
+    // if not flushed already
     private final ConcurrentHashMap<ResourceID, Optional<ConfigMap>> cache =
             new ConcurrentHashMap<>();
 

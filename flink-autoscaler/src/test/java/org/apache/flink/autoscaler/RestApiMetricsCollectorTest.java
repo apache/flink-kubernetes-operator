@@ -46,17 +46,16 @@ public class RestApiMetricsCollectorTest {
 
     @Test
     public void testAggregateMultiplePendingRecordsMetricsPerSource() throws Exception {
-        RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>> collector =
-                new RestApiMetricsCollector<>();
+        var collector = new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>();
 
         JobVertexID jobVertexID = new JobVertexID();
-        Map<String, FlinkMetric> flinkMetrics =
+        var flinkMetrics =
                 Map.of(
                         "a.pendingRecords", FlinkMetric.PENDING_RECORDS,
                         "b.pendingRecords", FlinkMetric.PENDING_RECORDS);
-        Map<JobVertexID, Map<String, FlinkMetric>> metrics = Map.of(jobVertexID, flinkMetrics);
+        var metrics = Map.of(jobVertexID, flinkMetrics);
 
-        List<AggregatedMetric> aggregatedMetricsResponse =
+        var aggregatedMetricsResponse =
                 List.of(
                         new AggregatedMetric(
                                 "a.pendingRecords", Double.NaN, Double.NaN, Double.NaN, 100.),
@@ -65,8 +64,8 @@ public class RestApiMetricsCollectorTest {
                         new AggregatedMetric(
                                 "c.unrelated", Double.NaN, Double.NaN, Double.NaN, 100.));
 
-        Configuration conf = new Configuration();
-        RestClusterClient<String> restClusterClient =
+        var conf = new Configuration();
+        var restClusterClient =
                 new RestClusterClient<>(
                         conf,
                         "test-cluster",
@@ -91,7 +90,7 @@ public class RestApiMetricsCollectorTest {
                 };
 
         JobID jobID = new JobID();
-        JobAutoScalerContext<JobID> context =
+        var context =
                 new JobAutoScalerContext<>(
                         jobID,
                         jobID,
@@ -100,8 +99,7 @@ public class RestApiMetricsCollectorTest {
                         new UnregisteredMetricsGroup(),
                         () -> restClusterClient);
 
-        Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> jobVertexIDMapMap =
-                collector.queryAllAggregatedMetrics(context, metrics);
+        var jobVertexIDMapMap = collector.queryAllAggregatedMetrics(context, metrics);
 
         Assertions.assertEquals(1, jobVertexIDMapMap.size());
         Map<FlinkMetric, AggregatedMetric> vertexMetrics = jobVertexIDMapMap.get(jobVertexID);

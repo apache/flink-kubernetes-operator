@@ -29,7 +29,7 @@ import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The state store based on the Java Heap, the state will be discarded after process restarts.
+ * State store based on the Java Heap, the state will be discarded after process restarts.
  *
  * @param <KEY> The job key.
  * @param <Context> The job autoscaler context.

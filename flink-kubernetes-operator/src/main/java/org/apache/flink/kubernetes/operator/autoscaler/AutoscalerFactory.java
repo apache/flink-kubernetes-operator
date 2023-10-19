@@ -33,10 +33,8 @@ public class AutoscalerFactory {
     public static JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> create(
             KubernetesClient client, EventRecorder eventRecorder) {
 
-        KubernetesAutoScalerStateStore stateStore =
-                new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
-        KubernetesAutoScalerEventHandler eventHandler =
-                new KubernetesAutoScalerEventHandler(eventRecorder);
+        var stateStore = new KubernetesAutoScalerStateStore(new ConfigMapStore(client));
+        var eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
 
         return new JobAutoScalerImpl<>(
                 new RestApiMetricsCollector<>(),
