@@ -64,7 +64,8 @@ public class KubernetesStandaloneClusterDescriptorTest {
                 new Fabric8FlinkStandaloneKubeClient(
                         flinkConfig, getClient(), Executors.newDirectExecutorService());
 
-        clusterDescriptor = new KubernetesStandaloneClusterDescriptor(flinkConfig, flinkKubeClient);
+        clusterDescriptor =
+                new KubernetesStandaloneClusterDescriptor(flinkConfig, flinkKubeClient, null);
     }
 
     @Test

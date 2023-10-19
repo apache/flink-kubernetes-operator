@@ -1043,7 +1043,7 @@ public class AbstractFlinkServiceTest {
         }
 
         @Override
-        public void submitSessionCluster(Configuration conf) {
+        public void deploySessionCluster(Configuration conf) {
             throw new UnsupportedOperationException();
         }
 

@@ -20,17 +20,13 @@ package org.apache.flink.kubernetes.operator.service;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.client.cli.ApplicationDeployer;
-import org.apache.flink.client.deployment.ClusterClientFactory;
-import org.apache.flink.client.deployment.ClusterClientServiceLoader;
-import org.apache.flink.client.deployment.ClusterDescriptor;
-import org.apache.flink.client.deployment.DefaultClusterClientServiceLoader;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
-import org.apache.flink.client.deployment.application.cli.ApplicationClusterDeployer;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.kubernetes.kubeclient.FlinkKubeClient;
+import org.apache.flink.kubernetes.kubeclient.FlinkKubeClientFactory;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -91,22 +87,23 @@ public class NativeFlinkService extends AbstractFlinkService {
     @Override
     protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) throws Exception {
         LOG.info("Deploying application cluster");
-        final ClusterClientServiceLoader clusterClientServiceLoader =
-                new DefaultClusterClientServiceLoader();
-        final ApplicationDeployer deployer =
-                new ApplicationClusterDeployer(clusterClientServiceLoader);
+        FlinkKubeClientFactory clientFactory = FlinkKubeClientFactory.getInstance();
+        FlinkKubeClient client = clientFactory.fromConfiguration(conf, "client");
+        OperatorKubernetesClusterDescriptor kubernetesClusterDescriptor =
+                new OperatorKubernetesClusterDescriptor(conf, client, getClusterClient(conf));
 
         final ApplicationConfiguration applicationConfiguration =
                 new ApplicationConfiguration(
                         jobSpec.getArgs() != null ? jobSpec.getArgs() : new String[0],
                         jobSpec.getEntryClass());
 
-        deployer.run(conf, applicationConfiguration);
+        kubernetesClusterDescriptor.deployApplicationCluster(
+                getClusterSpecification(conf), applicationConfiguration);
         LOG.info("Application cluster successfully deployed");
     }
 
     @Override
-    public void submitSessionCluster(Configuration conf) throws Exception {
+    public void deploySessionCluster(Configuration conf) throws Exception {
         submitClusterInternal(removeOperatorConfigs(conf));
     }
 
@@ -134,15 +131,11 @@ public class NativeFlinkService extends AbstractFlinkService {
 
     protected void submitClusterInternal(Configuration conf) throws Exception {
         LOG.info("Deploying session cluster");
-        final ClusterClientServiceLoader clusterClientServiceLoader =
-                new DefaultClusterClientServiceLoader();
-        final ClusterClientFactory<String> kubernetesClusterClientFactory =
-                clusterClientServiceLoader.getClusterClientFactory(conf);
-        try (final ClusterDescriptor<String> kubernetesClusterDescriptor =
-                kubernetesClusterClientFactory.createClusterDescriptor(conf)) {
-            kubernetesClusterDescriptor.deploySessionCluster(
-                    kubernetesClusterClientFactory.getClusterSpecification(conf));
-        }
+        FlinkKubeClientFactory clientFactory = FlinkKubeClientFactory.getInstance();
+        FlinkKubeClient client = clientFactory.fromConfiguration(conf, "client");
+        OperatorKubernetesClusterDescriptor kubernetesClusterDescriptor =
+                new OperatorKubernetesClusterDescriptor(conf, client, getClusterClient(conf));
+        kubernetesClusterDescriptor.deploySessionCluster(getClusterSpecification(conf));
         LOG.info("Session cluster successfully deployed");
     }
 

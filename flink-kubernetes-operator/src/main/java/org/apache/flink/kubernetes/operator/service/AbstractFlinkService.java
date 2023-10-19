@@ -21,10 +21,14 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.configuration.SecurityOptions;
+import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -89,7 +93,6 @@ import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
-import org.apache.flink.util.ConfigurationException;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -114,7 +117,10 @@ import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -131,7 +137,6 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
-import static org.apache.flink.runtime.rest.messages.queue.QueueStatus.Id.IN_PROGRESS;
 
 /**
  * An abstract {@link FlinkService} containing some common implementations for the native and
@@ -149,6 +154,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     protected final FlinkOperatorConfiguration operatorConfig;
     protected final ArtifactManager artifactManager;
     private static final String EMPTY_JAR = createEmptyJar();
+    protected final Base64.Decoder decoder = Base64.getDecoder();
 
     public AbstractFlinkService(
             KubernetesClient kubernetesClient,
@@ -168,6 +174,8 @@ public abstract class AbstractFlinkService implements FlinkService {
     protected abstract void deployApplicationCluster(JobSpec jobSpec, Configuration conf)
             throws Exception;
 
+    protected abstract void deploySessionCluster(Configuration conf) throws Exception;
+
     @Override
     public KubernetesClient getKubernetesClient() {
         return kubernetesClient;
@@ -182,12 +190,16 @@ public abstract class AbstractFlinkService implements FlinkService {
 
         // If Kubernetes or Zookeeper HA are activated, delete the job graph in HA storage so that
         // the newly changed job config (e.g. parallelism) could take effect
+        final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
+        final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
-            final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
-            final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
             FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
         } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
             FlinkUtils.deleteJobGraphInZookeeperHA(conf);
+        }
+
+        if (SecurityOptions.isRestSSLEnabled(conf)) {
+            // copyTLSFiles(conf, true);
         }
 
         if (requireHaMetadata) {
@@ -195,6 +207,13 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
 
         deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
+    }
+
+    public void submitSessionCluster(Configuration conf) throws Exception {
+        if (SecurityOptions.isRestSSLEnabled(conf)) {
+            // copyTLSFiles(conf, true);
+        }
+        deploySessionCluster(conf);
     }
 
     @Override
@@ -733,6 +752,10 @@ public abstract class AbstractFlinkService implements FlinkService {
         final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
         final int port = conf.getInteger(RestOptions.PORT);
+        Configuration restConf = new Configuration(conf);
+        if (SecurityOptions.isRestSSLEnabled(restConf)) {
+            copyTLSFiles(restConf, false);
+        }
         final String host =
                 ObjectUtils.firstNonNull(
                         operatorConfig.getFlinkServiceHostOverride(),
@@ -741,7 +764,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         final String restServerAddress = String.format("http://%s:%s", host, port);
         LOG.debug("Creating RestClusterClient({})", restServerAddress);
         return new RestClusterClient<>(
-                conf, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
+                restConf, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
     @VisibleForTesting
@@ -818,8 +841,12 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @VisibleForTesting
-    protected RestClient getRestClient(Configuration conf) throws ConfigurationException {
-        return new RestClient(conf, executorService);
+    protected RestClient getRestClient(Configuration conf) throws Exception {
+        Configuration restConf = new Configuration(conf);
+        if (SecurityOptions.isRestSSLEnabled(restConf)) {
+            copyTLSFiles(restConf, false);
+        }
+        return new RestClient(restConf, executorService);
     }
 
     private String findJarURI(JobSpec jobSpec) {
@@ -1013,6 +1040,25 @@ public abstract class AbstractFlinkService implements FlinkService {
             Configuration conf,
             boolean deleteHaData) {
 
+        if (SecurityOptions.isRestSSLEnabled(conf)) {
+            try {
+                Path keystorePath =
+                        Paths.get(
+                                conf.getString(
+                                        SecurityOptions.SSL_REST_KEYSTORE,
+                                        conf.getString(SecurityOptions.SSL_KEYSTORE)));
+                Files.deleteIfExists(keystorePath);
+                Path truststorePath =
+                        Paths.get(
+                                conf.getString(
+                                        SecurityOptions.SSL_REST_TRUSTSTORE,
+                                        conf.getString(SecurityOptions.SSL_TRUSTSTORE)));
+                Files.deleteIfExists(truststorePath);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
         var deletionPropagation = operatorConfig.getDeletionPropagation();
         LOG.info("Deleting cluster with {} propagation", deletionPropagation);
         deleteClusterInternal(meta, conf, deleteHaData, deletionPropagation);
@@ -1056,5 +1102,80 @@ public abstract class AbstractFlinkService implements FlinkService {
                 || !JobStatus.valueOf(currentJobState).isGloballyTerminalState()) {
             status.getJobStatus().setState(JobStatus.FINISHED.name());
         }
+    }
+
+    protected ClusterSpecification getClusterSpecification(Configuration conf) {
+        return new KubernetesClusterClientFactory().getClusterSpecification(conf);
+    }
+
+    private void copyTLSFiles(Configuration conf, boolean deployingCluster) throws IOException {
+        final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
+        final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
+        System.out.println("*** Copying tls files for " + clusterId);
+        ConfigOption<String> config =
+                conf.contains(SecurityOptions.SSL_REST_KEYSTORE)
+                        ? SecurityOptions.SSL_REST_KEYSTORE
+                        : SecurityOptions.SSL_KEYSTORE;
+        Path keystorePath = Paths.get(conf.getString(config));
+        Path targetPath =
+                Paths.get("/tmp", namespace, clusterId, keystorePath.getFileName().toString());
+        createLocalFile(conf, targetPath, keystorePath, namespace, deployingCluster);
+        conf.setString(config, targetPath.toString());
+        config =
+                conf.contains(SecurityOptions.SSL_REST_TRUSTSTORE)
+                        ? SecurityOptions.SSL_REST_TRUSTSTORE
+                        : SecurityOptions.SSL_TRUSTSTORE;
+        Path truststorePath = Paths.get(conf.getString(config));
+        Path targetTrustPath =
+                Paths.get("/tmp", namespace, clusterId, truststorePath.getFileName().toString());
+        createLocalFile(conf, targetTrustPath, truststorePath, namespace, deployingCluster);
+        conf.setString(config, targetTrustPath.toString());
+    }
+
+    private void createLocalFile(
+            Configuration conf,
+            Path targetPath,
+            Path certStorePath,
+            String namespace,
+            boolean deployingCluster)
+            throws IOException {
+        if (Files.exists(targetPath)) {
+            if (deployingCluster) {
+                LOG.warn("File already exists {}", targetPath);
+            }
+            return;
+        }
+        // make sure the parent directories exist
+        Files.createDirectories(targetPath.getParent());
+        Map<String, String> secretMounts = conf.get(KubernetesConfigOptions.KUBERNETES_SECRETS);
+        if (secretMounts == null) {
+            LOG.warn("No secret mount found for ssl config");
+            return;
+        }
+        Optional<String> certSecret =
+                secretMounts.entrySet().stream()
+                        .filter(e -> Paths.get(e.getValue()).equals(certStorePath.getParent()))
+                        .map(Map.Entry::getKey)
+                        .findFirst();
+        System.out.println(certSecret.get());
+        System.out.println(namespace);
+        certSecret.ifPresentOrElse(
+                secret -> {
+                    Map<String, String> secretData =
+                            kubernetesClient
+                                    .secrets()
+                                    .inNamespace(namespace)
+                                    .withName(certSecret.get())
+                                    .get()
+                                    .getData();
+                    String certString = secretData.get(certStorePath.getFileName().toString());
+                    try {
+                        Files.write(targetPath, decoder.decode(certString));
+                        LOG.info("Created local store file {}", targetPath);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                },
+                () -> LOG.warn("No secret mount found for ssl config"));
     }
 }

@@ -18,13 +18,10 @@
 package org.apache.flink.kubernetes.operator.service;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.client.deployment.ClusterDeploymentException;
-import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.SchedulerExecutionMode;
-import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
@@ -74,7 +71,7 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void submitSessionCluster(Configuration conf) throws Exception {
+    public void deploySessionCluster(Configuration conf) throws Exception {
         LOG.info("Deploying session cluster");
         submitClusterInternal(removeOperatorConfigs(conf), Mode.SESSION);
         LOG.info("Session cluster successfully deployed");
@@ -117,11 +114,10 @@ public class StandaloneFlinkService extends AbstractFlinkService {
         return Fabric8FlinkStandaloneKubeClient.create(configuration, executorService);
     }
 
-    protected void submitClusterInternal(Configuration conf, Mode mode)
-            throws ClusterDeploymentException {
+    protected void submitClusterInternal(Configuration conf, Mode mode) throws Exception {
         FlinkStandaloneKubeClient client = createNamespacedKubeClient(conf);
         try (final KubernetesStandaloneClusterDescriptor kubernetesClusterDescriptor =
-                new KubernetesStandaloneClusterDescriptor(conf, client)) {
+                new KubernetesStandaloneClusterDescriptor(conf, client, getClusterClient(conf))) {
             switch (mode) {
                 case APPLICATION:
                     kubernetesClusterDescriptor.deployApplicationCluster(
@@ -136,10 +132,6 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                             String.format("Unsupported running mode: %s", mode));
             }
         }
-    }
-
-    private ClusterSpecification getClusterSpecification(Configuration conf) {
-        return new KubernetesClusterClientFactory().getClusterSpecification(conf);
     }
 
     @Override
