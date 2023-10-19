@@ -31,6 +31,7 @@ import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 
@@ -68,6 +69,7 @@ public class MetricsCollectionAndEvaluationTest {
     private InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
 
     private JobVertexID source1, source2, map, sink;
+    private SlotSharingGroupId slotSharingGroupId;
     private JobTopology topology;
 
     private Clock clock;
@@ -86,6 +88,7 @@ public class MetricsCollectionAndEvaluationTest {
         source2 = new JobVertexID();
         map = new JobVertexID();
         sink = new JobVertexID();
+        slotSharingGroupId = new SlotSharingGroupId();
 
         topology =
                 new JobTopology(
@@ -415,7 +418,13 @@ public class MetricsCollectionAndEvaluationTest {
                 new JobTopology(
                         new VertexInfo(s1, Map.of(), 10, 720),
                         new VertexInfo(
-                                finished, Map.of(), 10, 720, true, IOMetrics.FINISHED_METRICS));
+                                finished,
+                                null,
+                                Map.of(),
+                                10,
+                                720,
+                                true,
+                                IOMetrics.FINISHED_METRICS));
 
         metricsCollector = new TestingMetricsCollector(topology);
         metricsCollector.setJobUpdateTs(startTime);

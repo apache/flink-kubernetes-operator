@@ -210,7 +210,15 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     @VisibleForTesting
     @SneakyThrows
     protected JobTopology getJobTopology(JobDetailsInfo jobDetailsInfo) {
-        Map<JobVertexID, Integer> maxParallelismMap =
+        var slotSharingGroupIdMap =
+                jobDetailsInfo.getJobVertexInfos().stream()
+                        .filter(e -> e.getSlotSharingGroupId() != null)
+                        .collect(
+                                Collectors.toMap(
+                                        JobDetailsInfo.JobVertexDetailsInfo::getJobVertexID,
+                                        JobDetailsInfo.JobVertexDetailsInfo
+                                                ::getSlotSharingGroupId));
+        var maxParallelismMap =
                 jobDetailsInfo.getJobVertexInfos().stream()
                         .collect(
                                 Collectors.toMap(
@@ -235,7 +243,8 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                     d.getJobVertexID(), IOMetrics.from(d.getJobVertexMetrics()));
                         });
 
-        return JobTopology.fromJsonPlan(json, maxParallelismMap, metrics, finished);
+        return JobTopology.fromJsonPlan(
+                json, slotSharingGroupIdMap, maxParallelismMap, metrics, finished);
     }
 
     private void updateKafkaSourceMaxParallelisms(Context ctx, JobID jobId, JobTopology topology)
@@ -254,7 +263,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                 "Updating source {} max parallelism based on available partitions to {}",
                                 sourceVertex,
                                 numPartitions);
-                        topology.updateMaxParallelism(sourceVertex, (int) numPartitions);
+                        topology.get(sourceVertex).updateMaxParallelism((int) numPartitions);
                     }
                 }
             }

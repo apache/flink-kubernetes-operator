@@ -52,6 +52,11 @@ public class TestingAutoscalerUtils {
     }
 
     public static JobAutoScalerContext<JobID> createResourceAwareContext() {
+        return createResourceAwareContext(100., "30 gb");
+    }
+
+    public static JobAutoScalerContext<JobID> createResourceAwareContext(
+            Double cpu, String memSize) {
         JobID jobId = JobID.generate();
         MetricRegistry registry = NoOpMetricRegistry.INSTANCE;
         GenericMetricGroup metricGroup = new GenericMetricGroup(registry, null, "test");
@@ -64,12 +69,12 @@ public class TestingAutoscalerUtils {
                 TestingAutoscalerUtils.getRestClusterClientSupplier()) {
             @Override
             public Optional<Double> getTaskManagerCpu() {
-                return Optional.of(100.);
+                return Optional.ofNullable(cpu);
             }
 
             @Override
             public Optional<MemorySize> getTaskManagerMemory() {
-                return Optional.of(MemorySize.parse("30 gb"));
+                return Optional.ofNullable(memSize).map(MemorySize::parse);
             }
         };
     }

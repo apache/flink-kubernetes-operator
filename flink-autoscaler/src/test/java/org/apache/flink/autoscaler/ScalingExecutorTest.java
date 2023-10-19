@@ -32,11 +32,14 @@ import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
@@ -46,7 +49,9 @@ import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_REPORT_REASON;
@@ -58,7 +63,9 @@ import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 /** Test for {@link ScalingExecutor}. */
 public class ScalingExecutorTest {
@@ -73,6 +80,8 @@ public class ScalingExecutorTest {
 
     private Configuration conf;
 
+    private Configuration capturedConfForMaxResources;
+
     private ScalingTracking scalingTracking = new ScalingTracking();
 
     private static final Map<ScalingMetric, EvaluatedScalingMetric> dummyGlobalMetrics =
@@ -86,7 +95,21 @@ public class ScalingExecutorTest {
         context = createDefaultJobAutoScalerContext();
         stateStore = new InMemoryAutoScalerStateStore<>();
 
-        scalingExecutor = new ScalingExecutor<>(eventCollector, stateStore);
+        capturedConfForMaxResources = null;
+        scalingExecutor =
+                new ScalingExecutor<>(eventCollector, stateStore) {
+                    @Override
+                    protected boolean scalingWouldExceedMaxResources(
+                            Configuration tunedConfig,
+                            JobTopology jobTopology,
+                            EvaluatedMetrics evaluatedMetrics,
+                            Map<JobVertexID, ScalingSummary> scalingSummaries,
+                            JobAutoScalerContext<JobID> ctx) {
+                        capturedConfForMaxResources = tunedConfig;
+                        return super.scalingWouldExceedMaxResources(
+                                tunedConfig, jobTopology, evaluatedMetrics, scalingSummaries, ctx);
+                    }
+                };
         conf = context.getConfiguration();
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
@@ -262,6 +285,7 @@ public class ScalingExecutorTest {
         var conf = context.getConfiguration();
         var now = Instant.now();
         var localTime = ZonedDateTime.ofInstant(now, ZoneId.systemDefault()).toLocalTime();
+
         // scaling execution in excluded periods
         var excludedPeriod =
                 new StringBuilder(localTime.toString().split("\\.")[0])
@@ -358,10 +382,12 @@ public class ScalingExecutorTest {
                         jobTopology));
     }
 
-    @Test
-    public void testMemoryTuning() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testMemoryTuning(boolean memoryTuningEnabled) throws Exception {
         context = TestingAutoscalerUtils.createResourceAwareContext();
-        context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
+        context.getConfiguration()
+                .set(AutoScalerOptions.MEMORY_TUNING_ENABLED, memoryTuningEnabled);
         context.getConfiguration().set(TaskManagerOptions.NUM_TASK_SLOTS, 5);
         context.getConfiguration()
                 .set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.parse("30 gb"));
@@ -386,13 +412,13 @@ public class ScalingExecutorTest {
                         EvaluatedScalingMetric.of(Double.NaN));
         var vertexMetrics =
                 Map.of(source, evaluated(10, 100, 50, 0), sink, evaluated(10, 100, 50, 0));
-        var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
 
-        JobTopology jobTopology =
+        var jobTopology =
                 new JobTopology(
                         new VertexInfo(source, Map.of(), 10, 1000, false, null),
                         new VertexInfo(sink, Map.of(source, REBALANCE), 10, 1000, false, null));
 
+        var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
         assertTrue(
                 scalingExecutor.scaleResource(
                         context,
@@ -401,23 +427,31 @@ public class ScalingExecutorTest {
                         new ScalingTracking(),
                         now,
                         jobTopology));
+        Map<String, String> expected;
+        if (memoryTuningEnabled) {
+            assertNotEquals(context.getConfiguration(), capturedConfForMaxResources);
+            expected =
+                    Map.of(
+                            TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
+                            "0.652",
+                            TaskManagerOptions.NETWORK_MEMORY_MIN.key(),
+                            "24320 kb",
+                            TaskManagerOptions.NETWORK_MEMORY_MAX.key(),
+                            "24320 kb",
+                            TaskManagerOptions.JVM_METASPACE.key(),
+                            "360 mb",
+                            TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
+                            "0.053",
+                            TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
+                            "0 bytes",
+                            TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
+                            "20400832696 bytes");
+        } else {
+            assertEquals(context.getConfiguration(), capturedConfForMaxResources);
+            expected = Map.of();
+        }
         assertThat(stateStore.getConfigChanges(context).getOverrides())
-                .containsExactlyInAnyOrderEntriesOf(
-                        Map.of(
-                                TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
-                                "0.652",
-                                TaskManagerOptions.NETWORK_MEMORY_MIN.key(),
-                                "24320 kb",
-                                TaskManagerOptions.NETWORK_MEMORY_MAX.key(),
-                                "24320 kb",
-                                TaskManagerOptions.JVM_METASPACE.key(),
-                                "360 mb",
-                                TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.053",
-                                TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
-                                "0 bytes",
-                                TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "20400832696 bytes"));
+                .containsExactlyInAnyOrderEntriesOf(expected);
     }
 
     @ParameterizedTest
@@ -673,6 +707,121 @@ public class ScalingExecutorTest {
                                 "7",
                                 "a6b7102b8d3e3a9564998c1ffeb5e2b7",
                                 "8"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("testDataForQuota")
+    public void testQuota(
+            SlotSharingGroupId slotSharingGroupId1,
+            SlotSharingGroupId slotSharingGroupId2,
+            Optional<Double> cpuQuota,
+            Optional<String> memoryQuota,
+            boolean quotaReached)
+            throws Exception {
+
+        var ctx = TestingAutoscalerUtils.createResourceAwareContext(2., "2g");
+        var conf = ctx.getConfiguration();
+        conf.setString("taskmanager.numberOfTaskSlots", "2");
+        cpuQuota.ifPresent(v -> conf.set(AutoScalerOptions.CPU_QUOTA, v));
+        memoryQuota.ifPresent(v -> conf.set(AutoScalerOptions.MEMORY_QUOTA, MemorySize.parse(v)));
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.6);
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
+
+        testQuotaReached(slotSharingGroupId1, slotSharingGroupId2, quotaReached, ctx);
+    }
+
+    private static Stream<Arguments> testDataForQuota() {
+        var slotSharingGroupId1 = new SlotSharingGroupId();
+        var slotSharingGroupId2 = new SlotSharingGroupId();
+        return Stream.of(
+                arguments(
+                        slotSharingGroupId1,
+                        slotSharingGroupId1,
+                        Optional.of(30.),
+                        Optional.empty(),
+                        false),
+                arguments(
+                        slotSharingGroupId1,
+                        slotSharingGroupId2,
+                        Optional.of(50.),
+                        Optional.empty(),
+                        false),
+                arguments(
+                        slotSharingGroupId1,
+                        slotSharingGroupId1,
+                        Optional.empty(),
+                        Optional.of("30g"),
+                        false),
+                arguments(
+                        slotSharingGroupId1,
+                        slotSharingGroupId2,
+                        Optional.empty(),
+                        Optional.of("50g"),
+                        false),
+                arguments(
+                        slotSharingGroupId1,
+                        slotSharingGroupId1,
+                        Optional.of(3.),
+                        Optional.empty(),
+                        true),
+                arguments(
+                        slotSharingGroupId1,
+                        slotSharingGroupId2,
+                        Optional.of(5.),
+                        Optional.empty(),
+                        true),
+                arguments(
+                        slotSharingGroupId1,
+                        slotSharingGroupId1,
+                        Optional.empty(),
+                        Optional.of("3g"),
+                        true),
+                arguments(
+                        slotSharingGroupId1,
+                        slotSharingGroupId2,
+                        Optional.empty(),
+                        Optional.of("5g"),
+                        true));
+    }
+
+    private void testQuotaReached(
+            SlotSharingGroupId slotSharingGroupId1,
+            SlotSharingGroupId slotSharingGroupId2,
+            boolean quotaReached,
+            JobAutoScalerContext<JobID> ctx)
+            throws Exception {
+        var op1 = new JobVertexID();
+        var op2 = new JobVertexID();
+        var jobTopology =
+                new JobTopology(
+                        new VertexInfo(op1, slotSharingGroupId1, Map.of(), 1, 720, false, null),
+                        new VertexInfo(op2, slotSharingGroupId2, Map.of(), 1, 720, false, null));
+        var vertexMetrics = Map.of(op1, evaluated(1, 210, 100), op2, evaluated(1, 110, 100));
+        var metrics =
+                new EvaluatedMetrics(
+                        vertexMetrics,
+                        Map.of(
+                                ScalingMetric.NUM_TASK_SLOTS_USED,
+                                EvaluatedScalingMetric.of(0.),
+                                ScalingMetric.GC_PRESSURE,
+                                EvaluatedScalingMetric.of(Double.NaN),
+                                ScalingMetric.HEAP_MAX_USAGE_RATIO,
+                                EvaluatedScalingMetric.of(Double.NaN)));
+
+        assertEquals(
+                !quotaReached,
+                scalingExecutor.scaleResource(
+                        ctx,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        Instant.now(),
+                        jobTopology));
+        if (quotaReached) {
+            assertEquals("ScalingReport", eventCollector.events.poll().getReason());
+            assertEquals("ResourceQuotaReached", eventCollector.events.poll().getReason());
+            assertTrue(eventCollector.events.isEmpty());
+        }
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
