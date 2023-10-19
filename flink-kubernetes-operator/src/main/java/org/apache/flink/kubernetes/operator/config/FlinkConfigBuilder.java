@@ -469,21 +469,23 @@ public class FlinkConfigBuilder {
         }
 
         boolean newConfKeys = spec.getFlinkVersion().isEqualOrNewer(FlinkVersion.v1_17);
-        String configKey;
+        String configKey = null;
         if (isJM) {
-            if (newConfKeys) {
-                configKey = KubernetesConfigOptions.JOB_MANAGER_CPU.key();
-            } else {
+            // Set new config all the time to simplify reading side
+            conf.setDouble(KubernetesConfigOptions.JOB_MANAGER_CPU.key(), resource.getCpu());
+            if (!newConfKeys) {
                 configKey = "kubernetes.jobmanager.cpu";
             }
         } else {
-            if (newConfKeys) {
-                configKey = KubernetesConfigOptions.TASK_MANAGER_CPU.key();
-            } else {
+            // Set new config all the time to simplify reading side
+            conf.setDouble(KubernetesConfigOptions.TASK_MANAGER_CPU.key(), resource.getCpu());
+            if (!newConfKeys) {
                 configKey = "kubernetes.taskmanager.cpu";
             }
         }
-        conf.setDouble(configKey, resource.getCpu());
+        if (configKey != null) {
+            conf.setDouble(configKey, resource.getCpu());
+        }
     }
 
     @VisibleForTesting

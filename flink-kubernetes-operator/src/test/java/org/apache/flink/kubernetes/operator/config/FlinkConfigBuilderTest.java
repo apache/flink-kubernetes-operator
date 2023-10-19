@@ -421,6 +421,10 @@ public class FlinkConfigBuilderTest {
 
         assertEquals("1.0", confMap.get("kubernetes.jobmanager.cpu"));
         assertEquals("1.0", confMap.get("kubernetes.taskmanager.cpu"));
+        // Set new config all the time to simplify reading side
+        assertEquals(Double.valueOf(1), configuration.get(KubernetesConfigOptions.JOB_MANAGER_CPU));
+        assertEquals(
+                Double.valueOf(1), configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU));
     }
 
     @Test

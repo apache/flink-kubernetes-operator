@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler.topology;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import lombok.Data;
@@ -32,6 +33,8 @@ public class VertexInfo {
 
     // All input vertices and the ship_strategy
     private final Map<JobVertexID, ShipStrategy> inputs;
+
+    private final SlotSharingGroupId slotSharingGroupId;
 
     // All output vertices and the ship_strategy
     private Map<JobVertexID, ShipStrategy> outputs;
@@ -48,12 +51,14 @@ public class VertexInfo {
 
     public VertexInfo(
             JobVertexID id,
+            SlotSharingGroupId slotSharingGroupId,
             Map<JobVertexID, ShipStrategy> inputs,
             int parallelism,
             int maxParallelism,
             boolean finished,
             IOMetrics ioMetrics) {
         this.id = id;
+        this.slotSharingGroupId = slotSharingGroupId;
         this.inputs = inputs;
         this.parallelism = parallelism;
         this.maxParallelism = maxParallelism;
@@ -69,7 +74,18 @@ public class VertexInfo {
             int parallelism,
             int maxParallelism,
             IOMetrics ioMetrics) {
-        this(id, inputs, parallelism, maxParallelism, false, ioMetrics);
+        this(id, null, inputs, parallelism, maxParallelism, false, ioMetrics);
+    }
+
+    @VisibleForTesting
+    public VertexInfo(
+            JobVertexID id,
+            Map<JobVertexID, ShipStrategy> inputs,
+            int parallelism,
+            int maxParallelism,
+            boolean finished,
+            IOMetrics ioMetrics) {
+        this(id, null, inputs, parallelism, maxParallelism, finished, ioMetrics);
     }
 
     @VisibleForTesting
@@ -79,9 +95,5 @@ public class VertexInfo {
             int parallelism,
             int maxParallelism) {
         this(id, inputs, parallelism, maxParallelism, null);
-    }
-
-    public void updateMaxParallelism(int maxParallelism) {
-        setMaxParallelism(Math.min(originalMaxParallelism, maxParallelism));
     }
 }

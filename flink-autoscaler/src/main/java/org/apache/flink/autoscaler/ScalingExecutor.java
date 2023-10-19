@@ -33,6 +33,7 @@ import org.apache.flink.autoscaler.utils.ResourceCheckUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.slf4j.Logger;
@@ -66,6 +67,9 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     public static final String HEAP_USAGE_MESSAGE =
             "Heap Usage %s is above the allowed limit for scaling operations. Please adjust the available memory manually.";
+
+    public static final String RESOURCE_QUOTA_REACHED_MESSAGE =
+            "Resource usage is above the allowed limit for scaling operations. Please adjust the resource quota manually.";
 
     private static final Logger LOG = LoggerFactory.getLogger(ScalingExecutor.class);
 
@@ -112,6 +116,17 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         if (allVerticesWithinUtilizationTarget(
                 evaluatedMetrics.getVertexMetrics(), scalingSummaries)) {
+            return false;
+        }
+
+        if (resourceQuotaReached(conf, evaluatedMetrics, scalingSummaries, context)) {
+            autoScalerEventHandler.handleEvent(
+                    context,
+                    AutoScalerEventHandler.Type.Warning,
+                    "ResourceQuotaReached",
+                    RESOURCE_QUOTA_REACHED_MESSAGE,
+                    null,
+                    conf.get(SCALING_EVENT_INTERVAL));
             return false;
         }
 
@@ -197,6 +212,85 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
         LOG.info("All vertex processing rates are within target.");
         return true;
+    }
+
+    protected static boolean resourceQuotaReached(
+            Configuration conf,
+            EvaluatedMetrics evaluatedMetrics,
+            Map<JobVertexID, ScalingSummary> scalingSummaries,
+            JobAutoScalerContext<?> ctx) {
+
+        if (evaluatedMetrics.getJobTopology() == null
+                || evaluatedMetrics.getJobTopology().getSlotSharingGroupMapping().isEmpty()) {
+            return false;
+        }
+
+        var cpuQuota = conf.getOptional(AutoScalerOptions.CPU_QUOTA);
+        var memoryQuota = conf.getOptional(AutoScalerOptions.MEMORY_QUOTA);
+        var tmMemory = ctx.getTaskManagerMemory();
+        var tmCpu = ctx.getTaskManagerCpu();
+
+        if (cpuQuota.isPresent() || memoryQuota.isPresent()) {
+            var currentSlotSharingGroupMaxParallelisms = new HashMap<SlotSharingGroupId, Integer>();
+            var newSlotSharingGroupMaxParallelisms = new HashMap<SlotSharingGroupId, Integer>();
+            for (var e :
+                    evaluatedMetrics.getJobTopology().getSlotSharingGroupMapping().entrySet()) {
+                int currentMaxParallelism =
+                        e.getValue().stream()
+                                .filter(scalingSummaries::containsKey)
+                                .mapToInt(v -> scalingSummaries.get(v).getCurrentParallelism())
+                                .max()
+                                .orElse(0);
+                currentSlotSharingGroupMaxParallelisms.put(e.getKey(), currentMaxParallelism);
+                int newMaxParallelism =
+                        e.getValue().stream()
+                                .filter(scalingSummaries::containsKey)
+                                .mapToInt(v -> scalingSummaries.get(v).getNewParallelism())
+                                .max()
+                                .orElse(0);
+                newSlotSharingGroupMaxParallelisms.put(e.getKey(), newMaxParallelism);
+            }
+
+            var numSlotsPerTm = conf.get(TaskManagerOptions.NUM_TASK_SLOTS);
+            var currentTotalSlots =
+                    currentSlotSharingGroupMaxParallelisms.values().stream()
+                            .mapToInt(Integer::intValue)
+                            .sum();
+            var currentNumTms = currentTotalSlots / numSlotsPerTm;
+            var newTotalSlots =
+                    newSlotSharingGroupMaxParallelisms.values().stream()
+                            .mapToInt(Integer::intValue)
+                            .sum();
+            var newNumTms = newTotalSlots / numSlotsPerTm;
+
+            if (newNumTms <= currentNumTms) {
+                LOG.debug(
+                        "Skipping quota check due to new resource allocation is less or equals than the current");
+                return false;
+            }
+
+            if (cpuQuota.isPresent() && tmCpu.isPresent()) {
+                LOG.debug("CPU resource quota is {}, checking limits", cpuQuota.get());
+                double totalCPU = tmCpu.get() * newNumTms;
+                if (totalCPU > cpuQuota.get()) {
+                    LOG.info("CPU resource quota reached with value: {}", totalCPU);
+                    return true;
+                }
+            }
+
+            if (memoryQuota.isPresent() && tmMemory.isPresent()) {
+                LOG.debug("Memory resource quota is {}, checking limits", memoryQuota.get());
+                long totalMemory = tmMemory.get().getBytes() * newNumTms;
+                if (totalMemory > memoryQuota.get().getBytes()) {
+                    LOG.info(
+                            "Memory resource quota reached with value: {}",
+                            new MemorySize(totalMemory));
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     @VisibleForTesting

@@ -77,7 +77,8 @@ public class AutoScalerFlinkMetricsTest {
 
     @Test
     public void testMetricsRegistration() {
-        var evaluatedMetrics = new EvaluatedMetrics(Map.of(jobVertexID, testMetrics()), Map.of());
+        var evaluatedMetrics =
+                new EvaluatedMetrics(null, Map.of(jobVertexID, testMetrics()), Map.of());
         var lastEvaluatedMetrics = new HashMap<JobID, EvaluatedMetrics>();
         initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
         lastEvaluatedMetrics.put(jobID, evaluatedMetrics);
@@ -108,7 +109,8 @@ public class AutoScalerFlinkMetricsTest {
 
     @Test
     public void testMetricsCleanup() {
-        var evaluatedMetrics = new EvaluatedMetrics(Map.of(jobVertexID, testMetrics()), Map.of());
+        var evaluatedMetrics =
+                new EvaluatedMetrics(null, Map.of(jobVertexID, testMetrics()), Map.of());
         var lastEvaluatedMetrics = new HashMap<JobID, EvaluatedMetrics>();
         initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
         lastEvaluatedMetrics.put(jobID, evaluatedMetrics);
@@ -128,7 +130,8 @@ public class AutoScalerFlinkMetricsTest {
 
     @Test
     public void testRecommendedParallelismWithinMetricWindow() {
-        var evaluatedMetrics = new EvaluatedMetrics(Map.of(jobVertexID, testMetrics()), Map.of());
+        var evaluatedMetrics =
+                new EvaluatedMetrics(null, Map.of(jobVertexID, testMetrics()), Map.of());
         var lastEvaluatedMetrics = new HashMap<JobID, EvaluatedMetrics>();
         initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
         resetRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
@@ -143,7 +146,8 @@ public class AutoScalerFlinkMetricsTest {
 
     @Test
     public void testRecommendedParallelismPastMetricWindow() {
-        var evaluatedMetrics = new EvaluatedMetrics(Map.of(jobVertexID, testMetrics()), Map.of());
+        var evaluatedMetrics =
+                new EvaluatedMetrics(null, Map.of(jobVertexID, testMetrics()), Map.of());
         var lastEvaluatedMetrics = new HashMap<JobID, EvaluatedMetrics>();
         initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
         lastEvaluatedMetrics.put(jobID, evaluatedMetrics);

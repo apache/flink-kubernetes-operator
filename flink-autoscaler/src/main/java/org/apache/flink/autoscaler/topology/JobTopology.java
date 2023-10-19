@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler.topology;
 
+import org.apache.flink.runtime.instance.SlotSharingGroupId;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
@@ -48,6 +49,7 @@ public class JobTopology {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     @Getter private final Map<JobVertexID, VertexInfo> vertexInfos;
+    @Getter private final Map<SlotSharingGroupId, Set<JobVertexID>> slotSharingGroupMapping;
     @Getter private final Set<JobVertexID> finishedVertices;
     @Getter private final List<JobVertexID> verticesInTopologicalOrder;
 
@@ -66,6 +68,7 @@ public class JobTopology {
                 ImmutableMap.copyOf(
                         vertexInfo.stream().collect(Collectors.toMap(VertexInfo::getId, v -> v)));
 
+        Map<SlotSharingGroupId, Set<JobVertexID>> vertexSlotSharingGroupMapping = new HashMap<>();
         var finishedVertices = ImmutableSet.<JobVertexID>builder();
 
         vertexInfo.forEach(
@@ -79,12 +82,21 @@ public class JobTopology {
                                             vertexOutputs
                                                     .computeIfAbsent(inputId, id -> new HashMap<>())
                                                     .put(vertexId, shipStrategy));
+
+                    var slotSharingGroupId = info.getSlotSharingGroupId();
+                    if (slotSharingGroupId != null) {
+                        vertexSlotSharingGroupMapping
+                                .computeIfAbsent(slotSharingGroupId, id -> new HashSet<>())
+                                .add(vertexId);
+                    }
+
                     if (info.isFinished()) {
                         finishedVertices.add(vertexId);
                     }
                 });
         vertexOutputs.forEach((v, outputs) -> vertexInfos.get(v).setOutputs(outputs));
 
+        this.slotSharingGroupMapping = ImmutableMap.copyOf(vertexSlotSharingGroupMapping);
         this.finishedVertices = finishedVertices.build();
         this.verticesInTopologicalOrder = returnVerticesInTopologicalOrder();
     }
@@ -95,10 +107,6 @@ public class JobTopology {
 
     public boolean isSource(JobVertexID jobVertexID) {
         return get(jobVertexID).getInputs().isEmpty();
-    }
-
-    public void updateMaxParallelism(JobVertexID vertexID, int maxParallelism) {
-        get(vertexID).updateMaxParallelism(maxParallelism);
     }
 
     private List<JobVertexID> returnVerticesInTopologicalOrder() {
@@ -134,6 +142,7 @@ public class JobTopology {
 
     public static JobTopology fromJsonPlan(
             String jsonPlan,
+            Map<JobVertexID, SlotSharingGroupId> slotSharingGroupIdMap,
             Map<JobVertexID, Integer> maxParallelismMap,
             Map<JobVertexID, IOMetrics> metrics,
             Set<JobVertexID> finishedVertices)
@@ -151,6 +160,7 @@ public class JobTopology {
             vertexInfo.add(
                     new VertexInfo(
                             vertexId,
+                            slotSharingGroupIdMap.get(vertexId),
                             inputs,
                             node.get("parallelism").asInt(),
                             maxParallelismMap.get(vertexId),

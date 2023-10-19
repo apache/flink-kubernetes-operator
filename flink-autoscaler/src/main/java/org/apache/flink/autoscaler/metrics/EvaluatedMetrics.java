@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler.metrics;
 
+import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import lombok.AllArgsConstructor;
@@ -30,6 +31,7 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class EvaluatedMetrics {
+    private JobTopology jobTopology;
     private Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> vertexMetrics;
     private Map<ScalingMetric, EvaluatedScalingMetric> globalMetrics;
 }

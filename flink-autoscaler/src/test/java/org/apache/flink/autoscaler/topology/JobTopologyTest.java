@@ -79,7 +79,7 @@ public class JobTopologyTest {
 
         JobTopology jobTopology =
                 JobTopology.fromJsonPlan(
-                        jsonPlan, maxParallelism, Map.of(), Collections.emptySet());
+                        jsonPlan, Map.of(), maxParallelism, Map.of(), Collections.emptySet());
 
         assertTrue(jobTopology.get(vertices.get("Sink: sink1")).getOutputs().isEmpty());
         assertTrue(jobTopology.get(vertices.get("Sink: sink2")).getOutputs().isEmpty());
