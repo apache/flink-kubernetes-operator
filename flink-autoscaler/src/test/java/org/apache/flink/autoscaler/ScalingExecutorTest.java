@@ -154,19 +154,20 @@ public class ScalingExecutorTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testScalingEventsWith0Interval(boolean scalingEnabled) throws Exception {
+    public void testScalingEventsWith0IntervalConfig(boolean scalingEnabled) throws Exception {
         testScalingEvents(scalingEnabled, Duration.ofSeconds(0));
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testScalingEventsWithInterval(boolean scalingEnabled) throws Exception {
+    public void testScalingEventsWithIntervalConfig(boolean scalingEnabled) throws Exception {
         testScalingEvents(scalingEnabled, Duration.ofSeconds(1800));
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testScalingEventsWithDefaultInterval(boolean scalingEnabled) throws Exception {
+    public void testScalingEventsWithDefaultIntervalConfig(boolean scalingEnabled)
+            throws Exception {
         testScalingEvents(scalingEnabled, null);
     }
 
@@ -178,17 +179,13 @@ public class ScalingExecutorTest {
         var metrics = Map.of(jobVertexID, evaluated(1, 110, 100));
 
         if (interval != null) {
-            conf.set(AutoScalerOptions.SCALING_REPORT_INTERVAL, interval);
+            conf.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, interval);
         }
 
         assertEquals(scalingEnabled, scalingDecisionExecutor.scaleResource(context, metrics));
         assertEquals(scalingEnabled, scalingDecisionExecutor.scaleResource(context, metrics));
 
-        int expectedSize =
-                (interval == null || (!interval.isNegative() && !interval.isZero()))
-                                && !scalingEnabled
-                        ? 1
-                        : 2;
+        int expectedSize = (interval == null || interval.toMillis() > 0) && !scalingEnabled ? 1 : 2;
         assertEquals(expectedSize, eventCollector.events.size());
 
         TestingEventCollector.Event<JobID, JobAutoScalerContext<JobID>> event;

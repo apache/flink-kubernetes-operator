@@ -203,8 +203,8 @@ public abstract class AbstractFlinkResourceReconciler<
                 cr,
                 EventRecorder.Type.Normal,
                 EventRecorder.Reason.SpecChanged,
-                EventRecorder.Component.JobManagerDeployment,
                 String.format(MSG_SPEC_CHANGED, specDiff.getType(), specDiff),
+                EventRecorder.Component.JobManagerDeployment,
                 "SpecChange: " + cr.getMetadata().getGeneration(),
                 client);
     }

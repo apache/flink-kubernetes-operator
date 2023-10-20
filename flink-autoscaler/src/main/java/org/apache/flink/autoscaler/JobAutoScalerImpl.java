@@ -194,7 +194,12 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         LOG.error("Error while scaling job", e);
         autoscalerMetrics.incrementError();
         eventHandler.handleEvent(
-                ctx, AutoScalerEventHandler.Type.Warning, AUTOSCALER_ERROR, e.getMessage(), null);
+                ctx,
+                AutoScalerEventHandler.Type.Warning,
+                AUTOSCALER_ERROR,
+                e.getMessage(),
+                null,
+                null);
     }
 
     private AutoscalerFlinkMetrics getOrInitAutoscalerFlinkMetrics(Context ctx) {

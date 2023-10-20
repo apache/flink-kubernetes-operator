@@ -26,14 +26,13 @@ import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import java.time.Instant;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
 import java.util.function.BiConsumer;
-import java.util.function.BiPredicate;
+import java.util.function.Predicate;
 
 /** Helper class for creating Kubernetes events for Flink resources. */
 public class EventRecorder {
@@ -51,15 +50,15 @@ public class EventRecorder {
             Component component,
             String message,
             KubernetesClient client) {
-        return triggerEvent(resource, type, reason, component, message, null, client);
+        return triggerEvent(resource, type, reason, message, component, null, client);
     }
 
     public boolean triggerEventOnce(
             AbstractFlinkResource<?, ?> resource,
             Type type,
             Reason reason,
-            Component component,
             String message,
+            Component component,
             String messageKey,
             KubernetesClient client) {
         return triggerEventOnce(
@@ -70,8 +69,8 @@ public class EventRecorder {
             AbstractFlinkResource<?, ?> resource,
             Type type,
             Reason reason,
-            Component component,
             String message,
+            Component component,
             @Nullable String messageKey,
             KubernetesClient client) {
         return triggerEvent(
@@ -86,7 +85,7 @@ public class EventRecorder {
             Component component,
             String messageKey,
             KubernetesClient client) {
-        return EventUtils.createOrUpdateEvent(
+        return EventUtils.createOrUpdateEventWithInterval(
                 client,
                 resource,
                 type,
@@ -94,7 +93,33 @@ public class EventRecorder {
                 message,
                 component,
                 e -> eventListener.accept(resource, e),
-                messageKey);
+                messageKey,
+                null);
+    }
+
+    /**
+     * @param interval Interval for dedupe. Null mean no dedupe.
+     * @return
+     */
+    public boolean triggerEventWithInterval(
+            AbstractFlinkResource<?, ?> resource,
+            Type type,
+            String reason,
+            String message,
+            Component component,
+            String messageKey,
+            KubernetesClient client,
+            @Nullable Duration interval) {
+        return EventUtils.createOrUpdateEventWithInterval(
+                client,
+                resource,
+                type,
+                reason,
+                message,
+                component,
+                e -> eventListener.accept(resource, e),
+                messageKey,
+                interval);
     }
 
     public boolean triggerEventOnce(
@@ -116,6 +141,12 @@ public class EventRecorder {
                 messageKey);
     }
 
+    /**
+     * @param interval Interval for dedupe. Null mean no dedupe.
+     * @param dedupePredicate Predicate for dedupe algorithm..
+     * @param labels Labels to store in meta data for dedupe. Do nothing if null.
+     * @return
+     */
     public boolean triggerEventWithLabels(
             AbstractFlinkResource<?, ?> resource,
             Type type,
@@ -124,8 +155,9 @@ public class EventRecorder {
             Component component,
             @Nullable String messageKey,
             KubernetesClient client,
-            @Nonnull BiPredicate<Map<String, String>, Instant> suppressionPredicate,
-            @Nonnull Map<String, String> labels) {
+            @Nullable Duration interval,
+            @Nullable Predicate<Map<String, String>> dedupePredicate,
+            @Nullable Map<String, String> labels) {
         return EventUtils.createOrUpdateEventWithLabels(
                 client,
                 resource,
@@ -135,7 +167,8 @@ public class EventRecorder {
                 component,
                 e -> eventListener.accept(resource, e),
                 messageKey,
-                suppressionPredicate,
+                interval,
+                dedupePredicate,
                 labels);
     }
 

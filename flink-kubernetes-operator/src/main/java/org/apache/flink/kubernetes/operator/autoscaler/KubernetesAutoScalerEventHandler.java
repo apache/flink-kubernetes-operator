@@ -26,14 +26,11 @@ import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
 import javax.annotation.Nullable;
 
-import java.time.Instant;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.BiPredicate;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
-
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_REPORT_INTERVAL;
 
 /** An event handler which posts events to the Kubernetes events API. */
 public class KubernetesAutoScalerEventHandler
@@ -52,38 +49,39 @@ public class KubernetesAutoScalerEventHandler
             Type type,
             String reason,
             String message,
-            @Nullable String messageKey) {
-        eventRecorder.triggerEvent(
+            @Nullable String messageKey,
+            @Nullable Duration interval) {
+        eventRecorder.triggerEventWithInterval(
                 context.getResource(),
                 EventRecorder.Type.valueOf(type.name()),
                 reason,
                 message,
                 EventRecorder.Component.Operator,
                 messageKey,
-                context.getKubernetesClient());
+                context.getKubernetesClient(),
+                interval);
     }
 
     @Override
     public void handleScalingEvent(
             KubernetesJobAutoScalerContext context,
-            Map<JobVertexID, ScalingSummary> scalingSummaries) {
-        var scalingEnabled = context.getConfiguration().get(SCALING_ENABLED);
-        if (scalingEnabled) {
-            AutoScalerEventHandler.super.handleScalingEvent(context, scalingSummaries);
+            Map<JobVertexID, ScalingSummary> scalingSummaries,
+            boolean scaled,
+            Duration interval) {
+        if (scaled) {
+            AutoScalerEventHandler.super.handleScalingEvent(
+                    context, scalingSummaries, scaled, null);
         } else {
             var conf = context.getConfiguration();
-            var scalingReport =
-                    AutoScalerEventHandler.scalingReport(scalingSummaries, scalingEnabled);
+            var scalingReport = AutoScalerEventHandler.scalingReport(scalingSummaries, scaled);
             var labels = Map.of(PARALLELISM_MAP_KEY, getParallelismHashCode(scalingSummaries));
-            var interval = context.getConfiguration().get(SCALING_REPORT_INTERVAL);
 
             @Nullable
-            BiPredicate<Map<String, String>, Instant> suppressionPredicate =
-                    new BiPredicate<Map<String, String>, Instant>() {
+            Predicate<Map<String, String>> dedupePredicate =
+                    new Predicate<Map<String, String>>() {
                         @Override
-                        public boolean test(Map<String, String> stringStringMap, Instant instant) {
-                            return Instant.now().isBefore(instant.plusMillis(interval.toMillis()))
-                                    && stringStringMap != null
+                        public boolean test(Map<String, String> stringStringMap) {
+                            return stringStringMap != null
                                     && Objects.equals(
                                             stringStringMap.get(PARALLELISM_MAP_KEY),
                                             getParallelismHashCode(scalingSummaries));
@@ -96,9 +94,10 @@ public class KubernetesAutoScalerEventHandler
                     AutoScalerEventHandler.SCALING_REPORT_REASON,
                     scalingReport,
                     EventRecorder.Component.Operator,
-                    AutoScalerEventHandler.EVENT_MESSAGE_KEY,
+                    AutoScalerEventHandler.SCALING_REPORT_KEY,
                     context.getKubernetesClient(),
-                    suppressionPredicate,
+                    interval,
+                    dedupePredicate,
                     labels);
         }
     }

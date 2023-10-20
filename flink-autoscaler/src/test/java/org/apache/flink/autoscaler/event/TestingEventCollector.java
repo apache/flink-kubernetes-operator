@@ -24,6 +24,7 @@ import lombok.Setter;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedList;
 import java.util.Map;
@@ -31,7 +32,6 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_REPORT_INTERVAL;
 
 /** Testing {@link AutoScalerEventHandler} implementation. */
 public class TestingEventCollector<KEY, Context extends JobAutoScalerContext<KEY>>
@@ -47,19 +47,19 @@ public class TestingEventCollector<KEY, Context extends JobAutoScalerContext<KEY
             Type type,
             String reason,
             String message,
-            @Nullable String messageKey) {
+            @Nullable String messageKey,
+            Duration interval) {
         String eventKey =
                 generateEventKey(context, type, reason, messageKey != null ? messageKey : message);
         Event<KEY, Context> event = eventMap.get(eventKey);
-        var interval = context.getConfiguration().get(SCALING_REPORT_INTERVAL);
-        var scaleEnabled = context.getConfiguration().get(SCALING_ENABLED);
+        var scaled = context.getConfiguration().get(SCALING_ENABLED);
         if (event == null) {
             Event<KEY, Context> newEvent = new Event<>(context, reason, message, messageKey);
             events.add(newEvent);
             eventMap.put(eventKey, newEvent);
             return;
-        } else if (!scaleEnabled
-                && Objects.equals(event.getMessage(), message)
+        } else if (((!scaled && Objects.equals(event.getMessage(), message))
+                        || !Objects.equals(reason, SCALING_REPORT_REASON))
                 && interval != null
                 && Instant.now()
                         .isBefore(event.getLastUpdateTimestamp().plusMillis(interval.toMillis()))) {

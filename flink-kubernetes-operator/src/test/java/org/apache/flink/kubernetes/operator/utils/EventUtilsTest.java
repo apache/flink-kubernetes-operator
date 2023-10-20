@@ -25,13 +25,15 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.annotation.Nullable;
 
-import java.time.Instant;
+import java.time.Duration;
 import java.util.Map;
-import java.util.function.BiPredicate;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /** Test for {@link EventUtils}. */
 @EnableKubernetesMockClient(crud = true)
@@ -61,7 +63,7 @@ public class EventUtilsTest {
                         message,
                         EventRecorder.Component.Operator);
         Assertions.assertTrue(
-                EventUtils.createOrUpdateEvent(
+                EventUtils.createOrUpdateEventWithInterval(
                         kubernetesClient,
                         flinkApp,
                         EventRecorder.Type.Warning,
@@ -69,6 +71,7 @@ public class EventUtilsTest {
                         message,
                         EventRecorder.Component.Operator,
                         consumer,
+                        null,
                         null));
         var event =
                 kubernetesClient
@@ -84,7 +87,7 @@ public class EventUtilsTest {
 
         eventConsumed = null;
         Assertions.assertFalse(
-                EventUtils.createOrUpdateEvent(
+                EventUtils.createOrUpdateEventWithInterval(
                         kubernetesClient,
                         flinkApp,
                         EventRecorder.Type.Warning,
@@ -92,7 +95,9 @@ public class EventUtilsTest {
                         message,
                         EventRecorder.Component.Operator,
                         consumer,
+                        null,
                         null));
+
         event =
                 kubernetesClient
                         .v1()
@@ -105,7 +110,7 @@ public class EventUtilsTest {
         Assertions.assertEquals(2, event.getCount());
 
         Assertions.assertTrue(
-                EventUtils.createOrUpdateEvent(
+                EventUtils.createOrUpdateEventWithInterval(
                         kubernetesClient,
                         flinkApp,
                         EventRecorder.Type.Warning,
@@ -113,11 +118,15 @@ public class EventUtilsTest {
                         null,
                         EventRecorder.Component.Operator,
                         consumer,
+                        null,
                         null));
     }
 
-    @Test
-    public void testCreateWithMessageKey() {
+    @ParameterizedTest
+    @ValueSource(strings = {"", "0", "1800"})
+    public void testCreateWithInterval(String intervalString) {
+        Duration interval =
+                intervalString.isBlank() ? null : Duration.ofSeconds(Long.valueOf(intervalString));
         var consumer =
                 new Consumer<Event>() {
                     @Override
@@ -136,7 +145,7 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator);
 
         Assertions.assertTrue(
-                EventUtils.createOrUpdateEvent(
+                EventUtils.createOrUpdateEventWithInterval(
                         kubernetesClient,
                         flinkApp,
                         EventRecorder.Type.Warning,
@@ -144,7 +153,8 @@ public class EventUtilsTest {
                         "message1",
                         EventRecorder.Component.Operator,
                         consumer,
-                        "mk"));
+                        "mk",
+                        interval));
         var event =
                 kubernetesClient
                         .v1()
@@ -157,7 +167,7 @@ public class EventUtilsTest {
         Assertions.assertEquals(1, event.getCount());
 
         Assertions.assertFalse(
-                EventUtils.createOrUpdateEvent(
+                EventUtils.createOrUpdateEventWithInterval(
                         kubernetesClient,
                         flinkApp,
                         EventRecorder.Type.Warning,
@@ -165,7 +175,8 @@ public class EventUtilsTest {
                         "message2",
                         EventRecorder.Component.Operator,
                         consumer,
-                        "mk"));
+                        "mk",
+                        null));
 
         event =
                 kubernetesClient
@@ -179,8 +190,44 @@ public class EventUtilsTest {
         Assertions.assertEquals(2, event.getCount());
     }
 
-    @Test
-    public void testCreateWithLabels() {
+    @ParameterizedTest
+    @ValueSource(strings = {"", "0", "1800"})
+    public void testCreateWithLabelsAndAllTruePredicate(String intervalString) {
+        @Nullable
+        Predicate<Map<String, String>> dedupePredicate =
+                new Predicate<Map<String, String>>() {
+                    @Override
+                    public boolean test(Map<String, String> stringStringMap) {
+                        return true;
+                    }
+                };
+        testCreateWithIntervalLabelsAndPredicate(intervalString, dedupePredicate);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "0", "1800"})
+    public void testCreateWithLabelsAndAllFalsePredicate(String intervalString) {
+        @Nullable
+        Predicate<Map<String, String>> dedupePredicate =
+                new Predicate<Map<String, String>>() {
+                    @Override
+                    public boolean test(Map<String, String> stringStringMap) {
+                        return false;
+                    }
+                };
+        testCreateWithIntervalLabelsAndPredicate(intervalString, dedupePredicate);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "0", "1800"})
+    public void testCreateWithLabelsAndNullPredicate(String intervalString) {
+        testCreateWithIntervalLabelsAndPredicate(intervalString, null);
+    }
+
+    private void testCreateWithIntervalLabelsAndPredicate(
+            String intervalString, @Nullable Predicate<Map<String, String>> dedupePredicate) {
+        Duration interval =
+                intervalString.isBlank() ? null : Duration.ofSeconds(Long.valueOf(intervalString));
         var consumer =
                 new Consumer<Event>() {
                     @Override
@@ -188,15 +235,6 @@ public class EventUtilsTest {
                         eventConsumed = event;
                     }
                 };
-        @Nullable
-        BiPredicate<Map<String, String>, Instant> suppressionPredicate =
-                new BiPredicate<Map<String, String>, Instant>() {
-                    @Override
-                    public boolean test(Map<String, String> stringStringMap, Instant instant) {
-                        return true;
-                    }
-                };
-
         var flinkApp = TestUtils.buildApplicationCluster();
         var reason = "Cleanup";
         var eventName =
@@ -219,7 +257,8 @@ public class EventUtilsTest {
                         consumer,
                         "mk"));
 
-        // Update the event with label
+        // Update the event with label.
+        var labels = Map.of("a", "b");
         Assertions.assertFalse(
                 EventUtils.createOrUpdateEventWithLabels(
                         kubernetesClient,
@@ -230,8 +269,9 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         "mk",
-                        null,
-                        Map.of("a", "b")));
+                        interval,
+                        dedupePredicate,
+                        labels));
         var event =
                 kubernetesClient
                         .v1()
@@ -240,36 +280,19 @@ public class EventUtilsTest {
                         .withName(eventName)
                         .get();
         Assertions.assertNotNull(event);
-        Assertions.assertEquals("message1", event.getMessage());
-        Assertions.assertEquals(2, event.getCount());
-        Assertions.assertEquals(event.getMetadata().getLabels().get("a"), "b");
+        if ((dedupePredicate == null || (dedupePredicate.test(labels)))
+                && interval != null
+                && interval.toMillis() > 0) {
+            Assertions.assertEquals("message", event.getMessage());
+            Assertions.assertEquals(1, event.getCount());
+            Assertions.assertEquals(null, event.getMetadata().getLabels().get("a"));
+        } else {
+            Assertions.assertEquals("message1", event.getMessage());
+            Assertions.assertEquals(2, event.getCount());
+            Assertions.assertEquals("b", event.getMetadata().getLabels().get("a"));
+        }
 
-        // Suppress event
-        Assertions.assertFalse(
-                EventUtils.createOrUpdateEventWithLabels(
-                        kubernetesClient,
-                        flinkApp,
-                        EventRecorder.Type.Warning,
-                        reason,
-                        "message1",
-                        EventRecorder.Component.Operator,
-                        consumer,
-                        "mk",
-                        suppressionPredicate,
-                        Map.of()));
-        event =
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(flinkApp.getMetadata().getNamespace())
-                        .withName(eventName)
-                        .get();
-        Assertions.assertNotNull(event);
-        Assertions.assertEquals("message1", event.getMessage());
-        Assertions.assertEquals(2, event.getCount());
-        Assertions.assertEquals(event.getMetadata().getLabels().get("a"), "b");
-
-        // Update the event with empty label
+        // Update with duplicate labels.
         Assertions.assertFalse(
                 EventUtils.createOrUpdateEventWithLabels(
                         kubernetesClient,
@@ -280,8 +303,9 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         "mk",
-                        null,
-                        Map.of()));
+                        interval,
+                        dedupePredicate,
+                        labels));
 
         event =
                 kubernetesClient
@@ -291,9 +315,52 @@ public class EventUtilsTest {
                         .withName(eventName)
                         .get();
         Assertions.assertNotNull(event);
-        Assertions.assertEquals("message2", event.getMessage());
-        Assertions.assertEquals(3, event.getCount());
-        Assertions.assertEquals(event.getMetadata().getLabels().get("a"), null);
+        if ((dedupePredicate == null || (dedupePredicate.test(labels)))
+                && interval != null
+                && interval.toMillis() > 0) {
+            Assertions.assertEquals("message", event.getMessage());
+            Assertions.assertEquals(1, event.getCount());
+            Assertions.assertEquals(null, event.getMetadata().getLabels().get("a"));
+        } else {
+            Assertions.assertEquals("message2", event.getMessage());
+            Assertions.assertEquals(3, event.getCount());
+            Assertions.assertEquals("b", event.getMetadata().getLabels().get("a"));
+        }
+
+        // Update with empty label.
+        labels = Map.of();
+        Assertions.assertFalse(
+                EventUtils.createOrUpdateEventWithLabels(
+                        kubernetesClient,
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        "message3",
+                        EventRecorder.Component.Operator,
+                        consumer,
+                        "mk",
+                        interval,
+                        dedupePredicate,
+                        labels));
+        event =
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(flinkApp.getMetadata().getNamespace())
+                        .withName(eventName)
+                        .get();
+        Assertions.assertNotNull(event);
+        if ((dedupePredicate == null || (dedupePredicate.test(labels)))
+                && interval != null
+                && interval.toMillis() > 0) {
+            Assertions.assertEquals("message", event.getMessage());
+            Assertions.assertEquals(1, event.getCount());
+            Assertions.assertEquals(null, event.getMetadata().getLabels().get("a"));
+        } else {
+            Assertions.assertEquals("message3", event.getMessage());
+            Assertions.assertEquals(4, event.getCount());
+            Assertions.assertEquals(null, event.getMetadata().getLabels().get("a"));
+        }
 
         // Update the event with null label
         Assertions.assertFalse(
@@ -306,7 +373,8 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         "mk",
-                        null,
+                        interval,
+                        dedupePredicate,
                         null));
 
         event =
@@ -317,36 +385,24 @@ public class EventUtilsTest {
                         .withName(eventName)
                         .get();
         Assertions.assertNotNull(event);
-        Assertions.assertEquals("message4", event.getMessage());
-        Assertions.assertEquals(4, event.getCount());
-        Assertions.assertEquals(event.getMetadata().getLabels().get("a"), null);
-
-        // Suppress the event
-        Assertions.assertFalse(
-                EventUtils.createOrUpdateEventWithLabels(
-                        kubernetesClient,
-                        flinkApp,
-                        EventRecorder.Type.Warning,
-                        reason,
-                        "message2",
-                        EventRecorder.Component.Operator,
-                        consumer,
-                        "mk",
-                        suppressionPredicate,
-                        Map.of("a", "b")));
-
-        event =
-                kubernetesClient
-                        .v1()
-                        .events()
-                        .inNamespace(flinkApp.getMetadata().getNamespace())
-                        .withName(eventName)
-                        .get();
-        Assertions.assertNotNull(event);
-        Assertions.assertEquals("message4", event.getMessage());
-        Assertions.assertEquals(4, event.getCount());
-        Assertions.assertEquals(event.getMetadata().getLabels().get("a"), null);
-
+        if ((dedupePredicate == null || (dedupePredicate.test(labels)))
+                && interval != null
+                && interval.toMillis() > 0) {
+            Assertions.assertEquals("message", event.getMessage());
+            Assertions.assertEquals(1, event.getCount());
+            Assertions.assertEquals(null, event.getMetadata().getLabels().get("a"));
+        } else {
+            Assertions.assertEquals("message4", event.getMessage());
+            Assertions.assertEquals(
+                    dedupePredicate != null
+                                    && dedupePredicate.test(labels)
+                                    && interval != null
+                                    && interval.toMillis() > 0
+                            ? 4
+                            : 5,
+                    event.getCount());
+            Assertions.assertEquals(null, event.getMetadata().getLabels().get("a"));
+        }
         // Create a new event
         Assertions.assertTrue(
                 EventUtils.createOrUpdateEventWithLabels(
@@ -358,7 +414,8 @@ public class EventUtilsTest {
                         EventRecorder.Component.Operator,
                         consumer,
                         "mk2",
-                        suppressionPredicate,
+                        interval,
+                        dedupePredicate,
                         Map.of("a", "b")));
         eventName =
                 EventUtils.generateEventName(

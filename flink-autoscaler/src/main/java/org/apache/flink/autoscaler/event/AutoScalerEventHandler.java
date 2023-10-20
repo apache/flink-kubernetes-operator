@@ -24,9 +24,9 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.util.Map;
 
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
@@ -44,18 +44,42 @@ public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
     String SCALING_SUMMARY_HEADER_SCALING_DISABLED = "Recommended parallelism change:";
     String SCALING_SUMMARY_HEADER_SCALING_ENABLED = "Scaling vertices:";
     String SCALING_REPORT_REASON = "ScalingReport";
-    String EVENT_MESSAGE_KEY = "ScalingExecutor";
+    String SCALING_REPORT_KEY = "ScalingExecutor";
 
-    /** Handle the event. */
+    /**
+     * Handle the event.
+     *
+     * @param interval Define the interval to suppress duplicate events. No dedupe if null.
+     */
     void handleEvent(
-            Context context, Type type, String reason, String message, @Nullable String messageKey);
+            Context context,
+            Type type,
+            String reason,
+            String message,
+            @Nullable String messageKey,
+            @Nullable Duration interval);
 
+    /**
+     * Handle scaling reports.
+     *
+     * @param interval Define the interval to suppress duplicate events.
+     * @param scaled Whether AutoScaler actually scaled the Flink job or just generate advice for
+     *     scaling.
+     */
     default void handleScalingEvent(
-            Context context, Map<JobVertexID, ScalingSummary> scalingSummaries) {
+            Context context,
+            Map<JobVertexID, ScalingSummary> scalingSummaries,
+            boolean scaled,
+            Duration interval) {
         // Provide default implementation without proper deduplication
-        var scalingReport =
-                scalingReport(scalingSummaries, context.getConfiguration().get(SCALING_ENABLED));
-        handleEvent(context, Type.Normal, SCALING_REPORT_REASON, scalingReport, EVENT_MESSAGE_KEY);
+        var scalingReport = scalingReport(scalingSummaries, scaled);
+        handleEvent(
+                context,
+                Type.Normal,
+                SCALING_REPORT_REASON,
+                scalingReport,
+                SCALING_REPORT_KEY,
+                interval);
     }
 
     static String scalingReport(

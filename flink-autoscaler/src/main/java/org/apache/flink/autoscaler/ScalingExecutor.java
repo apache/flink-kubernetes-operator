@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
@@ -91,9 +92,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         updateRecommendedParallelism(evaluatedMetrics, scalingSummaries);
 
-        autoScalerEventHandler.handleScalingEvent(context, scalingSummaries);
+        var scaleEnabled = conf.get(SCALING_ENABLED);
+        autoScalerEventHandler.handleScalingEvent(
+                context, scalingSummaries, scaleEnabled, conf.get(SCALING_EVENT_INTERVAL));
 
-        if (!conf.get(SCALING_ENABLED)) {
+        if (!scaleEnabled) {
             return false;
         }
 

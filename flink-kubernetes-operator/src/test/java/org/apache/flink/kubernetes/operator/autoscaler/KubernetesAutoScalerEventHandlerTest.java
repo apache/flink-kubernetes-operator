@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.autoscaler.ScalingSummary;
-import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
@@ -68,6 +68,82 @@ public class KubernetesAutoScalerEventHandlerTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"", "0", "1800"})
+    void testHandEventsWithNoMessageKey(String intervalString) {
+        testHandEvents(intervalString, null);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "0", "1800"})
+    void testHandEventsWithMessageKey(String intervalString) {
+        testHandEvents(intervalString, "key");
+    }
+
+    private void testHandEvents(String intervalString, String messageKey) {
+        Duration interval =
+                intervalString.isBlank() ? null : Duration.ofSeconds(Long.valueOf(intervalString));
+        var jobVertexID = new JobVertexID();
+
+        eventHandler.handleEvent(
+                ctx,
+                AutoScalerEventHandler.Type.Normal,
+                EventRecorder.Reason.IneffectiveScaling.name(),
+                "message",
+                messageKey,
+                interval);
+        var event = eventCollector.events.poll();
+        assertEquals(EventRecorder.Reason.IneffectiveScaling.name(), event.getReason());
+        assertEquals(1, event.getCount());
+
+        // Resend
+        eventHandler.handleEvent(
+                ctx,
+                AutoScalerEventHandler.Type.Normal,
+                EventRecorder.Reason.IneffectiveScaling.name(),
+                "message",
+                messageKey,
+                interval);
+        if (interval != null && interval.toMillis() > 0) {
+            assertEquals(0, eventCollector.events.size());
+        } else {
+            assertEquals(1, eventCollector.events.size());
+            event = eventCollector.events.poll();
+            assertEquals("message", event.getMessage());
+            assertEquals(2, event.getCount());
+        }
+
+        // Message changed
+        eventHandler.handleEvent(
+                ctx,
+                AutoScalerEventHandler.Type.Normal,
+                EventRecorder.Reason.IneffectiveScaling.name(),
+                "message1",
+                messageKey,
+                interval);
+        if (messageKey != null && interval != null && interval.toMillis() > 0) {
+            assertEquals(0, eventCollector.events.size());
+        } else {
+            assertEquals(1, eventCollector.events.size());
+            event = eventCollector.events.poll();
+            assertEquals("message1", event.getMessage());
+            assertEquals(messageKey == null ? 1 : 3, event.getCount());
+        }
+
+        // Message key changed
+        eventHandler.handleEvent(
+                ctx,
+                AutoScalerEventHandler.Type.Normal,
+                EventRecorder.Reason.IneffectiveScaling.name(),
+                "message1",
+                "newKey",
+                interval);
+        assertEquals(1, eventCollector.events.size());
+        event = eventCollector.events.poll();
+        assertEquals("message1", event.getMessage());
+        assertEquals(1, event.getCount());
+    }
+
+    @ParameterizedTest
     @ValueSource(booleans = {true, false})
     public void testHandleScalingEventsWith0Interval(boolean scalingEnabled) {
         testHandleScalingEvents(scalingEnabled, Duration.ofSeconds(0));
@@ -81,17 +157,12 @@ public class KubernetesAutoScalerEventHandlerTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testHandleScalingEventsWithDefaultInterval(boolean scalingEnabled) {
+    public void testHandleScalingEventsWithNullInterval(boolean scalingEnabled) {
         testHandleScalingEvents(scalingEnabled, null);
     }
 
-    private void testHandleScalingEvents(boolean scalingEnabled, Duration interval) {
+    private void testHandleScalingEvents(boolean scaled, Duration interval) {
         var jobVertexID = JobVertexID.fromHexString("1b51e99e55e89e404d9a0443fd98d9e2");
-        var conf = ctx.getConfiguration();
-        conf.set(AutoScalerOptions.SCALING_ENABLED, scalingEnabled);
-        if (interval != null) {
-            conf.set(AutoScalerOptions.SCALING_REPORT_INTERVAL, interval);
-        }
 
         var evaluatedScalingMetric = new EvaluatedScalingMetric();
         evaluatedScalingMetric.setAverage(1);
@@ -110,7 +181,7 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         ScalingMetric.TARGET_DATA_RATE,
                                         evaluatedScalingMetric)));
 
-        eventHandler.handleScalingEvent(ctx, scalingSummaries1);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, scaled, interval);
         var event = eventCollector.events.poll();
         assertTrue(
                 event.getMessage()
@@ -126,15 +197,14 @@ public class KubernetesAutoScalerEventHandlerTest {
 
         assertEquals(EventRecorder.Reason.ScalingReport.name(), event.getReason());
         assertEquals(
-                scalingEnabled ? null : "1286380436",
+                scaled ? null : "1286380436",
                 event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
         assertEquals(1, event.getCount());
 
         // Parallelism map doesn't change.
-        eventHandler.handleScalingEvent(ctx, scalingSummaries1);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, scaled, interval);
         Event newEvent;
-        if ((interval == null || (!interval.isNegative() && !interval.isZero()))
-                && !scalingEnabled) {
+        if (interval != null && interval.toMillis() > 0 && !scaled) {
             assertEquals(0, eventCollector.events.size());
         } else {
             assertEquals(1, eventCollector.events.size());
@@ -157,17 +227,14 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         evaluatedScalingMetric,
                                         ScalingMetric.TARGET_DATA_RATE,
                                         evaluatedScalingMetric)));
-        eventHandler.handleScalingEvent(ctx, scalingSummaries2);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries2, scaled, interval);
 
         assertEquals(1, eventCollector.events.size());
 
         newEvent = eventCollector.events.poll();
         assertEquals(event.getMetadata().getUid(), newEvent.getMetadata().getUid());
         assertEquals(
-                (interval == null || (!interval.isNegative() && !interval.isZero()))
-                                && !scalingEnabled
-                        ? 2
-                        : 3,
+                interval != null && interval.toMillis() > 0 && !scaled ? 2 : 3,
                 newEvent.getCount());
 
         // Parallelism map doesn't change but metrics changed.
@@ -185,10 +252,9 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         evaluatedScalingMetric,
                                         ScalingMetric.TARGET_DATA_RATE,
                                         evaluatedScalingMetric)));
-        eventHandler.handleScalingEvent(ctx, scalingSummaries2);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries2, scaled, interval);
 
-        if ((interval == null || (!interval.isNegative() && !interval.isZero()))
-                && !scalingEnabled) {
+        if (interval != null && interval.toMillis() > 0 && !scaled) {
             assertEquals(0, eventCollector.events.size());
         } else {
             assertEquals(1, eventCollector.events.size());
@@ -201,6 +267,7 @@ public class KubernetesAutoScalerEventHandlerTest {
     public void testSwitchingScalingEnabled() {
         var jobVertexID = JobVertexID.fromHexString("1b51e99e55e89e404d9a0443fd98d9e2");
         var evaluatedScalingMetric = new EvaluatedScalingMetric();
+        var interval = Duration.ofSeconds(1800);
         evaluatedScalingMetric.setAverage(1);
         evaluatedScalingMetric.setCurrent(2);
         Map<JobVertexID, ScalingSummary> scalingSummaries1 =
@@ -217,16 +284,14 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         ScalingMetric.TARGET_DATA_RATE,
                                         evaluatedScalingMetric)));
 
-        ctx.getConfiguration().set(AutoScalerOptions.SCALING_ENABLED, true);
-        eventHandler.handleScalingEvent(ctx, scalingSummaries1);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, true, interval);
         var event = eventCollector.events.poll();
         assertEquals(null, event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
         assertEquals(1, event.getCount());
 
         // Get recommendation event even parallelism map doesn't change and within supression
         // interval
-        ctx.getConfiguration().set(AutoScalerOptions.SCALING_ENABLED, false);
-        eventHandler.handleScalingEvent(ctx, scalingSummaries1);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, false, interval);
         assertEquals(1, eventCollector.events.size());
         event = eventCollector.events.poll();
         assertTrue(
@@ -246,8 +311,7 @@ public class KubernetesAutoScalerEventHandlerTest {
 
         // Get recommendation event even parallelism map doesn't change and within supression
         // interval
-        ctx.getConfiguration().set(AutoScalerOptions.SCALING_ENABLED, true);
-        eventHandler.handleScalingEvent(ctx, scalingSummaries1);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, true, interval);
         assertEquals(1, eventCollector.events.size());
         event = eventCollector.events.poll();
         assertTrue(

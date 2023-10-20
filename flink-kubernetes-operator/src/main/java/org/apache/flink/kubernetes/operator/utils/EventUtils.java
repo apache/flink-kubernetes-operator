@@ -26,10 +26,11 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.function.BiPredicate;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * The util to generate an event for the target resource. It is copied from
@@ -55,7 +56,7 @@ public class EventUtils {
                         & 0x7FFFFFFF);
     }
 
-    public static boolean createOrUpdateEvent(
+    public static boolean createOrUpdateEventWithInterval(
             KubernetesClient client,
             HasMetadata target,
             EventRecorder.Type type,
@@ -63,7 +64,8 @@ public class EventUtils {
             String message,
             EventRecorder.Component component,
             Consumer<Event> eventListener,
-            @Nullable String messageKey) {
+            @Nullable String messageKey,
+            @Nullable Duration interval) {
         return createOrUpdateEventWithLabels(
                 client,
                 target,
@@ -73,6 +75,7 @@ public class EventUtils {
                 component,
                 eventListener,
                 messageKey,
+                interval,
                 null,
                 Map.of());
     }
@@ -119,7 +122,8 @@ public class EventUtils {
             EventRecorder.Component component,
             Consumer<Event> eventListener,
             @Nullable String messageKey,
-            @Nullable BiPredicate<Map<String, String>, Instant> suppressionPredicate,
+            @Nullable Duration interval,
+            @Nullable Predicate<Map<String, String>> dedupePredicate,
             @Nullable Map<String, String> labels) {
         String eventName =
                 generateEventName(
@@ -127,11 +131,7 @@ public class EventUtils {
         Event existing = findExistingEvent(client, target, eventName);
 
         if (existing != null) {
-            if (suppressionPredicate != null
-                    && existing.getMetadata() != null
-                    && suppressionPredicate.test(
-                            existing.getMetadata().getLabels(),
-                            Instant.parse(existing.getLastTimestamp()))) {
+            if (labelCheck(existing, dedupePredicate) && intervalCheck(existing, interval)) {
                 return false;
             }
             updatedEventWithLabels(existing, client, message, eventListener, labels);
@@ -158,14 +158,13 @@ public class EventUtils {
     }
 
     private static void setLabels(Event existing, @Nullable Map<String, String> labels) {
-        if (existing.getMetadata() == null) {
-            var metaData = new ObjectMeta();
-            metaData.setLabels(labels);
-        } else if (existing.getMetadata().getLabels() == null) {
-            existing.getMetadata().setLabels(labels);
-        } else {
-            existing.getMetadata().setLabels(labels);
+        if (labels == null) {
+            return;
         }
+        if (existing.getMetadata() == null) {
+            existing.setMetadata(new ObjectMeta());
+        }
+        existing.getMetadata().setLabels(labels);
     }
 
     private static Event buildEvent(
@@ -198,5 +197,20 @@ public class EventUtils {
                 .withNamespace(target.getMetadata().getNamespace())
                 .endMetadata()
                 .build();
+    }
+
+    private static boolean intervalCheck(Event existing, @Nullable Duration interval) {
+        return interval != null
+                && Instant.now()
+                        .isBefore(
+                                Instant.parse(existing.getLastTimestamp())
+                                        .plusMillis(interval.toMillis()));
+    }
+
+    private static boolean labelCheck(
+            Event existing, Predicate<Map<String, String>> dedupePredicate) {
+        return dedupePredicate == null
+                || (existing.getMetadata() != null
+                        && dedupePredicate.test(existing.getMetadata().getLabels()));
     }
 }
