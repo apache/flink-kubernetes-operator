@@ -46,7 +46,6 @@ import org.apache.flink.kubernetes.kubeclient.KubernetesJobManagerSpecification;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.kubeclient.factory.KubernetesJobManagerFactory;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
-import org.apache.flink.kubernetes.operator.standalone.KubernetesStandaloneClusterDescriptor;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.entrypoint.ClusterEntrypoint;
@@ -69,7 +68,7 @@ import static org.apache.flink.util.Preconditions.checkNotNull;
 public class OperatorKubernetesClusterDescriptor extends KubernetesClusterDescriptor {
 
     private static final Logger LOG =
-            LoggerFactory.getLogger(KubernetesStandaloneClusterDescriptor.class);
+            LoggerFactory.getLogger(OperatorKubernetesClusterDescriptor.class);
 
     private final Configuration flinkConfig;
     private final FlinkKubeClient client;

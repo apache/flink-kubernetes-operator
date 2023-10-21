@@ -17,15 +17,11 @@
 
 package org.apache.flink.kubernetes.operator.service;
 
-import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.SecurityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.TestingClusterClient;
-import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
-import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -52,6 +48,7 @@ import java.util.concurrent.ExecutorService;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_HEALTH_PROBE_PORT;
+import static org.apache.flink.kubernetes.operator.service.AbstractFlinkService.CERT_DIR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -96,10 +93,16 @@ public class SecureFlinkServiceTest {
     public void testDeleteSecureClusterDeployment() throws IOException {
         var deployment = TestUtils.buildApplicationCluster();
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-        var flinkService = createFlinkService(null);
-        Files.createDirectories(certLocation);
-        Files.createFile(keyStoreFile);
-        Files.createFile(trustStoreFile);
+        var flinkService =
+                new NativeFlinkService(
+                        client, null, executorService, operatorConfig, eventRecorder);
+        Path operatorCertDir =
+                Paths.get(CERT_DIR, TestUtils.TEST_NAMESPACE, TestUtils.TEST_DEPLOYMENT_NAME);
+        Files.createDirectories(operatorCertDir);
+        Path keyPath = Paths.get(operatorCertDir.toString(), "keystore.jks");
+        Files.createFile(keyPath);
+        Path trustPath = Paths.get(operatorCertDir.toString(), "truststore.jks");
+        Files.createFile(trustPath);
         var conf = createOperatorConfig();
 
         var dep =
@@ -113,8 +116,8 @@ public class SecureFlinkServiceTest {
                         .build();
         client.resource(dep).create();
 
-        assertTrue(Files.exists(keyStoreFile));
-        assertTrue(Files.exists(trustStoreFile));
+        assertTrue(Files.exists(keyPath));
+        assertTrue(Files.exists(trustPath));
 
         assertNotNull(
                 client.apps()
@@ -131,104 +134,68 @@ public class SecureFlinkServiceTest {
                         .inNamespace(TestUtils.TEST_NAMESPACE)
                         .withName(TestUtils.TEST_DEPLOYMENT_NAME)
                         .get());
-        assertFalse(Files.exists(keyStoreFile));
-        assertFalse(Files.exists(trustStoreFile));
-        Files.deleteIfExists(trustStoreFile.getParent());
+        assertFalse(Files.exists(keyPath));
+        assertFalse(Files.exists(trustPath));
+        Files.deleteIfExists(keyPath.getParent());
     }
 
-    // @Test
-    public void testSubmitSecureApplicationCluster() throws Exception {
-        var testingClusterClient =
-                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
-        Configuration deployConfig = createOperatorConfig();
-        Secret secret =
-                client.secrets()
-                        .inNamespace(TestUtils.TEST_NAMESPACE)
-                        .withName(certificateSecret)
-                        .get();
-        assertNotNull(secret);
-        final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-
-        var flinkService = (NativeFlinkService) createFlinkService(testingClusterClient);
-        var testingService = new SecureFlinkService(flinkService);
-        testingService.submitApplicationCluster(deployment.getSpec().getJob(), deployConfig, false);
-        assertTrue(Files.exists(keyStoreFile));
-        assertEquals(DUMMY_KEYSTORE_CONTENTS, Files.readString(keyStoreFile));
-        assertTrue(Files.exists(trustStoreFile));
-        assertEquals(DUMMY_TRUSTSTORE_CONTENTS, Files.readString(trustStoreFile));
-        FileUtils.deleteDirectory(certLocation.toFile());
-    }
-
-    // @Test
-    public void testSubmitSecureSessionCluster() throws Exception {
-        var testingClusterClient =
-                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
-        Configuration deployConfig = createOperatorConfig();
-        var flinkService = (NativeFlinkService) createFlinkService(testingClusterClient);
-        var testingService = new SecureFlinkService(flinkService);
-        testingService.submitSessionCluster(deployConfig);
-        assertTrue(Files.exists(keyStoreFile));
-        assertEquals(DUMMY_KEYSTORE_CONTENTS, Files.readString(keyStoreFile));
-        assertTrue(Files.exists(trustStoreFile));
-        assertEquals(DUMMY_TRUSTSTORE_CONTENTS, Files.readString(trustStoreFile));
-        FileUtils.deleteDirectory(certLocation.toFile());
-    }
-
-    // @Test
+    @Test
     public void testGetSecureClusterClient() throws Exception {
-        var testingClusterClient =
-                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
         Configuration deployConfig = createOperatorConfig();
-        var flinkService = (NativeFlinkService) createFlinkService(testingClusterClient);
-        var testingService = new SecureFlinkService(flinkService);
+        var flinkService =
+                new NativeFlinkService(
+                        client, null, executorService, operatorConfig, eventRecorder);
         try {
-            testingService.getClusterClient(deployConfig);
+            flinkService.getClusterClient(deployConfig);
         } catch (ConfigurationException e) {
-            System.out.println(e.getMessage());
             assertEquals("Failed to initialize SSLContext for the REST client", e.getMessage());
         }
-        assertTrue(Files.exists(keyStoreFile));
-        assertEquals(DUMMY_KEYSTORE_CONTENTS, Files.readString(keyStoreFile));
-        assertTrue(Files.exists(trustStoreFile));
-        assertEquals(DUMMY_TRUSTSTORE_CONTENTS, Files.readString(trustStoreFile));
+        Path operatorCertDir =
+                Paths.get(CERT_DIR, TestUtils.TEST_NAMESPACE, TestUtils.TEST_DEPLOYMENT_NAME);
+        Path operatorKey = Paths.get(operatorCertDir.toString(), "keystore.jks");
+        assertTrue(Files.exists(operatorKey));
+        assertEquals(DUMMY_KEYSTORE_CONTENTS, Files.readString(operatorKey));
+        Path operatorTrust = Paths.get(operatorCertDir.toString(), "truststore.jks");
+        assertTrue(Files.exists(operatorTrust));
+        assertEquals(DUMMY_TRUSTSTORE_CONTENTS, Files.readString(operatorTrust));
         FileUtils.deleteDirectory(certLocation.toFile());
+        FileUtils.deleteDirectory(operatorCertDir.toFile());
     }
 
-    class SecureFlinkService extends NativeFlinkService {
-        private Configuration runtimeConfig;
-
-        public SecureFlinkService(NativeFlinkService nativeFlinkService) {
-            super(
-                    nativeFlinkService.kubernetesClient,
-                    nativeFlinkService.artifactManager,
-                    nativeFlinkService.executorService,
-                    SecureFlinkServiceTest.this.operatorConfig,
-                    eventRecorder);
-        }
-
-        @Override
-        protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) {
-            this.runtimeConfig = conf;
-        }
-
-        @Override
-        protected void submitClusterInternal(Configuration conf) throws Exception {
-            this.runtimeConfig = conf;
-        }
-
-        public Configuration getRuntimeConfig() {
-            return runtimeConfig;
+    @Test
+    public void testInvalidCertLocationGetClusterClient() throws Exception {
+        Configuration deployConfig = createOperatorConfig();
+        deployConfig.setString(
+                SecurityOptions.SSL_REST_KEYSTORE,
+                Paths.get(certLocation.toString(), "missingKey.crt").toString());
+        var flinkService =
+                new NativeFlinkService(
+                        client, null, executorService, operatorConfig, eventRecorder);
+        try {
+            flinkService.getClusterClient(deployConfig);
+        } catch (RuntimeException e) {
+            assertEquals("No data found for missingKey.crt in secret certsecret", e.getMessage());
+        } finally {
+            FileUtils.deleteDirectory(certLocation.toFile());
         }
     }
 
-    private AbstractFlinkService createFlinkService(RestClusterClient<String> clusterClient) {
-        return new NativeFlinkService(
-                client, null, executorService, operatorConfig, eventRecorder) {
-            @Override
-            public RestClusterClient<String> getClusterClient(Configuration config) {
-                return clusterClient;
-            }
-        };
+    @Test
+    public void testMissingSecretGetClusterClient() throws Exception {
+        Configuration deployConfig = createOperatorConfig();
+        client.secrets().inNamespace(TestUtils.TEST_NAMESPACE).withName(certificateSecret).delete();
+        var flinkService =
+                new NativeFlinkService(
+                        client, null, executorService, operatorConfig, eventRecorder);
+        try {
+            flinkService.getClusterClient(deployConfig);
+        } catch (RuntimeException e) {
+            assertEquals(
+                    "Secret certsecret in namespace flink-operator-test does not exist",
+                    e.getMessage());
+        } finally {
+            FileUtils.deleteDirectory(certLocation.toFile());
+        }
     }
 
     private Configuration createOperatorConfig() {

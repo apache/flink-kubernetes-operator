@@ -101,6 +101,7 @@ import org.apache.flink.util.Preconditions;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.commons.lang3.ObjectUtils;
@@ -148,6 +149,8 @@ public abstract class AbstractFlinkService implements FlinkService {
     private static final String EMPTY_JAR_FILENAME = "empty.jar";
     public static final String FIELD_NAME_TOTAL_CPU = "total-cpu";
     public static final String FIELD_NAME_TOTAL_MEMORY = "total-memory";
+
+    public static final String CERT_DIR = "/tmp/operator-certs";
 
     protected final KubernetesClient kubernetesClient;
     protected final ExecutorService executorService;
@@ -198,10 +201,6 @@ public abstract class AbstractFlinkService implements FlinkService {
             FlinkUtils.deleteJobGraphInZookeeperHA(conf);
         }
 
-        if (SecurityOptions.isRestSSLEnabled(conf)) {
-            // copyTLSFiles(conf, true);
-        }
-
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
@@ -210,9 +209,6 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     public void submitSessionCluster(Configuration conf) throws Exception {
-        if (SecurityOptions.isRestSSLEnabled(conf)) {
-            // copyTLSFiles(conf, true);
-        }
         deploySessionCluster(conf);
     }
 
@@ -754,7 +750,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         final int port = conf.getInteger(RestOptions.PORT);
         Configuration restConf = new Configuration(conf);
         if (SecurityOptions.isRestSSLEnabled(restConf)) {
-            copyTLSFiles(restConf, false);
+            copyTLSFiles(restConf);
         }
         final String host =
                 ObjectUtils.firstNonNull(
@@ -844,7 +840,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     protected RestClient getRestClient(Configuration conf) throws Exception {
         Configuration restConf = new Configuration(conf);
         if (SecurityOptions.isRestSSLEnabled(restConf)) {
-            copyTLSFiles(restConf, false);
+            copyTLSFiles(restConf);
         }
         return new RestClient(restConf, executorService);
     }
@@ -1041,19 +1037,11 @@ public abstract class AbstractFlinkService implements FlinkService {
             boolean deleteHaData) {
 
         if (SecurityOptions.isRestSSLEnabled(conf)) {
+            final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
+            final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
             try {
-                Path keystorePath =
-                        Paths.get(
-                                conf.getString(
-                                        SecurityOptions.SSL_REST_KEYSTORE,
-                                        conf.getString(SecurityOptions.SSL_KEYSTORE)));
-                Files.deleteIfExists(keystorePath);
-                Path truststorePath =
-                        Paths.get(
-                                conf.getString(
-                                        SecurityOptions.SSL_REST_TRUSTSTORE,
-                                        conf.getString(SecurityOptions.SSL_TRUSTSTORE)));
-                Files.deleteIfExists(truststorePath);
+                Path certPath = Paths.get(CERT_DIR, namespace, clusterId);
+                FileUtils.deleteDirectory(certPath.toFile());
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -1108,41 +1096,38 @@ public abstract class AbstractFlinkService implements FlinkService {
         return new KubernetesClusterClientFactory().getClusterSpecification(conf);
     }
 
-    private void copyTLSFiles(Configuration conf, boolean deployingCluster) throws IOException {
+    private void copyTLSFiles(Configuration conf) throws IOException {
         final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
-        System.out.println("*** Copying tls files for " + clusterId);
-        ConfigOption<String> config =
+        ConfigOption<String> configKeystore =
                 conf.contains(SecurityOptions.SSL_REST_KEYSTORE)
                         ? SecurityOptions.SSL_REST_KEYSTORE
                         : SecurityOptions.SSL_KEYSTORE;
-        Path keystorePath = Paths.get(conf.getString(config));
+        Path keystorePath = Paths.get(conf.getString(configKeystore));
         Path targetPath =
-                Paths.get("/tmp", namespace, clusterId, keystorePath.getFileName().toString());
-        createLocalFile(conf, targetPath, keystorePath, namespace, deployingCluster);
-        conf.setString(config, targetPath.toString());
-        config =
+                Paths.get(CERT_DIR, namespace, clusterId, keystorePath.getFileName().toString());
+        createLocalFile(conf, configKeystore, targetPath, keystorePath, namespace);
+        ConfigOption<String> configTruststore =
                 conf.contains(SecurityOptions.SSL_REST_TRUSTSTORE)
                         ? SecurityOptions.SSL_REST_TRUSTSTORE
                         : SecurityOptions.SSL_TRUSTSTORE;
-        Path truststorePath = Paths.get(conf.getString(config));
+        Path truststorePath = Paths.get(conf.getString(configTruststore));
         Path targetTrustPath =
-                Paths.get("/tmp", namespace, clusterId, truststorePath.getFileName().toString());
-        createLocalFile(conf, targetTrustPath, truststorePath, namespace, deployingCluster);
-        conf.setString(config, targetTrustPath.toString());
+                Paths.get(CERT_DIR, namespace, clusterId, truststorePath.getFileName().toString());
+        createLocalFile(conf, configTruststore, targetTrustPath, truststorePath, namespace);
     }
 
     private void createLocalFile(
             Configuration conf,
+            ConfigOption<String> configOption,
             Path targetPath,
             Path certStorePath,
-            String namespace,
-            boolean deployingCluster)
+            String namespace)
             throws IOException {
         if (Files.exists(targetPath)) {
-            if (deployingCluster) {
-                LOG.warn("File already exists {}", targetPath);
-            }
+            // We always need to set the config as session jobs may create the file before
+            // the session cluster is created. This would normally be after an operator restart
+            conf.setString(configOption, targetPath.toString());
             return;
         }
         // make sure the parent directories exist
@@ -1152,26 +1137,32 @@ public abstract class AbstractFlinkService implements FlinkService {
             LOG.warn("No secret mount found for ssl config");
             return;
         }
-        Optional<String> certSecret =
+        Optional<String> certSecretName =
                 secretMounts.entrySet().stream()
                         .filter(e -> Paths.get(e.getValue()).equals(certStorePath.getParent()))
                         .map(Map.Entry::getKey)
                         .findFirst();
-        System.out.println(certSecret.get());
-        System.out.println(namespace);
-        certSecret.ifPresentOrElse(
-                secret -> {
-                    Map<String, String> secretData =
-                            kubernetesClient
-                                    .secrets()
-                                    .inNamespace(namespace)
-                                    .withName(certSecret.get())
-                                    .get()
-                                    .getData();
-                    String certString = secretData.get(certStorePath.getFileName().toString());
+        certSecretName.ifPresentOrElse(
+                name -> {
+                    Secret certSecret =
+                            kubernetesClient.secrets().inNamespace(namespace).withName(name).get();
+                    if (certSecret == null) {
+                        throw new RuntimeException(
+                                String.format(
+                                        "Secret %s in namespace %s does not exist",
+                                        name, namespace));
+                    }
+                    Map<String, String> secretData = certSecret.getData();
+                    String key = certStorePath.getFileName().toString();
+                    String certString = secretData.get(key);
+                    if (certString == null) {
+                        throw new RuntimeException(
+                                String.format("No data found for %s in secret %s", key, name));
+                    }
                     try {
                         Files.write(targetPath, decoder.decode(certString));
                         LOG.info("Created local store file {}", targetPath);
+                        conf.setString(configOption, targetPath.toString());
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
