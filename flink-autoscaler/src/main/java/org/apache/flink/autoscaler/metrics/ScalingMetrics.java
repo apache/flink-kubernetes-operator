@@ -103,7 +103,8 @@ public class ScalingMetrics {
         // configured observe threshold
         boolean catchingUp =
                 scalingMetrics.getOrDefault(ScalingMetric.LAG, 0.)
-                        >= conf.get(AutoScalerOptions.OBSERVE_TPR_LAG_THRESHOLD).toSeconds()
+                        >= conf.get(AutoScalerOptions.OBSERVE_TRUE_PROCESSING_RATE_LAG_THRESHOLD)
+                                        .toSeconds()
                                 * numRecordsInPerSecond;
         if (!catchingUp) {
             return Optional.empty();

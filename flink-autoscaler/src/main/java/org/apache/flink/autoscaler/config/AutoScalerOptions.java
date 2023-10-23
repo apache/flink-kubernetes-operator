@@ -151,30 +151,35 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Lag threshold which will prevent unnecessary scalings while removing the pending messages responsible for the lag.");
 
-    public static final ConfigOption<Duration> OBSERVE_TPR_LAG_THRESHOLD =
-            autoScalerConfig("observed-tpr.lag-threshold")
+    public static final ConfigOption<Duration> OBSERVE_TRUE_PROCESSING_RATE_LAG_THRESHOLD =
+            autoScalerConfig("observed-true-processing-rate.lag-threshold")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(30))
-                    .withDeprecatedKeys(deprecatedOperatorConfigKey("observed-tpr.lag-threshold"))
-                    .withDescription("Lag threshold for enabling observed tpr measurements.");
+                    .withDeprecatedKeys(
+                            deprecatedOperatorConfigKey(
+                                    "observed-true-processing-rate.lag-threshold"))
+                    .withDescription(
+                            "Lag threshold for enabling observed true processing rate measurements.");
 
-    public static final ConfigOption<Double> OBSERVED_TPR_SWITCH_THRESHOLD =
-            autoScalerConfig("observed-tpr.switch-threshold")
+    public static final ConfigOption<Double> OBSERVED_TRUE_PROCESSING_RATE_SWITCH_THRESHOLD =
+            autoScalerConfig("observed-true-processing-rate.switch-threshold")
                     .doubleType()
                     .defaultValue(0.15)
                     .withDeprecatedKeys(
-                            deprecatedOperatorConfigKey("observed-tpr.switch-threshold"))
+                            deprecatedOperatorConfigKey(
+                                    "observed-true-processing-rate.switch-threshold"))
                     .withDescription(
-                            "Percentage threshold for switching to observed from busy time based true processing rate  if the measurement is off by at least the configured fraction. For example 0.15 means we switch to observed TPR if the busy time based one is at least 15% higher during catchup.");
+                            "Percentage threshold for switching to observed from busy time based true processing rate if the measurement is off by at least the configured fraction. For example 0.15 means we switch to observed if the busy time based computation is at least 15% higher during catchup.");
 
-    public static final ConfigOption<Integer> OBSERVED_TPR_MIN_OBSERVATIONS =
-            autoScalerConfig("observed-tpr.min-observations")
+    public static final ConfigOption<Integer> OBSERVED_TRUE_PROCESSING_RATE_MIN_OBSERVATIONS =
+            autoScalerConfig("observed-true-processing-rate.min-observations")
                     .intType()
                     .defaultValue(2)
                     .withDeprecatedKeys(
-                            deprecatedOperatorConfigKey("observed-tpr.min-observations"))
+                            deprecatedOperatorConfigKey(
+                                    "observed-true-processing-rate.min-observations"))
                     .withDescription(
-                            "Minimum nr of observations used when estimating / switching to observed tpr");
+                            "Minimum nr of observations used when estimating / switching to observed true processing rate.");
 
     public static final ConfigOption<Boolean> SCALING_EFFECTIVENESS_DETECTION_ENABLED =
             autoScalerConfig("scaling.effectiveness.detection.enabled")

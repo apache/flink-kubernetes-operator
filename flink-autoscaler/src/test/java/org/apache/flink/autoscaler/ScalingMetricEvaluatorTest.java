@@ -368,7 +368,7 @@ public class ScalingMetricEvaluatorTest {
         // Bust Time TPR average: 350
 
         // Set diff threshold to 20% -> within threshold
-        conf.set(AutoScalerOptions.OBSERVED_TPR_SWITCH_THRESHOLD, 0.2);
+        conf.set(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_SWITCH_THRESHOLD, 0.2);
 
         // Test that we used busy time based TPR
         assertEquals(
@@ -379,7 +379,7 @@ public class ScalingMetricEvaluatorTest {
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
 
         // Set diff threshold to 10% -> outside threshold
-        conf.set(AutoScalerOptions.OBSERVED_TPR_SWITCH_THRESHOLD, 0.1);
+        conf.set(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_SWITCH_THRESHOLD, 0.1);
 
         // Test that we used the observed TPR
         assertEquals(
@@ -390,7 +390,7 @@ public class ScalingMetricEvaluatorTest {
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
 
         // Test that observed tpr min observations are respected. If less, use busy time
-        conf.set(AutoScalerOptions.OBSERVED_TPR_MIN_OBSERVATIONS, 3);
+        conf.set(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_MIN_OBSERVATIONS, 3);
         assertEquals(
                 new EvaluatedScalingMetric(400., 350.),
                 evaluator

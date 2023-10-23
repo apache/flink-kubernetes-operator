@@ -165,7 +165,7 @@ public class ScalingMetricEvaluator {
                         OBSERVED_TPR,
                         vertex,
                         metricsHistory,
-                        conf.get(AutoScalerOptions.OBSERVED_TPR_MIN_OBSERVATIONS));
+                        conf.get(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_MIN_OBSERVATIONS));
 
         var tprMetric = selectTprMetric(vertex, conf, busyTimeTprAvg, observedTprAvg);
         return new EvaluatedScalingMetric(
@@ -187,7 +187,8 @@ public class ScalingMetricEvaluator {
             return TRUE_PROCESSING_RATE;
         }
 
-        double switchThreshold = conf.get(AutoScalerOptions.OBSERVED_TPR_SWITCH_THRESHOLD);
+        double switchThreshold =
+                conf.get(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_SWITCH_THRESHOLD);
         // If we could measure the observed tpr we decide whether to switch to using it
         // instead of busy time based on the error / difference between the two
         if (busyTimeTprAvg > observedTprAvg * (1 + switchThreshold)) {

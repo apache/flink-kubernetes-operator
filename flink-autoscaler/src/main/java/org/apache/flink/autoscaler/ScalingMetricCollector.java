@@ -115,14 +115,8 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
 
         // Calculate timestamp when the metric windows is full
         var metricWindowSize = getMetricWindowSize(conf);
-        var metricsAfterStable = metricHistory.tailMap(stableTime);
         var windowFullTime =
-                metricsAfterStable.isEmpty()
-                        ? now.plus(metricWindowSize)
-                        : metricsAfterStable.firstKey().plus(metricWindowSize);
-
-        // Trim metrics outside the metric window from metrics history
-        metricHistory.headMap(now.minus(metricWindowSize)).clear();
+                getWindowFullTime(metricHistory.tailMap(stableTime), now, metricWindowSize);
 
         // The filtered list of metrics we want to query for each vertex
         var filteredVertexMetricNames = queryFilteredMetricNames(ctx, topology);
@@ -147,15 +141,24 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         if (now.isBefore(windowFullTime)) {
             LOG.info("Metric window not full until {}", windowFullTime);
         } else {
-            // We clear any metrics from the stabilization interval once the metric window is full
-            metricHistory.headMap(stableTime).clear();
             collectedMetrics.setFullyCollected(true);
+            // Trim metrics outside the metric window from metrics history
+            metricHistory.headMap(now.minus(metricWindowSize)).clear();
         }
         return collectedMetrics;
     }
 
     protected Duration getMetricWindowSize(Configuration conf) {
         return conf.get(AutoScalerOptions.METRICS_WINDOW);
+    }
+
+    private static Instant getWindowFullTime(
+            SortedMap<Instant, CollectedMetrics> metricsAfterStable,
+            Instant now,
+            Duration metricWindowSize) {
+        return metricsAfterStable.isEmpty()
+                ? now.plus(metricWindowSize)
+                : metricsAfterStable.firstKey().plus(metricWindowSize);
     }
 
     @VisibleForTesting
@@ -287,7 +290,9 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                             observedTprAvg(
                                     jobVertexID,
                                     metricHistory,
-                                    conf.get(AutoScalerOptions.OBSERVED_TPR_MIN_OBSERVATIONS)));
+                                    conf.get(
+                                            AutoScalerOptions
+                                                    .OBSERVED_TRUE_PROCESSING_RATE_MIN_OBSERVATIONS)));
                     vertexScalingMetrics
                             .entrySet()
                             .forEach(e -> e.setValue(ScalingMetrics.roundMetric(e.getValue())));
