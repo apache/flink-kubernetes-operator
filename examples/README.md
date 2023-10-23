@@ -100,6 +100,17 @@ To try out this run the following command:
 kubectl apply -f basic-session-deployment-and-job.yaml
 ```
 
+#### Basic secured application
+
+This sample uses cert-manager to create a self-signed Issuer and jks certificate to secure the internal and rest 
+communication between pods. N.b. you may see RuntimeExceptions in the operator logs whilst the cert-manger creates the
+ssl certificate secret
+
+To try out this run the following command:
+```bash
+kubectl apply -f basic-secure.yaml
+```
+
 ### SQL runner
 
 For running Flink SQL scripts check this [example](flink-sql-runner-example/README.md).
