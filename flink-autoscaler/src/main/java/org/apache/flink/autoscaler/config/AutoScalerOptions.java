@@ -235,6 +235,7 @@ public class AutoScalerOptions {
             autoScalerConfig("scaling.event.interval")
                     .durationType()
                     .defaultValue(Duration.ofSeconds(1800))
+                    .withDeprecatedKeys(deprecatedOperatorConfigKey("scaling.event.interval"))
                     .withDescription("Time interval to resend the identical event");
 
     public static final ConfigOption<Duration> FLINK_CLIENT_TIMEOUT =
