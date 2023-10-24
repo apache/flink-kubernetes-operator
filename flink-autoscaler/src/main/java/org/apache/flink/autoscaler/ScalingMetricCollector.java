@@ -363,25 +363,13 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                         queryFilteredMetricNames(
                                                 ctx,
                                                 topology,
-                                                vertices.stream()
-                                                        .filter(topology::isSource)
-                                                        .filter(
-                                                                v ->
-                                                                        !topology.getFinishedVertices()
-                                                                                .contains(v)));
+                                                vertices.stream().filter(topology::isSource));
                                 newMetricNames.putAll(sourceMetricNames);
                                 return newMetricNames;
                             }
 
                             // Query all metric names
-                            return queryFilteredMetricNames(
-                                    ctx,
-                                    topology,
-                                    vertices.stream()
-                                            .filter(
-                                                    v ->
-                                                            !topology.getFinishedVertices()
-                                                                    .contains(v)));
+                            return queryFilteredMetricNames(ctx, topology, vertices.stream());
                         });
         names.keySet().removeAll(topology.getFinishedVertices());
         return names;
