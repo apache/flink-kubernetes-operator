@@ -17,19 +17,26 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
+import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
 import javax.annotation.Nullable;
 
 import java.time.Duration;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /** An event handler which posts events to the Kubernetes events API. */
 public class KubernetesAutoScalerEventHandler
         implements AutoScalerEventHandler<ResourceID, KubernetesJobAutoScalerContext> {
 
+    public static final String PARALLELISM_MAP_KEY = "parallelismMap";
     private final EventRecorder eventRecorder;
 
     public KubernetesAutoScalerEventHandler(EventRecorder eventRecorder) {
@@ -44,25 +51,71 @@ public class KubernetesAutoScalerEventHandler
             String message,
             @Nullable String messageKey,
             @Nullable Duration interval) {
-        if (interval == null) {
-            eventRecorder.triggerEvent(
-                    context.getResource(),
-                    EventRecorder.Type.valueOf(type.name()),
-                    reason,
-                    message,
-                    EventRecorder.Component.Operator,
-                    messageKey,
-                    context.getKubernetesClient());
+        eventRecorder.triggerEventWithInterval(
+                context.getResource(),
+                EventRecorder.Type.valueOf(type.name()),
+                reason,
+                message,
+                EventRecorder.Component.Operator,
+                messageKey,
+                context.getKubernetesClient(),
+                interval);
+    }
+
+    @Override
+    public void handleScalingEvent(
+            KubernetesJobAutoScalerContext context,
+            Map<JobVertexID, ScalingSummary> scalingSummaries,
+            boolean scaled,
+            Duration interval) {
+        if (scaled) {
+            AutoScalerEventHandler.super.handleScalingEvent(
+                    context, scalingSummaries, scaled, null);
         } else {
-            eventRecorder.triggerEventByInterval(
+            var conf = context.getConfiguration();
+            var scalingReport = AutoScalerEventHandler.scalingReport(scalingSummaries, scaled);
+            var labels = Map.of(PARALLELISM_MAP_KEY, getParallelismHashCode(scalingSummaries));
+
+            @Nullable
+            Predicate<Map<String, String>> dedupePredicate =
+                    new Predicate<Map<String, String>>() {
+                        @Override
+                        public boolean test(Map<String, String> stringStringMap) {
+                            return stringStringMap != null
+                                    && Objects.equals(
+                                            stringStringMap.get(PARALLELISM_MAP_KEY),
+                                            getParallelismHashCode(scalingSummaries));
+                        }
+                    };
+
+            eventRecorder.triggerEventWithLabels(
                     context.getResource(),
-                    EventRecorder.Type.valueOf(type.name()),
-                    reason,
+                    EventRecorder.Type.Normal,
+                    AutoScalerEventHandler.SCALING_REPORT_REASON,
+                    scalingReport,
                     EventRecorder.Component.Operator,
-                    message,
-                    messageKey,
+                    AutoScalerEventHandler.SCALING_REPORT_KEY,
                     context.getKubernetesClient(),
-                    interval);
+                    interval,
+                    dedupePredicate,
+                    labels);
         }
+    }
+
+    private static String getParallelismHashCode(
+            Map<JobVertexID, ScalingSummary> scalingSummaryHashMap) {
+        return Integer.toString(
+                scalingSummaryHashMap.entrySet().stream()
+                                .collect(
+                                        Collectors.toMap(
+                                                e -> e.getKey().toString(),
+                                                e ->
+                                                        String.format(
+                                                                "Parallelism %d -> %d",
+                                                                e.getValue()
+                                                                        .getCurrentParallelism(),
+                                                                e.getValue().getNewParallelism())))
+                                .hashCode()
+                        & 0x7FFFFFFF);
     }
 }

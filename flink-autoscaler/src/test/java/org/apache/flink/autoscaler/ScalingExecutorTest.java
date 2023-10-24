@@ -37,8 +37,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.autoscaler.ScalingExecutor.SCALING_SUMMARY_ENTRY;
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_REPORT_REASON;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_ENTRY;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_DISABLED;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_ENABLED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -151,19 +154,20 @@ public class ScalingExecutorTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testScalingEventsWith0Interval(boolean scalingEnabled) throws Exception {
+    public void testScalingEventsWith0IntervalConfig(boolean scalingEnabled) throws Exception {
         testScalingEvents(scalingEnabled, Duration.ofSeconds(0));
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testScalingEventsWithInterval(boolean scalingEnabled) throws Exception {
+    public void testScalingEventsWithIntervalConfig(boolean scalingEnabled) throws Exception {
         testScalingEvents(scalingEnabled, Duration.ofSeconds(1800));
     }
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void testScalingEventsWithDefaultInterval(boolean scalingEnabled) throws Exception {
+    public void testScalingEventsWithDefaultIntervalConfig(boolean scalingEnabled)
+            throws Exception {
         testScalingEvents(scalingEnabled, null);
     }
 
@@ -175,17 +179,13 @@ public class ScalingExecutorTest {
         var metrics = Map.of(jobVertexID, evaluated(1, 110, 100));
 
         if (interval != null) {
-            conf.set(AutoScalerOptions.SCALING_REPORT_INTERVAL, interval);
+            conf.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, interval);
         }
 
         assertEquals(scalingEnabled, scalingDecisionExecutor.scaleResource(context, metrics));
         assertEquals(scalingEnabled, scalingDecisionExecutor.scaleResource(context, metrics));
 
-        int expectedSize =
-                (interval == null || (!interval.isNegative() && !interval.isZero()))
-                                && !scalingEnabled
-                        ? 1
-                        : 2;
+        int expectedSize = (interval == null || interval.toMillis() > 0) && !scalingEnabled ? 1 : 2;
         assertEquals(expectedSize, eventCollector.events.size());
 
         TestingEventCollector.Event<JobID, JobAutoScalerContext<JobID>> event;
@@ -208,9 +208,9 @@ public class ScalingExecutorTest {
                 event.getMessage()
                         .contains(
                                 scalingEnabled
-                                        ? ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_ENABLED
-                                        : ScalingExecutor.SCALING_SUMMARY_HEADER_SCALING_DISABLED));
-        assertEquals(ScalingExecutor.SCALING_REPORT_REASON, event.getReason());
+                                        ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
+                                        : SCALING_SUMMARY_HEADER_SCALING_DISABLED));
+        assertEquals(SCALING_REPORT_REASON, event.getReason());
 
         metrics = Map.of(jobVertexID, evaluated(1, 110, 101));
 

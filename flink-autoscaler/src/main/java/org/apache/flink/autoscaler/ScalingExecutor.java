@@ -38,23 +38,15 @@ import java.util.Map;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /** Class responsible for executing scaling decisions. */
 public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
-    public static final String SCALING_SUMMARY_ENTRY =
-            " Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f";
-    public static final String SCALING_SUMMARY_HEADER_SCALING_DISABLED =
-            "Recommended parallelism change:";
-    public static final String SCALING_SUMMARY_HEADER_SCALING_ENABLED = "Scaling vertices:";
-    @VisibleForTesting static final String SCALING_REPORT_REASON = "ScalingReport";
-
     private static final Logger LOG = LoggerFactory.getLogger(ScalingExecutor.class);
 
     private final JobVertexScaler<KEY, Context> jobVertexScaler;
@@ -100,18 +92,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         updateRecommendedParallelism(evaluatedMetrics, scalingSummaries);
 
-        var scalingEnabled = conf.get(SCALING_ENABLED);
+        var scaleEnabled = conf.get(SCALING_ENABLED);
+        autoScalerEventHandler.handleScalingEvent(
+                context, scalingSummaries, scaleEnabled, conf.get(SCALING_EVENT_INTERVAL));
 
-        var scalingReport = scalingReport(scalingSummaries, scalingEnabled);
-        autoScalerEventHandler.handleEvent(
-                context,
-                AutoScalerEventHandler.Type.Normal,
-                SCALING_REPORT_REASON,
-                scalingReport,
-                "ScalingExecutor",
-                scalingEnabled ? null : conf.get(AutoScalerOptions.SCALING_REPORT_INTERVAL));
-
-        if (!scalingEnabled) {
+        if (!scaleEnabled) {
             return false;
         }
 
@@ -134,27 +119,6 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                         ScalingMetric.RECOMMENDED_PARALLELISM,
                                         EvaluatedScalingMetric.of(
                                                 scalingSummary.getNewParallelism())));
-    }
-
-    private static String scalingReport(
-            Map<JobVertexID, ScalingSummary> scalingSummaries, boolean scalingEnabled) {
-        StringBuilder sb =
-                new StringBuilder(
-                        scalingEnabled
-                                ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
-                                : SCALING_SUMMARY_HEADER_SCALING_DISABLED);
-        scalingSummaries.forEach(
-                (v, s) ->
-                        sb.append(
-                                String.format(
-                                        SCALING_SUMMARY_ENTRY,
-                                        v,
-                                        s.getCurrentParallelism(),
-                                        s.getNewParallelism(),
-                                        s.getMetrics().get(TRUE_PROCESSING_RATE).getAverage(),
-                                        s.getMetrics().get(EXPECTED_PROCESSING_RATE).getCurrent(),
-                                        s.getMetrics().get(TARGET_DATA_RATE).getAverage())));
-        return sb.toString();
     }
 
     protected static boolean allVerticesWithinUtilizationTarget(
@@ -190,7 +154,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         return true;
     }
 
-    private Map<JobVertexID, ScalingSummary> computeScalingSummary(
+    @VisibleForTesting
+    Map<JobVertexID, ScalingSummary> computeScalingSummary(
             Context context,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {

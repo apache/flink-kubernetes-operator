@@ -19,10 +19,17 @@ package org.apache.flink.autoscaler.event;
 
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
+import org.apache.flink.autoscaler.ScalingSummary;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nullable;
 
 import java.time.Duration;
+import java.util.Map;
+
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /**
  * Handler for autoscaler events.
@@ -32,12 +39,17 @@ import java.time.Duration;
  */
 @Experimental
 public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>> {
+    String SCALING_SUMMARY_ENTRY =
+            " Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f";
+    String SCALING_SUMMARY_HEADER_SCALING_DISABLED = "Recommended parallelism change:";
+    String SCALING_SUMMARY_HEADER_SCALING_ENABLED = "Scaling vertices:";
+    String SCALING_REPORT_REASON = "ScalingReport";
+    String SCALING_REPORT_KEY = "ScalingExecutor";
 
     /**
      * Handle the event.
      *
-     * @param interval When interval is great than 0, events that repeat within the interval will be
-     *     ignored.
+     * @param interval Define the interval to suppress duplicate events. No dedupe if null.
      */
     void handleEvent(
             Context context,
@@ -46,6 +58,50 @@ public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
             String message,
             @Nullable String messageKey,
             @Nullable Duration interval);
+
+    /**
+     * Handle scaling reports.
+     *
+     * @param interval Define the interval to suppress duplicate events.
+     * @param scaled Whether AutoScaler actually scaled the Flink job or just generate advice for
+     *     scaling.
+     */
+    default void handleScalingEvent(
+            Context context,
+            Map<JobVertexID, ScalingSummary> scalingSummaries,
+            boolean scaled,
+            Duration interval) {
+        // Provide default implementation without proper deduplication
+        var scalingReport = scalingReport(scalingSummaries, scaled);
+        handleEvent(
+                context,
+                Type.Normal,
+                SCALING_REPORT_REASON,
+                scalingReport,
+                SCALING_REPORT_KEY,
+                interval);
+    }
+
+    static String scalingReport(
+            Map<JobVertexID, ScalingSummary> scalingSummaries, boolean scalingEnabled) {
+        StringBuilder sb =
+                new StringBuilder(
+                        scalingEnabled
+                                ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
+                                : SCALING_SUMMARY_HEADER_SCALING_DISABLED);
+        scalingSummaries.forEach(
+                (v, s) ->
+                        sb.append(
+                                String.format(
+                                        SCALING_SUMMARY_ENTRY,
+                                        v,
+                                        s.getCurrentParallelism(),
+                                        s.getNewParallelism(),
+                                        s.getMetrics().get(TRUE_PROCESSING_RATE).getAverage(),
+                                        s.getMetrics().get(EXPECTED_PROCESSING_RATE).getCurrent(),
+                                        s.getMetrics().get(TARGET_DATA_RATE).getAverage())));
+        return sb.toString();
+    }
 
     /** The type of the events. */
     enum Type {

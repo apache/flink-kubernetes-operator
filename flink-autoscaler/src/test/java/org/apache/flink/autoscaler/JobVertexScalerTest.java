@@ -358,6 +358,39 @@ public class JobVertexScalerTest {
         assertThat(event.getMessage())
                 .isEqualTo(String.format(INEFFECTIVE_MESSAGE_FORMAT, jobVertexID));
         assertThat(event.getReason()).isEqualTo(INEFFECTIVE_SCALING);
+        assertEquals(1, event.getCount());
+
+        // Repeat ineffective scale with default interval, no event is triggered
+        assertEquals(
+                20,
+                vertexScaler.computeScaleTargetParallelism(
+                        context, jobVertexID, evaluated, history));
+        assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
+        assertEquals(0, eventCollector.events.size());
+
+        // Repeat ineffective scale with postive interval, no event is triggered
+        conf.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, Duration.ofSeconds(1800));
+        assertEquals(
+                20,
+                vertexScaler.computeScaleTargetParallelism(
+                        context, jobVertexID, evaluated, history));
+        assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
+        assertEquals(0, eventCollector.events.size());
+
+        // Ineffective scale with interval set to 0, an event is triggered
+        conf.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, Duration.ZERO);
+        assertEquals(
+                20,
+                vertexScaler.computeScaleTargetParallelism(
+                        context, jobVertexID, evaluated, history));
+        assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
+        assertEquals(1, eventCollector.events.size());
+        event = eventCollector.events.poll();
+        assertThat(event).isNotNull();
+        assertThat(event.getMessage())
+                .isEqualTo(String.format(INEFFECTIVE_MESSAGE_FORMAT, jobVertexID));
+        assertThat(event.getReason()).isEqualTo(INEFFECTIVE_SCALING);
+        assertEquals(2, event.getCount());
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
