@@ -108,15 +108,15 @@ public class KubernetesAutoScalerStateStore
     }
 
     @Override
-    public void storeEvaluatedMetrics(
+    public void storeCollectedMetrics(
             KubernetesJobAutoScalerContext jobContext,
-            SortedMap<Instant, CollectedMetrics> evaluatedMetrics) {
+            SortedMap<Instant, CollectedMetrics> metrics) {
         configMapStore.putSerializedState(
-                jobContext, COLLECTED_METRICS_KEY, serializeEvaluatedMetrics(evaluatedMetrics));
+                jobContext, COLLECTED_METRICS_KEY, serializeEvaluatedMetrics(metrics));
     }
 
     @Override
-    public Optional<SortedMap<Instant, CollectedMetrics>> getEvaluatedMetrics(
+    public Optional<SortedMap<Instant, CollectedMetrics>> getCollectedMetrics(
             KubernetesJobAutoScalerContext jobContext) {
         Optional<String> serializedEvaluatedMetricsOpt =
                 configMapStore.getSerializedState(jobContext, COLLECTED_METRICS_KEY);
@@ -135,7 +135,7 @@ public class KubernetesAutoScalerStateStore
     }
 
     @Override
-    public void removeEvaluatedMetrics(KubernetesJobAutoScalerContext jobContext) {
+    public void removeCollectedMetrics(KubernetesJobAutoScalerContext jobContext) {
         configMapStore.removeSerializedState(jobContext, COLLECTED_METRICS_KEY);
     }
 
@@ -217,7 +217,7 @@ public class KubernetesAutoScalerStateStore
                         .orElse(0);
 
         Optional<SortedMap<Instant, CollectedMetrics>> evaluatedMetricsOpt =
-                getEvaluatedMetrics(context);
+                getCollectedMetrics(context);
         if (evaluatedMetricsOpt.isEmpty()) {
             return;
         }

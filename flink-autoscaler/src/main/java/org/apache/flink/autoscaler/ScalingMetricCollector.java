@@ -92,7 +92,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                         jobKey,
                         (k) -> {
                             try {
-                                return stateStore.getEvaluatedMetrics(ctx).orElse(new TreeMap<>());
+                                return stateStore.getCollectedMetrics(ctx).orElse(new TreeMap<>());
                             } catch (Exception exception) {
                                 throw new RuntimeException(
                                         "Get evaluated metrics failed.", exception);
@@ -106,7 +106,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         // metric timestamp
         if (!metricHistory.isEmpty() && jobUpdateTs.isAfter(metricHistory.firstKey())) {
             LOG.info("Job updated at {}. Clearing metrics.", jobUpdateTs);
-            stateStore.removeEvaluatedMetrics(ctx);
+            stateStore.removeCollectedMetrics(ctx);
             cleanup(ctx.getJobKey());
             metricHistory.clear();
         }
@@ -130,10 +130,10 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
 
         // Add scaling metrics to history if they were computed successfully
         metricHistory.put(now, scalingMetrics);
-        stateStore.storeEvaluatedMetrics(ctx, metricHistory);
 
         if (now.isBefore(stableTime)) {
             LOG.info("Stabilizing until {}", stableTime);
+            stateStore.storeCollectedMetrics(ctx, metricHistory);
             return new CollectedMetricHistory(topology, Collections.emptySortedMap());
         }
 
@@ -145,6 +145,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
             // Trim metrics outside the metric window from metrics history
             metricHistory.headMap(now.minus(metricWindowSize)).clear();
         }
+        stateStore.storeCollectedMetrics(ctx, metricHistory);
         return collectedMetrics;
     }
 

@@ -528,6 +528,67 @@ public class MetricsCollectionAndEvaluationTest {
     }
 
     @Test
+    public void testMetricCollectionDuringStabilization() throws Exception {
+        var source = new JobVertexID();
+        var topology = new JobTopology(new VertexInfo(source, Set.of(), 10, 720));
+        Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> metrics =
+                Map.of(
+                        source,
+                        new HashMap<>(
+                                Map.of(
+                                        FlinkMetric.PENDING_RECORDS,
+                                        new AggregatedMetric(
+                                                "", Double.NaN, Double.NaN, Double.NaN, 1000000.),
+                                        FlinkMetric.BACKPRESSURE_TIME_PER_SEC,
+                                        new AggregatedMetric(
+                                                "", Double.NaN, Double.NaN, 600., Double.NaN),
+                                        FlinkMetric.BUSY_TIME_PER_SEC,
+                                        new AggregatedMetric(
+                                                "", Double.NaN, 200., Double.NaN, Double.NaN),
+                                        FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
+                                        new AggregatedMetric(
+                                                "", Double.NaN, Double.NaN, Double.NaN, 1000.),
+                                        FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
+                                        new AggregatedMetric(
+                                                "", Double.NaN, Double.NaN, Double.NaN, 500.))));
+
+        metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector.setJobUpdateTs(startTime);
+        metricsCollector.setCurrentMetrics(metrics);
+
+        context.getConfiguration()
+                .set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofMillis(100));
+        context.getConfiguration().set(AutoScalerOptions.METRICS_WINDOW, Duration.ofMillis(100));
+
+        // Within stabilization period we simply collect metrics but do not return them
+        metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(50), ZoneId.systemDefault()));
+        assertTrue(
+                metricsCollector.updateMetrics(context, stateStore).getMetricHistory().isEmpty());
+        assertEquals(1, stateStore.getCollectedMetrics(context).get().size());
+        metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(60), ZoneId.systemDefault()));
+        assertTrue(
+                metricsCollector.updateMetrics(context, stateStore).getMetricHistory().isEmpty());
+        assertEquals(2, stateStore.getCollectedMetrics(context).get().size());
+
+        // Until window is full (time=200) we keep returning stabilizing metrics
+        metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(150), ZoneId.systemDefault()));
+        assertEquals(
+                3, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(3, stateStore.getCollectedMetrics(context).get().size());
+
+        metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(180), ZoneId.systemDefault()));
+        assertEquals(
+                4, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(4, stateStore.getCollectedMetrics(context).get().size());
+
+        // Once we reach full time we trim the stabilization metrics
+        metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(260), ZoneId.systemDefault()));
+        assertEquals(
+                2, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(2, stateStore.getCollectedMetrics(context).get().size());
+    }
+
+    @Test
     public void testScaleDownWithZeroProcessingRate() throws Exception {
         var topology = new JobTopology(new VertexInfo(source1, Set.of(), 2, 720));
 

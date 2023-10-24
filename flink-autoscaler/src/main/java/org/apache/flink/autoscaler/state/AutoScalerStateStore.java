@@ -46,14 +46,13 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
 
     void removeScalingHistory(Context jobContext) throws Exception;
 
-    void storeEvaluatedMetrics(
-            Context jobContext, SortedMap<Instant, CollectedMetrics> evaluatedMetrics)
+    void storeCollectedMetrics(Context jobContext, SortedMap<Instant, CollectedMetrics> metrics)
             throws Exception;
 
-    Optional<SortedMap<Instant, CollectedMetrics>> getEvaluatedMetrics(Context jobContext)
+    Optional<SortedMap<Instant, CollectedMetrics>> getCollectedMetrics(Context jobContext)
             throws Exception;
 
-    void removeEvaluatedMetrics(Context jobContext) throws Exception;
+    void removeCollectedMetrics(Context jobContext) throws Exception;
 
     void storeParallelismOverrides(Context jobContext, Map<String, String> parallelismOverrides)
             throws Exception;

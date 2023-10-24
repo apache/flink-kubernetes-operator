@@ -40,13 +40,13 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     private final Map<KEY, Map<JobVertexID, SortedMap<Instant, ScalingSummary>>>
             scalingHistoryStore;
 
-    private final Map<KEY, SortedMap<Instant, CollectedMetrics>> evaluatedMetricsStore;
+    private final Map<KEY, SortedMap<Instant, CollectedMetrics>> collectedMetricsStore;
 
     private final Map<KEY, Map<String, String>> parallelismOverridesStore;
 
     public InMemoryAutoScalerStateStore() {
         scalingHistoryStore = new ConcurrentHashMap<>();
-        evaluatedMetricsStore = new ConcurrentHashMap<>();
+        collectedMetricsStore = new ConcurrentHashMap<>();
         parallelismOverridesStore = new ConcurrentHashMap<>();
     }
 
@@ -69,19 +69,19 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     }
 
     @Override
-    public void storeEvaluatedMetrics(
-            Context jobContext, SortedMap<Instant, CollectedMetrics> evaluatedMetrics) {
-        evaluatedMetricsStore.put(jobContext.getJobKey(), evaluatedMetrics);
+    public void storeCollectedMetrics(
+            Context jobContext, SortedMap<Instant, CollectedMetrics> metrics) {
+        collectedMetricsStore.put(jobContext.getJobKey(), metrics);
     }
 
     @Override
-    public Optional<SortedMap<Instant, CollectedMetrics>> getEvaluatedMetrics(Context jobContext) {
-        return Optional.ofNullable(evaluatedMetricsStore.get(jobContext.getJobKey()));
+    public Optional<SortedMap<Instant, CollectedMetrics>> getCollectedMetrics(Context jobContext) {
+        return Optional.ofNullable(collectedMetricsStore.get(jobContext.getJobKey()));
     }
 
     @Override
-    public void removeEvaluatedMetrics(Context jobContext) {
-        evaluatedMetricsStore.remove(jobContext.getJobKey());
+    public void removeCollectedMetrics(Context jobContext) {
+        collectedMetricsStore.remove(jobContext.getJobKey());
     }
 
     @Override
@@ -108,7 +108,7 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     @Override
     public void removeInfoFromCache(KEY jobKey) {
         scalingHistoryStore.remove(jobKey);
-        evaluatedMetricsStore.remove(jobKey);
+        collectedMetricsStore.remove(jobKey);
         parallelismOverridesStore.remove(jobKey);
     }
 }
