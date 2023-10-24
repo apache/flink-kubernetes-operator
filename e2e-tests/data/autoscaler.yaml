@@ -41,6 +41,12 @@ spec:
     job.autoscaler.stabilization.interval: "5s"
     job.autoscaler.metrics.window: "1m"
 
+#    Invalid Validations for testing autoscaler configurations
+#    kubernetes.operator.job.autoscaler.scale-down.max-factor: "-0.6"
+#    kubernetes.operator.job.autoscaler.scale-up.max-factor: "-1.0"
+#    kubernetes.operator.job.autoscaler.target.utilization: "-10.7"
+#    kubernetes.operator.job.autoscaler.target.utilization.boundary: "-Hundred"
+
     jobmanager.scheduler: adaptive
   serviceAccount: flink
   podTemplate:

@@ -17,7 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -682,6 +684,219 @@ public class DefaultValidatorTest {
             } else {
                 fail("Did not get expected error: " + expectedErr);
             }
+        }
+    }
+
+    @Test
+    public void testAutoScalerDeployment() {
+        testAutoScalerConfiguration(flinkConf -> {}).ifPresent(Assertions::fail);
+    }
+
+    @Test
+    public void testAutoScalerDeploymentWithInvalidNegativeScaleDownFactor() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(
+                                        AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "-0.1"));
+        assertErrorContains(
+                result, getFormattedErrorMessage(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 0.0d));
+    }
+
+    @Test
+    public void testAutoScalerDeploymentWithInvalidNegativeScaleUpFactor() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "-0.1"));
+        assertErrorContains(
+                result, getFormattedErrorMessage(AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.0d));
+    }
+
+    @Test
+    public void testAutoScalerDeploymentWithInvalidNegativeUtilization() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "-0.6"));
+        assertErrorContains(
+                result, getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION, 0.0d));
+    }
+
+    @Test
+    public void testAutoScalerDeploymentWithInvalidNegativeUtilizationBoundary() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(
+                                        AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(),
+                                        "-0.6"));
+        assertErrorContains(
+                result,
+                getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d));
+    }
+
+    @Test
+    public void testNonEnabledAutoScalerDeploymentJob() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.remove(AutoScalerOptions.AUTOSCALER_ENABLED.key());
+                            flinkConf.put(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "-1.6");
+                            flinkConf.put(
+                                    AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(), "-1.6");
+                        });
+        assertErrorNotContains(result);
+    }
+
+    @Test
+    public void testDisabledEnabledAutoScalerDeploymentJob() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "false");
+                            flinkConf.put(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "-1.6");
+                            flinkConf.put(
+                                    AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(), "-1.6");
+                        });
+        assertErrorNotContains(result);
+    }
+
+    @Test
+    public void testValidateSessionJob() {
+        testSessionJobAutoScalerConfiguration(flinkConf -> {}).ifPresent(Assertions::fail);
+    }
+
+    @Test
+    public void testValidateSessionJobWithInvalidNegativeScaleDownFactor() {
+        var result =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(
+                                        AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "-0.1"));
+        assertErrorContains(
+                result, getFormattedErrorMessage(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR, 0.0d));
+    }
+
+    @Test
+    public void testValidateSessionJobWithInvalidNegativeScaleUpFactor() {
+        var result =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "-0.1"));
+        assertErrorContains(
+                result, getFormattedErrorMessage(AutoScalerOptions.MAX_SCALE_UP_FACTOR, 0.0d));
+    }
+
+    @Test
+    public void testValidateSessionJobWithInvalidNegativeUtilization() {
+        var result =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "-0.6"));
+        assertErrorContains(
+                result, getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION, 0.0d));
+    }
+
+    @Test
+    public void testValidateSessionJobWithInvalidNegativeUtilizationBoundary() {
+        var result =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(
+                                        AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(),
+                                        "-0.6"));
+        assertErrorContains(
+                result,
+                getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d));
+    }
+
+    @Test
+    public void testValidateSessionJobWithInvalidUtilizationBoundary() {
+        var result =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(
+                                        AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(),
+                                        "-1.6"));
+        assertErrorContains(
+                result,
+                getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d));
+    }
+
+    @Test
+    public void testNonEnabledAutoScalerSessionJob() {
+        var result =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf -> {
+                            flinkConf.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "false");
+                            flinkConf.put(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "-1.6");
+                            flinkConf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "-1.6");
+                            flinkConf.put(
+                                    AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(), "-1.6");
+                        });
+        assertErrorNotContains(result);
+    }
+
+    private Optional<String> testSessionJobAutoScalerConfiguration(
+            Consumer<Map<String, String>> flinkConfigurationModifier) {
+        var sessionCluster = TestUtils.buildSessionCluster();
+        var sessionJob = TestUtils.buildSessionJob();
+        var flinkConfiguration = getDefaultTestAutoScalerFlinkConfigurationMap();
+        flinkConfigurationModifier.accept(flinkConfiguration);
+        sessionCluster.getSpec().setFlinkConfiguration(flinkConfiguration);
+        return validator.validateSessionJob(sessionJob, Optional.of(sessionCluster));
+    }
+
+    public Optional<String> testAutoScalerConfiguration(
+            Consumer<Map<String, String>> flinkConfigurationModifier) {
+        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        var flinkConfiguration = getDefaultTestAutoScalerFlinkConfigurationMap();
+        flinkConfigurationModifier.accept(flinkConfiguration);
+        deployment.getSpec().setFlinkConfiguration(flinkConfiguration);
+        return validator.validateDeployment(deployment);
+    }
+
+    private Map<String, String> getDefaultTestAutoScalerFlinkConfigurationMap() {
+        Map<String, String> conf = new HashMap<>();
+        conf.put(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "true");
+        conf.put(AutoScalerOptions.MAX_SCALE_UP_FACTOR.key(), "100000.0");
+        conf.put(AutoScalerOptions.MAX_SCALE_DOWN_FACTOR.key(), "0.6");
+        conf.put(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED.key(), "0.1");
+        conf.put(AutoScalerOptions.TARGET_UTILIZATION.key(), "0.7");
+        conf.put(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY.key(), "0.4");
+        return conf;
+    }
+
+    private static String getFormattedErrorMessage(
+            ConfigOption<Double> configValue, Double min, Double max) {
+        return String.format(
+                "The AutoScalerOption %s is invalid, it should be a value within the range [%s, %s]",
+                configValue.key(),
+                min != null ? min.toString() : "-Infinity",
+                max != null ? max.toString() : "+Infinity");
+    }
+
+    private static String getFormattedErrorMessage(ConfigOption<Double> configValue, Double min) {
+        return getFormattedErrorMessage(configValue, min, null);
+    }
+
+    private static void assertErrorContains(Optional<String> result, String error) {
+        if (result.isEmpty()) {
+            Assertions.fail("Invalid Configuration not caught in the tests");
+        } else {
+            Assertions.assertEquals(error, result.get());
+        }
+    }
+
+    private static void assertErrorNotContains(Optional<String> result) {
+        if (result.isPresent()) {
+            Assertions.fail("Invalid Configuration not caught in the tests");
         }
     }
 }
