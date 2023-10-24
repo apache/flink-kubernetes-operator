@@ -30,6 +30,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 /** Utilities for computing scaling metrics based on Flink metrics. */
 public class ScalingMetrics {
@@ -52,11 +54,11 @@ public class ScalingMetrics {
             Map<ScalingMetric, Double> scalingMetrics,
             JobTopology topology,
             double lagGrowthRate,
-            Configuration conf) {
+            Configuration conf,
+            Supplier<Double> observedTprAvg) {
 
         var isSource = topology.isSource(jobVertexID);
 
-        double busyTimeMsPerSecond = getBusyTimeMsPerSecond(flinkMetrics, conf, jobVertexID);
         double numRecordsInPerSecond =
                 getNumRecordsInPerSecond(flinkMetrics, jobVertexID, isSource);
 
@@ -68,7 +70,15 @@ public class ScalingMetrics {
         }
 
         if (!Double.isNaN(numRecordsInPerSecond)) {
-            double trueProcessingRate = computeTrueRate(numRecordsInPerSecond, busyTimeMsPerSecond);
+            double busyTimeMsPerSecond = getBusyTimeMsPerSecond(flinkMetrics, conf, jobVertexID);
+            double trueProcessingRate =
+                    computeTprFromBusyTime(conf, numRecordsInPerSecond, busyTimeMsPerSecond);
+            if (isSource) {
+                var observedTprOpt =
+                        getObservedTpr(flinkMetrics, scalingMetrics, numRecordsInPerSecond, conf)
+                                .orElseGet(observedTprAvg);
+                scalingMetrics.put(ScalingMetric.OBSERVED_TPR, observedTprOpt);
+            }
             scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, trueProcessingRate);
             scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
         } else {
@@ -76,6 +86,45 @@ public class ScalingMetrics {
             scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, Double.NaN);
             scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, Double.NaN);
         }
+    }
+
+    private static Optional<Double> getObservedTpr(
+            Map<FlinkMetric, AggregatedMetric> flinkMetrics,
+            Map<ScalingMetric, Double> scalingMetrics,
+            double numRecordsInPerSecond,
+            Configuration conf) {
+
+        // If there are no incoming records we return infinity to allow scale down
+        if (numRecordsInPerSecond == 0) {
+            return Optional.of(Double.POSITIVE_INFINITY);
+        }
+
+        // We only measure observed tpr when we are catching up, that is when the lag is beyond the
+        // configured observe threshold
+        boolean catchingUp =
+                scalingMetrics.getOrDefault(ScalingMetric.LAG, 0.)
+                        >= conf.get(AutoScalerOptions.OBSERVE_TRUE_PROCESSING_RATE_LAG_THRESHOLD)
+                                        .toSeconds()
+                                * numRecordsInPerSecond;
+        if (!catchingUp) {
+            return Optional.empty();
+        }
+
+        double observedTpr =
+                computeObservedTprWithBackpressure(
+                        numRecordsInPerSecond,
+                        flinkMetrics.get(FlinkMetric.BACKPRESSURE_TIME_PER_SEC).getAvg());
+
+        return Double.isNaN(observedTpr) ? Optional.empty() : Optional.of(observedTpr);
+    }
+
+    public static double computeObservedTprWithBackpressure(
+            double numRecordsInPerSecond, double backpressureMsPerSeconds) {
+        if (backpressureMsPerSeconds >= 1000) {
+            return Double.NaN;
+        }
+        double nonBackpressuredRate = (1 - (backpressureMsPerSeconds / 1000));
+        return numRecordsInPerSecond / nonBackpressuredRate;
     }
 
     public static Map<Edge, Double> computeOutputRatios(
@@ -136,10 +185,9 @@ public class ScalingMetrics {
                         "No busyTimeMsPerSecond metric available for {}. No scaling will be performed for this vertex.",
                         jobVertexId);
             }
-            // Pretend that the load is balanced because we don't know any better
-            busyTimeMsPerSecond = conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
+            return Double.NaN;
         }
-        return busyTimeMsPerSecond;
+        return Math.max(0, busyTimeMsPerSecond);
     }
 
     private static double getNumRecordsInPerSecond(
@@ -159,7 +207,7 @@ public class ScalingMetrics {
             LOG.warn("Received null input rate for {}. Returning NaN.", jobVertexID);
             return Double.NaN;
         }
-        return numRecordsInPerSecond.getSum();
+        return Math.max(0, numRecordsInPerSecond.getSum());
     }
 
     private static double getNumRecordsOutPerSecond(
@@ -225,11 +273,16 @@ public class ScalingMetrics {
         return getNumRecordsOutPerSecond(fromMetrics, from);
     }
 
-    private static double computeTrueRate(double rate, double busyTimeMsPerSecond) {
-        if (rate <= 0 || busyTimeMsPerSecond <= 0) {
+    private static double computeTprFromBusyTime(
+            Configuration conf, double rate, double busyTimeMsPerSecond) {
+        if (rate == 0) {
             // Nothing is coming in, we assume infinite processing power
             // until we can sample the true processing rate (i.e. data flows).
             return Double.POSITIVE_INFINITY;
+        }
+        // Pretend that the load is balanced because we don't know any better
+        if (Double.isNaN(busyTimeMsPerSecond)) {
+            busyTimeMsPerSecond = conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
         }
         return rate / (busyTimeMsPerSecond / 1000);
     }

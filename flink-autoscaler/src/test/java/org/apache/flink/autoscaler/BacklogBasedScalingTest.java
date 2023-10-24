@@ -368,7 +368,7 @@ public class BacklogBasedScalingTest {
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));
 
         autoscaler.scale(context);
-        assertFalse(stateStore.getEvaluatedMetrics(context).get().isEmpty());
+        assertFalse(stateStore.getCollectedMetrics(context).get().isEmpty());
     }
 
     @Test
@@ -392,13 +392,13 @@ public class BacklogBasedScalingTest {
         setClocksTo(now);
         metricsCollector.setJobUpdateTs(now);
         autoscaler.scale(context);
-        assertTrue(stateStore.getEvaluatedMetrics(context).isEmpty());
+        assertTrue(autoscaler.lastEvaluatedMetrics.isEmpty());
         assertTrue(eventCollector.events.isEmpty());
     }
 
     private void assertEvaluatedMetricsSize(int expectedSize) {
         Optional<SortedMap<Instant, CollectedMetrics>> evaluatedMetricsOpt =
-                stateStore.getEvaluatedMetrics(context);
+                stateStore.getCollectedMetrics(context);
         assertThat(evaluatedMetricsOpt).isPresent();
         assertThat(evaluatedMetricsOpt.get()).hasSize(expectedSize);
     }

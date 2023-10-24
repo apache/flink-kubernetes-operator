@@ -163,7 +163,6 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         for (Map.Entry<JobVertexID, ScalingSummary> entry : scalingSummaries.entrySet()) {
             var vertex = entry.getKey();
-            var scalingSummary = entry.getValue();
             var metrics = evaluatedMetrics.get(vertex);
 
             double processingRate = metrics.get(TRUE_PROCESSING_RATE).getAverage();

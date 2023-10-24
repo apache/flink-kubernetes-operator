@@ -29,6 +29,9 @@ public enum ScalingMetric {
     /** Processing rate at full capacity (records/sec). */
     TRUE_PROCESSING_RATE(true),
 
+    /** Observed true processing rate for sources. */
+    OBSERVED_TPR(true),
+
     /** Current processing rate. */
     CURRENT_PROCESSING_RATE(true),
 

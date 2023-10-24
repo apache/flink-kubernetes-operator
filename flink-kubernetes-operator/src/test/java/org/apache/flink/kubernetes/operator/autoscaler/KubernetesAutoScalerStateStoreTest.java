@@ -218,17 +218,17 @@ public class KubernetesAutoScalerStateStoreTest {
         var now = Instant.now();
 
         Assertions.assertEquals(scalingHistory, getTrimmedScalingHistory(stateStore, ctx, now));
-        assertThat(stateStore.getEvaluatedMetrics(ctx)).hasValue(metricHistory);
+        assertThat(stateStore.getCollectedMetrics(ctx)).hasValue(metricHistory);
 
         // Override with compressed data
         var newTs = Instant.now();
 
         addToScalingHistoryAndStore(stateStore, ctx, newTs, Map.of());
-        stateStore.storeEvaluatedMetrics(ctx, metricHistory);
+        stateStore.storeCollectedMetrics(ctx, metricHistory);
 
         // Make sure we can still access everything
         Assertions.assertEquals(scalingHistory, getTrimmedScalingHistory(stateStore, ctx, newTs));
-        assertThat(stateStore.getEvaluatedMetrics(ctx)).hasValue(metricHistory);
+        assertThat(stateStore.getCollectedMetrics(ctx)).hasValue(metricHistory);
     }
 
     @Test
@@ -265,7 +265,7 @@ public class KubernetesAutoScalerStateStoreTest {
                         new ScalingSummary(
                                 1, 2, Map.of(ScalingMetric.LAG, EvaluatedScalingMetric.of(2.)))));
 
-        stateStore.storeEvaluatedMetrics(ctx, metricHistory);
+        stateStore.storeCollectedMetrics(ctx, metricHistory);
 
         assertFalse(
                 configMapStore
@@ -314,7 +314,7 @@ public class KubernetesAutoScalerStateStoreTest {
                         configMapStore.getSerializedState(
                                 ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY))
                 .isPresent();
-        assertThat(stateStore.getEvaluatedMetrics(ctx)).isEmpty();
+        assertThat(stateStore.getCollectedMetrics(ctx)).isEmpty();
         assertThat(
                         configMapStore.getSerializedState(
                                 ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY))
