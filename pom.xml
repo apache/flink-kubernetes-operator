@@ -95,6 +95,14 @@ under the License.
         <curator-test.version>5.2.0</curator-test.version>
 
         <assertj.version>3.21.0</assertj.version>
+
+        <flink-kubernetes-operator.surefire.baseArgLine>-XX:+IgnoreUnrecognizedVMOptions ${surefire.module.config}</flink-kubernetes-operator.surefire.baseArgLine>
+
+        <!-- This property should contain the add-opens/add-exports commands required for the tests
+		     in the given module to pass.
+		     It MUST be a space-separated list not containing any newlines,
+		     of entries in the form '[-]{2}add-[opens|exports]=<module>/<package>=ALL-UNNAMED'.-->
+        <surefire.module.config/>
     </properties>
 
     <dependencyManagement>
@@ -181,6 +189,17 @@ under the License.
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
+                <configuration>
+                    <!-- This is picked up by IntelliJ -->
+                    <argLine>${flink-kubernetes-operator.surefire.baseArgLine}</argLine>
+                </configuration>
+                <executions>
+                    <execution>
+                        <configuration>
+                            <argLine>${flink-kubernetes-operator.surefire.baseArgLine}</argLine>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>

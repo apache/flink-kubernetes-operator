@@ -34,6 +34,10 @@ under the License.
     <properties>
         <awaitility.version>4.1.0</awaitility.version>
         <plugins.tmp.dir>${project.build.directory}/plugins</plugins.tmp.dir>
+        <surefire.module.config> <!-- required by
+        FlinkConfigManagerTest
+        -->--add-opens=java.base/java.util=ALL-UNNAMED
+        </surefire.module.config>
     </properties>
 
     <dependencies>
