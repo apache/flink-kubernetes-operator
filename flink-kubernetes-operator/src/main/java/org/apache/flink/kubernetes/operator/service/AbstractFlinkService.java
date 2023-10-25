@@ -193,9 +193,9 @@ public abstract class AbstractFlinkService implements FlinkService {
 
         // If Kubernetes or Zookeeper HA are activated, delete the job graph in HA storage so that
         // the newly changed job config (e.g. parallelism) could take effect
-        final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
-        final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
+            final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
+            final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
             FlinkUtils.deleteJobGraphInKubernetesHA(clusterId, namespace, kubernetesClient);
         } else if (FlinkUtils.isZookeeperHAActivated(conf)) {
             FlinkUtils.deleteJobGraphInZookeeperHA(conf);
@@ -1041,7 +1041,9 @@ public abstract class AbstractFlinkService implements FlinkService {
             final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
             try {
                 Path certPath = Paths.get(CERT_DIR, namespace, clusterId);
-                FileUtils.deleteDirectory(certPath.toFile());
+                if (Files.exists(certPath)) {
+                    FileUtils.deleteDirectory(certPath.toFile());
+                }
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -1097,6 +1099,10 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     private void copyTLSFiles(Configuration conf) throws IOException {
+        if (!conf.contains(KubernetesConfigOptions.KUBERNETES_SECRETS)) {
+            LOG.info("No secret mount found for ssl config");
+            return;
+        }
         final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
         ConfigOption<String> configKeystore =
@@ -1133,10 +1139,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         // make sure the parent directories exist
         Files.createDirectories(targetPath.getParent());
         Map<String, String> secretMounts = conf.get(KubernetesConfigOptions.KUBERNETES_SECRETS);
-        if (secretMounts == null) {
-            LOG.warn("No secret mount found for ssl config");
-            return;
-        }
+        // find the secret that provides the certificate mount point
         Optional<String> certSecretName =
                 secretMounts.entrySet().stream()
                         .filter(e -> Paths.get(e.getValue()).equals(certStorePath.getParent()))
