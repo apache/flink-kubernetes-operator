@@ -24,12 +24,15 @@ jobs:
   test_ci:
     runs-on: ubuntu-latest
     name: test_ci
+    strategy:
+      matrix:
+        java-version: [ 11, 17 ]
     steps:
       - uses: actions/checkout@v2
-      - name: Set up JDK 11
+      - name: Set up JDK ${{ matrix.java-version }}
         uses: actions/setup-java@v2
         with:
-          java-version: '11'
+          java-version: ${{ matrix.java-version }}
           distribution: 'adopt'
       - name: Cache local Maven repository
         uses: actions/cache@v3
