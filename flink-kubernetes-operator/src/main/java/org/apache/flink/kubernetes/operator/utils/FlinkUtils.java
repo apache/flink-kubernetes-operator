@@ -26,8 +26,6 @@ import org.apache.flink.kubernetes.KubernetesClusterClientFactory;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.kubeclient.parameters.KubernetesJobManagerParameters;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
@@ -338,10 +336,6 @@ public class FlinkUtils {
         return haMode.equalsIgnoreCase(KubernetesHaServicesFactory.class.getCanonicalName())
                 // Hardcoded config value should be removed when upgrading Flink dependency to 1.16
                 || haMode.equalsIgnoreCase("kubernetes");
-    }
-
-    public static boolean clusterShutdownDisabled(FlinkDeploymentSpec spec) {
-        return spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_14);
     }
 
     public static int getNumTaskManagers(Configuration conf) {

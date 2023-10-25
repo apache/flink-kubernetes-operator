@@ -162,9 +162,7 @@ public class FlinkConfigBuilder {
             }
 
             // We need to keep the application clusters around for proper operator behaviour
-            if (spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_14)) {
-                effectiveConfig.set(SHUTDOWN_ON_APPLICATION_FINISH, false);
-            }
+            effectiveConfig.set(SHUTDOWN_ON_APPLICATION_FINISH, false);
             if (HighAvailabilityMode.isHighAvailabilityModeActivated(effectiveConfig)) {
                 setDefaultConf(SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR, true);
             }

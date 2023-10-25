@@ -36,7 +36,7 @@ Flink Kubernetes Operator aims to capture the responsibilities of a human operat
   - Stateful and stateless application upgrades
   - Triggering and managing savepoints
   - Handling errors, rolling-back broken upgrades
-- Multiple Flink version support: v1.13, v1.14, v1.15, v1.16, v1.17
+- Multiple Flink version support: v1.15, v1.16, v1.17, v1.18
 - [Deployment Modes]({{< ref "docs/custom-resource/overview#application-deployments" >}}):
   - Application cluster
   - Session cluster

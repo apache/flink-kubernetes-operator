@@ -47,7 +47,6 @@ import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
@@ -275,7 +274,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         var jobId = jobIdString != null ? JobID.fromHexString(jobIdString) : null;
 
         Optional<String> savepointOpt = Optional.empty();
-        var savepointFormatType = SnapshotUtils.getSavepointFormatType(conf);
+        var savepointFormatType =
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
         try (var clusterClient = getClusterClient(conf)) {
             var clusterId = clusterClient.getClusterId();
             switch (upgradeMode) {
@@ -313,11 +313,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                                             KubernetesOperatorConfigOptions
                                                                     .DRAIN_ON_SAVEPOINT_DELETION),
                                                     savepointDirectory,
-                                                    conf.get(FLINK_VERSION)
-                                                                    .isNewerVersionThan(
-                                                                            FlinkVersion.v1_14)
-                                                            ? savepointFormatType
-                                                            : null)
+                                                    savepointFormatType)
                                             .get(timeout, TimeUnit.SECONDS);
                             savepointOpt = Optional.of(savepoint);
                             LOG.info("Job successfully suspended with savepoint {}.", savepoint);
@@ -365,11 +361,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                     deploymentStatus.getJobStatus().getSavepointInfo().updateLastSavepoint(sp);
                 });
 
-        var shutdownDisabled =
-                upgradeMode != UpgradeMode.LAST_STATE
-                        && FlinkUtils.clusterShutdownDisabled(
-                                ReconciliationUtils.getDeployedSpec(deployment));
-        if (!shutdownDisabled) {
+        // Unless we leave the jm around after savepoint, we should wait until it has finished
+        // shutting down
+        if (deleteClusterAfterSavepoint || upgradeMode != UpgradeMode.SAVEPOINT) {
             waitForClusterShutdown(conf);
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
         }
@@ -422,13 +416,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                                                 KubernetesOperatorConfigOptions
                                                                         .DRAIN_ON_SAVEPOINT_DELETION),
                                                         savepointDirectory,
-                                                        conf.get(FLINK_VERSION)
-                                                                        .isNewerVersionThan(
-                                                                                FlinkVersion.v1_14)
-                                                                ? conf.get(
-                                                                        KubernetesOperatorConfigOptions
-                                                                                .OPERATOR_SAVEPOINT_FORMAT_TYPE)
-                                                                : null)
+                                                        conf.get(
+                                                                KubernetesOperatorConfigOptions
+                                                                        .OPERATOR_SAVEPOINT_FORMAT_TYPE))
                                                 .get(timeout, TimeUnit.SECONDS);
                                 savepointOpt = Optional.of(savepoint);
                                 LOG.info(
@@ -484,7 +474,8 @@ public abstract class AbstractFlinkService implements FlinkService {
                     Preconditions.checkNotNull(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
             var timeout = operatorConfig.getFlinkClientTimeout().getSeconds();
 
-            var savepointFormatType = SnapshotUtils.getSavepointFormatType(conf);
+            var savepointFormatType =
+                    conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
 
             var response =
                     clusterClient
@@ -492,13 +483,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     savepointTriggerHeaders,
                                     savepointTriggerMessageParameters,
                                     new SavepointTriggerRequestBody(
-                                            savepointDirectory,
-                                            false,
-                                            conf.get(FLINK_VERSION)
-                                                            .isNewerVersionThan(FlinkVersion.v1_14)
-                                                    ? savepointFormatType
-                                                    : null,
-                                            null))
+                                            savepointDirectory, false, savepointFormatType, null))
                             .get(timeout, TimeUnit.SECONDS);
             LOG.info("Savepoint successfully triggered: " + response.getTriggerId().toHexString());
 
@@ -781,9 +766,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                             jobID,
                             job.getAllowNonRestoredState(),
                             savepoint,
-                            conf.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_14)
-                                    ? RestoreMode.DEFAULT
-                                    : null,
+                            RestoreMode.DEFAULT,
                             conf.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_16)
                                     ? conf.toMap()
                                     : null);

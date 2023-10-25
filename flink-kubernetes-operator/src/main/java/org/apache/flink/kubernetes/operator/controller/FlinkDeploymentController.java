@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
+import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
@@ -53,7 +54,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /** Controller that runs the main reconcile loop for Flink deployments. */
-@ControllerConfiguration()
+@ControllerConfiguration
 public class FlinkDeploymentController
         implements Reconciler<FlinkDeployment>,
                 ErrorStatusHandler<FlinkDeployment>,
@@ -127,6 +128,12 @@ public class FlinkDeploymentController
         statusRecorder.updateStatusFromCache(flinkApp);
         FlinkDeployment previousDeployment = ReconciliationUtils.clone(flinkApp);
         var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
+
+        // If we get an unsupported Flink version, trigger event and exit
+        if (!ValidatorUtils.validateSupportedVersion(ctx, eventRecorder)) {
+            return UpdateControl.noUpdate();
+        }
+
         try {
             observerFactory.getOrCreate(flinkApp).observe(ctx);
             if (!validateDeployment(ctx)) {

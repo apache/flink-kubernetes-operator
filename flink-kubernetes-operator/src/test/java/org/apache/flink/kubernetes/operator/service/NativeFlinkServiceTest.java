@@ -152,9 +152,7 @@ public class NativeFlinkServiceTest {
                             UpgradeMode upgradeMode,
                             Configuration conf,
                             boolean deleteClusterAfterSavepoint) {
-                        assertEquals(
-                                flinkVersion.isNewerVersionThan(FlinkVersion.v1_14) ? false : true,
-                                deleteClusterAfterSavepoint);
+                        assertEquals(false, deleteClusterAfterSavepoint);
                         tested.set(true);
                     }
                 };

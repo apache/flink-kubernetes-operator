@@ -114,11 +114,7 @@ public class NativeFlinkService extends AbstractFlinkService {
     public void cancelJob(
             FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration configuration)
             throws Exception {
-        // prior to Flink 1.15, ensure removal of orphaned config maps
-        // https://issues.apache.org/jira/browse/FLINK-30004
-        boolean deleteClusterAfterSavepoint =
-                !deployment.getSpec().getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_14);
-        cancelJob(deployment, upgradeMode, configuration, deleteClusterAfterSavepoint);
+        cancelJob(deployment, upgradeMode, configuration, false);
     }
 
     @Override
