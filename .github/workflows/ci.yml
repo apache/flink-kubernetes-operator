@@ -126,6 +126,16 @@ jobs:
             test: test_dynamic_config.sh
           - version: v1_17
             test: test_dynamic_config.sh
+          - version: v1_13
+            java-version: 17
+          - version: v1_14
+            java-version: 17
+          - version: v1_15
+            java-version: 17
+          - version: v1_16
+            java-version: 17
+          - version: v1_17
+            java-version: 17
     name: e2e_ci
     steps:
       - uses: actions/checkout@v2
