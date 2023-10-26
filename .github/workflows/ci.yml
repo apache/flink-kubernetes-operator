@@ -73,6 +73,7 @@ jobs:
         version: ["v1_18","v1_17","v1_16","v1_15","v1_14","v1_13"]
         namespace: ["default","flink"]
         mode: ["native", "standalone"]
+        java-version: [ 11, 17 ]
         test:
           - test_application_kubernetes_ha.sh
           - test_application_operations.sh
@@ -128,10 +129,10 @@ jobs:
     name: e2e_ci
     steps:
       - uses: actions/checkout@v2
-      - name: Set up JDK 11
+      - name: Set up JDK ${{ matrix.java-version }}
         uses: actions/setup-java@v2
         with:
-          java-version: '11'
+          java-version: ${{ matrix.java-version }}
           distribution: 'adopt'
       - name: Cache local Maven repository
         uses: actions/cache@v3
