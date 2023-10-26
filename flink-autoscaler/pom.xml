@@ -32,9 +32,9 @@ under the License.
     <packaging>jar</packaging>
 
     <properties>
-        <surefire.module.config> <!-- required by
-        JobTopologyTest
-        -->--add-opens=java.base/java.lang=ALL-UNNAMED
+        <surefire.module.config>
+            <!-- required by JobTopologyTest -->
+            --add-opens=java.base/java.lang=ALL-UNNAMED
         </surefire.module.config>
     </properties>
 
