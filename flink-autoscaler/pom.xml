@@ -31,6 +31,13 @@ under the License.
     <name>Flink Autoscaler</name>
     <packaging>jar</packaging>
 
+    <properties>
+        <surefire.module.config>
+            <!-- required by JobTopologyTest -->
+            --add-opens=java.base/java.lang=ALL-UNNAMED
+        </surefire.module.config>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>org.apache.flink</groupId>
