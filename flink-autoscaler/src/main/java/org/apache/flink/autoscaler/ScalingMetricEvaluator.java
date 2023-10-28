@@ -179,12 +179,12 @@ public class ScalingMetricEvaluator {
             double busyTimeTprAvg,
             double observedTprAvg) {
 
-        if (Double.isInfinite(busyTimeTprAvg) || Double.isNaN(busyTimeTprAvg)) {
-            return OBSERVED_TPR;
-        }
-
         if (Double.isNaN(observedTprAvg)) {
             return TRUE_PROCESSING_RATE;
+        }
+
+        if (Double.isInfinite(busyTimeTprAvg) || Double.isNaN(busyTimeTprAvg)) {
+            return OBSERVED_TPR;
         }
 
         double switchThreshold =

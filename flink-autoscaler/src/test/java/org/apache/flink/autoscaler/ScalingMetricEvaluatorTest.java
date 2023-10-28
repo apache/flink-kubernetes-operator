@@ -433,6 +433,32 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
+
+        metricHistory.put(
+                Instant.ofEpochMilli(100),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(
+                                        ScalingMetric.LAG,
+                                        0.,
+                                        ScalingMetric.TRUE_PROCESSING_RATE,
+                                        Double.POSITIVE_INFINITY,
+                                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                                        100.,
+                                        ScalingMetric.SOURCE_DATA_RATE,
+                                        50.,
+                                        ScalingMetric.LOAD,
+                                        10.)),
+                        Map.of()));
+
+        // Test that we used busy time based TPR even when infinity
+        assertEquals(
+                new EvaluatedScalingMetric(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY),
+                evaluator
+                        .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
+                        .get(source)
+                        .get(ScalingMetric.TRUE_PROCESSING_RATE));
     }
 
     private Tuple2<Double, Double> getThresholds(
