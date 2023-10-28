@@ -191,16 +191,16 @@ public class TestUtils extends BaseTestUtils {
     }
 
     public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment(
-            Map<String, String> flinkDepConfig) {
-        return createContextWithReadyFlinkDeployment(flinkDepConfig, null);
+            Map<String, String> flinkDepConfig, KubernetesClient client) {
+        return createContextWithReadyFlinkDeployment(flinkDepConfig, client, FlinkVersion.v1_18);
     }
 
     public static <T extends HasMetadata> Context<T> createContextWithReadyFlinkDeployment(
-            Map<String, String> flinkDepConfig, KubernetesClient client) {
+            Map<String, String> flinkDepConfig, KubernetesClient client, FlinkVersion version) {
         return new TestingContext<>() {
             @Override
             public Optional<T> getSecondaryResource(Class expectedType, String eventSourceName) {
-                var session = buildSessionCluster();
+                var session = buildSessionCluster(version);
                 session.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
                 session.getSpec().getFlinkConfiguration().putAll(flinkDepConfig);
                 session.getStatus()
@@ -324,7 +324,7 @@ public class TestUtils extends BaseTestUtils {
 
     public static Stream<Arguments> flinkVersionsAndUpgradeModes() {
         List<Arguments> args = new ArrayList<>();
-        for (FlinkVersion version : Set.of(FlinkVersion.v1_14, FlinkVersion.v1_15)) {
+        for (FlinkVersion version : Set.of(FlinkVersion.v1_15, FlinkVersion.v1_18)) {
             for (UpgradeMode upgradeMode : UpgradeMode.values()) {
                 args.add(arguments(version, upgradeMode));
             }
@@ -333,10 +333,7 @@ public class TestUtils extends BaseTestUtils {
     }
 
     public static Stream<Arguments> flinkVersions() {
-        return Stream.of(
-                arguments(FlinkVersion.v1_14),
-                arguments(FlinkVersion.v1_15),
-                arguments(FlinkVersion.v1_17));
+        return Stream.of(arguments(FlinkVersion.v1_15), arguments(FlinkVersion.v1_18));
     }
 
     public static FlinkDeployment createCanaryDeployment() {

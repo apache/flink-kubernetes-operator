@@ -16,5 +16,5 @@
 # limitations under the License.
 ################################################################################
 
-FROM ghcr.io/apache/flink-docker:1.18-SNAPSHOT-scala_2.12-java11-debian
+FROM flink:1.18
 COPY ./target/autoscaling*.jar /opt/flink/usrlib/autoscaling.jar

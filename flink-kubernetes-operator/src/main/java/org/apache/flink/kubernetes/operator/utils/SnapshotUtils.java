@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
-import org.apache.flink.core.execution.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
@@ -402,16 +401,5 @@ public class SnapshotUtils {
                         client);
             }
         }
-    }
-
-    public static SavepointFormatType getSavepointFormatType(Configuration configuration) {
-        var savepointFormatType = org.apache.flink.core.execution.SavepointFormatType.CANONICAL;
-        if (configuration.get(FLINK_VERSION) != null
-                && configuration.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_14)) {
-            savepointFormatType =
-                    configuration.get(
-                            KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
-        }
-        return savepointFormatType;
     }
 }

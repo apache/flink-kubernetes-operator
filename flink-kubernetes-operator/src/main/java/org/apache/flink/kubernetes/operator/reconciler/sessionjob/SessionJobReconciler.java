@@ -67,6 +67,14 @@ public class SessionJobReconciler
             Optional<String> savepoint,
             boolean requireHaMetadata)
             throws Exception {
+
+        eventRecorder.triggerEvent(
+                ctx.getResource(),
+                EventRecorder.Type.Normal,
+                EventRecorder.Reason.Submit,
+                EventRecorder.Component.Job,
+                MSG_SUBMIT,
+                ctx.getKubernetesClient());
         var jobID =
                 ctx.getFlinkService()
                         .submitJobToSessionCluster(

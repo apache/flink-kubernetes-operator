@@ -24,7 +24,6 @@ import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
-import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
@@ -694,43 +693,6 @@ public class ApplicationObserverTest extends OperatorTestBase {
                         .getTriggerNonce());
         assertEquals(
                 SavepointFormatType.NATIVE,
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getFormatType());
-
-        // canonical for flink savepoint
-        Long thirdNonce = 789L;
-        deployment.getSpec().getJob().setSavepointTriggerNonce(thirdNonce);
-        deployment.getSpec().setFlinkVersion(FlinkVersion.v1_14);
-        deployment
-                .getSpec()
-                .setFlinkConfiguration(
-                        Map.of(
-                                OPERATOR_SAVEPOINT_FORMAT_TYPE.key(),
-                                org.apache.flink.core.execution.SavepointFormatType.NATIVE.name()));
-        conf = configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
-        flinkService.triggerSavepoint(
-                deployment.getStatus().getJobStatus().getJobId(),
-                SnapshotTriggerType.MANUAL,
-                deployment.getStatus().getJobStatus().getSavepointInfo(),
-                conf);
-
-        observer.observe(deployment, readyContext);
-        observer.observe(deployment, readyContext);
-        assertFalse(SnapshotUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
-        assertEquals(
-                thirdNonce,
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getTriggerNonce());
-        assertEquals(
-                SavepointFormatType.CANONICAL,
                 deployment
                         .getStatus()
                         .getJobStatus()

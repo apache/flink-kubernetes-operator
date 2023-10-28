@@ -249,6 +249,7 @@ public class EventRecorder {
         ScalingReport,
         IneffectiveScaling,
         AutoscalerError,
-        Scaling
+        Scaling,
+        UnsupportedFlinkVersion
     }
 }

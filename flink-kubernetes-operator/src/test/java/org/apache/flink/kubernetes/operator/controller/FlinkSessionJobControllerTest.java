@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobReconciliationStatus;
@@ -39,8 +40,11 @@ import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -85,7 +89,10 @@ class FlinkSessionJobControllerTest {
             // Ignore
         }
 
-        Assertions.assertEquals(1, testController.events().size());
+        Assertions.assertEquals(2, testController.events().size());
+        // Discard submit event
+        testController.events().remove();
+
         var event = testController.events().remove();
         Assertions.assertEquals(EventRecorder.Type.Warning.toString(), event.getType());
         Assertions.assertEquals("SessionJobException", event.getReason());
@@ -271,7 +278,10 @@ class FlinkSessionJobControllerTest {
 
         testController.reconcile(sessionJob, context);
 
-        assertEquals(1, testController.events().size());
+        assertEquals(2, testController.events().size());
+        assertEquals(
+                EventRecorder.Reason.Submit,
+                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
         assertEquals(
                 EventRecorder.Reason.JobStatusChanged,
                 EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
@@ -312,7 +322,10 @@ class FlinkSessionJobControllerTest {
         assertEquals(1, jobs.size());
         assertNull(jobs.get(0).f0);
 
-        assertEquals(1, testController.events().size());
+        assertEquals(2, testController.events().size());
+        assertEquals(
+                EventRecorder.Reason.Submit,
+                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
         assertEquals(
                 EventRecorder.Reason.JobStatusChanged,
                 EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
@@ -334,9 +347,12 @@ class FlinkSessionJobControllerTest {
         testController.reconcile(sessionJob, context);
         flinkService.clearJobsInTerminalState();
         testController.reconcile(sessionJob, context);
-        assertEquals(2, testController.events().size());
+        assertEquals(3, testController.events().size());
         assertEquals(
                 EventRecorder.Reason.SpecChanged,
+                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+        assertEquals(
+                EventRecorder.Reason.Submit,
                 EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
         assertEquals(
                 EventRecorder.Reason.JobStatusChanged,
@@ -368,16 +384,19 @@ class FlinkSessionJobControllerTest {
         sessionJob.getSpec().getJob().setParallelism(-1);
         testController.reconcile(sessionJob, context);
         flinkService.clearJobsInTerminalState();
-        assertEquals(1, testController.events().size());
+        assertEquals(2, testController.events().size());
         testController.reconcile(sessionJob, context);
         var statusEvents =
                 testController.events().stream()
                         .filter(e -> !e.getReason().equals(ValidationError.name()))
                         .collect(Collectors.toList());
-        assertEquals(1, statusEvents.size());
+        assertEquals(2, statusEvents.size());
+        assertEquals(
+                EventRecorder.Reason.Submit,
+                EventRecorder.Reason.valueOf(statusEvents.get(0).getReason()));
         assertEquals(
                 EventRecorder.Reason.JobStatusChanged,
-                EventRecorder.Reason.valueOf(statusEvents.get(0).getReason()));
+                EventRecorder.Reason.valueOf(statusEvents.get(1).getReason()));
 
         assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
         assertEquals(
@@ -506,6 +525,24 @@ class FlinkSessionJobControllerTest {
         testController.cleanup(canary, context);
         assertEquals(0, testController.getInternalStatusUpdateCount());
         assertEquals(0, testController.getCanaryResourceManager().getNumberOfActiveCanaries());
+    }
+
+    @ParameterizedTest
+    @EnumSource(FlinkVersion.class)
+    public void testUnsupportedVersions(FlinkVersion version) throws Exception {
+        context =
+                TestUtils.createContextWithReadyFlinkDeployment(
+                        Map.of(), kubernetesClient, version);
+        var updateControl = testController.reconcile(TestUtils.buildSessionJob(), context);
+        var lastEvent = testController.events().poll();
+        if (!version.isNewerVersionThan(FlinkVersion.v1_14)) {
+            assertTrue(updateControl.getScheduleDelay().isEmpty());
+            assertEquals(
+                    EventRecorder.Reason.UnsupportedFlinkVersion.name(), lastEvent.getReason());
+        } else {
+            assertTrue(updateControl.getScheduleDelay().isPresent());
+            assertEquals(EventRecorder.Reason.Submit.name(), lastEvent.getReason());
+        }
     }
 
     private void verifyReconcileInitialSuspendedDeployment(FlinkSessionJob sessionJob)

@@ -29,6 +29,7 @@ import org.apache.flink.kubernetes.operator.service.FlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.EventSourceUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
+import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
@@ -97,6 +98,11 @@ public class FlinkSessionJobController
         statusRecorder.updateStatusFromCache(flinkSessionJob);
         FlinkSessionJob previousJob = ReconciliationUtils.clone(flinkSessionJob);
         var ctx = ctxFactory.getResourceContext(flinkSessionJob, josdkContext);
+
+        // If we get an unsupported Flink version, trigger event and exit
+        if (!ValidatorUtils.validateSupportedVersion(ctx, eventRecorder)) {
+            return UpdateControl.noUpdate();
+        }
 
         observer.observe(ctx);
         if (!validateSessionJob(ctx)) {

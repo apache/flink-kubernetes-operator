@@ -56,6 +56,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -448,9 +449,7 @@ public class FlinkDeploymentControllerTest {
         appCluster.getSpec().getJob().setState(JobState.SUSPENDED);
         testController.reconcile(appCluster, context);
         assertEquals(
-                flinkVersion.isNewerVersionThan(FlinkVersion.v1_14)
-                        ? JobManagerDeploymentStatus.READY
-                        : JobManagerDeploymentStatus.MISSING,
+                JobManagerDeploymentStatus.READY,
                 appCluster.getStatus().getJobManagerDeploymentStatus());
 
         // Resume from last savepoint
@@ -1224,6 +1223,22 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 appCluster.getStatus().getReconciliationStatus().getLastReconciledSpec(),
                 appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
+    }
+
+    @ParameterizedTest
+    @EnumSource(FlinkVersion.class)
+    public void testUnsupportedVersions(FlinkVersion version) throws Exception {
+        var appCluster = TestUtils.buildApplicationCluster(version);
+        var updateControl = testController.reconcile(appCluster, context);
+        var lastEvent = testController.events().poll();
+        if (!version.isNewerVersionThan(FlinkVersion.v1_14)) {
+            assertTrue(updateControl.getScheduleDelay().isEmpty());
+            assertEquals(
+                    EventRecorder.Reason.UnsupportedFlinkVersion.name(), lastEvent.getReason());
+        } else {
+            assertTrue(updateControl.getScheduleDelay().isPresent());
+            assertEquals(EventRecorder.Reason.Submit.name(), lastEvent.getReason());
+        }
     }
 
     private HasMetadata getIngress(FlinkDeployment deployment) {

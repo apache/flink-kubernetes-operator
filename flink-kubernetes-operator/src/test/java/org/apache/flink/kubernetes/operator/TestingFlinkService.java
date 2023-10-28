@@ -53,7 +53,6 @@ import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.kubernetes.operator.service.NativeFlinkServiceTest;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
-import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
@@ -298,7 +297,8 @@ public class TestingFlinkService extends AbstractFlinkService {
             Configuration conf) {
         var triggerId = "savepoint_trigger_" + savepointTriggerCounter++;
 
-        var savepointFormatType = SnapshotUtils.getSavepointFormatType(conf);
+        var savepointFormatType =
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
         savepointInfo.setTrigger(
                 triggerId, triggerType, SavepointFormatType.valueOf(savepointFormatType.name()));
         savepointTriggers.put(triggerId, false);
@@ -471,18 +471,14 @@ public class TestingFlinkService extends AbstractFlinkService {
 
         var sp = savepoint ? "savepoint_" + savepointCounter++ : null;
 
-        if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_14)) {
-            JobStatusMessage oldStatus = jobOpt.get().f1;
-            jobOpt.get().f1 =
-                    new JobStatusMessage(
-                            oldStatus.getJobId(),
-                            oldStatus.getJobName(),
-                            JobStatus.FINISHED,
-                            oldStatus.getStartTime());
-            jobOpt.get().f0 = sp;
-        } else {
-            jobs.removeIf(js -> js.f1.getJobId().equals(jobID));
-        }
+        JobStatusMessage oldStatus = jobOpt.get().f1;
+        jobOpt.get().f1 =
+                new JobStatusMessage(
+                        oldStatus.getJobId(),
+                        oldStatus.getJobName(),
+                        JobStatus.FINISHED,
+                        oldStatus.getStartTime());
+        jobOpt.get().f0 = sp;
 
         return sp;
     }

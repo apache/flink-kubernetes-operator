@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: ["v1_18","v1_17","v1_16","v1_15","v1_14","v1_13"]
+        version: ["v1_18","v1_17","v1_16","v1_15"]
         namespace: ["default","flink"]
         mode: ["native", "standalone"]
         java-version: [ 11, 17 ]
@@ -86,17 +86,13 @@ jobs:
           - namespace: flink
             extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
           - version: v1_18
-            image: ghcr.io\/apache\/flink-docker:1.18-SNAPSHOT-scala_2.12-java11-debian
+            image: flink:1.18
           - version: v1_17
             image: flink:1.17
           - version: v1_16
             image: flink:1.16
           - version: v1_15
             image: flink:1.15
-          - version: v1_14
-            image: flink:1.14
-          - version: v1_13
-            image: flink:1.13
         exclude:
           - namespace: default
             test: test_multi_sessionjob.sh
@@ -107,14 +103,6 @@ jobs:
           - mode: standalone
             test: test_autoscaler.sh
           - mode: standalone
-            test: test_dynamic_config.sh
-          - version: v1_13
-            test: test_autoscaler.sh
-          - version: v1_13
-            test: test_dynamic_config.sh
-          - version: v1_14
-            test: test_autoscaler.sh
-          - version: v1_14
             test: test_dynamic_config.sh
           - version: v1_15
             test: test_autoscaler.sh

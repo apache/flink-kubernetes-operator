@@ -28,7 +28,8 @@ public enum FlinkVersion {
     v1_15,
     v1_16,
     v1_17,
-    v1_18;
+    v1_18,
+    v1_19;
 
     public boolean isNewerVersionThan(FlinkVersion otherVersion) {
         return this.ordinal() > otherVersion.ordinal();
@@ -41,5 +42,9 @@ public enum FlinkVersion {
      */
     public static FlinkVersion current() {
         return values()[values().length - 1];
+    }
+
+    public static boolean isSupported(FlinkVersion version) {
+        return version != null && version.isNewerVersionThan(FlinkVersion.v1_14);
     }
 }
