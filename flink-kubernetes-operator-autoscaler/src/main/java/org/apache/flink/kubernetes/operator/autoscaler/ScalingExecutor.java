@@ -72,7 +72,6 @@ public class ScalingExecutor {
             AutoScalerInfo scalingInformation,
             Configuration conf,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
-
         var now = Instant.now();
         var scalingHistory = scalingInformation.getScalingHistory(now, conf);
         var scalingSummaries =
@@ -105,9 +104,10 @@ public class ScalingExecutor {
         }
 
         scalingInformation.addToScalingHistory(clock.instant(), scalingSummaries, conf);
+        // TODO add my service to get metrics form the custom autscaler and pass it to the below function.
+        // HashMap<String, String> test = ScalingMetricJsonSender.getDataFromEndpoint();
         scalingInformation.setCurrentOverrides(
                 getVertexParallelismOverrides(evaluatedMetrics, scalingSummaries));
-
         return true;
     }
 

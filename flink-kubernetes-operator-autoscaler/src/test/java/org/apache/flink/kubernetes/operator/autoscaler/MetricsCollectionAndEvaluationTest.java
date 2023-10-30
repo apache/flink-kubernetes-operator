@@ -360,6 +360,7 @@ public class MetricsCollectionAndEvaluationTest {
         // We haven't left the stabilization period
         // => no metrics reporting and collection should take place
         var collectedMetrics = metricsCollector.updateMetrics(app, scalingInfo, service, conf);
+
         assertTrue(collectedMetrics.getMetricHistory().isEmpty());
     }
 
