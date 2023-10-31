@@ -19,8 +19,8 @@ package org.apache.flink.autoscaler.topology;
 
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import org.apache.flink.shaded.guava30.com.google.common.collect.ImmutableMap;
-import org.apache.flink.shaded.guava30.com.google.common.collect.ImmutableSet;
+import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
+import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableSet;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
