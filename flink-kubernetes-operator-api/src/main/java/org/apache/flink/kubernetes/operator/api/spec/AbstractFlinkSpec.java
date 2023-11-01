@@ -48,6 +48,7 @@ public abstract class AbstractFlinkSpec implements Diffable<AbstractFlinkSpec> {
 
     /** Flink configuration overrides for the Flink deployment or Flink session job. */
     @SpecDiff.Config({
+        @SpecDiff.Entry(prefix = "job.autoscaler", type = DiffType.IGNORE),
         @SpecDiff.Entry(prefix = "parallelism.default", type = DiffType.IGNORE),
         @SpecDiff.Entry(prefix = "kubernetes.operator", type = DiffType.IGNORE),
         @SpecDiff.Entry(

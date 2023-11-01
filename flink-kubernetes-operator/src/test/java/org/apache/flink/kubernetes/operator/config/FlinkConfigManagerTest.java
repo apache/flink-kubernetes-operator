@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.config;
 
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.Configuration;
@@ -80,6 +81,10 @@ public class FlinkConfigManagerTest {
 
         deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "latest");
         deployment.getSpec().getFlinkConfiguration().put(opTestConf.key(), "latest");
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(AutoScalerOptions.METRICS_WINDOW.key(), "1234m");
 
         assertEquals(
                 "latest",
@@ -93,6 +98,9 @@ public class FlinkConfigManagerTest {
                         .get(opTestConf));
         assertEquals("reconciled", configManager.getObserveConfig(deployment).get(testConf));
         assertEquals("latest", configManager.getObserveConfig(deployment).get(opTestConf));
+        assertEquals(
+                Duration.ofMinutes(1234),
+                configManager.getObserveConfig(deployment).get(AutoScalerOptions.METRICS_WINDOW));
 
         deployment.getSpec().getFlinkConfiguration().put(testConf.key(), "stable");
         reconciliationStatus.serializeAndSetLastReconciledSpec(deployment.getSpec(), deployment);

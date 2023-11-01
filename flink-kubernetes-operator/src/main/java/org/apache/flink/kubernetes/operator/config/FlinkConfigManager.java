@@ -19,6 +19,7 @@
 package org.apache.flink.kubernetes.operator.config;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
@@ -245,7 +246,8 @@ public class FlinkConfigManager {
             spec.getFlinkConfiguration()
                     .forEach(
                             (k, v) -> {
-                                if (k.startsWith(K8S_OP_CONF_PREFIX)) {
+                                if (k.startsWith(K8S_OP_CONF_PREFIX)
+                                        || k.startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX)) {
                                     conf.setString(k, v);
                                 }
                             });
