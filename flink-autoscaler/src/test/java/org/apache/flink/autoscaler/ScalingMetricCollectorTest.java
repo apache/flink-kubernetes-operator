@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
+import org.apache.flink.autoscaler.metrics.MetricNotFoundException;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.client.program.rest.RestClusterClient;
@@ -43,6 +44,7 @@ import java.util.Set;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -178,7 +180,7 @@ public class ScalingMetricCollectorTest {
     private void testRequiredMetrics(
             List<AggregatedMetric> metricList,
             List<AggregatedMetric> requiredMetrics,
-            RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>> testCollector,
+            ScalingMetricCollector<JobID, JobAutoScalerContext<JobID>> testCollector,
             JobVertexID vertex,
             JobTopology topology) {
         for (var m : requiredMetrics) {
@@ -205,5 +207,23 @@ public class ScalingMetricCollectorTest {
         return List.of(
                 new AggregatedMetric("busyTimeMsPerSecond"),
                 new AggregatedMetric("numRecordsInPerSecond"));
+    }
+
+    @Test
+    public void testThrowsMetricNotFoundException() {
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+        var topology =
+                new JobTopology(
+                        new VertexInfo(source, Set.of(), 1, 1),
+                        new VertexInfo(sink, Set.of(source), 1, 1));
+
+        var metricCollector = new TestingMetricsCollector<>(topology);
+
+        assertThrows(
+                MetricNotFoundException.class,
+                () ->
+                        metricCollector.getFilteredVertexMetricNames(
+                                null, new JobID(), source, topology));
     }
 }
