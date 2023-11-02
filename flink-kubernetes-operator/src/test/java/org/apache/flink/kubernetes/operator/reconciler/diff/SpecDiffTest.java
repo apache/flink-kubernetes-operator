@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.diff;
 
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -80,12 +81,14 @@ public class SpecDiffTest {
         right.getFlinkConfiguration().put(OPERATOR_RECONCILE_INTERVAL.key(), "100 SECONDS");
         right.getFlinkConfiguration().put(SCOPE_NAMING_KUBERNETES_OPERATOR.key(), "foo.bar");
         right.getFlinkConfiguration().put(CoreOptions.DEFAULT_PARALLELISM.key(), "100");
+        right.getFlinkConfiguration().put(AutoScalerOptions.METRICS_WINDOW.key(), "1234m");
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());
-        assertEquals(7, diff.getNumDiffs());
+        assertEquals(8, diff.getNumDiffs());
 
         right.getFlinkConfiguration().remove(SCOPE_NAMING_KUBERNETES_OPERATOR.key());
+        right.getFlinkConfiguration().remove(AutoScalerOptions.METRICS_WINDOW.key());
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
         assertEquals(DiffType.IGNORE, diff.getType());
