@@ -20,7 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
-import org.apache.flink.autoscaler.exceptions.RecoverableException;
+import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
@@ -156,7 +156,7 @@ public class JobAutoScalerImplTest {
                                     RestClusterClient<?> restClient,
                                     JobID jobID,
                                     JobVertexID jobVertexID) {
-                                throw new RecoverableException(new Exception());
+                                throw new NotReadyException(new Exception());
                             }
                         };
         collectorWhichThrowsRecoverableException.setJobUpdateTs(Instant.now());

@@ -17,10 +17,10 @@
 
 package org.apache.flink.autoscaler.exceptions;
 
-/** An exception for a recoverable scenario. */
-public class RecoverableException extends RuntimeException {
+/** An exception to indicate the called code wasn't ready but will be at a later point in time. */
+public class NotReadyException extends RuntimeException {
 
-    public RecoverableException(Exception cause) {
+    public NotReadyException(Exception cause) {
         super(cause);
     }
 }

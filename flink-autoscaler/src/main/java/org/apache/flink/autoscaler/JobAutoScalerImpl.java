@@ -21,7 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
-import org.apache.flink.autoscaler.exceptions.RecoverableException;
+import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
@@ -97,7 +97,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
             runScalingLogic(ctx, autoscalerMetrics);
             stateStore.flush(ctx);
-        } catch (RecoverableException e) {
+        } catch (NotReadyException e) {
             LOG.debug("Not ready for scaling", e);
         } catch (Throwable e) {
             onError(ctx, autoscalerMetrics, e);

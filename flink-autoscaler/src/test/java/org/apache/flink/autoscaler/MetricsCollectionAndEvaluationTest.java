@@ -20,7 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
-import org.apache.flink.autoscaler.exceptions.RecoverableException;
+import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
@@ -614,7 +614,7 @@ public class MetricsCollectionAndEvaluationTest {
 
         int numCollectedMetricsBeforeTest = numCollectedMetricsSupplier.get();
         assertThrows(
-                RecoverableException.class,
+                NotReadyException.class,
                 () -> collectorWithMissingMetrics.updateMetrics(context, stateStore));
         assertEquals(numCollectedMetricsBeforeTest, numCollectedMetricsSupplier.get());
     }

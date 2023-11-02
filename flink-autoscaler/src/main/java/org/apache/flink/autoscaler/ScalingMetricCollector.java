@@ -20,7 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
-import org.apache.flink.autoscaler.exceptions.RecoverableException;
+import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
@@ -352,7 +352,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
             return queryFilteredMetricNames(ctx, topology);
         } catch (MetricNotFoundException e) {
             if (isStabilizing) {
-                throw new RecoverableException(e);
+                throw new NotReadyException(e);
             }
             throw e;
         }
