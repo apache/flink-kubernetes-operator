@@ -20,9 +20,11 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
+import org.apache.flink.autoscaler.metrics.MetricNotFoundException;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetrics;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
@@ -112,6 +114,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         }
         var topology = getJobTopology(ctx, stateStore, jobDetailsInfo);
         var stableTime = jobUpdateTs.plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
+        final boolean isStabilizing = now.isBefore(stableTime);
 
         // Calculate timestamp when the metric windows is full
         var metricWindowSize = getMetricWindowSize(conf);
@@ -119,7 +122,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                 getWindowFullTime(metricHistory.tailMap(stableTime), now, metricWindowSize);
 
         // The filtered list of metrics we want to query for each vertex
-        var filteredVertexMetricNames = queryFilteredMetricNames(ctx, topology);
+        var filteredVertexMetricNames = queryFilteredMetricNames(ctx, topology, isStabilizing);
 
         // Aggregated job vertex metrics collected from Flink based on the filtered metric names
         var collectedVertexMetrics = queryAllAggregatedMetrics(ctx, filteredVertexMetricNames);
@@ -131,7 +134,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         // Add scaling metrics to history if they were computed successfully
         metricHistory.put(now, scalingMetrics);
 
-        if (now.isBefore(stableTime)) {
+        if (isStabilizing) {
             LOG.info("Stabilizing until {}", stableTime);
             stateStore.storeCollectedMetrics(ctx, metricHistory);
             return new CollectedMetricHistory(topology, Collections.emptySortedMap());
@@ -343,8 +346,19 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         return (currentLag - lastLag) / timeDiff;
     }
 
+    private Map<JobVertexID, Map<String, FlinkMetric>> queryFilteredMetricNames(
+            Context ctx, JobTopology topology, boolean isStabilizing) {
+        try {
+            return queryFilteredMetricNames(ctx, topology);
+        } catch (MetricNotFoundException e) {
+            if (isStabilizing) {
+                throw new NotReadyException(e);
+            }
+            throw e;
+        }
+    }
+
     /** Query the available metric names for each job vertex. */
-    @SneakyThrows
     protected Map<JobVertexID, Map<String, FlinkMetric>> queryFilteredMetricNames(
             Context ctx, JobTopology topology) {
 
@@ -375,6 +389,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         return names;
     }
 
+    @SneakyThrows
     private Map<JobVertexID, Map<String, FlinkMetric>> queryFilteredMetricNames(
             Context ctx, JobTopology topology, Stream<JobVertexID> vertexStream) {
         try (var restClient = ctx.getRestClusterClient()) {
@@ -386,21 +401,11 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                                     v ->
                                             getFilteredVertexMetricNames(
                                                     restClient, ctx.getJobID(), v, topology)));
-        } catch (Exception e) {
-            throw new RuntimeException(e);
         }
     }
 
-    /**
-     * Query and filter metric names for a given job vertex.
-     *
-     * @param restClient Flink rest client.
-     * @param jobID Job Id.
-     * @param jobVertexID Job Vertex Id.
-     * @return Map of filtered metric names.
-     */
-    @SneakyThrows
-    protected Map<String, FlinkMetric> getFilteredVertexMetricNames(
+    /** Query and filter metric names for a given job vertex. */
+    Map<String, FlinkMetric> getFilteredVertexMetricNames(
             RestClusterClient<?> restClient,
             JobID jobID,
             JobVertexID jobVertexID,
@@ -449,8 +454,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                 // Add actual Flink metric name to list
                 filteredMetrics.put(flinkMetricName.get(), flinkMetric);
             } else {
-                throw new RuntimeException(
-                        "Could not find required metric " + flinkMetric + " for " + jobVertexID);
+                throw new MetricNotFoundException(flinkMetric, jobVertexID);
             }
         }
 
@@ -458,9 +462,9 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     }
 
     @VisibleForTesting
+    @SneakyThrows
     protected Collection<AggregatedMetric> queryAggregatedMetricNames(
-            RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID)
-            throws Exception {
+            RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
         var parameters = new AggregatedSubtaskMetricsParameters();
         var pathIt = parameters.getPathParameters().iterator();
 

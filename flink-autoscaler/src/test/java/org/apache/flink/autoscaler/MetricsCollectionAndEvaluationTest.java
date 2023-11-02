@@ -20,10 +20,12 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
+import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
+import org.apache.flink.autoscaler.metrics.MetricNotFoundException;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
@@ -46,12 +48,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for scaling metrics collection logic. */
@@ -570,6 +574,8 @@ public class MetricsCollectionAndEvaluationTest {
                 metricsCollector.updateMetrics(context, stateStore).getMetricHistory().isEmpty());
         assertEquals(2, stateStore.getCollectedMetrics(context).get().size());
 
+        testTolerateMetricsMissingDuringStabilizationPhase(topology);
+
         // Until window is full (time=200) we keep returning stabilizing metrics
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(150), ZoneId.systemDefault()));
         assertEquals(
@@ -586,6 +592,31 @@ public class MetricsCollectionAndEvaluationTest {
         assertEquals(
                 2, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
         assertEquals(2, stateStore.getCollectedMetrics(context).get().size());
+    }
+
+    private void testTolerateMetricsMissingDuringStabilizationPhase(JobTopology topology) {
+        var collectorWithMissingMetrics =
+                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(topology) {
+                    @Override
+                    protected Map<JobVertexID, Map<String, FlinkMetric>> queryFilteredMetricNames(
+                            JobAutoScalerContext<JobID> ctx, JobTopology topology) {
+                        throw new MetricNotFoundException(
+                                FlinkMetric.BUSY_TIME_PER_SEC, new JobVertexID());
+                    }
+                };
+        collectorWithMissingMetrics.setClock(
+                Clock.fixed(
+                        Instant.ofEpochMilli(startTime.toEpochMilli()), ZoneId.systemDefault()));
+        collectorWithMissingMetrics.setJobUpdateTs(startTime);
+
+        Supplier<Integer> numCollectedMetricsSupplier =
+                () -> stateStore.getCollectedMetrics(context).get().size();
+
+        int numCollectedMetricsBeforeTest = numCollectedMetricsSupplier.get();
+        assertThrows(
+                NotReadyException.class,
+                () -> collectorWithMissingMetrics.updateMetrics(context, stateStore));
+        assertEquals(numCollectedMetricsBeforeTest, numCollectedMetricsSupplier.get());
     }
 
     @Test

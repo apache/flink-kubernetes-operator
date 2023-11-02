@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
+import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
@@ -27,6 +28,7 @@ import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
 import org.apache.flink.autoscaler.state.TestingAutoscalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
+import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.Metric;
@@ -41,6 +43,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -140,6 +144,36 @@ public class JobAutoScalerImplTest {
                 2, autoscaler.flinkMetrics.get(context.getJobKey()).getNumErrorsCount());
 
         assertEquals(0, autoscaler.flinkMetrics.get(context.getJobKey()).getNumScalingsCount());
+    }
+
+    @Test
+    public void testTolerateRecoverableExceptions() throws Exception {
+        TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>
+                collectorWhichThrowsRecoverableException =
+                        new TestingMetricsCollector<>(new JobTopology(Collections.emptySet())) {
+                            @Override
+                            protected Collection<AggregatedMetric> queryAggregatedMetricNames(
+                                    RestClusterClient<?> restClient,
+                                    JobID jobID,
+                                    JobVertexID jobVertexID) {
+                                throw new NotReadyException(new Exception());
+                            }
+                        };
+        collectorWhichThrowsRecoverableException.setJobUpdateTs(Instant.now());
+
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        collectorWhichThrowsRecoverableException,
+                        null,
+                        null,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore);
+
+        // Should not produce an error
+        autoscaler.scale(context);
+        Assertions.assertEquals(
+                0, autoscaler.flinkMetrics.get(context.getJobKey()).getNumErrorsCount());
     }
 
     @Test
