@@ -143,13 +143,19 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
      */
     protected abstract Configuration createObserveConfig();
 
-    /** @return Cluster deployment mode. */
+    /**
+     * @return Cluster deployment mode.
+     */
     public abstract KubernetesDeploymentMode getDeploymentMode();
 
-    /** @return Cluster Flink Version. */
+    /**
+     * @return Cluster Flink Version.
+     */
     public abstract FlinkVersion getFlinkVersion();
 
-    /** @return Operator configuration for this resource. */
+    /**
+     * @return Operator configuration for this resource.
+     */
     public FlinkOperatorConfiguration getOperatorConfig() {
         if (operatorConfig != null) {
             return operatorConfig;

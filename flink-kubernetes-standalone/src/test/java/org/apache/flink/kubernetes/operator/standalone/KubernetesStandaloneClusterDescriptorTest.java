@@ -49,7 +49,9 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** @link KubernetesStandaloneClusterDescriptor unit tests */
+/**
+ * @link KubernetesStandaloneClusterDescriptor unit tests
+ */
 @EnableKubernetesMockClient(crud = true, https = false)
 public class KubernetesStandaloneClusterDescriptorTest {
     KubernetesMockServer mockWebServer;

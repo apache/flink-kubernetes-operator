@@ -46,7 +46,9 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** @link StandaloneKubernetesJobManagerFactory unit tests */
+/**
+ * @link StandaloneKubernetesJobManagerFactory unit tests
+ */
 public class StandaloneKubernetesTaskManagerFactoryTest extends ParametersTestBase {
 
     private Deployment deployment;

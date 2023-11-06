@@ -36,7 +36,9 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 
-/** @link CmdStandaloneJobManagerDecorator unit tests */
+/**
+ * @link CmdStandaloneJobManagerDecorator unit tests
+ */
 public class CmdStandaloneJobManagerDecoratorTest {
 
     private static final String MOCK_ENTRYPATH = "./docker-entrypath";

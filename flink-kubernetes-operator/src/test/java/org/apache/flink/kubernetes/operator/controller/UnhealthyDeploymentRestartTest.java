@@ -41,7 +41,9 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** @link Unhealthy deployment restart tests */
+/**
+ * @link Unhealthy deployment restart tests
+ */
 @EnableKubernetesMockClient(crud = true)
 public class UnhealthyDeploymentRestartTest {
 

@@ -36,7 +36,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** @link Unhealthy deployment restart tests */
+/**
+ * @link Unhealthy deployment restart tests
+ */
 @EnableKubernetesMockClient(crud = true)
 public class FailedDeploymentRestartTest {
     private FlinkConfigManager configManager;

@@ -130,7 +130,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-/** @link FlinkService unit tests */
+/**
+ * @link FlinkService unit tests
+ */
 @EnableKubernetesMockClient(crud = true)
 public class AbstractFlinkServiceTest {
 

@@ -62,7 +62,9 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-/** @link StandaloneKubernetesJobManagerFactory unit tests */
+/**
+ * @link StandaloneKubernetesJobManagerFactory unit tests
+ */
 public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBase {
 
     KubernetesJobManagerSpecification jmSpec;

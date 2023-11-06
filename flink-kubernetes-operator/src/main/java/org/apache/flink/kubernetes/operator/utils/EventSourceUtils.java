@@ -46,7 +46,8 @@ public class EventSourceUtils {
             EventSourceContext<FlinkDeployment> context) {
         final String labelSelector =
                 Map.of(Constants.LABEL_COMPONENT_KEY, Constants.LABEL_COMPONENT_JOB_MANAGER)
-                        .entrySet().stream()
+                        .entrySet()
+                        .stream()
                         .map(Object::toString)
                         .collect(Collectors.joining(","));
 
@@ -77,7 +78,8 @@ public class EventSourceUtils {
                 InformerConfiguration.from(FlinkSessionJob.class, context)
                         .withSecondaryToPrimaryMapper(
                                 sessionJob ->
-                                        context.getPrimaryCache()
+                                        context
+                                                .getPrimaryCache()
                                                 .byIndex(
                                                         FLINK_DEPLOYMENT_IDX,
                                                         indexKey(
@@ -112,7 +114,8 @@ public class EventSourceUtils {
                 InformerConfiguration.from(FlinkDeployment.class, context)
                         .withSecondaryToPrimaryMapper(
                                 flinkDeployment ->
-                                        context.getPrimaryCache()
+                                        context
+                                                .getPrimaryCache()
                                                 .byIndex(
                                                         FLINK_SESSIONJOB_IDX,
                                                         indexKey(

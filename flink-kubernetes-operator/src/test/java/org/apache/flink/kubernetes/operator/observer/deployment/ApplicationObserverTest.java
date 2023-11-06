@@ -259,17 +259,26 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertEquals(
                 0,
                 (int)
-                        kubernetesClient.v1().events()
-                                .inNamespace(deployment.getMetadata().getNamespace()).list()
-                                .getItems().stream()
+                        kubernetesClient
+                                .v1()
+                                .events()
+                                .inNamespace(deployment.getMetadata().getNamespace())
+                                .list()
+                                .getItems()
+                                .stream()
                                 .filter(e -> e.getReason().contains("SavepointError"))
                                 .count());
         observer.observe(deployment, readyContext);
         assertFalse(SnapshotUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
         assertEquals(
                 1,
-                kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
-                        .list().getItems().stream()
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .stream()
                         .filter(e -> e.getReason().contains("SavepointError"))
                         .count());
 
@@ -289,8 +298,13 @@ public class ApplicationObserverTest extends OperatorTestBase {
         assertFalse(SnapshotUtils.savepointInProgress(deployment.getStatus().getJobStatus()));
         assertEquals(
                 1,
-                kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
-                        .list().getItems().stream()
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .stream()
                         .filter(e -> e.getReason().contains("SavepointError"))
                         .filter(
                                 e ->
@@ -301,8 +315,13 @@ public class ApplicationObserverTest extends OperatorTestBase {
                         .count());
         assertEquals(
                 2,
-                kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
-                        .list().getItems().stream()
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .stream()
                         .filter(e -> e.getReason().contains("SavepointError"))
                         .filter(
                                 e ->
@@ -414,8 +433,13 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
         assertEquals(
                 1,
-                kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
-                        .list().getItems().stream()
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .stream()
                         .filter(e -> e.getReason().contains("SavepointError"))
                         .filter(
                                 e ->
@@ -426,8 +450,13 @@ public class ApplicationObserverTest extends OperatorTestBase {
                         .count());
         assertEquals(
                 1,
-                kubernetesClient.v1().events().inNamespace(deployment.getMetadata().getNamespace())
-                        .list().getItems().stream()
+                kubernetesClient
+                        .v1()
+                        .events()
+                        .inNamespace(deployment.getMetadata().getNamespace())
+                        .list()
+                        .getItems()
+                        .stream()
                         .filter(e -> e.getReason().contains("SavepointError"))
                         .filter(
                                 e ->

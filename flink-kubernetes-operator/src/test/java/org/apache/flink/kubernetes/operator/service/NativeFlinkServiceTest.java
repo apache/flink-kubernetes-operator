@@ -79,7 +79,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-/** @link FlinkService unit tests */
+/**
+ * @link FlinkService unit tests
+ */
 @EnableKubernetesMockClient(crud = true)
 public class NativeFlinkServiceTest {
     KubernetesClient client;

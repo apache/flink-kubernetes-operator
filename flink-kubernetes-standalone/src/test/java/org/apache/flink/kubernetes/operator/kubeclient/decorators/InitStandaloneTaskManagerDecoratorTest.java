@@ -47,7 +47,9 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** @link InitStandaloneTaskManagerDecorator unit tests */
+/**
+ * @link InitStandaloneTaskManagerDecorator unit tests
+ */
 public class InitStandaloneTaskManagerDecoratorTest extends ParametersTestBase {
 
     private Pod resultPod;
