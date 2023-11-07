@@ -57,6 +57,7 @@ under the License.
         <module>flink-kubernetes-webhook</module>
         <module>flink-kubernetes-docs</module>
         <module>flink-autoscaler</module>
+        <module>flink-autoscaler-standalone</module>
         <module>examples/flink-sql-runner-example</module>
         <module>examples/flink-beam-example</module>
         <module>examples/kubernetes-client-examples</module>
