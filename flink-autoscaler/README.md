@@ -23,5 +23,18 @@ framework.
 Under the hood, the autoscaler exposes a set of interfaces for storing autoscaler state,
 handling autoscaling events, and executing scaling decisions. How these are implemented
 is specific to the orchestration framework used (e.g. Kubernetes), but the interfaces are
-designed to be as generic as possible. Currently, there are several other implementations
-in the making, e.g. YARN or a standalone implementation.
+designed to be as generic as possible. The following are the introduction of these 
+generic interfaces:
+
+- **AutoScalerEventHandler** : Handling autoscaler events, such as: ScalingReport,
+  AutoscalerError, etc. `LoggableEventHandler` is the default implementation, it logs events.
+- **AutoScalerStateStore** : Storing all state during scaling. `InMemoryAutoScalerStateStore`
+  is the default implementation, it's based on the Java Heap, so the state will be discarded
+  after process restarts. We will implement persistent State Store in the future, such as
+  : `JdbcAutoScalerStateStore`.
+- **ScalingRealizer** : Applying scaling actions.
+- **JobAutoScalerContext** : Including all details related to the current job.
+
+Currently, the Autoscaler Standalone has been implemented, it supports a single Flink cluster, 
+and other implementation in the making, e.g. YARN cluster. Please click [here](../flink-autoscaler-standalone/README.md) 
+if you are interested in Autoscaler Standalone.
