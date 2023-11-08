@@ -114,6 +114,8 @@ The configurable parameters of the Helm chart and which default values as detail
 
 For more information check the [Helm documentation](https://helm.sh/docs/helm/helm_install/).
 
+__Notice__: The pod resources should be set as your workload in different environments to archive a matched K8s pod QoS. See also [Pod Quality of Service Classes](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/#quality-of-service-classes).
+
 ## Operator webhooks
 
 In order to use the webhooks in the operator, you must install the cert-manager on the Kubernetes cluster:
