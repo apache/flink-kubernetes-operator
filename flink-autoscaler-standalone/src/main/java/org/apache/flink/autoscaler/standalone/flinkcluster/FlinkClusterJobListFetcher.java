@@ -53,7 +53,9 @@ public class FlinkClusterJobListFetcher
     @Override
     public List<JobAutoScalerContext<JobID>> fetch() throws Exception {
         try (var restClusterClient = restClientGetter.apply(new Configuration())) {
-            return restClusterClient.listJobs().get(restClientTimeout.toSeconds(), TimeUnit.SECONDS)
+            return restClusterClient
+                    .listJobs()
+                    .get(restClientTimeout.toSeconds(), TimeUnit.SECONDS)
                     .stream()
                     .map(
                             jobStatusMessage -> {
