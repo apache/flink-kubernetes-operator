@@ -80,6 +80,7 @@ import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagerInfo;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersHeaders;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersInfo;
 import org.apache.flink.runtime.rest.util.RestMapperUtils;
+import org.apache.flink.runtime.scheduler.stopwithsavepoint.StopWithSavepointStoppingException;
 import org.apache.flink.runtime.taskexecutor.TaskExecutorMemoryConfiguration;
 import org.apache.flink.runtime.webmonitor.handlers.JarDeleteHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
@@ -116,6 +117,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -611,8 +613,19 @@ public class AbstractFlinkServiceTest {
 
     @Test
     public void nativeSavepointFormatTest() throws Exception {
+        runNativeSavepointFormatTest(false);
+    }
+
+    @Test
+    public void testSavepointCompletesButJobFailsAfterwards() throws Exception {
+        runNativeSavepointFormatTest(true);
+    }
+
+    private void runNativeSavepointFormatTest(boolean failAfterSavepointCompletes)
+            throws Exception {
         final TestingClusterClient<String> testingClusterClient =
                 new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        final JobID jobID = JobID.generate();
         final String savepointPath = "file:///path/of/svp";
         final CompletableFuture<Tuple4<JobID, String, Boolean, SavepointFormatType>>
                 triggerSavepointFuture = new CompletableFuture<>();
@@ -634,13 +647,20 @@ public class AbstractFlinkServiceTest {
                 stopWithSavepointFuture = new CompletableFuture<>();
         testingClusterClient.setStopWithSavepointFormat(
                 (id, formatType, savepointDir) -> {
-                    stopWithSavepointFuture.complete(new Tuple3<>(id, formatType, savepointDir));
+                    if (failAfterSavepointCompletes) {
+                        stopWithSavepointFuture.completeExceptionally(
+                                new CompletionException(
+                                        new StopWithSavepointStoppingException(
+                                                savepointPath, jobID)));
+                    } else {
+                        stopWithSavepointFuture.complete(
+                                new Tuple3<>(id, formatType, savepointDir));
+                    }
                     return CompletableFuture.completedFuture(savepointPath);
                 });
 
         var flinkService = new TestingService(testingClusterClient);
 
-        final JobID jobID = JobID.generate();
         final FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment
                 .getSpec()
@@ -673,9 +693,11 @@ public class AbstractFlinkServiceTest {
                         .set(OPERATOR_SAVEPOINT_FORMAT_TYPE, SavepointFormatType.NATIVE),
                 false);
         assertTrue(stopWithSavepointFuture.isDone());
-        assertEquals(jobID, stopWithSavepointFuture.get().f0);
-        assertEquals(SavepointFormatType.NATIVE, stopWithSavepointFuture.get().f1);
-        assertEquals(savepointPath, stopWithSavepointFuture.get().f2);
+        if (!failAfterSavepointCompletes) {
+            assertEquals(jobID, stopWithSavepointFuture.get().f0);
+            assertEquals(SavepointFormatType.NATIVE, stopWithSavepointFuture.get().f1);
+            assertEquals(savepointPath, stopWithSavepointFuture.get().f2);
+        }
     }
 
     @Test
