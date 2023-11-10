@@ -27,7 +27,7 @@ designed to be as generic as possible. The following are the introduction of the
 generic interfaces:
 
 - **AutoScalerEventHandler** : Handling autoscaler events, such as: ScalingReport,
-  AutoscalerError, etc. `LoggableEventHandler` is the default implementation, it logs events.
+  AutoscalerError, etc. `LoggingEventHandler` is the default implementation, it logs events.
 - **AutoScalerStateStore** : Storing all state during scaling. `InMemoryAutoScalerStateStore`
   is the default implementation, it's based on the Java Heap, so the state will be discarded
   after process restarts. We will implement persistent State Store in the future, such as
