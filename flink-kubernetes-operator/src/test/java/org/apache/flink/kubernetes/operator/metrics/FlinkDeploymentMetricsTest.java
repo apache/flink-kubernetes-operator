@@ -43,7 +43,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** @link FlinkDeploymentMetrics tests. */
+/**
+ * @link FlinkDeploymentMetrics tests.
+ */
 public class FlinkDeploymentMetricsTest {
 
     private final Configuration configuration = new Configuration();

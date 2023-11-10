@@ -29,7 +29,9 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import org.junit.jupiter.api.BeforeEach;
 
-/** @link JobStatusObserver unit tests */
+/**
+ * @link JobStatusObserver unit tests
+ */
 public abstract class OperatorTestBase {
 
     protected Configuration conf = new Configuration();

@@ -29,7 +29,9 @@ import org.junit.jupiter.api.Test;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 
-/** @link CmdStandaloneTaskManagerDecorator unit tests */
+/**
+ * @link CmdStandaloneTaskManagerDecorator unit tests
+ */
 public class CmdStandaloneTaskManagerDecoratorTest {
 
     private static final String MOCK_ENTRYPATH = "./docker-entrypath";

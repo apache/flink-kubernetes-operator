@@ -30,7 +30,9 @@ import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMet
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** @link KubernetesOperatorMetricGroup tests. */
+/**
+ * @link KubernetesOperatorMetricGroup tests.
+ */
 public class KubernetesOperatorMetricGroupTest {
 
     @Test

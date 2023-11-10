@@ -43,7 +43,9 @@ import java.util.List;
 import static org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils.TEST_NAMESPACE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** @link Fabric8FlinkStandaloneKubeClient unit tests */
+/**
+ * @link Fabric8FlinkStandaloneKubeClient unit tests
+ */
 @EnableKubernetesMockClient(crud = true, https = false)
 public class Fabric8FlinkStandaloneKubeClientTest {
     KubernetesMockServer mockWebServer;

@@ -51,7 +51,9 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** @link RollBack logic tests */
+/**
+ * @link RollBack logic tests
+ */
 @EnableKubernetesMockClient(crud = true)
 public class RollbackTest {
 

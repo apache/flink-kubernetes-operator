@@ -36,7 +36,9 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** @link UserLibMountDecorator unit tests */
+/**
+ * @link UserLibMountDecorator unit tests
+ */
 public class UserLibMountDecoratorTest {
 
     @Test

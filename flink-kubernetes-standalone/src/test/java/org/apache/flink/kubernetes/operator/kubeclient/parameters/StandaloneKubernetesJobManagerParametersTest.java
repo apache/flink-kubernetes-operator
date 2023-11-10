@@ -34,7 +34,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** @link StandaloneKubernetesJobManagerParameters unit tests */
+/**
+ * @link StandaloneKubernetesJobManagerParameters unit tests
+ */
 public class StandaloneKubernetesJobManagerParametersTest extends ParametersTestBase {
     private StandaloneKubernetesJobManagerParameters kubernetesJobManagerParameters;
 

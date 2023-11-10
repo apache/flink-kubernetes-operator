@@ -57,7 +57,9 @@ import static org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpVer
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** @link AdmissionHandler unit tests */
+/**
+ * @link AdmissionHandler unit tests
+ */
 public class AdmissionHandlerTest {
 
     private final AdmissionHandler admissionHandler =

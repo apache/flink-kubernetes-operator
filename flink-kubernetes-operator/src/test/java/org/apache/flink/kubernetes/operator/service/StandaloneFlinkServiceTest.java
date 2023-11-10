@@ -50,7 +50,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** @link StandaloneFlinkService unit tests */
+/**
+ * @link StandaloneFlinkService unit tests
+ */
 @EnableKubernetesMockClient(crud = true)
 public class StandaloneFlinkServiceTest {
     KubernetesMockServer mockServer;

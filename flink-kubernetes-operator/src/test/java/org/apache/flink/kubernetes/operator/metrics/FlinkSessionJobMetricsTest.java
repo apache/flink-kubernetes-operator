@@ -29,7 +29,9 @@ import static org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMet
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** @link FlinkSessionJobMetrics tests. */
+/**
+ * @link FlinkSessionJobMetrics tests.
+ */
 public class FlinkSessionJobMetricsTest {
 
     private final Configuration configuration = new Configuration();
