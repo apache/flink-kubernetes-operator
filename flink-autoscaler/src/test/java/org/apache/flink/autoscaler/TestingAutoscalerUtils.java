@@ -49,6 +49,19 @@ public class TestingAutoscalerUtils {
                 getRestClusterClientSupplier());
     }
 
+    public static JobAutoScalerContext<JobID> createJobAutoScalerContext(JobStatus jobStatus) {
+        MetricRegistry registry = NoOpMetricRegistry.INSTANCE;
+        GenericMetricGroup metricGroup = new GenericMetricGroup(registry, null, "test");
+        final JobID jobID = new JobID();
+        return new JobAutoScalerContext<JobID>(
+                jobID,
+                jobID,
+                jobStatus,
+                new Configuration(),
+                metricGroup,
+                getRestClusterClientSupplier());
+    }
+
     public static SupplierWithException<RestClusterClient<String>, Exception>
             getRestClusterClientSupplier() {
         return () ->

@@ -24,14 +24,11 @@ import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -40,7 +37,6 @@ import java.util.SortedMap;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
-import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
@@ -52,7 +48,6 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     private final JobVertexScaler<KEY, Context> jobVertexScaler;
     private final AutoScalerEventHandler<KEY, Context> autoScalerEventHandler;
     private final AutoScalerStateStore<KEY, Context> autoScalerStateStore;
-    private Clock clock = Clock.system(ZoneId.systemDefault());
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
@@ -74,12 +69,17 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     public boolean scaleResource(
             Context context,
-            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics)
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
+            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
+            ScalingTracking scalingTracking,
+            Instant now)
             throws Exception {
 
         var conf = context.getConfiguration();
-        var scalingHistory = getTrimmedScalingHistory(autoScalerStateStore, context, Instant.now());
-        var scalingSummaries = computeScalingSummary(context, evaluatedMetrics, scalingHistory);
+        var restartTimeSec = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+
+        var scalingSummaries =
+                computeScalingSummary(context, evaluatedMetrics, scalingHistory, restartTimeSec);
 
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
@@ -101,7 +101,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         addToScalingHistoryAndStore(
-                autoScalerStateStore, context, scalingHistory, clock.instant(), scalingSummaries);
+                autoScalerStateStore, context, scalingHistory, now, scalingSummaries);
+
+        scalingTracking.addScalingRecord(now, new ScalingRecord());
+        autoScalerStateStore.storeScalingTracking(context, scalingTracking);
+
         autoScalerStateStore.storeParallelismOverrides(
                 context, getVertexParallelismOverrides(evaluatedMetrics, scalingSummaries));
 
@@ -158,7 +162,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     Map<JobVertexID, ScalingSummary> computeScalingSummary(
             Context context,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
-            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
+            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
+            double restartTimeSec) {
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
         var excludeVertexIdList =
@@ -178,7 +183,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                         v,
                                         metrics,
                                         scalingHistory.getOrDefault(
-                                                v, Collections.emptySortedMap()));
+                                                v, Collections.emptySortedMap()),
+                                        restartTimeSec);
                         if (currentParallelism != newParallelism) {
                             out.put(
                                     v,
@@ -209,11 +215,5 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                     }
                 });
         return overrides;
-    }
-
-    @VisibleForTesting
-    protected void setClock(Clock clock) {
-        this.clock = Preconditions.checkNotNull(clock);
-        jobVertexScaler.setClock(clock);
     }
 }

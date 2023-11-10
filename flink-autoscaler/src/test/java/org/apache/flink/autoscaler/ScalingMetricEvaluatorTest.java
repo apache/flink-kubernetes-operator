@@ -40,6 +40,7 @@ import java.util.Set;
 import java.util.TreeMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.CATCH_UP_DURATION;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.PREFER_TRACKED_RESTART_TIME;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.RESTART_TIME;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
@@ -112,9 +113,8 @@ public class ScalingMetricEvaluatorTest {
         var conf = new Configuration();
 
         conf.set(CATCH_UP_DURATION, Duration.ofSeconds(2));
-        conf.set(RESTART_TIME, Duration.ZERO);
         var evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
+                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory), 0);
 
         assertEquals(new EvaluatedScalingMetric(.6, .7), evaluatedMetrics.get(source).get(LOAD));
 
@@ -135,7 +135,7 @@ public class ScalingMetricEvaluatorTest {
 
         conf.set(CATCH_UP_DURATION, Duration.ofSeconds(1));
         evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
+                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory), 0);
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -153,7 +153,7 @@ public class ScalingMetricEvaluatorTest {
         conf.set(RESTART_TIME, Duration.ofSeconds(2));
 
         evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
+                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory), 0);
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -170,7 +170,7 @@ public class ScalingMetricEvaluatorTest {
         // Turn off lag based scaling
         conf.set(CATCH_UP_DURATION, Duration.ZERO);
         evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
+                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory), 0);
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -204,7 +204,7 @@ public class ScalingMetricEvaluatorTest {
 
         conf.set(CATCH_UP_DURATION, Duration.ofMinutes(1));
         evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory));
+                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory), 0);
         assertEquals(
                 new EvaluatedScalingMetric(100, 100),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -233,6 +233,41 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(
                 Tuple2.of(1050., Double.POSITIVE_INFINITY), getThresholds(700, 350, conf, true));
         assertEquals(Tuple2.of(700., Double.POSITIVE_INFINITY), getThresholds(700, 0, conf, true));
+    }
+
+    @Test
+    public void testUtilizationBoundaryComputationWithRestartTimesTracking() {
+
+        var conf = new Configuration();
+        conf.set(TARGET_UTILIZATION, 0.8);
+        conf.set(TARGET_UTILIZATION_BOUNDARY, 0.1);
+        conf.set(RESTART_TIME, Duration.ofMinutes(10));
+        conf.set(CATCH_UP_DURATION, Duration.ZERO);
+        conf.set(PREFER_TRACKED_RESTART_TIME, true);
+
+        var scalingTracking = new ScalingTracking();
+        scalingTracking.addScalingRecord(
+                Instant.parse("2023-11-15T16:00:00.00Z"),
+                new ScalingRecord(Instant.parse("2023-11-15T16:03:00.00Z")));
+        scalingTracking.addScalingRecord(
+                Instant.parse("2023-11-15T16:20:00.00Z"),
+                new ScalingRecord(Instant.parse("2023-11-15T16:25:00.00Z")));
+
+        var restartTimeSec = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        // Restart time does not factor in
+        assertEquals(Tuple2.of(778.0, 1000.0), getThresholds(700, 0, restartTimeSec, conf));
+
+        conf.set(CATCH_UP_DURATION, Duration.ofMinutes(1));
+        assertEquals(Tuple2.of(1128.0, 4850.0), getThresholds(700, 350, restartTimeSec, conf));
+        assertEquals(Tuple2.of(778.0, 4500.0), getThresholds(700, 0, restartTimeSec, conf));
+
+        // Test thresholds during catchup periods
+        assertEquals(
+                Tuple2.of(1050., Double.POSITIVE_INFINITY),
+                getThresholds(700, 350, restartTimeSec, conf, true));
+        assertEquals(
+                Tuple2.of(700., Double.POSITIVE_INFINITY),
+                getThresholds(700, 0, restartTimeSec, conf, true));
     }
 
     @Test
@@ -320,6 +355,7 @@ public class ScalingMetricEvaluatorTest {
     public void testObservedTprEvaluation() {
         var source = new JobVertexID();
         var conf = new Configuration();
+        var restartTimeSec = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
 
         var topology = new JobTopology(new VertexInfo(source, Collections.emptySet(), 1, 1));
         var evaluator = new ScalingMetricEvaluator();
@@ -374,7 +410,10 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(
                 new EvaluatedScalingMetric(400., 350.),
                 evaluator
-                        .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
+                        .evaluate(
+                                conf,
+                                new CollectedMetricHistory(topology, metricHistory),
+                                restartTimeSec)
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
 
@@ -385,7 +424,10 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(
                 new EvaluatedScalingMetric(400, 300.),
                 evaluator
-                        .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
+                        .evaluate(
+                                conf,
+                                new CollectedMetricHistory(topology, metricHistory),
+                                restartTimeSec)
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
 
@@ -394,7 +436,10 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(
                 new EvaluatedScalingMetric(400., 350.),
                 evaluator
-                        .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
+                        .evaluate(
+                                conf,
+                                new CollectedMetricHistory(topology, metricHistory),
+                                restartTimeSec)
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
     }
@@ -403,6 +448,7 @@ public class ScalingMetricEvaluatorTest {
     public void testMissingObservedTpr() {
         var source = new JobVertexID();
         var conf = new Configuration();
+        var restartTimeSec = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
 
         var topology = new JobTopology(new VertexInfo(source, Collections.emptySet(), 1, 1));
         var evaluator = new ScalingMetricEvaluator();
@@ -430,7 +476,10 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(
                 new EvaluatedScalingMetric(300., 300.),
                 evaluator
-                        .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
+                        .evaluate(
+                                conf,
+                                new CollectedMetricHistory(topology, metricHistory),
+                                restartTimeSec)
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
 
@@ -456,7 +505,10 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(
                 new EvaluatedScalingMetric(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY),
                 evaluator
-                        .evaluate(conf, new CollectedMetricHistory(topology, metricHistory))
+                        .evaluate(
+                                conf,
+                                new CollectedMetricHistory(topology, metricHistory),
+                                restartTimeSec)
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
     }
@@ -467,13 +519,29 @@ public class ScalingMetricEvaluatorTest {
     }
 
     private Tuple2<Double, Double> getThresholds(
+            double inputTargetRate, double catchUpRate, double restartTimeSec, Configuration conf) {
+        return getThresholds(inputTargetRate, catchUpRate, restartTimeSec, conf, false);
+    }
+
+    private Tuple2<Double, Double> getThresholds(
             double inputTargetRate, double catchUpRate, Configuration conf, boolean catchingUp) {
+        var restartTimeSec = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
+        return getThresholds(inputTargetRate, catchUpRate, restartTimeSec, conf, catchingUp);
+    }
+
+    private Tuple2<Double, Double> getThresholds(
+            double inputTargetRate,
+            double catchUpRate,
+            double restartTimeSec,
+            Configuration conf,
+            boolean catchingUp) {
         var map = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
 
         map.put(TARGET_DATA_RATE, new EvaluatedScalingMetric(Double.NaN, inputTargetRate));
         map.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchUpRate));
 
-        ScalingMetricEvaluator.computeProcessingRateThresholds(map, conf, catchingUp);
+        ScalingMetricEvaluator.computeProcessingRateThresholds(
+                map, conf, catchingUp, restartTimeSec);
         return Tuple2.of(
                 map.get(SCALE_UP_RATE_THRESHOLD).getCurrent(),
                 map.get(SCALE_DOWN_RATE_THRESHOLD).getCurrent());

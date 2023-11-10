@@ -73,6 +73,7 @@ public class MetricsCollectionAndEvaluationTest {
     private Clock clock;
 
     private Instant startTime;
+    private long restartTimeSec;
 
     @BeforeEach
     public void setup() {
@@ -107,6 +108,7 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.setClock(clock);
         startTime = clock.instant();
         metricsCollector.setJobUpdateTs(startTime);
+        restartTimeSec = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
     }
 
     @Test
@@ -159,8 +161,9 @@ public class MetricsCollectionAndEvaluationTest {
         assertEquals(3, collectedMetrics.getMetricHistory().size());
         assertTrue(collectedMetrics.isFullyCollected());
 
-        var evaluation = evaluator.evaluate(conf, collectedMetrics);
-        scalingExecutor.scaleResource(context, evaluation);
+        var evaluation = evaluator.evaluate(conf, collectedMetrics, restartTimeSec);
+        scalingExecutor.scaleResource(
+                context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.size());
@@ -173,8 +176,9 @@ public class MetricsCollectionAndEvaluationTest {
         conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.5);
         conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
 
-        evaluation = evaluator.evaluate(conf, collectedMetrics);
-        scalingExecutor.scaleResource(context, evaluation);
+        evaluation = evaluator.evaluate(conf, collectedMetrics, restartTimeSec);
+        scalingExecutor.scaleResource(
+                context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
 
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.get(source1));
@@ -369,7 +373,7 @@ public class MetricsCollectionAndEvaluationTest {
         var collectedMetrics = collectMetrics();
 
         Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluation =
-                evaluator.evaluate(context.getConfiguration(), collectedMetrics);
+                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTimeSec);
         assertEquals(
                 500., evaluation.get(source1).get(ScalingMetric.TARGET_DATA_RATE).getCurrent());
         assertEquals(
@@ -382,7 +386,8 @@ public class MetricsCollectionAndEvaluationTest {
                 500.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
 
-        scalingExecutor.scaleResource(context, evaluation);
+        scalingExecutor.scaleResource(
+                context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(1, scaledParallelism.get(source1));
     }
@@ -640,7 +645,7 @@ public class MetricsCollectionAndEvaluationTest {
         var collectedMetrics = collectMetrics();
 
         Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluation =
-                evaluator.evaluate(context.getConfiguration(), collectedMetrics);
+                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTimeSec);
         assertEquals(0, evaluation.get(source1).get(ScalingMetric.TARGET_DATA_RATE).getCurrent());
         assertEquals(
                 Double.POSITIVE_INFINITY,
@@ -652,7 +657,8 @@ public class MetricsCollectionAndEvaluationTest {
                 0.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
 
-        scalingExecutor.scaleResource(context, evaluation);
+        scalingExecutor.scaleResource(
+                context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(1, scaledParallelism.get(source1));
 
@@ -669,7 +675,8 @@ public class MetricsCollectionAndEvaluationTest {
                         Instant.ofEpochSecond(1234),
                         new CollectedMetrics(newMetrics, lastCollected.getOutputRatios()));
 
-        evaluation = evaluator.evaluate(context.getConfiguration(), collectedMetrics);
+        evaluation =
+                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTimeSec);
         assertEquals(
                 3., evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getAverage());
     }

@@ -62,7 +62,7 @@ public class ScalingMetricEvaluator {
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricEvaluator.class);
 
     public Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluate(
-            Configuration conf, CollectedMetricHistory collectedMetrics) {
+            Configuration conf, CollectedMetricHistory collectedMetrics, double restartTimeSec) {
 
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
@@ -79,7 +79,8 @@ public class ScalingMetricEvaluator {
                             metricsHistory,
                             topology,
                             vertex,
-                            processingBacklog));
+                            processingBacklog,
+                            restartTimeSec));
         }
 
         return scalingOutput;
@@ -119,7 +120,8 @@ public class ScalingMetricEvaluator {
             SortedMap<Instant, CollectedMetrics> metricsHistory,
             JobTopology topology,
             JobVertexID vertex,
-            boolean processingBacklog) {
+            boolean processingBacklog,
+            double restartTime) {
 
         var latestVertexMetrics =
                 metricsHistory.get(metricsHistory.lastKey()).getVertexMetrics().get(vertex);
@@ -149,7 +151,7 @@ public class ScalingMetricEvaluator {
         evaluatedMetrics.put(
                 MAX_PARALLELISM,
                 EvaluatedScalingMetric.of(topology.getMaxParallelisms().get(vertex)));
-        computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog);
+        computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog, restartTime);
         return evaluatedMetrics;
     }
 
@@ -208,7 +210,8 @@ public class ScalingMetricEvaluator {
     protected static void computeProcessingRateThresholds(
             Map<ScalingMetric, EvaluatedScalingMetric> metrics,
             Configuration conf,
-            boolean processingBacklog) {
+            boolean processingBacklog,
+            double restartTimeSec) {
 
         double utilizationBoundary = conf.getDouble(TARGET_UTILIZATION_BOUNDARY);
         double targetUtilization = conf.get(TARGET_UTILIZATION);
@@ -227,10 +230,12 @@ public class ScalingMetricEvaluator {
         }
 
         double scaleUpThreshold =
-                AutoScalerUtils.getTargetProcessingCapacity(metrics, conf, upperUtilization, false);
+                AutoScalerUtils.getTargetProcessingCapacity(
+                        metrics, conf, upperUtilization, false, restartTimeSec);
 
         double scaleDownThreshold =
-                AutoScalerUtils.getTargetProcessingCapacity(metrics, conf, lowerUtilization, true);
+                AutoScalerUtils.getTargetProcessingCapacity(
+                        metrics, conf, lowerUtilization, true, restartTimeSec);
 
         metrics.put(SCALE_UP_RATE_THRESHOLD, EvaluatedScalingMetric.of(scaleUpThreshold));
         metrics.put(SCALE_DOWN_RATE_THRESHOLD, EvaluatedScalingMetric.of(scaleDownThreshold));
