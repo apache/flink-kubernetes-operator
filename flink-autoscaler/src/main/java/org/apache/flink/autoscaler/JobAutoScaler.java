@@ -20,16 +20,26 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.annotation.Internal;
 
 /**
- * The generic Autoscaler.
+ * Flink Job AutoScaler.
  *
  * @param <KEY> The job key.
+ * @param <Context> Instance of {@link JobAutoScalerContext}.
  */
 @Internal
 public interface JobAutoScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
-    /** Called as part of the reconciliation loop. */
+    /**
+     * Compute and apply new parallelism overrides for the provided job context.
+     *
+     * @param context Job context.
+     * @throws Exception
+     */
     void scale(Context context) throws Exception;
 
-    /** Called when the job is deleted. */
-    void cleanup(KEY key);
+    /**
+     * Called when the job is deleted.
+     *
+     * @param jobKey Job key.
+     */
+    void cleanup(KEY jobKey);
 }

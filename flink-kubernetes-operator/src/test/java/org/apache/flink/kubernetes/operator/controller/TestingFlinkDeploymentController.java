@@ -92,7 +92,6 @@ public class TestingFlinkDeploymentController
         statusRecorder = new StatusRecorder<>(new MetricManager<>(), statusUpdateCounter);
         reconcilerFactory =
                 new ReconcilerFactory(
-                        configManager,
                         eventRecorder,
                         statusRecorder,
                         AutoscalerFactory.create(

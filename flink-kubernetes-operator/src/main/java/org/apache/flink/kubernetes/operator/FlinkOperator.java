@@ -166,8 +166,7 @@ public class FlinkOperator {
                 MetricManager.createFlinkDeploymentMetricManager(baseConfig, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
         var autoscaler = AutoscalerFactory.create(client, eventRecorder);
-        var reconcilerFactory =
-                new ReconcilerFactory(configManager, eventRecorder, statusRecorder, autoscaler);
+        var reconcilerFactory = new ReconcilerFactory(eventRecorder, statusRecorder, autoscaler);
         var observerFactory = new FlinkDeploymentObserverFactory(eventRecorder);
         var canaryResourceManager = new CanaryResourceManager<FlinkDeployment>(configManager);
         HealthProbe.INSTANCE.registerCanaryResourceManager(canaryResourceManager);

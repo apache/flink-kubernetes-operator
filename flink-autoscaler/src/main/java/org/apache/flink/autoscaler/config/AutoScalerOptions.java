@@ -60,7 +60,7 @@ public class AutoScalerOptions {
     public static final ConfigOption<Duration> METRICS_WINDOW =
             autoScalerConfig("metrics.window")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(10))
+                    .defaultValue(Duration.ofMinutes(15))
                     .withDeprecatedKeys(deprecatedOperatorConfigKey("metrics.window"))
                     .withDescription("Scaling metrics aggregation window size.");
 
@@ -82,7 +82,7 @@ public class AutoScalerOptions {
     public static final ConfigOption<Double> TARGET_UTILIZATION_BOUNDARY =
             autoScalerConfig("target.utilization.boundary")
                     .doubleType()
-                    .defaultValue(0.4)
+                    .defaultValue(0.3)
                     .withDeprecatedKeys(deprecatedOperatorConfigKey("target.utilization.boundary"))
                     .withDescription(
                             "Target vertex utilization boundary. Scaling won't be performed if the current processing rate is within [target_rate / (target_utilization - boundary), (target_rate / (target_utilization + boundary)]");
@@ -129,7 +129,7 @@ public class AutoScalerOptions {
     public static final ConfigOption<Duration> CATCH_UP_DURATION =
             autoScalerConfig("catch-up.duration")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(15))
+                    .defaultValue(Duration.ofMinutes(30))
                     .withDeprecatedKeys(deprecatedOperatorConfigKey("catch-up.duration"))
                     .withDescription(
                             "The target duration for fully processing any backlog after a scaling operation. Set to 0 to disable backlog based scaling.");
@@ -137,7 +137,7 @@ public class AutoScalerOptions {
     public static final ConfigOption<Duration> RESTART_TIME =
             autoScalerConfig("restart.time")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(3))
+                    .defaultValue(Duration.ofMinutes(5))
                     .withDeprecatedKeys(deprecatedOperatorConfigKey("restart.time"))
                     .withDescription(
                             "Expected restart time to be used until the operator can determine it reliably from history.");
@@ -234,7 +234,7 @@ public class AutoScalerOptions {
     public static final ConfigOption<Duration> SCALING_EVENT_INTERVAL =
             autoScalerConfig("scaling.event.interval")
                     .durationType()
-                    .defaultValue(Duration.ofSeconds(1800))
+                    .defaultValue(Duration.ofMinutes(30))
                     .withDeprecatedKeys(deprecatedOperatorConfigKey("scaling.event.interval"))
                     .withDescription("Time interval to resend the identical event");
 
