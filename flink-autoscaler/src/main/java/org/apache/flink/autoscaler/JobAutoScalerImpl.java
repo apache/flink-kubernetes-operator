@@ -29,10 +29,12 @@ import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -41,6 +43,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
+import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.trimScalingHistory;
 
 /** The default implementation of {@link JobAutoScaler}. */
 public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
@@ -56,6 +59,8 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     private final AutoScalerEventHandler<KEY, Context> eventHandler;
     private final ScalingRealizer<KEY, Context> scalingRealizer;
     private final AutoScalerStateStore<KEY, Context> stateStore;
+
+    private Clock clock = Clock.systemDefaultZone();
 
     @VisibleForTesting
     final Map<KEY, Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
@@ -86,7 +91,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         try {
             if (!ctx.getConfiguration().getBoolean(AUTOSCALER_ENABLED)) {
                 LOG.debug("Autoscaler is disabled");
-                clearParallelismOverrides(ctx);
+                clearStatesAfterAutoscalerDisabled(ctx);
                 return;
             }
 
@@ -115,10 +120,37 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         stateStore.removeInfoFromCache(jobKey);
     }
 
-    private void clearParallelismOverrides(Context ctx) throws Exception {
-        var parallelismOverrides = stateStore.getParallelismOverrides(ctx);
-        if (parallelismOverrides.isPresent()) {
+    private void clearStatesAfterAutoscalerDisabled(Context ctx) throws Exception {
+        var needFlush = false;
+        var parallelismOverridesOpt = stateStore.getParallelismOverrides(ctx);
+        if (parallelismOverridesOpt.isPresent()) {
+            needFlush = true;
             stateStore.removeParallelismOverrides(ctx);
+        }
+
+        var collectedMetricsOpt = stateStore.getCollectedMetrics(ctx);
+        if (collectedMetricsOpt.isPresent()) {
+            needFlush = true;
+            stateStore.removeCollectedMetrics(ctx);
+        }
+
+        var scalingHistoryOpt = stateStore.getScalingHistory(ctx);
+        if (scalingHistoryOpt.isPresent()) {
+            var scalingHistory = scalingHistoryOpt.get();
+            var trimmedScalingHistory =
+                    trimScalingHistory(clock.instant(), ctx.getConfiguration(), scalingHistory);
+            if (trimmedScalingHistory.isEmpty()) {
+                // All scaling histories are trimmed.
+                needFlush = true;
+                stateStore.removeScalingHistory(ctx);
+            } else if (!scalingHistory.equals(trimmedScalingHistory)) {
+                // Some scaling histories are trimmed.
+                needFlush = true;
+                stateStore.storeScalingHistory(ctx, trimmedScalingHistory);
+            }
+        }
+
+        if (needFlush) {
             stateStore.flush(ctx);
         }
     }
@@ -209,5 +241,10 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         return this.flinkMetrics.computeIfAbsent(
                 ctx.getJobKey(),
                 id -> new AutoscalerFlinkMetrics(ctx.getMetricGroup().addGroup("AutoScaler")));
+    }
+
+    @VisibleForTesting
+    void setClock(Clock clock) {
+        this.clock = Preconditions.checkNotNull(clock);
     }
 }
