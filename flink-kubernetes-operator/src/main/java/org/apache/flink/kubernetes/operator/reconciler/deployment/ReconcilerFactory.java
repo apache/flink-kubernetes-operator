@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
-import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.Mode;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
@@ -37,7 +36,6 @@ import java.util.concurrent.ConcurrentHashMap;
 /** The factory to create reconciler based on app mode. */
 public class ReconcilerFactory {
 
-    private final FlinkConfigManager configManager;
     private final EventRecorder eventRecorder;
     private final StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder;
     private final JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler;
@@ -45,11 +43,9 @@ public class ReconcilerFactory {
             reconcilerMap;
 
     public ReconcilerFactory(
-            FlinkConfigManager configManager,
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> deploymentStatusRecorder,
             JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler) {
-        this.configManager = configManager;
         this.eventRecorder = eventRecorder;
         this.deploymentStatusRecorder = deploymentStatusRecorder;
         this.autoscaler = autoscaler;

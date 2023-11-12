@@ -376,7 +376,7 @@ public class MetricsCollectionAndEvaluationTest {
                 5000.,
                 evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getCurrent());
         assertEquals(
-                1667.,
+                1250.,
                 evaluation.get(source1).get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD).getCurrent());
         assertEquals(
                 500.,

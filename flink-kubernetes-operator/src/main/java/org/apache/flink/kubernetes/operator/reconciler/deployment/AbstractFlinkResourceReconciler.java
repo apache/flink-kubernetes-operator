@@ -18,7 +18,6 @@
 package org.apache.flink.kubernetes.operator.reconciler.deployment;
 
 import org.apache.flink.annotation.VisibleForTesting;
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -138,7 +137,7 @@ public abstract class AbstractFlinkResourceReconciler<
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();
 
-        scaling(ctx);
+        applyAutoscaler(ctx);
 
         var reconciliationState = reconciliationStatus.getState();
         var specDiff =
@@ -181,21 +180,13 @@ public abstract class AbstractFlinkResourceReconciler<
         }
     }
 
-    private void scaling(FlinkResourceContext<CR> ctx) throws Exception {
-        KubernetesJobAutoScalerContext autoScalerContext = ctx.getJobAutoScalerContext();
-
-        if (autoscalerDisabled(ctx)) {
-            autoScalerContext.getConfiguration().set(AUTOSCALER_ENABLED, false);
-        } else if (autoScalerContext.getJobStatus() != JobStatus.RUNNING) {
-            LOG.info("Autoscaler is waiting for stable, running state");
-        }
-
-        autoscaler.scale(autoScalerContext);
-    }
-
-    private boolean autoscalerDisabled(FlinkResourceContext<CR> ctx) {
-        return ctx.getResource().getSpec().getJob() == null
-                || !ctx.getObserveConfig().getBoolean(AUTOSCALER_ENABLED);
+    private void applyAutoscaler(FlinkResourceContext<CR> ctx) throws Exception {
+        var autoScalerCtx = ctx.getJobAutoScalerContext();
+        boolean autoscalerEnabled =
+                ctx.getResource().getSpec().getJob() != null
+                        && ctx.getObserveConfig().getBoolean(AUTOSCALER_ENABLED);
+        autoScalerCtx.getConfiguration().set(AUTOSCALER_ENABLED, autoscalerEnabled);
+        autoscaler.scale(autoScalerCtx);
     }
 
     private void triggerSpecChangeEvent(CR cr, DiffResult<SPEC> specDiff, KubernetesClient client) {

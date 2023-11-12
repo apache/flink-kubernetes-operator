@@ -91,6 +91,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             }
 
             if (ctx.getJobStatus() != JobStatus.RUNNING) {
+                LOG.debug("Autoscaler is waiting for stable, running state");
                 lastEvaluatedMetrics.remove(ctx.getJobKey());
                 return;
             }
