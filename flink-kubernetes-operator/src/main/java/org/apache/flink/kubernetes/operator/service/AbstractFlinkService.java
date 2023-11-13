@@ -223,11 +223,10 @@ public abstract class AbstractFlinkService implements FlinkService {
     public JobID submitJobToSessionCluster(
             ObjectMeta meta,
             FlinkSessionJobSpec spec,
+            JobID jobID,
             Configuration conf,
             @Nullable String savepoint)
             throws Exception {
-        // we generate jobID in advance to help deduplicate job submission.
-        var jobID = FlinkUtils.generateSessionJobFixedJobID(meta);
         runJar(spec.getJob(), jobID, uploadJar(meta, spec, conf), conf, savepoint);
         LOG.info("Submitted job: {} to session cluster.", jobID);
         return jobID;
@@ -811,7 +810,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                             conf.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_16)
                                     ? conf.toMap()
                                     : null);
-            LOG.info("Submitting job: {} to session cluster.", jobID.toHexString());
+            LOG.info("Submitting job: {} to session cluster.", jobID);
             clusterClient
                     .sendRequest(headers, parameters, runRequestBody)
                     .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);

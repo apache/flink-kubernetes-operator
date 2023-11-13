@@ -17,7 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.reconciler.sessionjob;
 
-import org.apache.flink.autoscaler.NoopJobAutoscaler;
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
@@ -25,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
@@ -34,6 +36,7 @@ import org.apache.flink.runtime.messages.FlinkJobNotFoundException;
 import org.apache.flink.runtime.messages.FlinkJobTerminatedWithoutCancellationException;
 
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,8 +51,9 @@ public class SessionJobReconciler
 
     public SessionJobReconciler(
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder) {
-        super(eventRecorder, statusRecorder, new NoopJobAutoscaler<>());
+            StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder,
+            JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler) {
+        super(eventRecorder, statusRecorder, autoscaler);
     }
 
     @Override
@@ -75,16 +79,21 @@ public class SessionJobReconciler
                 EventRecorder.Component.Job,
                 MSG_SUBMIT,
                 ctx.getKubernetesClient());
-        var jobID =
-                ctx.getFlinkService()
-                        .submitJobToSessionCluster(
-                                ctx.getResource().getMetadata(),
-                                sessionJobSpec,
-                                deployConfig,
-                                savepoint.orElse(null));
+
+        // Generate job id and record in status for durability
+        var jobId = JobID.generate();
+        ctx.getResource().getStatus().getJobStatus().setJobId(jobId.toHexString());
+        statusRecorder.patchAndCacheStatus(ctx.getResource(), ctx.getKubernetesClient());
+
+        ctx.getFlinkService()
+                .submitJobToSessionCluster(
+                        ctx.getResource().getMetadata(),
+                        sessionJobSpec,
+                        jobId,
+                        deployConfig,
+                        savepoint.orElse(null));
 
         var status = ctx.getResource().getStatus();
-        status.getJobStatus().setJobId(jobID.toHexString());
         status.getJobStatus().setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
     }
 
@@ -93,6 +102,7 @@ public class SessionJobReconciler
             throws Exception {
         ctx.getFlinkService()
                 .cancelSessionJob(ctx.getResource(), upgradeMode, ctx.getObserveConfig());
+        ctx.getResource().getStatus().getJobStatus().setJobId(null);
     }
 
     @Override

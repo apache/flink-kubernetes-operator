@@ -198,7 +198,8 @@ public class AbstractFlinkServiceTest {
 
         var job = TestUtils.buildSessionJob();
         var deployConf = configManager.getSessionJobConfig(session, job.getSpec());
-        flinkService.submitJobToSessionCluster(job.getMetadata(), job.getSpec(), deployConf, null);
+        flinkService.submitJobToSessionCluster(
+                job.getMetadata(), job.getSpec(), JobID.generate(), deployConf, null);
 
         // Make sure that deploy conf was passed to jar run
         if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_16)) {

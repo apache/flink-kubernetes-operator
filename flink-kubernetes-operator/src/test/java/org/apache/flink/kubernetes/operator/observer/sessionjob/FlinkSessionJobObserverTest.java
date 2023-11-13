@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.observer.sessionjob;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.RestOptions;
@@ -34,9 +35,7 @@ import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
-import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
-import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -44,6 +43,8 @@ import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Map;
 
@@ -66,7 +67,9 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         observer = new TestObserverAdapter<>(this, new FlinkSessionJobObserver(eventRecorder));
         reconciler =
                 new TestReconcilerAdapter<>(
-                        this, new SessionJobReconciler(eventRecorder, statusRecorder));
+                        this,
+                        new SessionJobReconciler(
+                                eventRecorder, statusRecorder, new NoopJobAutoscaler<>()));
     }
 
     @Test
@@ -268,146 +271,37 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         assertFalse(SnapshotUtils.checkpointInProgress(sessionJob.getStatus().getJobStatus()));
     }
 
-    @Test
-    public void testObserveAlreadySubmitted() {
-        final var sessionJob = TestUtils.buildSessionJob();
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testObserveAlreadySubmitted(boolean submitted) {
+        var sessionJob = TestUtils.buildSessionJob();
+        sessionJob.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
         sessionJob.getMetadata().setGeneration(10L);
-        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
 
         flinkService.setSessionJobSubmittedCallback(
                 () -> {
                     throw new RuntimeException("Failed after submitted job");
                 });
-        // submit job
+        // submit job but fail during submission
         Assertions.assertThrows(
                 RuntimeException.class, () -> reconciler.reconcile(sessionJob, readyContext));
-        Assertions.assertNotNull(sessionJob.getStatus().getReconciliationStatus());
         Assertions.assertEquals(
                 ReconciliationState.UPGRADING,
                 sessionJob.getStatus().getReconciliationStatus().getState());
-        Assertions.assertNull(sessionJob.getStatus().getJobStatus().getJobId());
 
-        observer.observe(sessionJob, readyContext);
-        Assertions.assertEquals(
-                ReconciliationState.DEPLOYED,
-                sessionJob.getStatus().getReconciliationStatus().getState());
-        var jobID = sessionJob.getStatus().getJobStatus().getJobId();
-        Assertions.assertNotNull(jobID);
-        Assertions.assertEquals(10, JobID.fromHexString(jobID).getUpperPart());
-        Assertions.assertEquals(
-                JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
-    }
-
-    @Test
-    public void testObserveAlreadyUpgraded() throws Exception {
-        final var sessionJob = TestUtils.buildSessionJob();
-        sessionJob.getMetadata().setGeneration(10L);
-        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
-
-        reconciler.reconcile(sessionJob, readyContext);
-        observer.observe(sessionJob, readyContext);
-        Assertions.assertEquals(
-                ReconciliationState.DEPLOYED,
-                sessionJob.getStatus().getReconciliationStatus().getState());
-        var jobID = sessionJob.getStatus().getJobStatus().getJobId();
-        Assertions.assertNotNull(jobID);
-        Assertions.assertEquals(10, JobID.fromHexString(jobID).getUpperPart());
-        Assertions.assertEquals(
-                JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
-
-        flinkService.setSessionJobSubmittedCallback(
-                () -> {
-                    throw new RuntimeException("Failed after submitted job");
-                });
-        sessionJob.getSpec().getJob().setParallelism(10);
-        sessionJob.getMetadata().setGeneration(11L);
-
-        // upgrade
-        Assertions.assertThrows(
-                RuntimeException.class,
-                () -> {
-                    // suspend
-                    reconciler.reconcile(sessionJob, readyContext);
-                    // upgrade
-                    reconciler.reconcile(sessionJob, readyContext);
-                });
-
-        Assertions.assertEquals(
-                ReconciliationState.UPGRADING,
-                sessionJob.getStatus().getReconciliationStatus().getState());
-        // jobID not changed
-        Assertions.assertEquals(jobID, sessionJob.getStatus().getJobStatus().getJobId());
-
-        observer.observe(sessionJob, readyContext);
-
-        Assertions.assertEquals(
-                ReconciliationState.DEPLOYED,
-                sessionJob.getStatus().getReconciliationStatus().getState());
-        Assertions.assertEquals(
-                11L,
-                JobID.fromHexString(sessionJob.getStatus().getJobStatus().getJobId())
-                        .getUpperPart());
-    }
-
-    @Test
-    public void testOrphanedJob() throws Exception {
-        final var sessionJob = TestUtils.buildSessionJob();
-        sessionJob.getMetadata().setGeneration(10L);
-        final var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
-
-        reconciler.reconcile(sessionJob, readyContext);
-        observer.observe(sessionJob, readyContext);
-        Assertions.assertEquals(
-                ReconciliationState.DEPLOYED,
-                sessionJob.getStatus().getReconciliationStatus().getState());
-        var jobID = sessionJob.getStatus().getJobStatus().getJobId();
-        Assertions.assertNotNull(jobID);
-        Assertions.assertEquals(10, JobID.fromHexString(jobID).getUpperPart());
-        Assertions.assertEquals(
-                JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
-
-        flinkService.setSessionJobSubmittedCallback(
-                () -> {
-                    throw new RuntimeException("Failed after submitted job");
-                });
-        sessionJob.getSpec().getJob().setParallelism(10);
-        sessionJob.getMetadata().setGeneration(11L);
-        // upgrade
-        Assertions.assertThrows(
-                RuntimeException.class,
-                () -> {
-                    // suspend
-                    reconciler.reconcile(sessionJob, readyContext);
-                    // upgrade
-                    reconciler.reconcile(sessionJob, readyContext);
-                });
-
-        Assertions.assertEquals(
-                ReconciliationState.UPGRADING,
-                sessionJob.getStatus().getReconciliationStatus().getState());
-        // jobID not changed
-        Assertions.assertEquals(jobID, sessionJob.getStatus().getJobStatus().getJobId());
-
-        // mock a job with different id of the target CR occurs
-        var jobs = flinkService.listJobs();
-        for (var job : jobs) {
-            if (!job.f1.getJobState().isGloballyTerminalState()
-                    && !job.f1.getJobId().toHexString().equals(jobID)) {
-                job.f1 =
-                        new JobStatusMessage(
-                                FlinkUtils.generateSessionJobFixedJobID(
-                                        sessionJob.getMetadata().getUid(), -1L),
-                                job.f1.getJobName(),
-                                job.f1.getJobState(),
-                                job.f1.getStartTime());
-            }
+        if (!submitted) {
+            // Pretend that job was never submitted
+            flinkService.clear();
         }
 
-        var exception =
-                Assertions.assertThrows(
-                        RuntimeException.class, () -> observer.observe(sessionJob, readyContext));
-        Assertions.assertTrue(
-                exception.getMessage().contains("doesn't match upgrade target generation"));
+        observer.observe(sessionJob, readyContext);
+        Assertions.assertEquals(
+                submitted ? ReconciliationState.DEPLOYED : ReconciliationState.UPGRADING,
+                sessionJob.getStatus().getReconciliationStatus().getState());
+        Assertions.assertEquals(
+                submitted ? JobStatus.RUNNING.name() : JobStatus.RECONCILING.name(),
+                sessionJob.getStatus().getJobStatus().getState());
     }
 
     @Test

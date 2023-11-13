@@ -355,13 +355,6 @@ public class FlinkUtilsTest {
         assertEquals(List.of(v1merged, volume2, volume3), mergedPod.getSpec().getVolumes());
     }
 
-    @Test
-    public void testJobIDGeneration() {
-        JobID jobID =
-                FlinkUtils.generateSessionJobFixedJobID("ffffffff-ffff-ffff-aaaa-aaaaaaaaaaaa", 2L);
-        assertEquals("ffffffffffffffff0000000000000002", jobID.toString());
-    }
-
     private void createHAConfigMapWithData(
             String configMapName, String namespace, String clusterId, Map<String, String> data) {
         final ConfigMap kubernetesConfigMap =
