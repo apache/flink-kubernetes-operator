@@ -247,15 +247,10 @@ public class ScalingExecutorTest {
             Map<JobVertexID, Integer> getScaledParallelism(
                     AutoScalerStateStore<KEY, Context> stateStore, Context context)
                     throws Exception {
-        return stateStore
-                .getParallelismOverrides(context)
-                .map(
-                        overrides ->
-                                overrides.entrySet().stream()
-                                        .collect(
-                                                Collectors.toMap(
-                                                        e -> JobVertexID.fromHexString(e.getKey()),
-                                                        e -> Integer.valueOf(e.getValue()))))
-                .orElse(Map.of());
+        return stateStore.getParallelismOverrides(context).entrySet().stream()
+                .collect(
+                        Collectors.toMap(
+                                e -> JobVertexID.fromHexString(e.getKey()),
+                                e -> Integer.valueOf(e.getValue())));
     }
 }

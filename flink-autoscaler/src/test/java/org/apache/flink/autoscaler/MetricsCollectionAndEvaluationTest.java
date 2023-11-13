@@ -568,11 +568,11 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(50), ZoneId.systemDefault()));
         assertTrue(
                 metricsCollector.updateMetrics(context, stateStore).getMetricHistory().isEmpty());
-        assertEquals(1, stateStore.getCollectedMetrics(context).get().size());
+        assertEquals(1, stateStore.getCollectedMetrics(context).size());
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(60), ZoneId.systemDefault()));
         assertTrue(
                 metricsCollector.updateMetrics(context, stateStore).getMetricHistory().isEmpty());
-        assertEquals(2, stateStore.getCollectedMetrics(context).get().size());
+        assertEquals(2, stateStore.getCollectedMetrics(context).size());
 
         testTolerateMetricsMissingDuringStabilizationPhase(topology);
 
@@ -580,18 +580,18 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(150), ZoneId.systemDefault()));
         assertEquals(
                 3, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
-        assertEquals(3, stateStore.getCollectedMetrics(context).get().size());
+        assertEquals(3, stateStore.getCollectedMetrics(context).size());
 
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(180), ZoneId.systemDefault()));
         assertEquals(
                 4, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
-        assertEquals(4, stateStore.getCollectedMetrics(context).get().size());
+        assertEquals(4, stateStore.getCollectedMetrics(context).size());
 
         // Once we reach full time we trim the stabilization metrics
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(260), ZoneId.systemDefault()));
         assertEquals(
                 2, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
-        assertEquals(2, stateStore.getCollectedMetrics(context).get().size());
+        assertEquals(2, stateStore.getCollectedMetrics(context).size());
     }
 
     private void testTolerateMetricsMissingDuringStabilizationPhase(JobTopology topology) {
@@ -610,7 +610,7 @@ public class MetricsCollectionAndEvaluationTest {
         collectorWithMissingMetrics.setJobUpdateTs(startTime);
 
         Supplier<Integer> numCollectedMetricsSupplier =
-                () -> stateStore.getCollectedMetrics(context).get().size();
+                () -> stateStore.getCollectedMetrics(context).size();
 
         int numCollectedMetricsBeforeTest = numCollectedMetricsSupplier.get();
         assertThrows(

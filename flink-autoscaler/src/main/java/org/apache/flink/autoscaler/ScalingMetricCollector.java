@@ -58,7 +58,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
-import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -94,7 +93,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                         jobKey,
                         (k) -> {
                             try {
-                                return stateStore.getCollectedMetrics(ctx).orElse(new TreeMap<>());
+                                return stateStore.getCollectedMetrics(ctx);
                             } catch (Exception exception) {
                                 throw new RuntimeException(
                                         "Get evaluated metrics failed.", exception);

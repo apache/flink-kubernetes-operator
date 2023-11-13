@@ -43,9 +43,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -84,21 +86,21 @@ public class KubernetesAutoScalerStateStore
     }
 
     @Override
-    public Optional<Map<JobVertexID, SortedMap<Instant, ScalingSummary>>> getScalingHistory(
+    public Map<JobVertexID, SortedMap<Instant, ScalingSummary>> getScalingHistory(
             KubernetesJobAutoScalerContext jobContext) {
         Optional<String> serializedScalingHistory =
                 configMapStore.getSerializedState(jobContext, SCALING_HISTORY_KEY);
         if (serializedScalingHistory.isEmpty()) {
-            return Optional.empty();
+            return new HashMap<>();
         }
         try {
-            return Optional.of(deserializeScalingHistory(serializedScalingHistory.get()));
+            return deserializeScalingHistory(serializedScalingHistory.get());
         } catch (JacksonException e) {
             LOG.error(
                     "Could not deserialize scaling history, possibly the format changed. Discarding...",
                     e);
             configMapStore.removeSerializedState(jobContext, SCALING_HISTORY_KEY);
-            return Optional.empty();
+            return new HashMap<>();
         }
     }
 
@@ -116,21 +118,21 @@ public class KubernetesAutoScalerStateStore
     }
 
     @Override
-    public Optional<SortedMap<Instant, CollectedMetrics>> getCollectedMetrics(
+    public SortedMap<Instant, CollectedMetrics> getCollectedMetrics(
             KubernetesJobAutoScalerContext jobContext) {
         Optional<String> serializedEvaluatedMetricsOpt =
                 configMapStore.getSerializedState(jobContext, COLLECTED_METRICS_KEY);
         if (serializedEvaluatedMetricsOpt.isEmpty()) {
-            return Optional.empty();
+            return new TreeMap<>();
         }
         try {
-            return Optional.of(deserializeEvaluatedMetrics(serializedEvaluatedMetricsOpt.get()));
+            return deserializeEvaluatedMetrics(serializedEvaluatedMetricsOpt.get());
         } catch (JacksonException e) {
             LOG.error(
                     "Could not deserialize metric history, possibly the format changed. Discarding...",
                     e);
             configMapStore.removeSerializedState(jobContext, COLLECTED_METRICS_KEY);
-            return Optional.empty();
+            return new TreeMap<>();
         }
     }
 
@@ -149,11 +151,11 @@ public class KubernetesAutoScalerStateStore
     }
 
     @Override
-    public Optional<Map<String, String>> getParallelismOverrides(
-            KubernetesJobAutoScalerContext jobContext) {
+    public Map<String, String> getParallelismOverrides(KubernetesJobAutoScalerContext jobContext) {
         return configMapStore
                 .getSerializedState(jobContext, PARALLELISM_OVERRIDES_KEY)
-                .map(KubernetesAutoScalerStateStore::deserializeParallelismOverrides);
+                .map(KubernetesAutoScalerStateStore::deserializeParallelismOverrides)
+                .orElse(new HashMap<>());
     }
 
     @Override
@@ -216,12 +218,7 @@ public class KubernetesAutoScalerStateStore
                         .map(String::length)
                         .orElse(0);
 
-        Optional<SortedMap<Instant, CollectedMetrics>> evaluatedMetricsOpt =
-                getCollectedMetrics(context);
-        if (evaluatedMetricsOpt.isEmpty()) {
-            return;
-        }
-        SortedMap<Instant, CollectedMetrics> metricHistory = evaluatedMetricsOpt.get();
+        SortedMap<Instant, CollectedMetrics> metricHistory = getCollectedMetrics(context);
         while (scalingHistorySize + metricHistorySize > MAX_CM_BYTES) {
             if (metricHistory.isEmpty()) {
                 return;

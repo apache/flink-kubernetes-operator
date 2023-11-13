@@ -39,7 +39,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 
@@ -368,7 +367,7 @@ public class BacklogBasedScalingTest {
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));
 
         autoscaler.scale(context);
-        assertFalse(stateStore.getCollectedMetrics(context).get().isEmpty());
+        assertFalse(stateStore.getCollectedMetrics(context).isEmpty());
     }
 
     @Test
@@ -397,10 +396,9 @@ public class BacklogBasedScalingTest {
     }
 
     private void assertEvaluatedMetricsSize(int expectedSize) {
-        Optional<SortedMap<Instant, CollectedMetrics>> evaluatedMetricsOpt =
+        SortedMap<Instant, CollectedMetrics> evaluatedMetrics =
                 stateStore.getCollectedMetrics(context);
-        assertThat(evaluatedMetricsOpt).isPresent();
-        assertThat(evaluatedMetricsOpt.get()).hasSize(expectedSize);
+        assertThat(evaluatedMetrics).hasSize(expectedSize);
     }
 
     private void setClocksTo(Instant time) {

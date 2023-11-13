@@ -27,7 +27,6 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import javax.annotation.Nonnull;
 
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
@@ -86,10 +85,7 @@ public class ScalingHistoryUtils {
                     Instant now)
                     throws Exception {
         var conf = context.getConfiguration();
-        return autoScalerStateStore
-                .getScalingHistory(context)
-                .map(scalingHistory -> trimScalingHistory(now, conf, scalingHistory))
-                .orElse(new HashMap<>());
+        return trimScalingHistory(now, conf, autoScalerStateStore.getScalingHistory(context));
     }
 
     public static Map<JobVertexID, SortedMap<Instant, ScalingSummary>> trimScalingHistory(

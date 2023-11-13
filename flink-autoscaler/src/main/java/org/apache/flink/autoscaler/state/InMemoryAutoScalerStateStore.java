@@ -23,9 +23,11 @@ import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -58,9 +60,10 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     }
 
     @Override
-    public Optional<Map<JobVertexID, SortedMap<Instant, ScalingSummary>>> getScalingHistory(
+    public Map<JobVertexID, SortedMap<Instant, ScalingSummary>> getScalingHistory(
             Context jobContext) {
-        return Optional.ofNullable(scalingHistoryStore.get(jobContext.getJobKey()));
+        return Optional.ofNullable(scalingHistoryStore.get(jobContext.getJobKey()))
+                .orElse(new HashMap<>());
     }
 
     @Override
@@ -75,8 +78,9 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     }
 
     @Override
-    public Optional<SortedMap<Instant, CollectedMetrics>> getCollectedMetrics(Context jobContext) {
-        return Optional.ofNullable(collectedMetricsStore.get(jobContext.getJobKey()));
+    public SortedMap<Instant, CollectedMetrics> getCollectedMetrics(Context jobContext) {
+        return Optional.ofNullable(collectedMetricsStore.get(jobContext.getJobKey()))
+                .orElse(new TreeMap<>());
     }
 
     @Override
@@ -91,8 +95,9 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     }
 
     @Override
-    public Optional<Map<String, String>> getParallelismOverrides(Context jobContext) {
-        return Optional.ofNullable(parallelismOverridesStore.get(jobContext.getJobKey()));
+    public Map<String, String> getParallelismOverrides(Context jobContext) {
+        return Optional.ofNullable(parallelismOverridesStore.get(jobContext.getJobKey()))
+                .orElse(new HashMap<>());
     }
 
     @Override

@@ -218,7 +218,7 @@ public class KubernetesAutoScalerStateStoreTest {
         var now = Instant.now();
 
         Assertions.assertEquals(scalingHistory, getTrimmedScalingHistory(stateStore, ctx, now));
-        assertThat(stateStore.getCollectedMetrics(ctx)).hasValue(metricHistory);
+        assertThat(stateStore.getCollectedMetrics(ctx)).isEqualTo(metricHistory);
 
         // Override with compressed data
         var newTs = Instant.now();
@@ -228,7 +228,7 @@ public class KubernetesAutoScalerStateStoreTest {
 
         // Make sure we can still access everything
         Assertions.assertEquals(scalingHistory, getTrimmedScalingHistory(stateStore, ctx, newTs));
-        assertThat(stateStore.getCollectedMetrics(ctx)).hasValue(metricHistory);
+        assertThat(stateStore.getCollectedMetrics(ctx)).isEqualTo(metricHistory);
     }
 
     @Test
