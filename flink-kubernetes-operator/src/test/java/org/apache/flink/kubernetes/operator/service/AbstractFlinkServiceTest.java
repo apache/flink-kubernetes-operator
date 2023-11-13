@@ -123,6 +123,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import static org.apache.flink.kubernetes.operator.api.status.SavepointFormatType.NATIVE;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -692,12 +693,16 @@ public class AbstractFlinkServiceTest {
                 new Configuration(configManager.getObserveConfig(deployment))
                         .set(OPERATOR_SAVEPOINT_FORMAT_TYPE, SavepointFormatType.NATIVE),
                 false);
+
         assertTrue(stopWithSavepointFuture.isDone());
-        if (!failAfterSavepointCompletes) {
-            assertEquals(jobID, stopWithSavepointFuture.get().f0);
-            assertEquals(SavepointFormatType.NATIVE, stopWithSavepointFuture.get().f1);
-            assertEquals(savepointPath, stopWithSavepointFuture.get().f2);
-        }
+        assertEquals(
+                failAfterSavepointCompletes, stopWithSavepointFuture.isCompletedExceptionally());
+
+        var lastSavepoint =
+                deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint();
+        assertEquals(NATIVE, lastSavepoint.getFormatType());
+        assertEquals(savepointPath, lastSavepoint.getLocation());
+        assertEquals(jobID.toHexString(), deployment.getStatus().getJobStatus().getJobId());
     }
 
     @Test
