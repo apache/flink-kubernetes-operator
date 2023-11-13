@@ -67,19 +67,14 @@ public class ConfigMapStore {
     }
 
     protected void removeSerializedState(KubernetesJobAutoScalerContext jobContext, String key) {
-        getConfigMap(jobContext)
-                .ifPresentOrElse(
-                        configMap -> configMap.getData().remove(key),
-                        () -> {
-                            throw new IllegalStateException(
-                                    "The configMap isn't created, so the remove is unavailable.");
-                        });
+        getConfigMap(jobContext).ifPresent(configMap -> configMap.getData().remove(key));
     }
 
     public void flush(KubernetesJobAutoScalerContext jobContext) {
         Optional<ConfigMap> configMapOpt = cache.get(jobContext.getJobKey());
         if (configMapOpt == null || configMapOpt.isEmpty()) {
             LOG.debug("The configMap isn't updated, so skip the flush.");
+            // Do not flush if there are no updates.
             return;
         }
         try {

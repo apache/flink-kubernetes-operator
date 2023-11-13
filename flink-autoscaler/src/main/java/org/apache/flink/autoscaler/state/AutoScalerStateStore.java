@@ -65,9 +65,9 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
     void removeParallelismOverrides(Context jobContext) throws Exception;
 
     /**
-     * Flushing is needed because we just save data in cache for all store methods. For less write
-     * operations, we flush the cached data to the physical storage only after all operations have
-     * been performed.
+     * Flushing is needed because we do not persist data for all store methods until this method is
+     * called. Note: The state store implementation should try to avoid write operations unless data
+     * was changed through this interface.
      */
     void flush(Context jobContext) throws Exception;
 
