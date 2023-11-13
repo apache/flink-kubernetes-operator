@@ -51,7 +51,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -201,7 +200,7 @@ public class JobAutoScalerImplTest {
         autoscaler.applyParallelismOverrides(context);
         assertParallelismOverrides(Map.of(v1, "1", v2, "2"));
 
-        assertThat(stateStore.getParallelismOverrides(context)).hasValue(Map.of(v1, "1", v2, "2"));
+        assertThat(stateStore.getParallelismOverrides(context)).isEqualTo(Map.of(v1, "1", v2, "2"));
 
         // Disabling autoscaler should clear overrides
         context.getConfiguration().setString(AUTOSCALER_ENABLED.key(), "false");
@@ -225,13 +224,13 @@ public class JobAutoScalerImplTest {
         stateStore.flush(context);
         autoscaler.applyParallelismOverrides(context);
 
-        assertThat(autoscaler.getParallelismOverrides(context)).hasValue(Map.of(v1, "1", v2, "2"));
+        assertThat(autoscaler.getParallelismOverrides(context)).isEqualTo(Map.of(v1, "1", v2, "2"));
         assertParallelismOverrides(Map.of(v1, "1", v2, "2"));
 
         context.getConfiguration().setString(SCALING_ENABLED.key(), "false");
 
         autoscaler.applyParallelismOverrides(context);
-        assertThat(autoscaler.getParallelismOverrides(context)).hasValue(Map.of(v1, "1", v2, "2"));
+        assertThat(autoscaler.getParallelismOverrides(context)).isEqualTo(Map.of(v1, "1", v2, "2"));
         assertParallelismOverrides(Map.of(v1, "1", v2, "2"));
 
         // Test error handling
@@ -247,9 +246,9 @@ public class JobAutoScalerImplTest {
         var autoscaler =
                 new JobAutoScalerImpl<>(
                         null, null, null, eventCollector, scalingRealizer, stateStore) {
-                    public Optional<Map<String, String>> getParallelismOverrides(
+                    public Map<String, String> getParallelismOverrides(
                             JobAutoScalerContext<JobID> ctx) {
-                        return Optional.of(new HashMap<>(overrides));
+                        return new HashMap<>(overrides);
                     }
                 };
 
@@ -314,7 +313,7 @@ public class JobAutoScalerImplTest {
     }
 
     private void getInstantScalingSummaryTreeMap(
-            SortedMap<Instant, ScalingSummary> scalingHistory,
+            SortedMap<Instant, ScalingSummary> scalingHistoryData,
             Clock clock,
             int expectedScalingHistorySize)
             throws Exception {
@@ -323,7 +322,7 @@ public class JobAutoScalerImplTest {
                 new JobAutoScalerImpl<>(
                         null, null, null, eventCollector, scalingRealizer, stateStore);
 
-        enrichStateStore(scalingHistory);
+        enrichStateStore(scalingHistoryData);
         stateStore.flush(context);
         assertThat(stateStore.getFlushCount()).isEqualTo(1);
 
@@ -334,10 +333,10 @@ public class JobAutoScalerImplTest {
         assertThat(stateStore.getCollectedMetrics(context)).isEmpty();
 
         if (expectedScalingHistorySize > 0) {
-            Optional<Map<JobVertexID, SortedMap<Instant, ScalingSummary>>> scalingHistoryOpt =
+            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory =
                     stateStore.getScalingHistory(context);
-            assertThat(scalingHistoryOpt).isPresent();
-            assertThat(scalingHistoryOpt.get().values())
+            assertThat(scalingHistory).isNotEmpty();
+            assertThat(scalingHistory.values())
                     .allMatch(aa -> aa.size() == expectedScalingHistorySize);
         } else {
             assertThat(stateStore.getScalingHistory(context)).isEmpty();

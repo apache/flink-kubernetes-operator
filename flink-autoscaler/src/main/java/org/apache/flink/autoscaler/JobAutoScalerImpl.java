@@ -37,7 +37,6 @@ import org.slf4j.LoggerFactory;
 import java.time.Clock;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
@@ -123,21 +122,20 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
     private void clearStatesAfterAutoscalerDisabled(Context ctx) throws Exception {
         var needFlush = false;
-        var parallelismOverridesOpt = stateStore.getParallelismOverrides(ctx);
-        if (parallelismOverridesOpt.isPresent()) {
+        var parallelismOverrides = stateStore.getParallelismOverrides(ctx);
+        if (!parallelismOverrides.isEmpty()) {
             needFlush = true;
             stateStore.removeParallelismOverrides(ctx);
         }
 
-        var collectedMetricsOpt = stateStore.getCollectedMetrics(ctx);
-        if (collectedMetricsOpt.isPresent()) {
+        var collectedMetrics = stateStore.getCollectedMetrics(ctx);
+        if (!collectedMetrics.isEmpty()) {
             needFlush = true;
             stateStore.removeCollectedMetrics(ctx);
         }
 
-        var scalingHistoryOpt = stateStore.getScalingHistory(ctx);
-        if (scalingHistoryOpt.isPresent()) {
-            var scalingHistory = scalingHistoryOpt.get();
+        var scalingHistory = stateStore.getScalingHistory(ctx);
+        if (!scalingHistory.isEmpty()) {
             var trimmedScalingHistory =
                     trimScalingHistory(clock.instant(), ctx.getConfiguration(), scalingHistory);
             if (trimmedScalingHistory.isEmpty()) {
@@ -157,7 +155,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     }
 
     @VisibleForTesting
-    protected Optional<Map<String, String>> getParallelismOverrides(Context ctx) throws Exception {
+    protected Map<String, String> getParallelismOverrides(Context ctx) throws Exception {
         return stateStore.getParallelismOverrides(ctx);
     }
 
@@ -169,11 +167,10 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
      */
     @VisibleForTesting
     protected void applyParallelismOverrides(Context ctx) throws Exception {
-        var overridesOpt = getParallelismOverrides(ctx);
-        if (overridesOpt.isEmpty() || overridesOpt.get().isEmpty()) {
+        var overrides = getParallelismOverrides(ctx);
+        if (overrides.isEmpty()) {
             return;
         }
-        Map<String, String> overrides = overridesOpt.get();
         LOG.debug("Applying parallelism overrides: {}", overrides);
 
         var conf = ctx.getConfiguration();

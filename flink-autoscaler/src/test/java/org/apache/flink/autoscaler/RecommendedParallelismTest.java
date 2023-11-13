@@ -39,7 +39,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 
@@ -205,7 +204,7 @@ public class RecommendedParallelismTest {
 
         // after restart while the job is not running the evaluated metrics are gone
         autoscaler.scale(context);
-        assertEquals(3, stateStore.getCollectedMetrics(context).get().size());
+        assertEquals(3, stateStore.getCollectedMetrics(context).size());
         assertNull(autoscaler.lastEvaluatedMetrics.get(context.getJobKey()));
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.get(source));
@@ -229,10 +228,9 @@ public class RecommendedParallelismTest {
     }
 
     private void assertEvaluatedMetricsSize(int expectedSize) {
-        Optional<SortedMap<Instant, CollectedMetrics>> evaluatedMetricsOpt =
+        SortedMap<Instant, CollectedMetrics> evaluatedMetrics =
                 stateStore.getCollectedMetrics(context);
-        assertThat(evaluatedMetricsOpt).isPresent();
-        assertThat(evaluatedMetricsOpt.get()).hasSize(expectedSize);
+        assertThat(evaluatedMetrics).hasSize(expectedSize);
     }
 
     private Double getCurrentMetricValue(JobVertexID jobVertexID, ScalingMetric scalingMetric) {

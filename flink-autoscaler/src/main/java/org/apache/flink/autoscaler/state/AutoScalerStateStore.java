@@ -23,9 +23,10 @@ import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
+import javax.annotation.Nonnull;
+
 import java.time.Instant;
 import java.util.Map;
-import java.util.Optional;
 import java.util.SortedMap;
 
 /**
@@ -41,23 +42,25 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
             Context jobContext, Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory)
             throws Exception;
 
-    Optional<Map<JobVertexID, SortedMap<Instant, ScalingSummary>>> getScalingHistory(
-            Context jobContext) throws Exception;
+    @Nonnull
+    Map<JobVertexID, SortedMap<Instant, ScalingSummary>> getScalingHistory(Context jobContext)
+            throws Exception;
 
     void removeScalingHistory(Context jobContext) throws Exception;
 
     void storeCollectedMetrics(Context jobContext, SortedMap<Instant, CollectedMetrics> metrics)
             throws Exception;
 
-    Optional<SortedMap<Instant, CollectedMetrics>> getCollectedMetrics(Context jobContext)
-            throws Exception;
+    @Nonnull
+    SortedMap<Instant, CollectedMetrics> getCollectedMetrics(Context jobContext) throws Exception;
 
     void removeCollectedMetrics(Context jobContext) throws Exception;
 
     void storeParallelismOverrides(Context jobContext, Map<String, String> parallelismOverrides)
             throws Exception;
 
-    Optional<Map<String, String>> getParallelismOverrides(Context jobContext) throws Exception;
+    @Nonnull
+    Map<String, String> getParallelismOverrides(Context jobContext) throws Exception;
 
     void removeParallelismOverrides(Context jobContext) throws Exception;
 
