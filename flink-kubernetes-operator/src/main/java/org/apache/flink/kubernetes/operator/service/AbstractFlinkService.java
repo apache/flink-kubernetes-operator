@@ -80,6 +80,7 @@ import org.apache.flink.runtime.rest.messages.queue.QueueStatus;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersHeaders;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersInfo;
 import org.apache.flink.runtime.rest.util.RestConstants;
+import org.apache.flink.runtime.scheduler.stopwithsavepoint.StopWithSavepointStoppingException;
 import org.apache.flink.runtime.state.memory.NonPersistentMetadataCheckpointStorageLocation;
 import org.apache.flink.runtime.webmonitor.handlers.JarDeleteHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarDeleteMessageParameters;
@@ -90,6 +91,7 @@ import org.apache.flink.runtime.webmonitor.handlers.JarUploadHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
 import org.apache.flink.util.ConfigurationException;
+import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.FlinkRuntimeException;
@@ -327,6 +329,22 @@ public abstract class AbstractFlinkService implements FlinkService {
                                             ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT
                                                     .key()),
                                     exception);
+                        } catch (Exception e) {
+                            var stopWithSavepointException =
+                                    ExceptionUtils.findThrowable(
+                                            e, StopWithSavepointStoppingException.class);
+                            if (stopWithSavepointException.isPresent()) {
+                                // Handle edge case where the savepoint completes but the job fails
+                                // right afterward.
+                                savepointOpt =
+                                        Optional.of(
+                                                stopWithSavepointException
+                                                        .get()
+                                                        .getSavepointPath());
+                            } else {
+                                // Rethrow if savepoint was not completed successfully.
+                                throw e;
+                            }
                         }
                     } else if (ReconciliationUtils.isJobInTerminalState(deploymentStatus)) {
                         LOG.info(
