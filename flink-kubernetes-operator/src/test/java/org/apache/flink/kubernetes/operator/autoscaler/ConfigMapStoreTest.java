@@ -26,8 +26,6 @@ import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
-
 import static org.apache.flink.kubernetes.operator.autoscaler.TestingKubernetesAutoscalerUtils.createContext;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -56,6 +54,7 @@ public class ConfigMapStoreTest {
         String key3 = "key3";
         String value3 = "value3";
         assertThat(configMapStore.getSerializedState(ctx1, key1)).isEmpty();
+        // Retrieve configMap
         assertEquals(1, mockWebServer.getRequestCount());
 
         // Further gets should not go to K8s
@@ -63,18 +62,24 @@ public class ConfigMapStoreTest {
         assertThat(configMapStore.getSerializedState(ctx1, key3)).isEmpty();
         assertEquals(1, mockWebServer.getRequestCount());
 
-        assertThat(configMapStore.getConfigMapFromKubernetes(ctx1)).isEmpty();
+        // Manually trigger retrieval from Kubernetes
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx1).getData()).isEmpty();
         assertEquals(2, mockWebServer.getRequestCount());
 
+        // Putting does not go to Kubernetes, unless flushing.
         configMapStore.putSerializedState(ctx1, key1, value1);
-        assertEquals(4, mockWebServer.getRequestCount());
+        assertEquals(2, mockWebServer.getRequestCount());
 
         // The put just update the data to cache, and shouldn't request kubernetes.
         configMapStore.putSerializedState(ctx1, key2, value2);
-        assertEquals(4, mockWebServer.getRequestCount());
+        assertEquals(2, mockWebServer.getRequestCount());
 
-        assertThat(configMapStore.getConfigMapFromKubernetes(ctx1)).isPresent();
-        assertThat(configMapStore.getConfigMapFromKubernetes(ctx2)).isEmpty();
+        // Flush!
+        configMapStore.flush(ctx1);
+        assertEquals(3, mockWebServer.getRequestCount());
+
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx1).getData()).isNotEmpty();
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx2).getData()).isEmpty();
 
         assertThat(configMapStore.getSerializedState(ctx1, key1)).isPresent();
         assertThat(configMapStore.getSerializedState(ctx2, key1)).isEmpty();
@@ -104,14 +109,14 @@ public class ConfigMapStoreTest {
         assertEquals(0, mockWebServer.getRequestCount());
 
         configMapStore.putSerializedState(ctx, "a", "1");
-        Optional<ConfigMap> configMapOpt = configMapStore.getCache().get(ctx.getJobKey());
-        assertThat(configMapOpt).isPresent();
-        assertEquals(2, mockWebServer.getRequestCount());
+        ConfigMap configMap = configMapStore.getCache().get(ctx.getJobKey()).configMap;
+        assertThat(configMap.getData()).isNotEmpty();
+        assertEquals(1, mockWebServer.getRequestCount());
 
         // Modify the autoscaler info in the background
-        var cm = ReconciliationUtils.clone(configMapOpt.get());
+        var cm = ReconciliationUtils.clone(configMap);
         cm.getData().put("a", "2");
-        kubernetesClient.resource(cm).update();
+        kubernetesClient.resource(cm).create();
 
         // Replace should throw an error due to the modification
         assertThrows(KubernetesClientException.class, () -> configMapStore.flush(ctx));
@@ -119,5 +124,37 @@ public class ConfigMapStoreTest {
 
         // Make sure we can get the new version
         assertThat(configMapStore.getSerializedState(ctx, "a")).contains("2");
+    }
+
+    @Test
+    void testMinimalAmountOfFlushing() {
+        KubernetesJobAutoScalerContext ctx = createContext("cr1", kubernetesClient);
+        var key = "key";
+        var value = "value";
+
+        var configMapStore = new ConfigMapStore(kubernetesClient);
+
+        configMapStore.getSerializedState(ctx, key);
+        assertEquals(1, mockWebServer.getRequestCount());
+
+        configMapStore.putSerializedState(ctx, key, value);
+        assertEquals(1, mockWebServer.getRequestCount());
+
+        configMapStore.flush(ctx);
+        assertEquals(2, mockWebServer.getRequestCount());
+
+        // Get from cache
+        assertThat(configMapStore.getSerializedState(ctx, key)).hasValue(value);
+        assertEquals(2, mockWebServer.getRequestCount());
+
+        configMapStore.removeSerializedState(ctx, key);
+        assertEquals(2, mockWebServer.getRequestCount());
+
+        configMapStore.flush(ctx);
+        assertEquals(3, mockWebServer.getRequestCount());
+
+        // Subsequent flushes do not trigger an API call
+        configMapStore.flush(ctx);
+        assertEquals(3, mockWebServer.getRequestCount());
     }
 }
