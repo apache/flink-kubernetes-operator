@@ -22,6 +22,7 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
+import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
@@ -42,17 +43,23 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_SCALING_HISTORY_AGE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -282,6 +289,71 @@ public class JobAutoScalerImplTest {
 
         autoscaler.applyParallelismOverrides(context);
         assertParallelismOverrides(Map.of(v1.toString(), "1", v2.toString(), "4"));
+    }
+
+    @Test
+    void testAutoscalerDisabled() throws Exception {
+        context.getConfiguration().setBoolean(AUTOSCALER_ENABLED, false);
+        context.getConfiguration().set(VERTEX_SCALING_HISTORY_AGE, Duration.ofMillis(200));
+
+        var scalingHistory = new TreeMap<Instant, ScalingSummary>();
+        scalingHistory.put(Instant.ofEpochMilli(100), new ScalingSummary());
+        scalingHistory.put(Instant.ofEpochMilli(200), new ScalingSummary());
+
+        // Test all scaling aren't expired
+        getInstantScalingSummaryTreeMap(
+                scalingHistory, Clock.fixed(Instant.ofEpochMilli(250), ZoneId.systemDefault()), 2);
+
+        // Test one scaling aren't expired
+        getInstantScalingSummaryTreeMap(
+                scalingHistory, Clock.fixed(Instant.ofEpochMilli(350), ZoneId.systemDefault()), 1);
+
+        // Test all scaling are expired
+        getInstantScalingSummaryTreeMap(
+                scalingHistory, Clock.fixed(Instant.ofEpochMilli(450), ZoneId.systemDefault()), 0);
+    }
+
+    private void getInstantScalingSummaryTreeMap(
+            SortedMap<Instant, ScalingSummary> scalingHistory,
+            Clock clock,
+            int expectedScalingHistorySize)
+            throws Exception {
+        stateStore = new TestingAutoscalerStateStore<>();
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        null, null, null, eventCollector, scalingRealizer, stateStore);
+
+        enrichStateStore(scalingHistory);
+        stateStore.flush(context);
+        assertThat(stateStore.getFlushCount()).isEqualTo(1);
+
+        autoscaler.setClock(clock);
+        autoscaler.scale(context);
+
+        assertThat(stateStore.getParallelismOverrides(context)).isEmpty();
+        assertThat(stateStore.getCollectedMetrics(context)).isEmpty();
+
+        if (expectedScalingHistorySize > 0) {
+            Optional<Map<JobVertexID, SortedMap<Instant, ScalingSummary>>> scalingHistoryOpt =
+                    stateStore.getScalingHistory(context);
+            assertThat(scalingHistoryOpt).isPresent();
+            assertThat(scalingHistoryOpt.get().values())
+                    .allMatch(aa -> aa.size() == expectedScalingHistorySize);
+        } else {
+            assertThat(stateStore.getScalingHistory(context)).isEmpty();
+        }
+        assertThat(stateStore.getFlushCount()).isEqualTo(2);
+    }
+
+    private void enrichStateStore(SortedMap<Instant, ScalingSummary> scalingHistory) {
+        var v1 = new JobVertexID();
+        var v2 = new JobVertexID();
+        stateStore.storeParallelismOverrides(
+                context, Map.of(v1.toString(), "1", v2.toString(), "2"));
+
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+        stateStore.storeCollectedMetrics(context, metricHistory);
+        stateStore.storeScalingHistory(context, Map.of(v1, scalingHistory, v2, scalingHistory));
     }
 
     private void assertParallelismOverrides(Map<String, String> expectedOverrides) {

@@ -21,6 +21,7 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nonnull;
@@ -87,29 +88,31 @@ public class ScalingHistoryUtils {
         var conf = context.getConfiguration();
         return autoScalerStateStore
                 .getScalingHistory(context)
-                .map(
-                        scalingHistory -> {
-                            Instant expectedStartTime =
-                                    now.minus(
-                                            conf.get(AutoScalerOptions.VERTEX_SCALING_HISTORY_AGE));
-                            var entryIt = scalingHistory.entrySet().iterator();
-                            while (entryIt.hasNext()) {
-                                var entry = entryIt.next();
-                                // Limit how long past scaling decisions are remembered
-                                entry.setValue(
-                                        new TreeMap<>(entry.getValue().tailMap(expectedStartTime)));
-                                var vertexHistory = entry.getValue();
-                                while (vertexHistory.size()
-                                        > conf.get(
-                                                AutoScalerOptions.VERTEX_SCALING_HISTORY_COUNT)) {
-                                    vertexHistory.remove(vertexHistory.firstKey());
-                                }
-                                if (vertexHistory.isEmpty()) {
-                                    entryIt.remove();
-                                }
-                            }
-                            return scalingHistory;
-                        })
+                .map(scalingHistory -> trimScalingHistory(now, conf, scalingHistory))
                 .orElse(new HashMap<>());
+    }
+
+    public static Map<JobVertexID, SortedMap<Instant, ScalingSummary>> trimScalingHistory(
+            Instant now,
+            Configuration conf,
+            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
+        Instant expectedStartTime =
+                now.minus(conf.get(AutoScalerOptions.VERTEX_SCALING_HISTORY_AGE));
+        var result = new TreeMap<>(scalingHistory);
+        var entryIt = result.entrySet().iterator();
+        while (entryIt.hasNext()) {
+            var entry = entryIt.next();
+            // Limit how long past scaling decisions are remembered
+            entry.setValue(new TreeMap<>(entry.getValue().tailMap(expectedStartTime)));
+            var vertexHistory = entry.getValue();
+            while (vertexHistory.size()
+                    > conf.get(AutoScalerOptions.VERTEX_SCALING_HISTORY_COUNT)) {
+                vertexHistory.remove(vertexHistory.firstKey());
+            }
+            if (vertexHistory.isEmpty()) {
+                entryIt.remove();
+            }
+        }
+        return result;
     }
 }
