@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.observer.sessionjob;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
@@ -35,13 +34,10 @@ import org.apache.flink.util.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-
-import static org.apache.flink.kubernetes.operator.utils.FlinkUtils.generateSessionJobFixedJobID;
 
 /** The observer of {@link FlinkSessionJob}. */
 public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<FlinkSessionJob> {
@@ -74,57 +70,20 @@ public class FlinkSessionJobObserver extends AbstractFlinkResourceObserver<Flink
     @Override
     protected boolean checkIfAlreadyUpgraded(FlinkResourceContext<FlinkSessionJob> ctx) {
         var flinkSessionJob = ctx.getResource();
-        var uid = flinkSessionJob.getMetadata().getUid();
         Collection<JobStatusMessage> jobStatusMessages;
         try {
             jobStatusMessages = ctx.getFlinkService().listJobs(ctx.getObserveConfig());
         } catch (Exception e) {
             throw new RuntimeException("Failed to list jobs", e);
         }
-        var matchedJobs = new ArrayList<JobID>();
+        var submittedJobId = flinkSessionJob.getStatus().getJobStatus().getJobId();
         for (JobStatusMessage jobStatusMessage : jobStatusMessages) {
-            var jobId = jobStatusMessage.getJobId();
-            if (jobId.getLowerPart()
-                            == generateSessionJobFixedJobID(uid, jobId.getUpperPart() + 1L)
-                                    .getLowerPart()
-                    && !jobStatusMessage.getJobState().isGloballyTerminalState()) {
-                matchedJobs.add(jobId);
-            }
-        }
-
-        if (matchedJobs.isEmpty()) {
-            return false;
-        } else if (matchedJobs.size() > 1) {
-            // this indicates a bug, which means we have more than one running job for a single
-            // SessionJob CR.
-            throw new RuntimeException(
-                    String.format(
-                            "Unexpected case: %d job found for the resource with uid: %s",
-                            matchedJobs.size(), flinkSessionJob.getMetadata().getUid()));
-        } else {
-            var matchedJobID = matchedJobs.get(0);
-            Long upgradeTargetGeneration =
-                    ReconciliationUtils.getUpgradeTargetGeneration(flinkSessionJob);
-            long deployedGeneration = matchedJobID.getUpperPart();
-            var oldJobID = flinkSessionJob.getStatus().getJobStatus().getJobId();
-
-            if (upgradeTargetGeneration == deployedGeneration) {
-                LOG.info(
-                        "Pending upgrade is already deployed, updating status. Old jobID:{}, new jobID:{}",
-                        oldJobID,
-                        matchedJobID.toHexString());
-                flinkSessionJob.getStatus().getJobStatus().setJobId(matchedJobID.toHexString());
+            if (jobStatusMessage.getJobId().toHexString().equals(submittedJobId)) {
+                LOG.info("Job with id {} is already deployed.", submittedJobId);
                 return true;
-            } else {
-                var msg =
-                        String.format(
-                                "Running job %s's generation %s doesn't match upgrade target generation %s.",
-                                matchedJobID.toHexString(),
-                                deployedGeneration,
-                                upgradeTargetGeneration);
-                throw new RuntimeException(msg);
             }
         }
+        return false;
     }
 
     private static class SessionJobStatusObserver extends JobStatusObserver<FlinkSessionJob> {

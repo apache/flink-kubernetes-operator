@@ -17,7 +17,6 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.CoreOptions;
 import org.apache.flink.configuration.HighAvailabilityOptions;
@@ -32,7 +31,6 @@ import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.rest.messages.DashboardConfigurationHeaders;
 import org.apache.flink.runtime.util.ZooKeeperUtils;
-import org.apache.flink.util.Preconditions;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,7 +41,6 @@ import io.fabric8.kubernetes.api.model.ConfigMapList;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.HTTPGetAction;
 import io.fabric8.kubernetes.api.model.IntOrString;
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.Probe;
@@ -61,7 +58,6 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 
 import static org.apache.flink.kubernetes.utils.Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY;
 
@@ -394,29 +390,6 @@ public class FlinkUtils {
                                 .orElse(Collections.emptyMap()));
         labels.put(CR_GENERATION_LABEL, generation.toString());
         conf.set(KubernetesConfigOptions.JOB_MANAGER_ANNOTATIONS, labels);
-    }
-
-    /**
-     * The jobID's lower part is the resource uid, the higher part is the resource generation.
-     *
-     * @param meta the meta of the resource.
-     * @return the generated jobID.
-     */
-    public static JobID generateSessionJobFixedJobID(ObjectMeta meta) {
-        return generateSessionJobFixedJobID(meta.getUid(), meta.getGeneration());
-    }
-
-    /**
-     * The jobID's lower part is the resource uid, the higher part is the resource generation.
-     *
-     * @param uid the uid of the resource.
-     * @param generation the generation of the resource.
-     * @return the generated jobID.
-     */
-    public static JobID generateSessionJobFixedJobID(String uid, Long generation) {
-        return new JobID(
-                UUID.fromString(Preconditions.checkNotNull(uid)).getMostSignificantBits(),
-                Preconditions.checkNotNull(generation));
     }
 
     /**

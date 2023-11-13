@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -55,6 +56,14 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
      */
     public boolean observe(FlinkResourceContext<R> ctx) {
         var resource = ctx.getResource();
+        if (resource.getStatus()
+                        .getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getState()
+                == JobState.SUSPENDED) {
+            return false;
+        }
         var jobStatus = resource.getStatus().getJobStatus();
         LOG.debug("Observing job status");
         var previousJobStatus = jobStatus.getState();

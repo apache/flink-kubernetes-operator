@@ -95,6 +95,8 @@ The autoscaler currently only works with [Flink 1.17](https://hub.docker.com/_/f
    - [Fix logic for determining downstream subtasks for partitioner replacement](https://github.com/apache/flink/commit/fb482fe39844efda33a4c05858903f5b64e158a3)
  - [Support timespan for busyTime metrics](https://github.com/apache/flink/commit/a7fdab8b23cddf568fa32ee7eb804d7c3eb23a35) (good to have)
 
+For session job auto-scaling, a latest custom build of Flink 1.19 or 1.18 is required that contains the fix for [FLINK-33534](https://issues.apache.org/jira/browse/FLINK-33534).
+
 ### Limitations
 
 By default the autoscaler can work for all job vertices in the processing graph.
@@ -199,37 +201,37 @@ For a detailed config reference check the [general configuration page]({{< ref "
 
 ## Extensibility of Autoscaler
 
-The Autoscaler exposes a set of interfaces for storing autoscaler state, handling autoscaling events, 
-and executing scaling decisions. How these are implemented is specific to the orchestration framework 
-used (e.g. Kubernetes), but the interfaces are designed to be as generic as possible. The following 
+The Autoscaler exposes a set of interfaces for storing autoscaler state, handling autoscaling events,
+and executing scaling decisions. How these are implemented is specific to the orchestration framework
+used (e.g. Kubernetes), but the interfaces are designed to be as generic as possible. The following
 are the introduction of these generic interfaces:
 
 - **AutoScalerEventHandler** : Handling autoscaler events, such as: ScalingReport,
   AutoscalerError, etc. `LoggingEventHandler` is the default implementation, it logs events.
-- **AutoScalerStateStore** : Storing all state during scaling. `InMemoryAutoScalerStateStore` is 
-  the default implementation, it's based on the Java Heap, so the state will be discarded after 
+- **AutoScalerStateStore** : Storing all state during scaling. `InMemoryAutoScalerStateStore` is
+  the default implementation, it's based on the Java Heap, so the state will be discarded after
   process restarts. We will implement persistent State Store in the future, such as : `JdbcAutoScalerStateStore`.
 - **ScalingRealizer** : Applying scaling actions.
 - **JobAutoScalerContext** : Including all details related to the current job.
 
 ## Autoscaler Standalone
 
-**Flink Autoscaler Standalone** is an implementation of **Flink Autoscaler**, it runs as a separate java 
-process. It computes the reasonable parallelism of all job vertices by monitoring the metrics, such as: 
+**Flink Autoscaler Standalone** is an implementation of **Flink Autoscaler**, it runs as a separate java
+process. It computes the reasonable parallelism of all job vertices by monitoring the metrics, such as:
 processing rate, busy time, etc.
 
-Flink Autoscaler Standalone rescales flink job in-place by rest api of 
+Flink Autoscaler Standalone rescales flink job in-place by rest api of
 [Externalized Declarative Resource Management](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/elastic_scaling/#externalized-declarative-resource-management).
-`RescaleApiScalingRealizer` is the default implementation of `ScalingRealizer`, it uses the Rescale API 
+`RescaleApiScalingRealizer` is the default implementation of `ScalingRealizer`, it uses the Rescale API
 to apply parallelism changes.
 
-Kubernetes Operator is well integrated with Autoscaler, we strongly recommend using Kubernetes Operator 
-directly for the kubernetes flink jobs, and only flink jobs in non-kubernetes environments use Autoscaler 
+Kubernetes Operator is well integrated with Autoscaler, we strongly recommend using Kubernetes Operator
+directly for the kubernetes flink jobs, and only flink jobs in non-kubernetes environments use Autoscaler
 Standalone.
 
 ### How To Use Autoscaler Standalone
 
-Currently, `Flink Autoscaler Standalone` only supports a single Flink cluster. It can be any type of 
+Currently, `Flink Autoscaler Standalone` only supports a single Flink cluster. It can be any type of
 Flink cluster, includes:
 
 - Flink Standalone Cluster
@@ -272,7 +274,7 @@ In general, the host and port are the same as Flink WebUI.
 
 ### Extensibility of autoscaler standalone
 
-Please click [here]({{< ref "docs/custom-resource/autoscaler#extensibility-of-autoscaler" >}}) 
+Please click [here]({{< ref "docs/custom-resource/autoscaler#extensibility-of-autoscaler" >}})
 to check out extensibility of generic autoscaler.
 
 `Autoscaler Standalone` isn't responsible for job management, so it doesn't have job information.

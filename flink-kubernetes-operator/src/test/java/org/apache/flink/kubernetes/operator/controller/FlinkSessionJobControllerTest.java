@@ -116,7 +116,7 @@ class FlinkSessionJobControllerTest {
         updateControl = testController.reconcile(sessionJob, context);
 
         assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
-        assertEquals(5, testController.getInternalStatusUpdateCount());
+        assertEquals(6, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
 
         FlinkSessionJobReconciliationStatus reconciliationStatus =
@@ -574,7 +574,7 @@ class FlinkSessionJobControllerTest {
         // Reconciling
         assertEquals(
                 JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
-        assertEquals(3, testController.getInternalStatusUpdateCount());
+        assertEquals(4, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -591,7 +591,7 @@ class FlinkSessionJobControllerTest {
         // Running
         updateControl = testController.reconcile(sessionJob, context);
         assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
-        assertEquals(4, testController.getInternalStatusUpdateCount());
+        assertEquals(5, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -601,7 +601,7 @@ class FlinkSessionJobControllerTest {
         // Stable loop
         updateControl = testController.reconcile(sessionJob, context);
         assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
-        assertEquals(4, testController.getInternalStatusUpdateCount());
+        assertEquals(5, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(

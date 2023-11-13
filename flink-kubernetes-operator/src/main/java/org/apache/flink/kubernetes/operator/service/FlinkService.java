@@ -64,6 +64,7 @@ public interface FlinkService {
     JobID submitJobToSessionCluster(
             ObjectMeta meta,
             FlinkSessionJobSpec spec,
+            JobID jobID,
             Configuration conf,
             @Nullable String savepoint)
             throws Exception;

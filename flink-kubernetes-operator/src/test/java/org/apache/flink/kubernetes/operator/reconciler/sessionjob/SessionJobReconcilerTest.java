@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.reconciler.sessionjob;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -28,6 +29,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
+import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
@@ -92,7 +94,9 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         configManager = new FlinkConfigManager(configuration);
         reconciler =
                 new TestReconcilerAdapter<>(
-                        this, new SessionJobReconciler(eventRecorder, statusRecorder));
+                        this,
+                        new SessionJobReconciler(
+                                eventRecorder, statusRecorder, new NoopJobAutoscaler<>()));
     }
 
     @Test
@@ -789,5 +793,42 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 "savepoint_trigger_0",
                 spSessionJob.getStatus().getJobStatus().getSavepointInfo().getTriggerId());
         assertEquals("FINISHED", spSessionJob.getStatus().getJobStatus().getState());
+    }
+
+    @Test
+    public void testJobIdGeneration() throws Exception {
+        var sessionJob = TestUtils.buildSessionJob();
+        sessionJob.getMetadata().setGeneration(10L);
+        var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
+
+        reconciler.reconcile(sessionJob, readyContext);
+        Assertions.assertEquals(
+                ReconciliationState.DEPLOYED,
+                sessionJob.getStatus().getReconciliationStatus().getState());
+        var jobID = sessionJob.getStatus().getJobStatus().getJobId();
+        Assertions.assertEquals(
+                RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
+        Assertions.assertEquals(jobID, flinkService.listJobs().get(0).f1.getJobId().toString());
+
+        flinkService.setSessionJobSubmittedCallback(
+                () -> {
+                    throw new RuntimeException("Failed after submitted job");
+                });
+        sessionJob.getSpec().getJob().setParallelism(10);
+        // upgrade
+        Assertions.assertThrows(
+                RuntimeException.class,
+                () -> {
+                    // suspend
+                    reconciler.reconcile(sessionJob, readyContext);
+                    // upgrade
+                    reconciler.reconcile(sessionJob, readyContext);
+                });
+
+        Assertions.assertEquals(
+                ReconciliationState.UPGRADING,
+                sessionJob.getStatus().getReconciliationStatus().getState());
+        // New jobID recorded despite failure
+        Assertions.assertNotEquals(jobID, sessionJob.getStatus().getJobStatus().getJobId());
     }
 }
