@@ -22,6 +22,7 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
+import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
@@ -299,12 +300,22 @@ public class JobAutoScalerImplTest {
         stateStore.storeScalingHistory(context, Map.of(new JobVertexID(), scalingHistory));
         assertFalse(stateStore.getScalingHistory(context).isEmpty());
 
+        stateStore.storeParallelismOverrides(context, Map.of("vertex", "4"));
+        assertFalse(stateStore.getParallelismOverrides(context).isEmpty());
+
+        TreeMap<Instant, CollectedMetrics> metrics = new TreeMap<>();
+        metrics.put(Instant.now(), new CollectedMetrics());
+        stateStore.storeCollectedMetrics(context, metrics);
+        assertFalse(stateStore.getCollectedMetrics(context).isEmpty());
+
         var autoscaler =
                 new JobAutoScalerImpl<>(
                         null, null, null, eventCollector, scalingRealizer, stateStore);
         autoscaler.scale(context);
 
         assertTrue(stateStore.getScalingHistory(context).isEmpty());
+        assertTrue(stateStore.getScalingHistory(context).isEmpty());
+        assertTrue(stateStore.getParallelismOverrides(context).isEmpty());
     }
 
     private void assertParallelismOverrides(Map<String, String> expectedOverrides) {
