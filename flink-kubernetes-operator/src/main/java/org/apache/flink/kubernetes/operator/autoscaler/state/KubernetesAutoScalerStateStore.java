@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler;
+package org.apache.flink.kubernetes.operator.autoscaler.state;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.ScalingSummary;
@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.utils.AutoScalerSerDeModule;
 import org.apache.flink.configuration.ConfigurationUtils;
+import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import com.fasterxml.jackson.core.JacksonException;
@@ -161,6 +162,11 @@ public class KubernetesAutoScalerStateStore
     @Override
     public void removeParallelismOverrides(KubernetesJobAutoScalerContext jobContext) {
         configMapStore.removeSerializedState(jobContext, PARALLELISM_OVERRIDES_KEY);
+    }
+
+    @Override
+    public void clearAll(KubernetesJobAutoScalerContext jobContext) {
+        configMapStore.clearAll(jobContext);
     }
 
     @Override

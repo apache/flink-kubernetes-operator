@@ -64,6 +64,9 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
 
     void removeParallelismOverrides(Context jobContext) throws Exception;
 
+    /** Removes all data from this context. Flush stil needs to be called. */
+    void clearAll(Context jobContext) throws Exception;
+
     /**
      * Flushing is needed because we do not persist data for all store methods until this method is
      * called. Note: The state store implementation should try to avoid write operations unless data

@@ -89,7 +89,8 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         try {
             if (!ctx.getConfiguration().getBoolean(AUTOSCALER_ENABLED)) {
                 LOG.debug("Autoscaler is disabled");
-                clearStatesAfterAutoscalerDisabled(ctx);
+                stateStore.clearAll(ctx);
+                stateStore.flush(ctx);
                 return;
             }
 
@@ -117,13 +118,6 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         lastEvaluatedMetrics.remove(jobKey);
         flinkMetrics.remove(jobKey);
         stateStore.removeInfoFromCache(jobKey);
-    }
-
-    private void clearStatesAfterAutoscalerDisabled(Context ctx) throws Exception {
-        stateStore.removeParallelismOverrides(ctx);
-        stateStore.removeCollectedMetrics(ctx);
-        stateStore.removeScalingHistory(ctx);
-        stateStore.flush(ctx);
     }
 
     @VisibleForTesting

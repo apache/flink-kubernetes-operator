@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler;
+package org.apache.flink.kubernetes.operator.autoscaler.state;
 
+import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.mock.Whitebox;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -63,7 +65,7 @@ public class ConfigMapStoreTest {
         assertEquals(1, mockWebServer.getRequestCount());
 
         // Manually trigger retrieval from Kubernetes
-        assertThat(configMapStore.getConfigMapFromKubernetes(ctx1).getData()).isEmpty();
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx1).getDataReadOnly()).isEmpty();
         assertEquals(2, mockWebServer.getRequestCount());
 
         // Putting does not go to Kubernetes, unless flushing.
@@ -78,8 +80,8 @@ public class ConfigMapStoreTest {
         configMapStore.flush(ctx1);
         assertEquals(3, mockWebServer.getRequestCount());
 
-        assertThat(configMapStore.getConfigMapFromKubernetes(ctx1).getData()).isNotEmpty();
-        assertThat(configMapStore.getConfigMapFromKubernetes(ctx2).getData()).isEmpty();
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx1).getDataReadOnly()).isNotEmpty();
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx2).getDataReadOnly()).isEmpty();
 
         assertThat(configMapStore.getSerializedState(ctx1, key1)).isPresent();
         assertThat(configMapStore.getSerializedState(ctx2, key1)).isEmpty();
@@ -109,7 +111,10 @@ public class ConfigMapStoreTest {
         assertEquals(0, mockWebServer.getRequestCount());
 
         configMapStore.putSerializedState(ctx, "a", "1");
-        ConfigMap configMap = configMapStore.getCache().get(ctx.getJobKey()).configMap;
+        ConfigMap configMap =
+                (ConfigMap)
+                        Whitebox.getInternalState(
+                                configMapStore.getCache().get(ctx.getJobKey()), "configMap");
         assertThat(configMap.getData()).isNotEmpty();
         assertEquals(1, mockWebServer.getRequestCount());
 
