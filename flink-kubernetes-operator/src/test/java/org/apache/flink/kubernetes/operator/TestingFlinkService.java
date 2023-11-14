@@ -240,7 +240,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void submitSessionCluster(Configuration conf) throws Exception {
+    public void deploySessionCluster(Configuration conf) throws Exception {
         if (deployFailure) {
             throw new Exception("Deployment failure");
         }

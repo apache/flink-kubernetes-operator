@@ -21,10 +21,12 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.client.deployment.ClusterRetrieveException;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.configuration.SecurityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -46,6 +48,7 @@ import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -90,7 +93,6 @@ import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
-import org.apache.flink.util.ConfigurationException;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkException;
@@ -116,6 +118,7 @@ import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -170,6 +173,8 @@ public abstract class AbstractFlinkService implements FlinkService {
     protected abstract void deployApplicationCluster(JobSpec jobSpec, Configuration conf)
             throws Exception;
 
+    protected abstract void deploySessionCluster(Configuration conf) throws Exception;
+
     @Override
     public KubernetesClient getKubernetesClient() {
         return kubernetesClient;
@@ -195,8 +200,27 @@ public abstract class AbstractFlinkService implements FlinkService {
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
+        try {
+            deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
+        } catch (RuntimeException e) {
+            LOG.warn("Caught Exception " + e.getMessage());
+            if (!isValidRuntimeException(conf, e)) {
+                LOG.warn("Caught exception ****");
+                throw e;
+            }
+        }
+    }
 
-        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
+    public void submitSessionCluster(Configuration conf) throws Exception {
+        try {
+            deploySessionCluster(conf);
+        } catch (RuntimeException e) {
+            LOG.warn("Caught Exception " + e.getMessage());
+            if (!isValidRuntimeException(conf, e)) {
+                LOG.warn("Caught exception ****");
+                throw e;
+            }
+        }
     }
 
     @Override
@@ -753,6 +777,10 @@ public abstract class AbstractFlinkService implements FlinkService {
         final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
         final int port = conf.getInteger(RestOptions.PORT);
+        Configuration restConf = new Configuration(conf);
+        if (SecurityOptions.isRestSSLEnabled(restConf)) {
+            modifyOperatorRestConfig(restConf);
+        }
         final String host =
                 ObjectUtils.firstNonNull(
                         operatorConfig.getFlinkServiceHostOverride(),
@@ -761,7 +789,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         final String restServerAddress = String.format("http://%s:%s", host, port);
         LOG.debug("Creating RestClusterClient({})", restServerAddress);
         return new RestClusterClient<>(
-                conf, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
+                restConf, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
     @VisibleForTesting
@@ -838,8 +866,12 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @VisibleForTesting
-    protected RestClient getRestClient(Configuration conf) throws ConfigurationException {
-        return new RestClient(conf, executorService);
+    protected RestClient getRestClient(Configuration conf) throws Exception {
+        Configuration restConf = new Configuration(conf);
+        if (SecurityOptions.isRestSSLEnabled(restConf)) {
+            modifyOperatorRestConfig(restConf);
+        }
+        return new RestClient(restConf, executorService);
     }
 
     private String findJarURI(JobSpec jobSpec) {
@@ -1076,5 +1108,59 @@ public abstract class AbstractFlinkService implements FlinkService {
                 || !JobStatus.valueOf(currentJobState).isGloballyTerminalState()) {
             status.getJobStatus().setState(JobStatus.FINISHED.name());
         }
+    }
+
+    private void modifyOperatorRestConfig(Configuration conf) throws IOException {
+        EnvUtils.get(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH)
+                .ifPresent(
+                        path -> {
+                            if (Files.notExists(Paths.get(path))) {
+                                return;
+                            }
+                            conf.set(
+                                    SecurityOptions.SSL_REST_TRUSTSTORE,
+                                    EnvUtils.getRequired(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH));
+                            conf.set(
+                                    SecurityOptions.SSL_REST_TRUSTSTORE_PASSWORD,
+                                    EnvUtils.getRequired(EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD));
+                            if (SecurityOptions.isRestSSLAuthenticationEnabled(conf)
+                                    && EnvUtils.get(EnvUtils.ENV_OPERATOR_KEYSTORE_PATH)
+                                            .isPresent()) {
+                                conf.set(
+                                        SecurityOptions.SSL_REST_KEYSTORE,
+                                        EnvUtils.getRequired(EnvUtils.ENV_OPERATOR_KEYSTORE_PATH));
+                                conf.set(
+                                        SecurityOptions.SSL_REST_KEYSTORE_PASSWORD,
+                                        EnvUtils.getRequired(
+                                                EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD));
+                                conf.set(
+                                        SecurityOptions.SSL_REST_KEY_PASSWORD,
+                                        EnvUtils.getRequired(
+                                                EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD));
+                            } else {
+                                conf.removeConfig(SecurityOptions.SSL_REST_KEYSTORE);
+                                conf.removeConfig(SecurityOptions.SSL_REST_KEYSTORE_PASSWORD);
+                            }
+                            conf.removeConfig(SecurityOptions.SSL_TRUSTSTORE);
+                            conf.removeConfig(SecurityOptions.SSL_TRUSTSTORE_PASSWORD);
+                            conf.removeConfig(SecurityOptions.SSL_KEYSTORE);
+                            conf.removeConfig(SecurityOptions.SSL_KEYSTORE_PASSWORD);
+                        });
+    }
+
+    private boolean isValidRuntimeException(Configuration conf, RuntimeException e) {
+        final Optional<String> trustStorePath = EnvUtils.get(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH);
+        if (SecurityOptions.isRestSSLEnabled(conf)
+                && trustStorePath.isPresent()
+                && Files.exists(Paths.get(trustStorePath.get()))
+                && e.getCause() instanceof ClusterRetrieveException) {
+            Exception cause = (Exception) e.getCause();
+            System.out.println(cause.getMessage());
+            System.out.println(cause.getCause());
+            Exception cause2 = (Exception) cause.getCause();
+            System.out.println(cause2.getCause());
+            return true;
+        }
+        return false;
     }
 }

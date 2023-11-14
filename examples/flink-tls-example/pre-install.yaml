@@ -1,0 +1,106 @@
+################################################################################
+#  Licensed to the Apache Software Foundation (ASF) under one
+#  or more contributor license agreements.  See the NOTICE file
+#  distributed with this work for additional information
+#  regarding copyright ownership.  The ASF licenses this file
+#  to you under the Apache License, Version 2.0 (the
+#  "License"); you may not use this file except in compliance
+#  with the License.  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+# limitations under the License.
+################################################################################
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-secure-cert-secret-creds
+type: Opaque
+data:
+  password: cGFzc3dvcmQxMjM0
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: operator-certificate-password
+type: Opaque
+data:
+  password: cGFzc3dvcmQxMjM0
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: flink-selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: flink-ca-cert
+spec:
+  issuerRef:
+    kind: Issuer
+    name: flink-selfsigned-issuer
+  commonName: FlinkCA
+  isCA: true
+  secretName: flink-ca-cert
+  subject:
+    organizations:
+      - Apache Flink
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: flink-ca-issuer
+spec:
+  ca:
+    secretName: flink-ca-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: basic-secure-cert
+spec:
+  dnsNames:
+    - '*.flink.svc'
+    - '*.svc.cluster.local'
+    - 'basic-secure-rest'
+    - 'basic-secure-deployment-only-rest'
+  keystores:
+    jks:
+      create: true
+      passwordSecretRef:
+        name: basic-secure-cert-secret-creds
+        key: password
+  issuerRef:
+    kind: Issuer
+    name: flink-ca-issuer
+  commonName: FlinkDeployment
+  secretName: basic-secure-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: flink-operator-cert
+spec:
+  dnsNames:
+    - '*.flink.svc'
+    - '*.svc.cluster.local'
+  keystores:
+    jks:
+      create: true
+      passwordSecretRef:
+        name: operator-certificate-password
+        key: password
+  issuerRef:
+    kind: Issuer
+    name: flink-ca-issuer
+  commonName: FlinkOperator
+  secretName: flink-operator-cert
+---
