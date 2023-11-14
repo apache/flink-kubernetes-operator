@@ -136,7 +136,6 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
-import static org.apache.flink.runtime.rest.messages.queue.QueueStatus.Id.IN_PROGRESS;
 
 /**
  * An abstract {@link FlinkService} containing some common implementations for the native and
@@ -777,9 +776,9 @@ public abstract class AbstractFlinkService implements FlinkService {
         final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
         final int port = conf.getInteger(RestOptions.PORT);
-        Configuration restConf = new Configuration(conf);
-        if (SecurityOptions.isRestSSLEnabled(restConf)) {
-            modifyOperatorRestConfig(restConf);
+        Configuration operatorRestConf = conf;
+        if (SecurityOptions.isRestSSLEnabled(conf)) {
+            operatorRestConf = getOperatorRestConfig(conf);
         }
         final String host =
                 ObjectUtils.firstNonNull(
@@ -789,7 +788,9 @@ public abstract class AbstractFlinkService implements FlinkService {
         final String restServerAddress = String.format("http://%s:%s", host, port);
         LOG.debug("Creating RestClusterClient({})", restServerAddress);
         return new RestClusterClient<>(
-                restConf, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
+                operatorRestConf,
+                clusterId,
+                (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
     @VisibleForTesting
@@ -867,11 +868,11 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @VisibleForTesting
     protected RestClient getRestClient(Configuration conf) throws Exception {
-        Configuration restConf = new Configuration(conf);
-        if (SecurityOptions.isRestSSLEnabled(restConf)) {
-            modifyOperatorRestConfig(restConf);
+        Configuration operatorRestConf = conf;
+        if (SecurityOptions.isRestSSLEnabled(conf)) {
+            operatorRestConf = getOperatorRestConfig(operatorRestConf);
         }
-        return new RestClient(restConf, executorService);
+        return new RestClient(operatorRestConf, executorService);
     }
 
     private String findJarURI(JobSpec jobSpec) {
@@ -1110,7 +1111,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    private void modifyOperatorRestConfig(Configuration conf) throws IOException {
+    private Configuration getOperatorRestConfig(Configuration origConfig) throws IOException {
+        Configuration conf = new Configuration(origConfig);
         EnvUtils.get(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH)
                 .ifPresent(
                         path -> {
@@ -1146,19 +1148,19 @@ public abstract class AbstractFlinkService implements FlinkService {
                             conf.removeConfig(SecurityOptions.SSL_KEYSTORE);
                             conf.removeConfig(SecurityOptions.SSL_KEYSTORE_PASSWORD);
                         });
+        return conf;
     }
 
     private boolean isValidRuntimeException(Configuration conf, RuntimeException e) {
         final Optional<String> trustStorePath = EnvUtils.get(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH);
+        // The ClusterDescriptors always try and create a RestClient from the config
+        // that would be given to the deployment. When SSL is enabled it will throw
+        // a ClusterRetrieveException as the operator does not have the certs where they
+        // would be mounted on the client
         if (SecurityOptions.isRestSSLEnabled(conf)
                 && trustStorePath.isPresent()
                 && Files.exists(Paths.get(trustStorePath.get()))
                 && e.getCause() instanceof ClusterRetrieveException) {
-            Exception cause = (Exception) e.getCause();
-            System.out.println(cause.getMessage());
-            System.out.println(cause.getCause());
-            Exception cause2 = (Exception) cause.getCause();
-            System.out.println(cause2.getCause());
             return true;
         }
         return false;

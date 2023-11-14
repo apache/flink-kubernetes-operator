@@ -117,7 +117,6 @@ public class SecureFlinkServiceTest {
                             testService.submitApplicationCluster(
                                     deployment.getSpec().getJob(), deployConfig, false);
                         });
-        System.out.println(thrown.getMessage());
         assertInstanceOf(ClusterRetrieveException.class, thrown.getCause());
     }
 
