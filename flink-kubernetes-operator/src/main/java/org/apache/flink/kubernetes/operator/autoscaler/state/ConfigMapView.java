@@ -49,12 +49,13 @@ class ConfigMapView {
     private final Function<ConfigMap, Resource<ConfigMap>> resourceRetriever;
 
     public ConfigMapView(
-            ConfigMap configMap, Function<ConfigMap, Resource<ConfigMap>> resourceRetriever) {
-        var existingConfigMap = resourceRetriever.apply(configMap).get();
+            ConfigMap configMapSkeleton,
+            Function<ConfigMap, Resource<ConfigMap>> resourceRetriever) {
+        var existingConfigMap = resourceRetriever.apply(configMapSkeleton).get();
         if (existingConfigMap != null) {
             refreshConfigMap(existingConfigMap);
         } else {
-            this.configMap = configMap;
+            this.configMap = configMapSkeleton;
             this.state = State.NEEDS_CREATE;
         }
         this.resourceRetriever = resourceRetriever;

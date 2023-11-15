@@ -102,8 +102,8 @@ public class ConfigMapStore {
     ConfigMapView getConfigMapFromKubernetes(KubernetesJobAutoScalerContext jobContext) {
         HasMetadata cr = jobContext.getResource();
         var meta = createCmObjectMeta(ResourceID.fromResource(cr));
-        var cm = buildConfigMap(cr, meta);
-        return new ConfigMapView(cm, kubernetesClient::resource);
+        var configMapSkeleton = buildConfigMap(cr, meta);
+        return new ConfigMapView(configMapSkeleton, kubernetesClient::resource);
     }
 
     private ObjectMeta createCmObjectMeta(ResourceID uid) {
