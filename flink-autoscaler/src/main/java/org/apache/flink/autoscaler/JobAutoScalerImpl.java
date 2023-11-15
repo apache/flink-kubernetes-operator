@@ -42,7 +42,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
-import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.trimScalingHistory;
 
 /** The default implementation of {@link JobAutoScaler}. */
 public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
@@ -90,7 +89,8 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         try {
             if (!ctx.getConfiguration().getBoolean(AUTOSCALER_ENABLED)) {
                 LOG.debug("Autoscaler is disabled");
-                clearStatesAfterAutoscalerDisabled(ctx);
+                stateStore.clearAll(ctx);
+                stateStore.flush(ctx);
                 return;
             }
 
@@ -118,40 +118,6 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         lastEvaluatedMetrics.remove(jobKey);
         flinkMetrics.remove(jobKey);
         stateStore.removeInfoFromCache(jobKey);
-    }
-
-    private void clearStatesAfterAutoscalerDisabled(Context ctx) throws Exception {
-        var needFlush = false;
-        var parallelismOverrides = stateStore.getParallelismOverrides(ctx);
-        if (!parallelismOverrides.isEmpty()) {
-            needFlush = true;
-            stateStore.removeParallelismOverrides(ctx);
-        }
-
-        var collectedMetrics = stateStore.getCollectedMetrics(ctx);
-        if (!collectedMetrics.isEmpty()) {
-            needFlush = true;
-            stateStore.removeCollectedMetrics(ctx);
-        }
-
-        var scalingHistory = stateStore.getScalingHistory(ctx);
-        if (!scalingHistory.isEmpty()) {
-            var trimmedScalingHistory =
-                    trimScalingHistory(clock.instant(), ctx.getConfiguration(), scalingHistory);
-            if (trimmedScalingHistory.isEmpty()) {
-                // All scaling histories are trimmed.
-                needFlush = true;
-                stateStore.removeScalingHistory(ctx);
-            } else if (!scalingHistory.equals(trimmedScalingHistory)) {
-                // Some scaling histories are trimmed.
-                needFlush = true;
-                stateStore.storeScalingHistory(ctx, trimmedScalingHistory);
-            }
-        }
-
-        if (needFlush) {
-            stateStore.flush(ctx);
-        }
     }
 
     @VisibleForTesting

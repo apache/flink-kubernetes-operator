@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler;
+package org.apache.flink.kubernetes.operator.autoscaler.state;
 
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -43,9 +44,9 @@ import java.util.TreeMap;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.updateVertexList;
-import static org.apache.flink.kubernetes.operator.autoscaler.KubernetesAutoScalerStateStore.serializeEvaluatedMetrics;
-import static org.apache.flink.kubernetes.operator.autoscaler.KubernetesAutoScalerStateStore.serializeScalingHistory;
 import static org.apache.flink.kubernetes.operator.autoscaler.TestingKubernetesAutoscalerUtils.createContext;
+import static org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore.serializeEvaluatedMetrics;
+import static org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore.serializeScalingHistory;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -329,5 +330,41 @@ public class KubernetesAutoScalerStateStoreTest {
                         configMapStore.getSerializedState(
                                 ctx, KubernetesAutoScalerStateStore.SCALING_HISTORY_KEY))
                 .isEmpty();
+    }
+
+    @Test
+    public void testDiscardAllState() {
+        stateStore.storeCollectedMetrics(
+                ctx, new TreeMap<>(Map.of(Instant.now(), new CollectedMetrics())));
+        stateStore.storeScalingHistory(
+                ctx,
+                Map.of(
+                        new JobVertexID(),
+                        new TreeMap<>(Map.of(Instant.now(), new ScalingSummary()))));
+        stateStore.storeParallelismOverrides(ctx, Map.of(new JobVertexID().toHexString(), "23"));
+
+        assertThat(stateStore.getCollectedMetrics(ctx)).isNotEmpty();
+        assertThat(stateStore.getScalingHistory(ctx)).isNotEmpty();
+        assertThat(stateStore.getParallelismOverrides(ctx)).isNotEmpty();
+
+        stateStore.flush(ctx);
+
+        assertThat(stateStore.getCollectedMetrics(ctx)).isNotEmpty();
+        assertThat(stateStore.getScalingHistory(ctx)).isNotEmpty();
+        assertThat(stateStore.getParallelismOverrides(ctx)).isNotEmpty();
+
+        stateStore.clearAll(ctx);
+
+        assertThat(stateStore.getCollectedMetrics(ctx)).isEmpty();
+        assertThat(stateStore.getScalingHistory(ctx)).isEmpty();
+        assertThat(stateStore.getParallelismOverrides(ctx)).isEmpty();
+
+        // We haven't flushed the clear operation, ConfigMap in Kubernetes should not be empty
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx).getDataReadOnly()).isNotEmpty();
+
+        stateStore.flush(ctx);
+
+        // Contents should be removed from Kubernetes
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx).getDataReadOnly()).isEmpty();
     }
 }

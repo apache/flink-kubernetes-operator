@@ -25,7 +25,8 @@ import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
-import org.apache.flink.autoscaler.state.TestingAutoscalerStateStore;
+import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -55,7 +56,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class RecommendedParallelismTest {
 
     private JobAutoScalerContext<JobID> context;
-    private TestingAutoscalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
+    private AutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
 
     private TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>> metricsCollector;
     private ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingExecutor;
@@ -70,7 +71,7 @@ public class RecommendedParallelismTest {
 
         TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventCollector =
                 new TestingEventCollector<>();
-        stateStore = new TestingAutoscalerStateStore<>();
+        stateStore = new InMemoryAutoScalerStateStore<>();
 
         scalingExecutor = new ScalingExecutor<>(eventCollector, stateStore);
 
@@ -227,7 +228,7 @@ public class RecommendedParallelismTest {
         assertEquals(4, scaledParallelism.get(sink));
     }
 
-    private void assertEvaluatedMetricsSize(int expectedSize) {
+    private void assertEvaluatedMetricsSize(int expectedSize) throws Exception {
         SortedMap<Instant, CollectedMetrics> evaluatedMetrics =
                 stateStore.getCollectedMetrics(context);
         assertThat(evaluatedMetrics).hasSize(expectedSize);

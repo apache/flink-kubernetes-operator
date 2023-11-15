@@ -26,7 +26,8 @@ import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
-import org.apache.flink.autoscaler.state.TestingAutoscalerStateStore;
+import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.client.program.rest.RestClusterClient;
@@ -43,16 +44,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.SortedMap;
 import java.util.TreeMap;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
@@ -61,6 +59,8 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABL
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_SCALING_HISTORY_AGE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for JobAutoScalerImpl. */
 public class JobAutoScalerImplTest {
@@ -68,7 +68,7 @@ public class JobAutoScalerImplTest {
     private JobAutoScalerContext<JobID> context;
     private TestingScalingRealizer<JobID, JobAutoScalerContext<JobID>> scalingRealizer;
     private TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventCollector;
-    private TestingAutoscalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
+    private AutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
 
     @BeforeEach
     public void setup() {
@@ -77,7 +77,7 @@ public class JobAutoScalerImplTest {
 
         scalingRealizer = new TestingScalingRealizer<>();
         eventCollector = new TestingEventCollector<>();
-        stateStore = new TestingAutoscalerStateStore<>();
+        stateStore = new InMemoryAutoScalerStateStore<>();
     }
 
     @Test
@@ -209,10 +209,8 @@ public class JobAutoScalerImplTest {
         assertThat(autoscaler.getParallelismOverrides(context)).isEmpty();
         assertParallelismOverrides(null);
 
-        int requestCount = stateStore.getFlushCount();
         // Make sure we don't update in kubernetes once removed
         autoscaler.scale(context);
-        assertEquals(requestCount, stateStore.getFlushCount());
 
         context.getConfiguration().setString(AUTOSCALER_ENABLED.key(), "true");
         autoscaler.applyParallelismOverrides(context);
@@ -299,60 +297,25 @@ public class JobAutoScalerImplTest {
         scalingHistory.put(Instant.ofEpochMilli(100), new ScalingSummary());
         scalingHistory.put(Instant.ofEpochMilli(200), new ScalingSummary());
 
-        // Test all scaling aren't expired
-        getInstantScalingSummaryTreeMap(
-                scalingHistory, Clock.fixed(Instant.ofEpochMilli(250), ZoneId.systemDefault()), 2);
+        stateStore.storeScalingHistory(context, Map.of(new JobVertexID(), scalingHistory));
+        assertFalse(stateStore.getScalingHistory(context).isEmpty());
 
-        // Test one scaling aren't expired
-        getInstantScalingSummaryTreeMap(
-                scalingHistory, Clock.fixed(Instant.ofEpochMilli(350), ZoneId.systemDefault()), 1);
+        stateStore.storeParallelismOverrides(context, Map.of("vertex", "4"));
+        assertFalse(stateStore.getParallelismOverrides(context).isEmpty());
 
-        // Test all scaling are expired
-        getInstantScalingSummaryTreeMap(
-                scalingHistory, Clock.fixed(Instant.ofEpochMilli(450), ZoneId.systemDefault()), 0);
-    }
+        TreeMap<Instant, CollectedMetrics> metrics = new TreeMap<>();
+        metrics.put(Instant.now(), new CollectedMetrics());
+        stateStore.storeCollectedMetrics(context, metrics);
+        assertFalse(stateStore.getCollectedMetrics(context).isEmpty());
 
-    private void getInstantScalingSummaryTreeMap(
-            SortedMap<Instant, ScalingSummary> scalingHistoryData,
-            Clock clock,
-            int expectedScalingHistorySize)
-            throws Exception {
-        stateStore = new TestingAutoscalerStateStore<>();
         var autoscaler =
                 new JobAutoScalerImpl<>(
                         null, null, null, eventCollector, scalingRealizer, stateStore);
-
-        enrichStateStore(scalingHistoryData);
-        stateStore.flush(context);
-        assertThat(stateStore.getFlushCount()).isEqualTo(1);
-
-        autoscaler.setClock(clock);
         autoscaler.scale(context);
 
-        assertThat(stateStore.getParallelismOverrides(context)).isEmpty();
-        assertThat(stateStore.getCollectedMetrics(context)).isEmpty();
-
-        if (expectedScalingHistorySize > 0) {
-            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory =
-                    stateStore.getScalingHistory(context);
-            assertThat(scalingHistory).isNotEmpty();
-            assertThat(scalingHistory.values())
-                    .allMatch(aa -> aa.size() == expectedScalingHistorySize);
-        } else {
-            assertThat(stateStore.getScalingHistory(context)).isEmpty();
-        }
-        assertThat(stateStore.getFlushCount()).isEqualTo(2);
-    }
-
-    private void enrichStateStore(SortedMap<Instant, ScalingSummary> scalingHistory) {
-        var v1 = new JobVertexID();
-        var v2 = new JobVertexID();
-        stateStore.storeParallelismOverrides(
-                context, Map.of(v1.toString(), "1", v2.toString(), "2"));
-
-        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
-        stateStore.storeCollectedMetrics(context, metricHistory);
-        stateStore.storeScalingHistory(context, Map.of(v1, scalingHistory, v2, scalingHistory));
+        assertTrue(stateStore.getScalingHistory(context).isEmpty());
+        assertTrue(stateStore.getScalingHistory(context).isEmpty());
+        assertTrue(stateStore.getParallelismOverrides(context).isEmpty());
     }
 
     private void assertParallelismOverrides(Map<String, String> expectedOverrides) {

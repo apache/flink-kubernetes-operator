@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.autoscaler;
+package org.apache.flink.kubernetes.operator.autoscaler.state;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.utils.Constants;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -27,8 +28,6 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nonnull;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -44,13 +43,12 @@ public class ConfigMapStore {
 
     private final KubernetesClient kubernetesClient;
 
-    // The cache for each resourceId may be in three states:
-    // 1. The resourceId doesn't exist : ConfigMap isn't loaded from kubernetes, or it's deleted
-    // 2  Exists, Optional.empty() : The ConfigMap doesn't exist in Kubernetes
-    // 3. Exists, Not Empty : We have loaded the ConfigMap from kubernetes, it may not be the same
-    // if not flushed already
-    private final ConcurrentHashMap<ResourceID, Optional<ConfigMap>> cache =
-            new ConcurrentHashMap<>();
+    /**
+     * Cache for Kubernetes ConfigMaps which reflects the latest state of a ConfigMap for a
+     * ResourceId. Any changes to the ConfigMap are only reflected in Kubernetes once the flush()
+     * method is called.
+     */
+    private final ConcurrentHashMap<ResourceID, ConfigMapView> cache = new ConcurrentHashMap<>();
 
     public ConfigMapStore(KubernetesClient kubernetesClient) {
         this.kubernetesClient = kubernetesClient;
@@ -58,34 +56,30 @@ public class ConfigMapStore {
 
     protected void putSerializedState(
             KubernetesJobAutoScalerContext jobContext, String key, String value) {
-        getOrCreateState(jobContext).put(key, value);
+        getConfigMap(jobContext).put(key, value);
     }
 
     protected Optional<String> getSerializedState(
             KubernetesJobAutoScalerContext jobContext, String key) {
-        return getConfigMap(jobContext).map(configMap -> configMap.getData().get(key));
+        return Optional.ofNullable(getConfigMap(jobContext).get(key));
     }
 
     protected void removeSerializedState(KubernetesJobAutoScalerContext jobContext, String key) {
-        getConfigMap(jobContext)
-                .ifPresentOrElse(
-                        configMap -> configMap.getData().remove(key),
-                        () -> {
-                            throw new IllegalStateException(
-                                    "The configMap isn't created, so the remove is unavailable.");
-                        });
+        getConfigMap(jobContext).removeKey(key);
+    }
+
+    public void clearAll(KubernetesJobAutoScalerContext jobContext) {
+        getConfigMap(jobContext).clear();
     }
 
     public void flush(KubernetesJobAutoScalerContext jobContext) {
-        Optional<ConfigMap> configMapOpt = cache.get(jobContext.getJobKey());
-        if (configMapOpt == null || configMapOpt.isEmpty()) {
-            LOG.debug("The configMap isn't updated, so skip the flush.");
+        ConfigMapView configMapView = cache.get(jobContext.getJobKey());
+        if (configMapView == null) {
+            LOG.debug("The configMap doesn't exist, so skip the flush.");
             return;
         }
         try {
-            cache.put(
-                    jobContext.getJobKey(),
-                    Optional.of(kubernetesClient.resource(configMapOpt.get()).update()));
+            configMapView.flush();
         } catch (Exception e) {
             LOG.error(
                     "Error while updating autoscaler info configmap, invalidating to clear the cache",
@@ -99,49 +93,17 @@ public class ConfigMapStore {
         cache.remove(resourceID);
     }
 
-    private Optional<ConfigMap> getConfigMap(KubernetesJobAutoScalerContext jobContext) {
+    private ConfigMapView getConfigMap(KubernetesJobAutoScalerContext jobContext) {
         return cache.computeIfAbsent(
                 jobContext.getJobKey(), (id) -> getConfigMapFromKubernetes(jobContext));
     }
 
-    private Map<String, String> getOrCreateState(KubernetesJobAutoScalerContext jobContext) {
-        return cache.compute(
-                        jobContext.getJobKey(),
-                        (id, configMapOpt) -> {
-                            // If in the cache and valid simply return
-                            if (configMapOpt != null && configMapOpt.isPresent()) {
-                                return configMapOpt;
-                            }
-                            // Otherwise get or create
-                            return Optional.of(getOrCreateConfigMapFromKubernetes(jobContext));
-                        })
-                .get()
-                .getData();
-    }
-
     @VisibleForTesting
-    protected Optional<ConfigMap> getConfigMapFromKubernetes(
-            KubernetesJobAutoScalerContext jobContext) {
+    ConfigMapView getConfigMapFromKubernetes(KubernetesJobAutoScalerContext jobContext) {
         HasMetadata cr = jobContext.getResource();
         var meta = createCmObjectMeta(ResourceID.fromResource(cr));
-        return getScalingInfoConfigMap(meta);
-    }
-
-    @Nonnull
-    private ConfigMap getOrCreateConfigMapFromKubernetes(
-            KubernetesJobAutoScalerContext jobContext) {
-        HasMetadata cr = jobContext.getResource();
-        var meta = createCmObjectMeta(ResourceID.fromResource(cr));
-        return getScalingInfoConfigMap(meta).orElseGet(() -> createConfigMap(cr, meta));
-    }
-
-    private ConfigMap createConfigMap(HasMetadata cr, ObjectMeta meta) {
-        LOG.info("Creating scaling info config map");
-        var cm = new ConfigMap();
-        cm.setMetadata(meta);
-        cm.addOwnerReference(cr);
-        cm.setData(new HashMap<>());
-        return kubernetesClient.resource(cm).create();
+        var configMapSkeleton = buildConfigMap(cr, meta);
+        return new ConfigMapView(configMapSkeleton, kubernetesClient::resource);
     }
 
     private ObjectMeta createCmObjectMeta(ResourceID uid) {
@@ -157,17 +119,16 @@ public class ConfigMapStore {
         return objectMeta;
     }
 
-    private Optional<ConfigMap> getScalingInfoConfigMap(ObjectMeta objectMeta) {
-        return Optional.ofNullable(
-                kubernetesClient
-                        .configMaps()
-                        .inNamespace(objectMeta.getNamespace())
-                        .withName(objectMeta.getName())
-                        .get());
+    private ConfigMap buildConfigMap(HasMetadata cr, ObjectMeta meta) {
+        var cm = new ConfigMap();
+        cm.setMetadata(meta);
+        cm.addOwnerReference(cr);
+        cm.setData(new HashMap<>());
+        return cm;
     }
 
     @VisibleForTesting
-    protected ConcurrentHashMap<ResourceID, Optional<ConfigMap>> getCache() {
+    protected ConcurrentHashMap<ResourceID, ConfigMapView> getCache() {
         return cache;
     }
 }

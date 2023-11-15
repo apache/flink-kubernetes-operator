@@ -24,7 +24,8 @@ import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
-import org.apache.flink.autoscaler.state.TestingAutoscalerStateStore;
+import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -54,7 +55,7 @@ public class BacklogBasedScalingTest {
 
     private JobAutoScalerContext<JobID> context;
     private TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventCollector;
-    private TestingAutoscalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
+    private AutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
 
     private TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>> metricsCollector;
     private ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingExecutor;
@@ -68,7 +69,7 @@ public class BacklogBasedScalingTest {
         context = createDefaultJobAutoScalerContext();
 
         eventCollector = new TestingEventCollector<>();
-        stateStore = new TestingAutoscalerStateStore<>();
+        stateStore = new InMemoryAutoScalerStateStore<>();
 
         scalingExecutor = new ScalingExecutor<>(eventCollector, stateStore);
 
@@ -395,7 +396,7 @@ public class BacklogBasedScalingTest {
         assertTrue(eventCollector.events.isEmpty());
     }
 
-    private void assertEvaluatedMetricsSize(int expectedSize) {
+    private void assertEvaluatedMetricsSize(int expectedSize) throws Exception {
         SortedMap<Instant, CollectedMetrics> evaluatedMetrics =
                 stateStore.getCollectedMetrics(context);
         assertThat(evaluatedMetrics).hasSize(expectedSize);

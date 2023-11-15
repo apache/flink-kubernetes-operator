@@ -21,6 +21,8 @@ import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
+import org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.jobgraph.JobVertexID;

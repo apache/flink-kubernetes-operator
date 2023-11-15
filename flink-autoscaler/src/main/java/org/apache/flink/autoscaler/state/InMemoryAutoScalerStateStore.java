@@ -106,6 +106,13 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     }
 
     @Override
+    public void clearAll(Context jobContext) {
+        scalingHistoryStore.remove(jobContext.getJobKey());
+        parallelismOverridesStore.remove(jobContext.getJobKey());
+        collectedMetricsStore.remove(jobContext.getJobKey());
+    }
+
+    @Override
     public void flush(Context jobContext) {
         // The InMemory state store doesn't persist data.
     }
