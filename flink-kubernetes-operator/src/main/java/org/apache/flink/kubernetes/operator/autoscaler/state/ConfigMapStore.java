@@ -56,7 +56,7 @@ public class ConfigMapStore {
 
     protected void putSerializedState(
             KubernetesJobAutoScalerContext jobContext, String key, String value) {
-        getOrCreateState(jobContext).put(key, value);
+        getConfigMap(jobContext).put(key, value);
     }
 
     protected Optional<String> getSerializedState(
@@ -96,19 +96,6 @@ public class ConfigMapStore {
     private ConfigMapView getConfigMap(KubernetesJobAutoScalerContext jobContext) {
         return cache.computeIfAbsent(
                 jobContext.getJobKey(), (id) -> getConfigMapFromKubernetes(jobContext));
-    }
-
-    private ConfigMapView getOrCreateState(KubernetesJobAutoScalerContext jobContext) {
-        return cache.compute(
-                jobContext.getJobKey(),
-                (id, configMapView) -> {
-                    // If in the cache and valid simply return
-                    if (configMapView != null) {
-                        return configMapView;
-                    }
-                    // Otherwise retrieve if it exists
-                    return getConfigMapFromKubernetes(jobContext);
-                });
     }
 
     @VisibleForTesting
