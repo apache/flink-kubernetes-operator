@@ -116,7 +116,8 @@ public class ConfigMapStore {
     ConfigMapView getConfigMapFromKubernetes(KubernetesJobAutoScalerContext jobContext) {
         HasMetadata cr = jobContext.getResource();
         var meta = createCmObjectMeta(ResourceID.fromResource(cr));
-        return getScalingInfoConfigMap(cr, meta);
+        var cm = buildConfigMap(cr, meta);
+        return new ConfigMapView(cm, kubernetesClient::resource);
     }
 
     private ObjectMeta createCmObjectMeta(ResourceID uid) {
@@ -132,20 +133,7 @@ public class ConfigMapStore {
         return objectMeta;
     }
 
-    private ConfigMapView getScalingInfoConfigMap(HasMetadata cr, ObjectMeta objectMeta) {
-        return new ConfigMapView(
-                () ->
-                        kubernetesClient
-                                .configMaps()
-                                .inNamespace(objectMeta.getNamespace())
-                                .withName(objectMeta.getName())
-                                .get(),
-                () -> buildConfigMap(cr, objectMeta),
-                kubernetesClient::resource);
-    }
-
     private ConfigMap buildConfigMap(HasMetadata cr, ObjectMeta meta) {
-        LOG.info("Creating scaling info config map");
         var cm = new ConfigMap();
         cm.setMetadata(meta);
         cm.addOwnerReference(cr);

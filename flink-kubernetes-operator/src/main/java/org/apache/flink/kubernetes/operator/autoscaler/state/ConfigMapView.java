@@ -22,13 +22,16 @@ import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.client.dsl.Resource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 class ConfigMapView {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ConfigMapView.class);
 
     enum State {
         NEEDS_CREATE,
@@ -43,14 +46,12 @@ class ConfigMapView {
     private final Function<ConfigMap, Resource<ConfigMap>> resourceRetriever;
 
     public ConfigMapView(
-            Supplier<ConfigMap> configMapRetriever,
-            Supplier<ConfigMap> configMapBuilder,
-            Function<ConfigMap, Resource<ConfigMap>> resourceRetriever) {
-        var existingConfigMap = configMapRetriever.get();
+            ConfigMap configMap, Function<ConfigMap, Resource<ConfigMap>> resourceRetriever) {
+        var existingConfigMap = resourceRetriever.apply(configMap).get();
         if (existingConfigMap != null) {
             refreshConfigMap(existingConfigMap);
         } else {
-            this.configMap = configMapBuilder.get();
+            this.configMap = configMap;
             this.state = State.NEEDS_CREATE;
         }
         this.resourceRetriever = resourceRetriever;
@@ -88,6 +89,7 @@ class ConfigMapView {
         if (state == State.NEEDS_UPDATE) {
             refreshConfigMap(resource.update());
         } else if (state == State.NEEDS_CREATE) {
+            LOG.info("Creating config map {}", configMap.getMetadata().getName());
             refreshConfigMap(resource.create());
         }
     }
