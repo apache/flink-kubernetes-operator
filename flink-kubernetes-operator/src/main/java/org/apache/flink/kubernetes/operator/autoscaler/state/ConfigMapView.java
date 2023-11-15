@@ -34,8 +34,11 @@ class ConfigMapView {
     private static final Logger LOG = LoggerFactory.getLogger(ConfigMapView.class);
 
     enum State {
+        /** ConfigMap is only stored locally, not created in Kubernetes yet. */
         NEEDS_CREATE,
+        /** ConfigMap exists in Kubernetes but there are newer local changes. */
         NEEDS_UPDATE,
+        /** ConfigMap view reflects the actual contents of Kubernetes ConfigMap. */
         UP_TO_DATE
     }
 

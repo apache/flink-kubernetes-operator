@@ -43,12 +43,11 @@ public class ConfigMapStore {
 
     private final KubernetesClient kubernetesClient;
 
-    // The cache for each resourceId may be in four states:
-    // 1. No cache entry: ConfigMap isn't loaded from kubernetes, or it's deleted.
-    // 2. Cache entry, not created : The ConfigMap doesn't exist in Kubernetes.
-    // 3. Cache entry, not flushed : The ConfigMap exists in Kubernetes, but it is not updated yet.
-    // 4. Cache entry, flushed and created : We have loaded the ConfigMap from kubernetes, and it's
-    // up-to-date.
+    /**
+     * Cache for Kubernetes ConfigMaps which reflects the latest state of a ConfigMap for a
+     * ResourceId. Any changes to the ConfigMap are only reflected in Kubernetes once the flush()
+     * method is called.
+     */
     private final ConcurrentHashMap<ResourceID, ConfigMapView> cache = new ConcurrentHashMap<>();
 
     public ConfigMapStore(KubernetesClient kubernetesClient) {
