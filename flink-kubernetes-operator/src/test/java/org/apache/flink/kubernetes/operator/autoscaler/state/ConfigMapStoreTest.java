@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.apache.flink.kubernetes.operator.autoscaler.TestingKubernetesAutoscalerUtils.createContext;
@@ -41,12 +42,21 @@ public class ConfigMapStoreTest {
 
     KubernetesMockServer mockWebServer;
 
+    ConfigMapStore configMapStore;
+
+    KubernetesJobAutoScalerContext ctx;
+
+    @BeforeEach
+    public void setup() {
+        configMapStore = new ConfigMapStore(kubernetesClient);
+        ctx = createContext("cr1", kubernetesClient);
+    }
+
     @Test
     void testCaching() {
         KubernetesJobAutoScalerContext ctx1 = createContext("cr1", kubernetesClient);
         KubernetesJobAutoScalerContext ctx2 = createContext("cr2", kubernetesClient);
 
-        var configMapStore = new ConfigMapStore(kubernetesClient);
         assertEquals(0, mockWebServer.getRequestCount());
 
         String key1 = "key1";
@@ -104,7 +114,6 @@ public class ConfigMapStoreTest {
     void testErrorHandling() {
         KubernetesJobAutoScalerContext ctx = createContext("cr1", kubernetesClient);
 
-        var configMapStore = new ConfigMapStore(kubernetesClient);
         // Test for the invalid flush.
         configMapStore.flush(ctx);
 
@@ -137,8 +146,6 @@ public class ConfigMapStoreTest {
         var key = "key";
         var value = "value";
 
-        var configMapStore = new ConfigMapStore(kubernetesClient);
-
         configMapStore.getSerializedState(ctx, key);
         assertEquals(1, mockWebServer.getRequestCount());
 
@@ -161,5 +168,52 @@ public class ConfigMapStoreTest {
         // Subsequent flushes do not trigger an API call
         configMapStore.flush(ctx);
         assertEquals(3, mockWebServer.getRequestCount());
+    }
+
+    @Test
+    public void testDiscardAllState() {
+        configMapStore.putSerializedState(
+                ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY, "state1");
+        configMapStore.putSerializedState(
+                ctx, KubernetesAutoScalerStateStore.SCALING_HISTORY_KEY, "state2");
+        configMapStore.putSerializedState(
+                ctx, KubernetesAutoScalerStateStore.PARALLELISM_OVERRIDES_KEY, "state3");
+
+        assertThat(
+                        configMapStore.getSerializedState(
+                                ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY))
+                .isPresent();
+        assertThat(
+                        configMapStore.getSerializedState(
+                                ctx, KubernetesAutoScalerStateStore.SCALING_HISTORY_KEY))
+                .isPresent();
+        assertThat(
+                        configMapStore.getSerializedState(
+                                ctx, KubernetesAutoScalerStateStore.PARALLELISM_OVERRIDES_KEY))
+                .isPresent();
+
+        configMapStore.flush(ctx);
+
+        configMapStore.clearAll(ctx);
+
+        assertThat(
+                        configMapStore.getSerializedState(
+                                ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY))
+                .isEmpty();
+        assertThat(
+                        configMapStore.getSerializedState(
+                                ctx, KubernetesAutoScalerStateStore.SCALING_HISTORY_KEY))
+                .isEmpty();
+        assertThat(
+                        configMapStore.getSerializedState(
+                                ctx, KubernetesAutoScalerStateStore.PARALLELISM_OVERRIDES_KEY))
+                .isEmpty();
+
+        // We haven't flushed the clear operation, ConfigMap in Kubernetes should not be empty
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx).getDataReadOnly()).isNotEmpty();
+
+        configMapStore.flush(ctx);
+
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx).getDataReadOnly()).isEmpty();
     }
 }

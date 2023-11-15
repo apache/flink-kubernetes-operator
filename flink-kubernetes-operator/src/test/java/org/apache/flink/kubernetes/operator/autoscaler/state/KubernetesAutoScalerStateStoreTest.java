@@ -334,39 +334,37 @@ public class KubernetesAutoScalerStateStoreTest {
 
     @Test
     public void testDiscardAllState() {
-        configMapStore.putSerializedState(
-                ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY, "state1");
-        configMapStore.putSerializedState(
-                ctx, KubernetesAutoScalerStateStore.SCALING_HISTORY_KEY, "state2");
-        configMapStore.putSerializedState(
-                ctx, KubernetesAutoScalerStateStore.PARALLELISM_OVERRIDES_KEY, "state3");
+        stateStore.storeCollectedMetrics(
+                ctx, new TreeMap<>(Map.of(Instant.now(), new CollectedMetrics())));
+        stateStore.storeScalingHistory(
+                ctx,
+                Map.of(
+                        new JobVertexID(),
+                        new TreeMap<>(Map.of(Instant.now(), new ScalingSummary()))));
+        stateStore.storeParallelismOverrides(ctx, Map.of(new JobVertexID().toHexString(), "23"));
 
-        assertThat(
-                        configMapStore.getSerializedState(
-                                ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY))
-                .isPresent();
-        assertThat(
-                        configMapStore.getSerializedState(
-                                ctx, KubernetesAutoScalerStateStore.SCALING_HISTORY_KEY))
-                .isPresent();
-        assertThat(
-                        configMapStore.getSerializedState(
-                                ctx, KubernetesAutoScalerStateStore.PARALLELISM_OVERRIDES_KEY))
-                .isPresent();
+        assertThat(stateStore.getCollectedMetrics(ctx)).isNotEmpty();
+        assertThat(stateStore.getScalingHistory(ctx)).isNotEmpty();
+        assertThat(stateStore.getParallelismOverrides(ctx)).isNotEmpty();
 
-        configMapStore.clearAll(ctx);
+        stateStore.flush(ctx);
 
-        assertThat(
-                        configMapStore.getSerializedState(
-                                ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY))
-                .isEmpty();
-        assertThat(
-                        configMapStore.getSerializedState(
-                                ctx, KubernetesAutoScalerStateStore.SCALING_HISTORY_KEY))
-                .isEmpty();
-        assertThat(
-                        configMapStore.getSerializedState(
-                                ctx, KubernetesAutoScalerStateStore.PARALLELISM_OVERRIDES_KEY))
-                .isEmpty();
+        assertThat(stateStore.getCollectedMetrics(ctx)).isNotEmpty();
+        assertThat(stateStore.getScalingHistory(ctx)).isNotEmpty();
+        assertThat(stateStore.getParallelismOverrides(ctx)).isNotEmpty();
+
+        stateStore.clearAll(ctx);
+
+        assertThat(stateStore.getCollectedMetrics(ctx)).isEmpty();
+        assertThat(stateStore.getScalingHistory(ctx)).isEmpty();
+        assertThat(stateStore.getParallelismOverrides(ctx)).isEmpty();
+
+        // We haven't flushed the clear operation, ConfigMap in Kubernetes should not be empty
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx).getDataReadOnly()).isNotEmpty();
+
+        stateStore.flush(ctx);
+
+        // Contents should be removed from Kubernetes
+        assertThat(configMapStore.getConfigMapFromKubernetes(ctx).getDataReadOnly()).isEmpty();
     }
 }
