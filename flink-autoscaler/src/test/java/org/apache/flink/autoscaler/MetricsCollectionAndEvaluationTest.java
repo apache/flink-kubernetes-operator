@@ -73,7 +73,7 @@ public class MetricsCollectionAndEvaluationTest {
     private Clock clock;
 
     private Instant startTime;
-    private long restartTimeSec;
+    private Duration restartTime;
 
     @BeforeEach
     public void setup() {
@@ -108,7 +108,7 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.setClock(clock);
         startTime = clock.instant();
         metricsCollector.setJobUpdateTs(startTime);
-        restartTimeSec = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
+        restartTime = conf.get(AutoScalerOptions.RESTART_TIME);
     }
 
     @Test
@@ -161,7 +161,7 @@ public class MetricsCollectionAndEvaluationTest {
         assertEquals(3, collectedMetrics.getMetricHistory().size());
         assertTrue(collectedMetrics.isFullyCollected());
 
-        var evaluation = evaluator.evaluate(conf, collectedMetrics, restartTimeSec);
+        var evaluation = evaluator.evaluate(conf, collectedMetrics, restartTime);
         scalingExecutor.scaleResource(
                 context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
 
@@ -176,7 +176,7 @@ public class MetricsCollectionAndEvaluationTest {
         conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.5);
         conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
 
-        evaluation = evaluator.evaluate(conf, collectedMetrics, restartTimeSec);
+        evaluation = evaluator.evaluate(conf, collectedMetrics, restartTime);
         scalingExecutor.scaleResource(
                 context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
 
@@ -373,7 +373,7 @@ public class MetricsCollectionAndEvaluationTest {
         var collectedMetrics = collectMetrics();
 
         Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluation =
-                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTimeSec);
+                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
         assertEquals(
                 500., evaluation.get(source1).get(ScalingMetric.TARGET_DATA_RATE).getCurrent());
         assertEquals(
@@ -645,7 +645,7 @@ public class MetricsCollectionAndEvaluationTest {
         var collectedMetrics = collectMetrics();
 
         Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluation =
-                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTimeSec);
+                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
         assertEquals(0, evaluation.get(source1).get(ScalingMetric.TARGET_DATA_RATE).getCurrent());
         assertEquals(
                 Double.POSITIVE_INFINITY,
@@ -675,8 +675,7 @@ public class MetricsCollectionAndEvaluationTest {
                         Instant.ofEpochSecond(1234),
                         new CollectedMetrics(newMetrics, lastCollected.getOutputRatios()));
 
-        evaluation =
-                evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTimeSec);
+        evaluation = evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
         assertEquals(
                 3., evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getAverage());
     }

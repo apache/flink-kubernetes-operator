@@ -250,8 +250,7 @@ public class ScalingExecutorTest {
         metrics.put(
                 ScalingMetric.TRUE_PROCESSING_RATE, new EvaluatedScalingMetric(procRate, procRate));
 
-        var restartTime =
-                context.getConfiguration().get(AutoScalerOptions.RESTART_TIME).toSeconds();
+        var restartTime = context.getConfiguration().get(AutoScalerOptions.RESTART_TIME);
         ScalingMetricEvaluator.computeProcessingRateThresholds(
                 metrics, context.getConfiguration(), false, restartTime);
         return metrics;

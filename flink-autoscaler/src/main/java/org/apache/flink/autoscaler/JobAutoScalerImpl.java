@@ -171,10 +171,9 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         var now = clock.instant();
         // Scaling tracking data contains previous restart times that are taken into account
         var scalingTracking = getTrimmedScalingTracking(stateStore, ctx, now);
-        var restartTimeSec =
-                scalingTracking.getMaxRestartTimeSecondsOrDefault(ctx.getConfiguration());
+        var restartTime = scalingTracking.getMaxRestartTimeSecondsOrDefault(ctx.getConfiguration());
         var evaluatedMetrics =
-                evaluator.evaluate(ctx.getConfiguration(), collectedMetrics, restartTimeSec);
+                evaluator.evaluate(ctx.getConfiguration(), collectedMetrics, restartTime);
         LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
         lastEvaluatedMetrics.put(ctx.getJobKey(), evaluatedMetrics);
 

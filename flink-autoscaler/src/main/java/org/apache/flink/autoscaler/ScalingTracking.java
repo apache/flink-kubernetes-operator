@@ -130,7 +130,7 @@ public class ScalingTracking {
      * option is set to false, or if there are no tracking records available. Otherwise, the maximum
      * observed restart time is capped by the MAX_RESTART_TIME.
      */
-    public double getMaxRestartTimeSecondsOrDefault(Configuration conf) {
+    public Duration getMaxRestartTimeSecondsOrDefault(Configuration conf) {
         long maxRestartTime = -1;
         if (conf.get(AutoScalerOptions.PREFER_TRACKED_RESTART_TIME)) {
             for (Map.Entry<Instant, ScalingRecord> entry : scalingRecords.entrySet()) {
@@ -142,12 +142,12 @@ public class ScalingTracking {
                 }
             }
         }
-        long restartTimeFromConfig = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
+        var restartTimeFromConfig = conf.get(AutoScalerOptions.RESTART_TIME);
         long maxRestartTimeFromConfig =
                 conf.get(AutoScalerOptions.TRACKED_RESTART_TIME_LIMIT).toSeconds();
         return maxRestartTime == -1
                 ? restartTimeFromConfig
-                : Math.min(maxRestartTime, maxRestartTimeFromConfig);
+                : Duration.ofSeconds(Math.min(maxRestartTime, maxRestartTimeFromConfig));
     }
 
     /**

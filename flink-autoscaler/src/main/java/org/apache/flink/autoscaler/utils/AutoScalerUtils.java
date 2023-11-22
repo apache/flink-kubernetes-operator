@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -41,7 +42,7 @@ public class AutoScalerUtils {
             Configuration conf,
             double targetUtilization,
             boolean withRestart,
-            double restartTimeSec) {
+            Duration restartTime) {
 
         // Target = Lag Catchup Rate + Restart Catchup Rate + Processing at utilization
         // Target = LAG/CATCH_UP + INPUT_RATE*RESTART/CATCH_UP + INPUT_RATE/TARGET_UTIL
@@ -68,7 +69,7 @@ public class AutoScalerUtils {
         double restartCatchupRate =
                 !withRestart || catchUpTargetSec == 0
                         ? 0
-                        : (avgInputTargetRate * restartTimeSec) / catchUpTargetSec;
+                        : (avgInputTargetRate * restartTime.toSeconds()) / catchUpTargetSec;
         double inputTargetAtUtilization = avgInputTargetRate / targetUtilization;
 
         return Math.round(lagCatchupTargetRate + restartCatchupRate + inputTargetAtUtilization);

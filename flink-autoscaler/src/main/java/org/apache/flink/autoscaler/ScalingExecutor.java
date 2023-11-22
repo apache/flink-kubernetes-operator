@@ -28,6 +28,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
@@ -76,10 +77,10 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             throws Exception {
 
         var conf = context.getConfiguration();
-        var restartTimeSec = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var restartTime = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
 
         var scalingSummaries =
-                computeScalingSummary(context, evaluatedMetrics, scalingHistory, restartTimeSec);
+                computeScalingSummary(context, evaluatedMetrics, scalingHistory, restartTime);
 
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
@@ -163,7 +164,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Context context,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
-            double restartTimeSec) {
+            Duration restartTime) {
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
         var excludeVertexIdList =
@@ -184,7 +185,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                         metrics,
                                         scalingHistory.getOrDefault(
                                                 v, Collections.emptySortedMap()),
-                                        restartTimeSec);
+                                        restartTime);
                         if (currentParallelism != newParallelism) {
                             out.put(
                                     v,

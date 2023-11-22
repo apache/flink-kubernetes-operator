@@ -35,6 +35,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -62,7 +63,7 @@ public class ScalingMetricEvaluator {
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricEvaluator.class);
 
     public Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluate(
-            Configuration conf, CollectedMetricHistory collectedMetrics, double restartTimeSec) {
+            Configuration conf, CollectedMetricHistory collectedMetrics, Duration restartTime) {
 
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
@@ -80,7 +81,7 @@ public class ScalingMetricEvaluator {
                             topology,
                             vertex,
                             processingBacklog,
-                            restartTimeSec));
+                            restartTime));
         }
 
         return scalingOutput;
@@ -121,7 +122,7 @@ public class ScalingMetricEvaluator {
             JobTopology topology,
             JobVertexID vertex,
             boolean processingBacklog,
-            double restartTime) {
+            Duration restartTime) {
 
         var latestVertexMetrics =
                 metricsHistory.get(metricsHistory.lastKey()).getVertexMetrics().get(vertex);
@@ -211,7 +212,7 @@ public class ScalingMetricEvaluator {
             Map<ScalingMetric, EvaluatedScalingMetric> metrics,
             Configuration conf,
             boolean processingBacklog,
-            double restartTimeSec) {
+            Duration restartTime) {
 
         double utilizationBoundary = conf.getDouble(TARGET_UTILIZATION_BOUNDARY);
         double targetUtilization = conf.get(TARGET_UTILIZATION);
@@ -231,11 +232,11 @@ public class ScalingMetricEvaluator {
 
         double scaleUpThreshold =
                 AutoScalerUtils.getTargetProcessingCapacity(
-                        metrics, conf, upperUtilization, false, restartTimeSec);
+                        metrics, conf, upperUtilization, false, restartTime);
 
         double scaleDownThreshold =
                 AutoScalerUtils.getTargetProcessingCapacity(
-                        metrics, conf, lowerUtilization, true, restartTimeSec);
+                        metrics, conf, lowerUtilization, true, restartTime);
 
         metrics.put(SCALE_UP_RATE_THRESHOLD, EvaluatedScalingMetric.of(scaleUpThreshold));
         metrics.put(SCALE_DOWN_RATE_THRESHOLD, EvaluatedScalingMetric.of(scaleDownThreshold));

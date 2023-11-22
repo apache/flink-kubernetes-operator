@@ -39,8 +39,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ScalingTrackingTest {
 
-    long configuredRestartTimeSeconds = 300;
-    long configuredMaxRestartTimeSeconds = 900;
+    Duration configuredRestartTime = Duration.ofMinutes(5);
+    Duration configuredMaxRestartTime = Duration.ofMinutes(15);
     private ScalingTracking scalingTracking;
     private Configuration conf;
 
@@ -48,62 +48,61 @@ class ScalingTrackingTest {
     void setUp() {
         scalingTracking = new ScalingTracking();
         conf = new Configuration();
-        conf.set(AutoScalerOptions.RESTART_TIME, Duration.ofSeconds(configuredRestartTimeSeconds));
+        conf.set(AutoScalerOptions.RESTART_TIME, configuredRestartTime);
         conf.set(AutoScalerOptions.PREFER_TRACKED_RESTART_TIME, true);
     }
 
     @Test
     void shouldReturnConfiguredRestartTime_WhenNoScalingRecords() {
         // Empty scalingTracking
-        double result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
 
-        assertThat(result).isEqualTo(configuredRestartTimeSeconds);
+        assertThat(result).isEqualTo(configuredRestartTime);
     }
 
     @Test
     void shouldReturnConfiguredRestartTime_WhenPreferTrackedRestartTimeIsFalse() {
         conf.set(AutoScalerOptions.PREFER_TRACKED_RESTART_TIME, false);
-        setUpScalingRecords(Duration.ofSeconds(configuredRestartTimeSeconds - 1));
+        setUpScalingRecords(configuredRestartTime.minusSeconds(1));
 
-        double result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
 
-        assertThat(result).isEqualTo(configuredRestartTimeSeconds);
+        assertThat(result).isEqualTo(configuredRestartTime);
     }
 
     @Test
     void maxRestartTimeShouldNotCapConfiguredRestartTime_WhenPreferTrackedRestartTimeIsFalse() {
         conf.set(AutoScalerOptions.PREFER_TRACKED_RESTART_TIME, false);
         var restartTime =
-                configuredMaxRestartTimeSeconds
-                        + 1; // exceeds max configured, but should not be capped
-        conf.set(AutoScalerOptions.RESTART_TIME, Duration.ofSeconds(restartTime));
+                configuredMaxRestartTime.plusSeconds(
+                        1); // exceeds max configured, but should not be capped
+        conf.set(AutoScalerOptions.RESTART_TIME, restartTime);
         setUpScalingRecords(
-                Duration.ofSeconds(
-                        configuredRestartTimeSeconds - 1)); // should not be taken into account
+                configuredRestartTime.minusSeconds(1)); // should not be taken into account
 
-        double result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
 
         assertThat(result).isEqualTo(restartTime);
     }
 
     @Test
     void shouldReturnMaxTrackedRestartTime_WhenNotCapped() {
-        long duration = configuredMaxRestartTimeSeconds - 1;
-        setUpScalingRecords(Duration.ofSeconds(duration));
+        var duration = configuredMaxRestartTime.minusSeconds(1);
+        setUpScalingRecords(duration);
 
-        double result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
 
         assertThat(result).isEqualTo(duration);
     }
 
     @Test
     void shouldReturnConfiguredRestartTime_WhenCapped() {
-        long duration = configuredMaxRestartTimeSeconds + 1;
-        setUpScalingRecords(Duration.ofSeconds(duration));
+        var duration = configuredMaxRestartTime.plusSeconds(1);
+        setUpScalingRecords(duration);
 
-        double result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
 
-        assertThat(result).isEqualTo(configuredMaxRestartTimeSeconds);
+        assertThat(result).isEqualTo(configuredMaxRestartTime);
     }
 
     private void setUpScalingRecords(Duration secondRescaleDuration) {

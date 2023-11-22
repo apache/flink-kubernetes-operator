@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Map;
@@ -72,7 +73,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             JobVertexID vertex,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             SortedMap<Instant, ScalingSummary> history,
-            double restartTimeSec) {
+            Duration restartTime) {
         var conf = context.getConfiguration();
         var currentParallelism = (int) evaluatedMetrics.get(PARALLELISM).getCurrent();
         double averageTrueProcessingRate = evaluatedMetrics.get(TRUE_PROCESSING_RATE).getAverage();
@@ -85,7 +86,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         double targetCapacity =
                 AutoScalerUtils.getTargetProcessingCapacity(
-                        evaluatedMetrics, conf, conf.get(TARGET_UTILIZATION), true, restartTimeSec);
+                        evaluatedMetrics, conf, conf.get(TARGET_UTILIZATION), true, restartTime);
         if (Double.isNaN(targetCapacity)) {
             LOG.warn(
                     "Target data rate is not available for {}, cannot compute new parallelism",

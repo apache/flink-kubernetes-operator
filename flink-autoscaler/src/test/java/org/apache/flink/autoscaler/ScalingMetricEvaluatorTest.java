@@ -114,7 +114,8 @@ public class ScalingMetricEvaluatorTest {
 
         conf.set(CATCH_UP_DURATION, Duration.ofSeconds(2));
         var evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory), 0);
+                evaluator.evaluate(
+                        conf, new CollectedMetricHistory(topology, metricHistory), Duration.ZERO);
 
         assertEquals(new EvaluatedScalingMetric(.6, .7), evaluatedMetrics.get(source).get(LOAD));
 
@@ -135,7 +136,8 @@ public class ScalingMetricEvaluatorTest {
 
         conf.set(CATCH_UP_DURATION, Duration.ofSeconds(1));
         evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory), 0);
+                evaluator.evaluate(
+                        conf, new CollectedMetricHistory(topology, metricHistory), Duration.ZERO);
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -153,7 +155,8 @@ public class ScalingMetricEvaluatorTest {
         conf.set(RESTART_TIME, Duration.ofSeconds(2));
 
         evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory), 0);
+                evaluator.evaluate(
+                        conf, new CollectedMetricHistory(topology, metricHistory), Duration.ZERO);
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -170,7 +173,8 @@ public class ScalingMetricEvaluatorTest {
         // Turn off lag based scaling
         conf.set(CATCH_UP_DURATION, Duration.ZERO);
         evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory), 0);
+                evaluator.evaluate(
+                        conf, new CollectedMetricHistory(topology, metricHistory), Duration.ZERO);
         assertEquals(
                 new EvaluatedScalingMetric(200, 150),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -204,7 +208,8 @@ public class ScalingMetricEvaluatorTest {
 
         conf.set(CATCH_UP_DURATION, Duration.ofMinutes(1));
         evaluatedMetrics =
-                evaluator.evaluate(conf, new CollectedMetricHistory(topology, metricHistory), 0);
+                evaluator.evaluate(
+                        conf, new CollectedMetricHistory(topology, metricHistory), Duration.ZERO);
         assertEquals(
                 new EvaluatedScalingMetric(100, 100),
                 evaluatedMetrics.get(source).get(TARGET_DATA_RATE));
@@ -355,7 +360,7 @@ public class ScalingMetricEvaluatorTest {
     public void testObservedTprEvaluation() {
         var source = new JobVertexID();
         var conf = new Configuration();
-        var restartTimeSec = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
+        var restartTime = conf.get(AutoScalerOptions.RESTART_TIME);
 
         var topology = new JobTopology(new VertexInfo(source, Collections.emptySet(), 1, 1));
         var evaluator = new ScalingMetricEvaluator();
@@ -413,7 +418,7 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory),
-                                restartTimeSec)
+                                restartTime)
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
 
@@ -427,7 +432,7 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory),
-                                restartTimeSec)
+                                restartTime)
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
 
@@ -439,7 +444,7 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory),
-                                restartTimeSec)
+                                restartTime)
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
     }
@@ -448,7 +453,7 @@ public class ScalingMetricEvaluatorTest {
     public void testMissingObservedTpr() {
         var source = new JobVertexID();
         var conf = new Configuration();
-        var restartTimeSec = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
+        var restartTime = conf.get(AutoScalerOptions.RESTART_TIME);
 
         var topology = new JobTopology(new VertexInfo(source, Collections.emptySet(), 1, 1));
         var evaluator = new ScalingMetricEvaluator();
@@ -479,7 +484,7 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory),
-                                restartTimeSec)
+                                restartTime)
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
 
@@ -508,7 +513,7 @@ public class ScalingMetricEvaluatorTest {
                         .evaluate(
                                 conf,
                                 new CollectedMetricHistory(topology, metricHistory),
-                                restartTimeSec)
+                                restartTime)
                         .get(source)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE));
     }
@@ -519,20 +524,20 @@ public class ScalingMetricEvaluatorTest {
     }
 
     private Tuple2<Double, Double> getThresholds(
-            double inputTargetRate, double catchUpRate, double restartTimeSec, Configuration conf) {
-        return getThresholds(inputTargetRate, catchUpRate, restartTimeSec, conf, false);
+            double inputTargetRate, double catchUpRate, Duration restartTime, Configuration conf) {
+        return getThresholds(inputTargetRate, catchUpRate, restartTime, conf, false);
     }
 
     private Tuple2<Double, Double> getThresholds(
             double inputTargetRate, double catchUpRate, Configuration conf, boolean catchingUp) {
-        var restartTimeSec = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
-        return getThresholds(inputTargetRate, catchUpRate, restartTimeSec, conf, catchingUp);
+        var restartTime = conf.get(AutoScalerOptions.RESTART_TIME);
+        return getThresholds(inputTargetRate, catchUpRate, restartTime, conf, catchingUp);
     }
 
     private Tuple2<Double, Double> getThresholds(
             double inputTargetRate,
             double catchUpRate,
-            double restartTimeSec,
+            Duration restartTime,
             Configuration conf,
             boolean catchingUp) {
         var map = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
@@ -540,8 +545,7 @@ public class ScalingMetricEvaluatorTest {
         map.put(TARGET_DATA_RATE, new EvaluatedScalingMetric(Double.NaN, inputTargetRate));
         map.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchUpRate));
 
-        ScalingMetricEvaluator.computeProcessingRateThresholds(
-                map, conf, catchingUp, restartTimeSec);
+        ScalingMetricEvaluator.computeProcessingRateThresholds(map, conf, catchingUp, restartTime);
         return Tuple2.of(
                 map.get(SCALE_UP_RATE_THRESHOLD).getCurrent(),
                 map.get(SCALE_DOWN_RATE_THRESHOLD).getCurrent());
