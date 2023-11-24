@@ -143,7 +143,7 @@ public class AutoScalerOptions {
                             "Expected restart time to be used until the operator can determine it reliably from history.");
 
     public static final ConfigOption<Boolean> PREFER_TRACKED_RESTART_TIME =
-            autoScalerConfig("restart.time.tracked.enabled")
+            autoScalerConfig("restart.time-tracking.enabled")
                     .booleanType()
                     .defaultValue(false)
                     .withDescription(
@@ -155,7 +155,7 @@ public class AutoScalerOptions {
                                     + "' will act as an upper bound.");
 
     public static final ConfigOption<Duration> TRACKED_RESTART_TIME_LIMIT =
-            autoScalerConfig("restart.time.tracked.limit")
+            autoScalerConfig("restart.time-tracking.limit")
                     .durationType()
                     .defaultValue(Duration.ofMinutes(15))
                     .withDescription(

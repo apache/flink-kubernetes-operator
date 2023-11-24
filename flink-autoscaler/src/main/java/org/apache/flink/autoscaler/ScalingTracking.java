@@ -27,6 +27,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -43,6 +45,8 @@ import java.util.stream.Collectors;
 @NoArgsConstructor
 @Builder
 public class ScalingTracking {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ScalingTracking.class);
 
     /** Details related to recent rescaling operations. */
     private final TreeMap<Instant, ScalingRecord> scalingRecords = new TreeMap<>();
@@ -89,6 +93,11 @@ public class ScalingTracking {
                                 if (targetParallelismMatchesActual(
                                         targetParallelism, actualParallelism)) {
                                     value.setEndTime(now);
+                                    LOG.debug(
+                                            "Recorded restart duration of {} seconds (from {} till {})",
+                                            Duration.between(scalingTimestamp, now).getSeconds(),
+                                            scalingTimestamp,
+                                            now);
                                     return true;
                                 }
                             }
