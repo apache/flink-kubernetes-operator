@@ -81,16 +81,16 @@
             <td>Expected restart time to be used until the operator can determine it reliably from history.</td>
         </tr>
         <tr>
-            <td><h5>job.autoscaler.restart.time.tracked.enabled</h5></td>
+            <td><h5>job.autoscaler.restart.time-tracking.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
-            <td>Whether to use the actually observed rescaling restart times instead of the fixed 'job.autoscaler.restart.time' configuration. If set to true, the maximum restart duration over a number of samples will be used. The value of 'job.autoscaler.restart.time' will act as an upper bound.</td>
+            <td>Whether to use the actual observed rescaling restart times instead of the fixed 'job.autoscaler.restart.time' configuration. If set to true, the maximum restart duration over a number of samples will be used. The value of 'job.autoscaler.restart.time' will act as an upper bound.</td>
         </tr>
         <tr>
-            <td><h5>job.autoscaler.restart.time.tracked.limit</h5></td>
+            <td><h5>job.autoscaler.restart.time-tracking.limit</h5></td>
             <td style="word-wrap: break-word;">15 min</td>
             <td>Duration</td>
-            <td>Maximum cap for the calculated restart time when 'job.autoscaler.restart.time.tracked.enabled' is set to true.</td>
+            <td>Maximum cap for the observed restart time when 'job.autoscaler.restart.time-tracking.enabled' is set to true.</td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.scale-down.max-factor</h5></td>
