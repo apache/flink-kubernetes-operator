@@ -32,6 +32,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -146,10 +147,15 @@ public class ScalingExecutorTest {
                         evaluated(10, 80, 100));
         // filter operator should not scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of(filterOperatorHexString));
-        assertFalse(scalingDecisionExecutor.scaleResource(context, metrics));
+        var now = Instant.now();
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
         // filter operator should scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of());
-        assertTrue(scalingDecisionExecutor.scaleResource(context, metrics));
+        assertTrue(
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
     }
 
     @ParameterizedTest
@@ -182,8 +188,15 @@ public class ScalingExecutorTest {
             conf.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, interval);
         }
 
-        assertEquals(scalingEnabled, scalingDecisionExecutor.scaleResource(context, metrics));
-        assertEquals(scalingEnabled, scalingDecisionExecutor.scaleResource(context, metrics));
+        var now = Instant.now();
+        assertEquals(
+                scalingEnabled,
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+        assertEquals(
+                scalingEnabled,
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
 
         int expectedSize = (interval == null || interval.toMillis() > 0) && !scalingEnabled ? 1 : 2;
         assertEquals(expectedSize, eventCollector.events.size());
@@ -216,7 +229,10 @@ public class ScalingExecutorTest {
 
         assertEquals(expectedSize, event.getCount());
 
-        assertEquals(scalingEnabled, scalingDecisionExecutor.scaleResource(context, metrics));
+        assertEquals(
+                scalingEnabled,
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
         var event2 = eventCollector.events.poll();
         assertThat(event2).isNotNull();
         assertThat(event2.getContext()).isSameAs(event.getContext());
@@ -233,8 +249,10 @@ public class ScalingExecutorTest {
         metrics.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchupRate));
         metrics.put(
                 ScalingMetric.TRUE_PROCESSING_RATE, new EvaluatedScalingMetric(procRate, procRate));
+
+        var restartTime = context.getConfiguration().get(AutoScalerOptions.RESTART_TIME);
         ScalingMetricEvaluator.computeProcessingRateThresholds(
-                metrics, context.getConfiguration(), false);
+                metrics, context.getConfiguration(), false, restartTime);
         return metrics;
     }
 

@@ -26,6 +26,7 @@ import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.function.SupplierWithException;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.ToString;
 
@@ -39,6 +40,7 @@ import javax.annotation.Nullable;
 @Experimental
 @AllArgsConstructor
 @ToString
+@Builder(toBuilder = true)
 public class JobAutoScalerContext<KEY> {
 
     /** The identifier of each flink job. */

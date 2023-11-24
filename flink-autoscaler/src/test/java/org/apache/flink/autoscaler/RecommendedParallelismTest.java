@@ -271,6 +271,6 @@ public class RecommendedParallelismTest {
     private void setClocksTo(Instant time) {
         var clock = Clock.fixed(time, ZoneId.systemDefault());
         metricsCollector.setClock(clock);
-        scalingExecutor.setClock(clock);
+        autoscaler.setClock(clock);
     }
 }

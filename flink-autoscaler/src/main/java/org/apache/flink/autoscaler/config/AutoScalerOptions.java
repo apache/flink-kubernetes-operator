@@ -142,6 +142,27 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Expected restart time to be used until the operator can determine it reliably from history.");
 
+    public static final ConfigOption<Boolean> PREFER_TRACKED_RESTART_TIME =
+            autoScalerConfig("restart.time-tracking.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether to use the actual observed rescaling restart times instead of the fixed '"
+                                    + RESTART_TIME.key()
+                                    + "' configuration. If set to true, the maximum restart duration over a number of "
+                                    + "samples will be used. The value of '"
+                                    + RESTART_TIME.key()
+                                    + "' will act as an upper bound.");
+
+    public static final ConfigOption<Duration> TRACKED_RESTART_TIME_LIMIT =
+            autoScalerConfig("restart.time-tracking.limit")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(15))
+                    .withDescription(
+                            "Maximum cap for the observed restart time when '"
+                                    + PREFER_TRACKED_RESTART_TIME.key()
+                                    + "' is set to true.");
+
     public static final ConfigOption<Duration> BACKLOG_PROCESSING_LAG_THRESHOLD =
             autoScalerConfig("backlog-processing.lag-threshold")
                     .durationType()

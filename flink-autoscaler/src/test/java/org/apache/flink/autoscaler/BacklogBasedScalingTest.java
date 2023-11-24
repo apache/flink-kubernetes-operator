@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler;
 
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
@@ -345,6 +346,70 @@ public class BacklogBasedScalingTest {
     }
 
     @Test
+    public void shouldTrackEndOfScalingTimeCorrectly() throws Exception {
+        var now = Instant.ofEpochMilli(0);
+        setClocksTo(now);
+        metricsCollector.setJobUpdateTs(now);
+        metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(1));
+        // Set metrics that cause upscaling
+        metricsCollector.setCurrentMetrics(
+                Map.of(
+                        source1,
+                        Map.of(
+                                FlinkMetric.BUSY_TIME_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
+                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
+                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
+                                FlinkMetric.PENDING_RECORDS,
+                                new AggregatedMetric(
+                                        "", Double.NaN, Double.NaN, Double.NaN, 2000.)),
+                        sink,
+                        Map.of(
+                                FlinkMetric.BUSY_TIME_PER_SEC,
+                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
+                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                                new AggregatedMetric(
+                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
+
+        autoscaler.scale(context);
+        now = now.plus(Duration.ofSeconds(1));
+        setClocksTo(now);
+        autoscaler.scale(context);
+
+        // Scaling was applied
+        var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
+        assertEquals(4, scaledParallelism.get(source1));
+        assertEquals(4, scaledParallelism.get(sink));
+
+        // New tracking with null end time was added
+        assertLastTrackingEndTimeIs(null);
+
+        context = context.toBuilder().jobStatus(JobStatus.INITIALIZING).build();
+        autoscaler.scale(context);
+
+        // Tracking end time not set until RUNNING
+        assertLastTrackingEndTimeIs(null);
+
+        // Job transitioned to RUNNING and the target parallelism was reached
+        context = context.toBuilder().jobStatus(JobStatus.RUNNING).build();
+        metricsCollector.setJobTopology(
+                new JobTopology(
+                        new VertexInfo(source1, Set.of(), 4, 720),
+                        new VertexInfo(sink, Set.of(source1), 4, 720)));
+        autoscaler.scale(context);
+
+        assertLastTrackingEndTimeIs(now);
+    }
+
+    private void assertLastTrackingEndTimeIs(Instant expectedEndTime) throws Exception {
+        var scalingTracking = stateStore.getScalingTracking(context);
+        var latestScalingRecordEntry = scalingTracking.getLatestScalingRecordEntry().get();
+        assertThat(latestScalingRecordEntry.getValue().getEndTime()).isEqualTo(expectedEndTime);
+    }
+
+    @Test
     public void testMetricsPersistedAfterRedeploy() throws Exception {
         var now = Instant.ofEpochMilli(0);
         setClocksTo(now);
@@ -405,7 +470,7 @@ public class BacklogBasedScalingTest {
     private void setClocksTo(Instant time) {
         var clock = Clock.fixed(time, ZoneId.systemDefault());
         metricsCollector.setClock(clock);
-        scalingExecutor.setClock(clock);
+        autoscaler.setClock(clock);
     }
 
     private void assertFlinkMetricsCount(int scalingCount, int balancedCount) {

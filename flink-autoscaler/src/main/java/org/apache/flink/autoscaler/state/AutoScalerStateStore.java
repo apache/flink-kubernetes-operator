@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler.state;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
+import org.apache.flink.autoscaler.ScalingTracking;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -45,6 +46,10 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
     @Nonnull
     Map<JobVertexID, SortedMap<Instant, ScalingSummary>> getScalingHistory(Context jobContext)
             throws Exception;
+
+    void storeScalingTracking(Context jobContext, ScalingTracking scalingTrack) throws Exception;
+
+    ScalingTracking getScalingTracking(Context jobContext) throws Exception;
 
     void removeScalingHistory(Context jobContext) throws Exception;
 
