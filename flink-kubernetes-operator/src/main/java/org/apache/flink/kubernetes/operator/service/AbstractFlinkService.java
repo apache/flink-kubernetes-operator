@@ -204,7 +204,6 @@ public abstract class AbstractFlinkService implements FlinkService {
         } catch (RuntimeException e) {
             LOG.warn("Caught Exception " + e.getMessage());
             if (!isValidRuntimeException(conf, e)) {
-                LOG.warn("Caught exception ****");
                 throw e;
             }
         }
@@ -216,7 +215,6 @@ public abstract class AbstractFlinkService implements FlinkService {
         } catch (RuntimeException e) {
             LOG.warn("Caught Exception " + e.getMessage());
             if (!isValidRuntimeException(conf, e)) {
-                LOG.warn("Caught exception ****");
                 throw e;
             }
         }
