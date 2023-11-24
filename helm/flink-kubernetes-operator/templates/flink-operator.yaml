@@ -112,14 +112,13 @@ spec:
               value: {{ .Values.jvmArgs.operator }}
             {{- if .Values.tls.create }}
             - name: OPERATOR_KEYSTORE_PATH
-              value: {{ .Values.tls.certMountPath }}/keystore.jks
+              value: /opt/flink/artifacts/operator-cert/keystore.jks
             - name: OPERATOR_TRUSTSTORE_PATH
-              value: {{ .Values.tls.certMountPath }}/truststore.jks
+              value: /opt/flink/artifacts/operator-cert/truststore.jks
             - name: OPERATOR_KEYSTORE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.tls.certPasswordSecretRef.name }}
-                  key: {{ .Values.tls.certPasswordSecretRef.key }}
+                  {{- toYaml .Values.tls.certPasswordSecretRef | nindent 18 }}
                   optional: true
             {{- end }}
             {{- with .Values.operatorPod.env }}
@@ -143,8 +142,8 @@ spec:
               mountPath: /opt/flink/artifacts
             {{- end }}
           {{- if .Values.tls.create }}
-            - name: operator-cert-secret
-              mountPath: {{ .Values.tls.certMountPath }}
+            - name: flink-operator-cert-secret
+              mountPath: /opt/flink/artifacts/operator-cert
           {{- end }}
           {{- if and (index .Values "operatorHealth") (index .Values.operatorHealth "livenessProbe") }}
           livenessProbe:
@@ -246,7 +245,7 @@ spec:
               path: keystore.p12
         {{- end }}
         {{- if .Values.tls.create }}
-        - name: operator-cert-secret
+        - name: flink-operator-cert-secret
           secret:
             secretName: {{ .Values.tls.certSecret }}
             optional: true

@@ -199,7 +199,6 @@ postStart: {}
 tls:
   create: true
   certSecret: flink-operator-cert
-  certMountPath: /opt/flink/operator-cert
   certPasswordSecretRef:
     name: operator-certificate-password
     key: password
