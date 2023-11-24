@@ -125,12 +125,12 @@ public class ScalingTracking {
     }
 
     /**
-     * Retrieves the maximum restart time in seconds based on the provided configuration and scaling
-     * records. Defaults to the RESTART_TIME from configuration if the PREFER_TRACKED_RESTART_TIME
-     * option is set to false, or if there are no tracking records available. Otherwise, the maximum
-     * observed restart time is capped by the MAX_RESTART_TIME.
+     * Retrieves the maximum restart time based on the provided configuration and scaling records.
+     * Defaults to the RESTART_TIME from configuration if the PREFER_TRACKED_RESTART_TIME option is
+     * set to false, or if there are no tracking records available. Otherwise, the maximum observed
+     * restart time is capped by the MAX_RESTART_TIME.
      */
-    public Duration getMaxRestartTimeSecondsOrDefault(Configuration conf) {
+    public Duration getMaxRestartTimeOrDefault(Configuration conf) {
         long maxRestartTime = -1;
         if (conf.get(AutoScalerOptions.PREFER_TRACKED_RESTART_TIME)) {
             for (Map.Entry<Instant, ScalingRecord> entry : scalingRecords.entrySet()) {
@@ -151,13 +151,15 @@ public class ScalingTracking {
     }
 
     /**
-     * Removes records from the internal map that are older than the specified time span and trims
-     * the number of records to the specified maximum count.
+     * Removes all but one records from the internal map that are older than the specified time span
+     * and trims the number of records to the specified maximum count. Always keeps at least one
+     * latest entry.
      *
      * @param keptTimeSpan Duration for how long recent records are to be kept.
      * @param keptNumRecords The maximum number of recent records to keep.
      */
     public void removeOldRecords(Instant now, Duration keptTimeSpan, int keptNumRecords) {
+        var latestRecord = getLatestScalingRecordEntry();
         var cutoffTime = now.minus(keptTimeSpan);
 
         // Remove records older than the cutoff time
@@ -167,5 +169,6 @@ public class ScalingTracking {
         while (scalingRecords.size() > keptNumRecords) {
             scalingRecords.pollFirstEntry();
         }
+        latestRecord.ifPresent(record -> scalingRecords.put(record.getKey(), record.getValue()));
     }
 }

@@ -258,7 +258,7 @@ public class ScalingMetricEvaluatorTest {
                 Instant.parse("2023-11-15T16:20:00.00Z"),
                 new ScalingRecord(Instant.parse("2023-11-15T16:25:00.00Z")));
 
-        var restartTimeSec = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var restartTimeSec = scalingTracking.getMaxRestartTimeOrDefault(conf);
         // Restart time does not factor in
         assertEquals(Tuple2.of(778.0, 1000.0), getThresholds(700, 0, restartTimeSec, conf));
 

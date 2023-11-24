@@ -55,7 +55,7 @@ class ScalingTrackingTest {
     @Test
     void shouldReturnConfiguredRestartTime_WhenNoScalingRecords() {
         // Empty scalingTracking
-        var result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var result = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
         assertThat(result).isEqualTo(configuredRestartTime);
     }
@@ -65,7 +65,7 @@ class ScalingTrackingTest {
         conf.set(AutoScalerOptions.PREFER_TRACKED_RESTART_TIME, false);
         setUpScalingRecords(configuredRestartTime.minusSeconds(1));
 
-        var result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var result = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
         assertThat(result).isEqualTo(configuredRestartTime);
     }
@@ -80,7 +80,7 @@ class ScalingTrackingTest {
         setUpScalingRecords(
                 configuredRestartTime.minusSeconds(1)); // should not be taken into account
 
-        var result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var result = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
         assertThat(result).isEqualTo(restartTime);
     }
@@ -90,7 +90,7 @@ class ScalingTrackingTest {
         var duration = configuredMaxRestartTime.minusSeconds(1);
         setUpScalingRecords(duration);
 
-        var result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var result = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
         assertThat(result).isEqualTo(duration);
     }
@@ -100,7 +100,7 @@ class ScalingTrackingTest {
         var duration = configuredMaxRestartTime.plusSeconds(1);
         setUpScalingRecords(duration);
 
-        var result = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var result = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
         assertThat(result).isEqualTo(configuredMaxRestartTime);
     }
