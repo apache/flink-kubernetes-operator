@@ -105,16 +105,6 @@ class ScalingTrackingTest {
         assertThat(result).isEqualTo(configuredMaxRestartTime);
     }
 
-    private void setUpScalingRecords(Duration secondRescaleDuration) {
-        scalingTracking.addScalingRecord(
-                Instant.parse("2023-11-15T16:00:00.00Z"),
-                new ScalingRecord(Instant.parse("2023-11-15T16:03:00.00Z")));
-        var secondRecordStart = Instant.parse("2023-11-15T16:20:00.00Z");
-        scalingTracking.addScalingRecord(
-                secondRecordStart,
-                new ScalingRecord(secondRecordStart.plus(secondRescaleDuration)));
-    }
-
     @Test
     void shouldSetEndTime_WhenParallelismMatches() {
         var now = Instant.now();
@@ -153,6 +143,52 @@ class ScalingTrackingTest {
         assertThat(result).isFalse();
         assertThat(scalingTracking.getLatestScalingRecordEntry().get().getValue().getEndTime())
                 .isNull();
+    }
+
+    @Test
+    public void removeOldRecordsShouldNotFail_WhenNoRecords() {
+        scalingTracking.removeOldRecords(Instant.now(), Duration.ofHours(1), 10);
+        assertThat(scalingTracking.getScalingRecords()).isEmpty();
+    }
+
+    @Test
+    public void shouldRemoveOldRecords_ByTimeSpan() {
+        Instant now = Instant.now();
+        scalingTracking.addScalingRecord(now.minus(Duration.ofHours(3)), new ScalingRecord());
+        scalingTracking.addScalingRecord(now.minus(Duration.ofHours(2)), new ScalingRecord());
+        scalingTracking.addScalingRecord(now.minus(Duration.ofHours(1)), new ScalingRecord());
+        scalingTracking.removeOldRecords(now, Duration.ofHours(1), 10);
+        assertThat(scalingTracking.getScalingRecords()).hasSize(1);
+    }
+
+    @Test
+    public void shouldRemoveRecords_WhenExceedingMaxCount() {
+        Instant now = Instant.now();
+        for (int i = 0; i < 10; i++) {
+            scalingTracking.addScalingRecord(now.minus(Duration.ofMinutes(i)), new ScalingRecord());
+        }
+        scalingTracking.removeOldRecords(now, Duration.ofHours(1), 5);
+        assertThat(scalingTracking.getScalingRecords()).hasSize(5);
+    }
+
+    @Test
+    public void shouldAlwaysKeepAtLeastOneLatestRecord_WhenOutOfTimeSpan() {
+        Instant now = Instant.now();
+        scalingTracking.addScalingRecord(
+                now.minus(Duration.ofDays(1)),
+                new ScalingRecord()); // This is the only record and is old
+        scalingTracking.removeOldRecords(now, Duration.ofHours(1), 10);
+        assertThat(scalingTracking.getScalingRecords()).hasSize(1);
+    }
+
+    private void setUpScalingRecords(Duration secondRescaleDuration) {
+        scalingTracking.addScalingRecord(
+                Instant.parse("2023-11-15T16:00:00.00Z"),
+                new ScalingRecord(Instant.parse("2023-11-15T16:03:00.00Z")));
+        var secondRecordStart = Instant.parse("2023-11-15T16:20:00.00Z");
+        scalingTracking.addScalingRecord(
+                secondRecordStart,
+                new ScalingRecord(secondRecordStart.plus(secondRescaleDuration)));
     }
 
     private void addScalingRecordWithoutEndTime(Instant startTime) {
