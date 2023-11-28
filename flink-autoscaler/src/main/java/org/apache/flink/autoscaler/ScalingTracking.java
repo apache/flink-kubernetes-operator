@@ -100,6 +100,10 @@ public class ScalingTracking {
                                             now);
                                     return true;
                                 }
+                            } else {
+                                LOG.debug(
+                                        "Cannot record end time because already set in the latest record: {}",
+                                        value.getEndTime());
                             }
                             return false;
                         })
@@ -129,7 +133,15 @@ public class ScalingTracking {
                             var vertexID = entry.getKey();
                             var targetParallelism = entry.getValue();
                             var actualParallelism = actualParallelisms.getOrDefault(vertexID, -1);
-                            return actualParallelism.equals(targetParallelism);
+                            boolean isEqual = actualParallelism.equals(targetParallelism);
+                            if (!isEqual) {
+                                LOG.debug(
+                                        "Vertex {} actual parallelism {} does not match target parallelism {}",
+                                        vertexID,
+                                        actualParallelism,
+                                        targetParallelism);
+                            }
+                            return isEqual;
                         });
     }
 
@@ -150,6 +162,7 @@ public class ScalingTracking {
                     maxRestartTime = Math.max(restartTime, maxRestartTime);
                 }
             }
+            LOG.debug("Maximum tracked restart time: {}", maxRestartTime);
         }
         var restartTimeFromConfig = conf.get(AutoScalerOptions.RESTART_TIME);
         long maxRestartTimeFromConfig =
