@@ -179,12 +179,6 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
                 jobTopology.getVerticesInTopologicalOrder(),
                 () -> lastEvaluatedMetrics.get(ctx.getJobKey()));
 
-        if (!collectedMetrics.isFullyCollected()) {
-            // We have done an upfront evaluation, but we are not ready for scaling.
-            resetRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
-            return;
-        }
-
         var scalingHistory = getTrimmedScalingHistory(stateStore, ctx, now);
         // A scaling tracking without an end time gets created whenever a scaling decision is
         // applied. Here, when the job transitions to RUNNING, we record the time for it.
@@ -193,6 +187,12 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
                     now, jobTopology, scalingHistory)) {
                 stateStore.storeScalingTracking(ctx, scalingTracking);
             }
+        }
+
+        if (!collectedMetrics.isFullyCollected()) {
+            // We have done an upfront evaluation, but we are not ready for scaling.
+            resetRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
+            return;
         }
 
         var parallelismChanged =
