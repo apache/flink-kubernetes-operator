@@ -331,8 +331,10 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     exception);
                         } catch (Exception e) {
                             var stopWithSavepointException =
-                                    ExceptionUtils.findThrowable(
-                                            e, StopWithSavepointStoppingException.class);
+                                    ExceptionUtils.findThrowableSerializedAware(
+                                            e,
+                                            StopWithSavepointStoppingException.class,
+                                            getClass().getClassLoader());
                             if (stopWithSavepointException.isPresent()) {
                                 // Handle edge case where the savepoint completes but the job fails
                                 // right afterward.

@@ -651,8 +651,9 @@ public class AbstractFlinkServiceTest {
                     if (failAfterSavepointCompletes) {
                         stopWithSavepointFuture.completeExceptionally(
                                 new CompletionException(
-                                        new StopWithSavepointStoppingException(
-                                                savepointPath, jobID)));
+                                        new SerializedThrowable(
+                                                new StopWithSavepointStoppingException(
+                                                        savepointPath, jobID))));
                     } else {
                         stopWithSavepointFuture.complete(
                                 new Tuple3<>(id, formatType, savepointDir));
