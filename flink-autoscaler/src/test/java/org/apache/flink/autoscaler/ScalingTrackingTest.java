@@ -106,29 +106,35 @@ class ScalingTrackingTest {
     }
 
     @Test
-    void shouldSetEndTime_WhenParallelismMatches() {
+    void shouldSetRestartDuration_WhenParallelismMatches() {
         var now = Instant.now();
-        var lastScaling = now.minusSeconds(60);
-        addScalingRecordWithoutEndTime(lastScaling);
+        var restartDuration = Duration.ofSeconds(60);
+        var lastScaling = now.minusSeconds(restartDuration.getSeconds());
+        addScalingRecordWithoutRestartDuration(lastScaling);
         var actualParallelisms = initActualParallelisms();
         var jobTopology = new JobTopology(createVertexInfoSet(actualParallelisms));
         var scalingHistory =
                 initScalingHistoryWithTargetParallelism(lastScaling, actualParallelisms);
 
         boolean result =
-                scalingTracking.setEndTimeIfTrackedAndParallelismMatches(
+                scalingTracking.recordRestartDurationIfTrackedAndParallelismMatches(
                         now, jobTopology, scalingHistory);
 
         assertThat(result).isTrue();
-        assertThat(scalingTracking.getLatestScalingRecordEntry().get().getValue().getEndTime())
-                .isEqualTo(now);
+        assertThat(
+                        scalingTracking
+                                .getLatestScalingRecordEntry()
+                                .get()
+                                .getValue()
+                                .getRestartDuration())
+                .isEqualTo(restartDuration);
     }
 
     @Test
-    void shouldNotSetEndTime_WhenParallelismDoesNotMatch() {
+    void shouldNotSetRestartDuration_WhenParallelismDoesNotMatch() {
         var now = Instant.now();
         var lastScaling = now.minusSeconds(60);
-        addScalingRecordWithoutEndTime(lastScaling);
+        addScalingRecordWithoutRestartDuration(lastScaling);
         var actualParallelisms = initActualParallelisms();
         var jobTopology = new JobTopology(createVertexInfoSet(actualParallelisms));
         var mismatchedParallelisms = new HashMap<>(actualParallelisms);
@@ -137,11 +143,16 @@ class ScalingTrackingTest {
                 initScalingHistoryWithTargetParallelism(lastScaling, mismatchedParallelisms);
 
         boolean result =
-                scalingTracking.setEndTimeIfTrackedAndParallelismMatches(
+                scalingTracking.recordRestartDurationIfTrackedAndParallelismMatches(
                         now, jobTopology, scalingHistory);
 
         assertThat(result).isFalse();
-        assertThat(scalingTracking.getLatestScalingRecordEntry().get().getValue().getEndTime())
+        assertThat(
+                        scalingTracking
+                                .getLatestScalingRecordEntry()
+                                .get()
+                                .getValue()
+                                .getRestartDuration())
                 .isNull();
     }
 
@@ -183,15 +194,13 @@ class ScalingTrackingTest {
 
     private void setUpScalingRecords(Duration secondRescaleDuration) {
         scalingTracking.addScalingRecord(
-                Instant.parse("2023-11-15T16:00:00.00Z"),
-                new ScalingRecord(Instant.parse("2023-11-15T16:03:00.00Z")));
+                Instant.parse("2023-11-15T16:00:00.00Z"), new ScalingRecord(Duration.ofMinutes(3)));
         var secondRecordStart = Instant.parse("2023-11-15T16:20:00.00Z");
         scalingTracking.addScalingRecord(
-                secondRecordStart,
-                new ScalingRecord(secondRecordStart.plus(secondRescaleDuration)));
+                secondRecordStart, new ScalingRecord(secondRescaleDuration));
     }
 
-    private void addScalingRecordWithoutEndTime(Instant startTime) {
+    private void addScalingRecordWithoutRestartDuration(Instant startTime) {
         ScalingRecord record = new ScalingRecord();
         scalingTracking.addScalingRecord(startTime, record);
     }

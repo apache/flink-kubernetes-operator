@@ -288,11 +288,9 @@ public class ScalingMetricEvaluatorTest {
 
         var scalingTracking = new ScalingTracking();
         scalingTracking.addScalingRecord(
-                Instant.parse("2023-11-15T16:00:00.00Z"),
-                new ScalingRecord(Instant.parse("2023-11-15T16:03:00.00Z")));
+                Instant.parse("2023-11-15T16:00:00.00Z"), new ScalingRecord(Duration.ofMinutes(3)));
         scalingTracking.addScalingRecord(
-                Instant.parse("2023-11-15T16:20:00.00Z"),
-                new ScalingRecord(Instant.parse("2023-11-15T16:25:00.00Z")));
+                Instant.parse("2023-11-15T16:20:00.00Z"), new ScalingRecord(Duration.ofMinutes(5)));
 
         var restartTimeSec = scalingTracking.getMaxRestartTimeOrDefault(conf);
         // Restart time does not factor in

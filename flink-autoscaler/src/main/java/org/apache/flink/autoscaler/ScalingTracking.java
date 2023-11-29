@@ -65,17 +65,17 @@ public class ScalingTracking {
     }
 
     /**
-     * Sets the end time for the latest scaling record if its parallelism matches the current job
-     * parallelism.
+     * Sets restart duration for the latest scaling record if its parallelism matches the current
+     * job parallelism.
      *
-     * @param now The current instant to be set as the end time of the scaling record.
+     * @param now The instant to be used as the end time when calculating the restart duration.
      * @param jobTopology The current job topology containing details of the job's parallelism.
      * @param scalingHistory The scaling history.
-     * @return true if the end time is successfully set, false if the end time is already set, the
-     *     latest scaling record cannot be found, or the target parallelism does not match the
-     *     actual parallelism.
+     * @return true if the restart duration is successfully recorded, false if the restart duration
+     *     is already set, the latest scaling record cannot be found, or the target parallelism does
+     *     not match the actual parallelism.
      */
-    public boolean setEndTimeIfTrackedAndParallelismMatches(
+    public boolean recordRestartDurationIfTrackedAndParallelismMatches(
             Instant now,
             JobTopology jobTopology,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
@@ -84,7 +84,7 @@ public class ScalingTracking {
                         entry -> {
                             var value = entry.getValue();
                             var scalingTimestamp = entry.getKey();
-                            if (value.getEndTime() == null) {
+                            if (value.getRestartDuration() == null) {
                                 var targetParallelism =
                                         getTargetParallelismOfScaledVertices(
                                                 scalingTimestamp, scalingHistory);
@@ -92,7 +92,8 @@ public class ScalingTracking {
 
                                 if (targetParallelismMatchesActual(
                                         targetParallelism, actualParallelism)) {
-                                    value.setEndTime(now);
+                                    value.setRestartDuration(
+                                            Duration.between(scalingTimestamp, now));
                                     LOG.debug(
                                             "Recorded restart duration of {} seconds (from {} till {})",
                                             Duration.between(scalingTimestamp, now).getSeconds(),
@@ -102,8 +103,8 @@ public class ScalingTracking {
                                 }
                             } else {
                                 LOG.debug(
-                                        "Cannot record end time because already set in the latest record: {}",
-                                        value.getEndTime());
+                                        "Cannot record restart duration because already set in the latest record: {}",
+                                        value.getRestartDuration());
                             }
                             return false;
                         })
@@ -155,11 +156,9 @@ public class ScalingTracking {
         long maxRestartTime = -1;
         if (conf.get(AutoScalerOptions.PREFER_TRACKED_RESTART_TIME)) {
             for (Map.Entry<Instant, ScalingRecord> entry : scalingRecords.entrySet()) {
-                var startTime = entry.getKey();
-                var endTime = entry.getValue().getEndTime();
-                if (endTime != null) {
-                    var restartTime = Duration.between(startTime, endTime).toSeconds();
-                    maxRestartTime = Math.max(restartTime, maxRestartTime);
+                var restartDuration = entry.getValue().getRestartDuration();
+                if (restartDuration != null) {
+                    maxRestartTime = Math.max(restartDuration.toSeconds(), maxRestartTime);
                 }
             }
             LOG.debug("Maximum tracked restart time: {}", maxRestartTime);
