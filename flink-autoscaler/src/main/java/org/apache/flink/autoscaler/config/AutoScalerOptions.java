@@ -151,8 +151,10 @@ public class AutoScalerOptions {
                                     + RESTART_TIME.key()
                                     + "' configuration. If set to true, the maximum restart duration over a number of "
                                     + "samples will be used. The value of '"
+                                    + autoScalerConfigKey("restart.time-tracking.limit")
+                                    + "' will act as an upper bound, and the value of '"
                                     + RESTART_TIME.key()
-                                    + "' will act as an upper bound.");
+                                    + "' will still be used when there are no rescale samples.");
 
     public static final ConfigOption<Duration> TRACKED_RESTART_TIME_LIMIT =
             autoScalerConfig("restart.time-tracking.limit")
