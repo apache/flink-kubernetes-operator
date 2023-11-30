@@ -140,6 +140,7 @@ public abstract class ScalingMetricCollector {
             LOG.info("Metric window not full until {}", windowFullTime);
         }
 
+        // TODO: sending metrics to the REST endpoint.
         ScalingMetricJsonSender.sendMetricsAsJson(collectedMetrics);
         HashMap<String, String> test = ScalingMetricJsonSender.getDataFromEndpoint();
 

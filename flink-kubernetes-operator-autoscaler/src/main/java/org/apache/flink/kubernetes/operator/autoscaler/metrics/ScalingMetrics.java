@@ -59,6 +59,7 @@ public class ScalingMetrics {
         double busyTimeMsPerSecond = getBusyTimeMsPerSecond(flinkMetrics, conf, jobVertexID);
         double numRecordsInPerSecond =
                 getNumRecordsInPerSecond(flinkMetrics, jobVertexID, isSource);
+        double numRecordsOutPerSecond = getNumRecordsOutPerSecond(flinkMetrics, jobVertexID);
 
         if (isSource) {
             double sourceDataRate = Math.max(0, numRecordsInPerSecond + lagGrowthRate);
@@ -76,6 +77,8 @@ public class ScalingMetrics {
             scalingMetrics.put(ScalingMetric.TRUE_PROCESSING_RATE, Double.NaN);
             scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, Double.NaN);
         }
+
+        scalingMetrics.put(ScalingMetric.NUM_RECORDS_OUT_PER_SECOND, numRecordsOutPerSecond);
     }
 
     public static Map<Edge, Double> computeOutputRatios(

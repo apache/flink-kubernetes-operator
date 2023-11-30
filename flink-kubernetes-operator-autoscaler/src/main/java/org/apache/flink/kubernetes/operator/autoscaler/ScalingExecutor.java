@@ -104,7 +104,8 @@ public class ScalingExecutor {
         }
 
         scalingInformation.addToScalingHistory(clock.instant(), scalingSummaries, conf);
-        // TODO add my service to get metrics form the custom autscaler and pass it to the below function.
+        // TODO add my service to get metrics form the custom autscaler and pass it to the below
+        // function.
         // HashMap<String, String> test = ScalingMetricJsonSender.getDataFromEndpoint();
         scalingInformation.setCurrentOverrides(
                 getVertexParallelismOverrides(evaluatedMetrics, scalingSummaries));
