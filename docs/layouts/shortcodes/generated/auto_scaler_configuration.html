@@ -84,7 +84,7 @@
             <td><h5>job.autoscaler.restart.time-tracking.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
-            <td>Whether to use the actual observed rescaling restart times instead of the fixed 'job.autoscaler.restart.time' configuration. If set to true, the maximum restart duration over a number of samples will be used. The value of 'job.autoscaler.restart.time' will act as an upper bound.</td>
+            <td>Whether to use the actual observed rescaling restart times instead of the fixed 'job.autoscaler.restart.time' configuration. If set to true, the maximum restart duration over a number of samples will be used. The value of 'job.autoscaler.restart.time-tracking.limit' will act as an upper bound, and the value of 'job.autoscaler.restart.time' will still be used when there are no rescale samples.</td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.restart.time-tracking.limit</h5></td>
