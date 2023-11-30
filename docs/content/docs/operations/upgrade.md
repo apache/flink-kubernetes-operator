@@ -142,7 +142,7 @@ Here is a reference example of upgrading a `basic-checkpoint-ha-example` deploym
     ```
 5. Restore the job:
 
-   Deploy the previously deleted job using this [FlinkDeployemnt](https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml) with `v1beta1` and explicitly set the `job.initialSavepointPath` to the savepoint location obtained from the step 1.
+   Deploy the previously deleted job using this [FlinkDeployment](https://raw.githubusercontent.com/apache/flink-kubernetes-operator/main/examples/basic-checkpoint-ha.yaml) with `v1beta1` and explicitly set the `job.initialSavepointPath` to the savepoint location obtained from the step 1.
 
     ```
     spec:
