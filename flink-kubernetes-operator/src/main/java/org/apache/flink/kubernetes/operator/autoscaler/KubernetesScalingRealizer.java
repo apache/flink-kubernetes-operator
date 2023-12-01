@@ -24,6 +24,7 @@ import org.apache.flink.configuration.PipelineOptions;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
 import java.util.Map;
+import java.util.TreeMap;
 
 /** The Kubernetes implementation for applying parallelism overrides. */
 public class KubernetesScalingRealizer
@@ -32,6 +33,9 @@ public class KubernetesScalingRealizer
     @Override
     public void realize(
             KubernetesJobAutoScalerContext context, Map<String, String> parallelismOverrides) {
+        // Make sure the keys are sorted via TreeMap to prevent changing the spec when none of the
+        // entries changed but the key order is different!
+        parallelismOverrides = new TreeMap<>(parallelismOverrides);
         context.getResource()
                 .getSpec()
                 .getFlinkConfiguration()
