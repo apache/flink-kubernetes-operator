@@ -20,6 +20,8 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ConfigurationUtils;
+import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -52,6 +54,8 @@ import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -137,7 +141,13 @@ public abstract class AbstractFlinkResourceReconciler<
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();
 
-        applyAutoscaler(ctx);
+        applyAutoscaler(
+                ctx,
+                lastReconciledSpec != null
+                        ? lastReconciledSpec
+                                .getFlinkConfiguration()
+                                .get(PipelineOptions.PARALLELISM_OVERRIDES.key())
+                        : null);
 
         var reconciliationState = reconciliationStatus.getState();
         var specDiff =
@@ -180,13 +190,28 @@ public abstract class AbstractFlinkResourceReconciler<
         }
     }
 
-    private void applyAutoscaler(FlinkResourceContext<CR> ctx) throws Exception {
+    private void applyAutoscaler(FlinkResourceContext<CR> ctx, @Nullable String existingOverrides)
+            throws Exception {
         var autoScalerCtx = ctx.getJobAutoScalerContext();
         boolean autoscalerEnabled =
                 ctx.getResource().getSpec().getJob() != null
                         && ctx.getObserveConfig().getBoolean(AUTOSCALER_ENABLED);
         autoScalerCtx.getConfiguration().set(AUTOSCALER_ENABLED, autoscalerEnabled);
+
         autoscaler.scale(autoScalerCtx);
+
+        // Check that the overrides actually changed and not merely the String representation
+        var flinkConfig = ctx.getResource().getSpec().getFlinkConfiguration();
+        var newOverrides = flinkConfig.get(PipelineOptions.PARALLELISM_OVERRIDES.key());
+        if (existingOverrides != null && newOverrides != null) {
+            var existingOverridesMap =
+                    ConfigurationUtils.convertValue(existingOverrides, Map.class);
+            var newOverridesMap = ConfigurationUtils.convertValue(newOverrides, Map.class);
+            if (newOverridesMap.equals(existingOverridesMap)) {
+                // Existing overrides equal current ones, avoid changing the spec
+                flinkConfig.put(PipelineOptions.PARALLELISM_OVERRIDES.key(), existingOverrides);
+            }
+        }
     }
 
     private void triggerSpecChangeEvent(CR cr, DiffResult<SPEC> specDiff, KubernetesClient client) {
