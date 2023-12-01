@@ -19,13 +19,12 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.configuration.PipelineOptions;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
+import static org.assertj.core.api.Assertions.assertThat;
 
 /** Tests for KubernetesScalingRealizer. */
 public class KubernetesScalingRealizerTest {
@@ -44,10 +43,10 @@ public class KubernetesScalingRealizerTest {
         new KubernetesScalingRealizer().realize(ctx, overrides);
 
         assertThat(
-                ctx.getResource()
-                        .getSpec()
-                        .getFlinkConfiguration()
-                        .get(PipelineOptions.PARALLELISM_OVERRIDES.key()),
-                is("a:1,b:2"));
+                        ctx.getResource()
+                                .getSpec()
+                                .getFlinkConfiguration()
+                                .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
+                .isEqualTo("a:1,b:2");
     }
 }
