@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
@@ -54,8 +53,6 @@ import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.annotation.Nullable;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -141,13 +138,7 @@ public abstract class AbstractFlinkResourceReconciler<
                 cr.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         SPEC currentDeploySpec = cr.getSpec();
 
-        applyAutoscaler(
-                ctx,
-                lastReconciledSpec != null
-                        ? lastReconciledSpec
-                                .getFlinkConfiguration()
-                                .get(PipelineOptions.PARALLELISM_OVERRIDES.key())
-                        : null);
+        applyAutoscaler(ctx);
 
         var reconciliationState = reconciliationStatus.getState();
         var specDiff =
@@ -190,8 +181,7 @@ public abstract class AbstractFlinkResourceReconciler<
         }
     }
 
-    private void applyAutoscaler(FlinkResourceContext<CR> ctx, @Nullable String existingOverrides)
-            throws Exception {
+    private void applyAutoscaler(FlinkResourceContext<CR> ctx) throws Exception {
         var autoScalerCtx = ctx.getJobAutoScalerContext();
         boolean autoscalerEnabled =
                 ctx.getResource().getSpec().getJob() != null
@@ -199,18 +189,38 @@ public abstract class AbstractFlinkResourceReconciler<
         autoScalerCtx.getConfiguration().set(AUTOSCALER_ENABLED, autoscalerEnabled);
 
         autoscaler.scale(autoScalerCtx);
+        putBackOldParallelismOverridesIfNewOnesAreMerelyAPermutation(ctx);
+    }
 
-        // Check that the overrides actually changed and not merely the String representation
-        var flinkConfig = ctx.getResource().getSpec().getFlinkConfiguration();
-        var newOverrides = flinkConfig.get(PipelineOptions.PARALLELISM_OVERRIDES.key());
-        if (existingOverrides != null && newOverrides != null) {
-            var existingOverridesMap =
-                    ConfigurationUtils.convertValue(existingOverrides, Map.class);
-            var newOverridesMap = ConfigurationUtils.convertValue(newOverrides, Map.class);
-            if (newOverridesMap.equals(existingOverridesMap)) {
-                // Existing overrides equal current ones, avoid changing the spec
-                flinkConfig.put(PipelineOptions.PARALLELISM_OVERRIDES.key(), existingOverrides);
-            }
+    private static <
+                    CR extends AbstractFlinkResource<SPEC, STATUS>,
+                    SPEC extends AbstractFlinkSpec,
+                    STATUS extends CommonStatus<SPEC>>
+            void putBackOldParallelismOverridesIfNewOnesAreMerelyAPermutation(
+                    FlinkResourceContext<CR> ctx) {
+        Configuration deployedConfig = ctx.getObserveConfig();
+        Configuration toBeReconciledConfig = ctx.getDeployConfig(ctx.getResource().getSpec());
+        if (deployedConfig == null || toBeReconciledConfig == null) {
+            return;
+        }
+
+        var existingOverridesMap = deployedConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
+        var newOverridesMap = toBeReconciledConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
+
+        // Check that the overrides actually changed and not just the String representation.
+        // This way we prevent reconciling a NOOP config change which would trigger a redeploy of
+        // the pipeline.
+        if (!newOverridesMap.isEmpty() && newOverridesMap.equals(existingOverridesMap)) {
+            // Be sure to get the raw config string, not the map!
+            var existingOverridesString =
+                    deployedConfig.getString(PipelineOptions.PARALLELISM_OVERRIDES.key(), "");
+            // Existing overrides equal current ones, avoid triggering the reconciliation loop by
+            // putting back the original parallelism overrides string with its String
+            // representation.
+            ctx.getResource()
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), existingOverridesString);
         }
     }
 
