@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorato
 import org.apache.flink.kubernetes.operator.kubeclient.Fabric8FlinkStandaloneKubeClient;
 import org.apache.flink.kubernetes.operator.kubeclient.FlinkStandaloneKubeClient;
 import org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils;
+import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.EnvVar;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.api.model.apps.Deployment;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.Config;
 import org.apache.flink.kubernetes.shaded.io.fabric8.kubernetes.client.ConfigBuilder;
@@ -43,8 +44,9 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils.TEST_NAMESPACE;
+import static org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -111,6 +113,16 @@ public class KubernetesStandaloneClusterDescriptorTest {
         assertTrue(
                 jmDeployment.getSpec().getTemplate().getSpec().getContainers().stream()
                         .anyMatch(c -> c.getArgs().contains("jobmanager")));
+        List<EnvVar> envVars = jmDeployment.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv();
+        assertTrue(envVars.stream().anyMatch(env -> env.getName().equals(USER_ENV_VAR) && env.getValue().equals(JM_ENV_VALUE)));
+        Deployment tmDeployment =
+                deployments.stream()
+                        .filter(d -> d.getMetadata().getName().equals(expectedTMDeploymentName))
+                        .findFirst()
+                        .orElse(null);
+        envVars = tmDeployment.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv();
+        assertTrue(envVars.stream().anyMatch(env -> env.getName().equals(USER_ENV_VAR) && env.getValue().equals(TM_ENV_VALUE)));
+
 
         var clusterClient = clusterClientProvider.getClusterClient();
 
