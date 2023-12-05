@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 
 import org.junit.jupiter.api.Test;
 
@@ -30,12 +31,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class KubernetesScalingRealizerTest {
 
     @Test
-    public void testAutoscalerOverridesVertexIdsAreSorted() {
-
+    public void testAutoscalerOverridesStringDoesNotChangeUnlessOverridesChange() {
         KubernetesJobAutoScalerContext ctx =
                 TestingKubernetesAutoscalerUtils.createContext("test", null);
+        FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
 
-        // Create map which returns keys unsorted
+        // Create resource with existing parallelism overrides
+        resource.getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), "a:1,b:2");
+        resource.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(resource.getSpec(), resource);
+        resource.getSpec()
+                .getFlinkConfiguration()
+                .remove(PipelineOptions.PARALLELISM_OVERRIDES.key());
+
+        // Create an overrides map which returns the keys in a different order
         Map<String, String> overrides = new LinkedHashMap<>();
         overrides.put("b", "2");
         overrides.put("a", "1");

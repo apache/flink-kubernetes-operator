@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.reconciler.deployment;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -189,39 +188,6 @@ public abstract class AbstractFlinkResourceReconciler<
         autoScalerCtx.getConfiguration().set(AUTOSCALER_ENABLED, autoscalerEnabled);
 
         autoscaler.scale(autoScalerCtx);
-        putBackOldParallelismOverridesIfNewOnesAreMerelyAPermutation(ctx);
-    }
-
-    private static <
-                    CR extends AbstractFlinkResource<SPEC, STATUS>,
-                    SPEC extends AbstractFlinkSpec,
-                    STATUS extends CommonStatus<SPEC>>
-            void putBackOldParallelismOverridesIfNewOnesAreMerelyAPermutation(
-                    FlinkResourceContext<CR> ctx) {
-        Configuration deployedConfig = ctx.getObserveConfig();
-        Configuration toBeReconciledConfig = ctx.getDeployConfig(ctx.getResource().getSpec());
-        if (deployedConfig == null || toBeReconciledConfig == null) {
-            return;
-        }
-
-        var existingOverridesMap = deployedConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
-        var newOverridesMap = toBeReconciledConfig.get(PipelineOptions.PARALLELISM_OVERRIDES);
-
-        // Check that the overrides actually changed and not just the String representation.
-        // This way we prevent reconciling a NOOP config change which would trigger a redeploy of
-        // the pipeline.
-        if (!newOverridesMap.isEmpty() && newOverridesMap.equals(existingOverridesMap)) {
-            // Be sure to get the raw config string, not the map!
-            var existingOverridesString =
-                    deployedConfig.getString(PipelineOptions.PARALLELISM_OVERRIDES.key(), "");
-            // Existing overrides equal current ones, avoid triggering the reconciliation loop by
-            // putting back the original parallelism overrides string with its String
-            // representation.
-            ctx.getResource()
-                    .getSpec()
-                    .getFlinkConfiguration()
-                    .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), existingOverridesString);
-        }
     }
 
     private void triggerSpecChangeEvent(CR cr, DiffResult<SPEC> specDiff, KubernetesClient client) {

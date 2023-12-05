@@ -931,56 +931,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         .get(PipelineOptions.PARALLELISM_OVERRIDES));
     }
 
-    @Test
-    public void testNoSpecChangeForEffectivelyIdenticalParallelismOverrides() throws Exception {
-        var ctxFactory =
-                new TestingFlinkResourceContextFactory(
-                        configManager, operatorMetricGroup, flinkService, eventRecorder);
-        appReconciler =
-                new ApplicationReconciler(eventRecorder, statusRecorder, new NoopJobAutoscaler<>());
-
-        var deployment = TestUtils.buildApplicationCluster();
-
-        var v1 = new JobVertexID(0, 0);
-        var v2 = new JobVertexID(0, 1);
-        var existingOverrides = String.format("%s:1,%s:2", v1, v2);
-
-        // Apply initial overrides
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), existingOverrides);
-
-        // Reconcile overrides
-        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
-        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
-        assertEquals(
-                ReconciliationState.DEPLOYED,
-                deployment.getStatus().getReconciliationStatus().getState());
-        assertEquals("RUNNING", deployment.getStatus().getJobStatus().getState());
-
-        // Reverse the order of the same overrides
-        var existingOverridesDifferentPermutation = String.format("%s:2,%s:1", v2, v1);
-        deployment
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(
-                        PipelineOptions.PARALLELISM_OVERRIDES.key(),
-                        existingOverridesDifferentPermutation);
-
-        // Ensure that the permutation in the override string does not trigger a deploy
-        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
-        assertEquals(
-                ReconciliationState.DEPLOYED,
-                deployment.getStatus().getReconciliationStatus().getState());
-        assertEquals(
-                existingOverrides,
-                ctxFactory
-                        .getResourceContext(deployment, context)
-                        .getObserveConfig()
-                        .getString(PipelineOptions.PARALLELISM_OVERRIDES.key(), ""));
-    }
-
     @ParameterizedTest
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyJobIdNotResetDuringLastStateRecovery(FlinkVersion flinkVersion) {

@@ -81,8 +81,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
                 conf,
                 getResourceMetricGroup(),
                 () -> getFlinkService().getClusterClient(conf),
-                resource,
-                getKubernetesClient());
+                this);
     }
 
     @Nullable
