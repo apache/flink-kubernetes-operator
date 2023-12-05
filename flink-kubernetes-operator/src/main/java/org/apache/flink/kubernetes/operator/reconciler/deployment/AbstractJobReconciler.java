@@ -22,11 +22,14 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -89,7 +92,10 @@ public abstract class AbstractJobReconciler<
 
     @Override
     protected boolean reconcileSpecChange(
-            FlinkResourceContext<CR> ctx, Configuration deployConfig, SPEC lastReconciledSpec)
+            DiffType diffType,
+            FlinkResourceContext<CR> ctx,
+            Configuration deployConfig,
+            SPEC lastReconciledSpec)
             throws Exception {
 
         var resource = ctx.getResource();
@@ -98,6 +104,13 @@ public abstract class AbstractJobReconciler<
 
         JobState currentJobState = lastReconciledSpec.getJob().getState();
         JobState desiredJobState = currentDeploySpec.getJob().getState();
+
+        if (diffType == DiffType.SAVEPOINT_REDEPLOY) {
+            redeployWithSavepoint(
+                    ctx, deployConfig, resource, status, currentDeploySpec, desiredJobState);
+            return true;
+        }
+
         if (currentJobState == JobState.RUNNING) {
             if (desiredJobState == JobState.RUNNING) {
                 LOG.info("Upgrading/Restarting running job, suspending first...");
@@ -304,6 +317,40 @@ public abstract class AbstractJobReconciler<
             specToRecover.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         }
         restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata);
+    }
+
+    private void redeployWithSavepoint(
+            FlinkResourceContext<CR> ctx,
+            Configuration deployConfig,
+            CR resource,
+            STATUS status,
+            SPEC currentDeploySpec,
+            JobState desiredJobState)
+            throws Exception {
+        LOG.info("Redeploying from savepoint");
+        cancelJob(ctx, UpgradeMode.STATELESS);
+        var savepointOpt =
+                Optional.ofNullable(currentDeploySpec.getJob().getInitialSavepointPath());
+        currentDeploySpec
+                .getJob()
+                .setUpgradeMode(
+                        savepointOpt.isPresent() ? UpgradeMode.SAVEPOINT : UpgradeMode.STATELESS);
+        savepointOpt.ifPresent(
+                s ->
+                        status.getJobStatus()
+                                .getSavepointInfo()
+                                .setLastSavepoint(Savepoint.of(s, SnapshotTriggerType.MANUAL)));
+
+        if (desiredJobState == JobState.RUNNING) {
+            deploy(
+                    ctx,
+                    currentDeploySpec,
+                    ctx.getDeployConfig(currentDeploySpec),
+                    savepointOpt,
+                    false);
+        }
+        ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);
+        status.getReconciliationStatus().markReconciledSpecAsStable();
     }
 
     /**

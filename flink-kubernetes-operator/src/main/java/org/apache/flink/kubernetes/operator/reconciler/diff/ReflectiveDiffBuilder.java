@@ -96,11 +96,13 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
                         var modes = annotation.mode();
                         boolean modeApplies =
                                 modes.length == 0 || Arrays.asList(modes).contains(deploymentMode);
-                        diffBuilder.append(
-                                field.getName(),
-                                leftField,
-                                rightField,
-                                modeApplies ? annotation.value() : UPGRADE);
+                        if (rightField != null || !annotation.onNullIgnore()) {
+                            diffBuilder.append(
+                                    field.getName(),
+                                    leftField,
+                                    rightField,
+                                    modeApplies ? annotation.value() : UPGRADE);
+                        }
                     } else if (Diffable.class.isAssignableFrom(field.getType())
                             && ObjectUtils.allNotNull(leftField, rightField)) {
                         diffBuilder.append(

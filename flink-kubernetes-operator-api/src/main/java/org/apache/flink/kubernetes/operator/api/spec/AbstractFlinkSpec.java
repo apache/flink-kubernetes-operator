@@ -44,6 +44,7 @@ public abstract class AbstractFlinkSpec implements Diffable<AbstractFlinkSpec> {
      * Nonce used to manually trigger restart for the cluster/session job. In order to trigger
      * restart, change the number to anything other than the current value.
      */
+    @SpecDiff(onNullIgnore = true)
     private Long restartNonce;
 
     /** Flink configuration overrides for the Flink deployment or Flink session job. */

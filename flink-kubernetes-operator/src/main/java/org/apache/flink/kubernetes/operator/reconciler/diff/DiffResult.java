@@ -101,14 +101,7 @@ public class DiffResult<T> {
     }
 
     private static DiffType getSpechChangeType(List<Diff<?>> diffs) {
-        var type = DiffType.IGNORE;
-        for (var diff : diffs) {
-            type = DiffType.max(type, diff.getType());
-            if (type == DiffType.UPGRADE) {
-                return type;
-            }
-        }
-        return type;
+        return diffs.stream().map(Diff::getType).reduce(DiffType::max).orElse(DiffType.IGNORE);
     }
 
     private static void addField(

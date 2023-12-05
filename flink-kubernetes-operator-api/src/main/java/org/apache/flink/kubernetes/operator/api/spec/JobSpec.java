@@ -87,4 +87,12 @@ public class JobSpec implements Diffable<JobSpec> {
     /** Allow checkpoint state that cannot be mapped to any job vertex in tasks. */
     @SpecDiff(DiffType.IGNORE)
     private Boolean allowNonRestoredState;
+
+    /**
+     * Nonce used to trigger a full redeployment of the job from the savepoint path specified in
+     * initialSavepointPath or from empty state if initialSavepointPath is null. Rollback is not
+     * possible after redeployment.
+     */
+    @SpecDiff(value = DiffType.SAVEPOINT_REDEPLOY, onNullIgnore = true)
+    private Long savepointRedeployNonce;
 }

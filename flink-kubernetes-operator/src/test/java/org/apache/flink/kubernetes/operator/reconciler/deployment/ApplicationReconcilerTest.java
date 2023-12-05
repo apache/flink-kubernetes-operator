@@ -84,6 +84,7 @@ import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.platform.commons.util.StringUtils;
@@ -1237,6 +1238,97 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 deployment.getStatus().getReconciliationStatus().getState());
         assertEquals(1, flinkService.listJobs().size());
         assertEquals("RECONCILING", deployment.getStatus().getJobStatus().getState());
+    }
+
+    @ParameterizedTest
+    @EnumSource(UpgradeMode.class)
+    public void testSavepointRedeploy(UpgradeMode upgradeMode) throws Exception {
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getJob().setUpgradeMode(upgradeMode);
+
+        reconciler.reconcile(deployment, context);
+        var runningJobs = flinkService.listJobs();
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs);
+
+        // Test savepoint redeploy for running job
+        verifySavepointRedeploy(deployment, runningJobs, "sp-t1");
+
+        // Test savepoint redeploy for non-running job, we just deployed
+        verifySavepointRedeploy(deployment, runningJobs, "sp-t2");
+
+        // Test redeploy for to the same savepoint path
+        deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
+        verifySavepointRedeploy(deployment, runningJobs, "sp-t2");
+
+        // Test redeploy from empty state
+        verifySavepointRedeploy(deployment, runningJobs, null);
+
+        // Test savepoint redeploy when jobstate is set to suspended
+        deployment.getSpec().getJob().setState(JobState.SUSPENDED);
+        verifySavepointRedeploy(deployment, runningJobs, "sp-t3");
+
+        if (upgradeMode != UpgradeMode.STATELESS) {
+            // When we suspended with a new initial savepoint path simple spec changes should use
+            // the correct savepoint
+            // This doesn't apply to stateless mode as that starts from empty state after suspend
+            deployment.getSpec().getJob().setParallelism(321);
+            verifySavepointRedeploy(deployment, runningJobs, "sp-t3");
+
+            deployment.getSpec().getJob().setState(JobState.SUSPENDED);
+            reconciler.reconcile(deployment, context);
+            assertEquals(
+                    JobManagerDeploymentStatus.MISSING,
+                    deployment.getStatus().getJobManagerDeploymentStatus());
+
+            // Test suspend and a new initialSavepointPath
+            deployment.getSpec().getJob().setState(JobState.RUNNING);
+            verifySavepointRedeploy(deployment, runningJobs, "sp-t4");
+        }
+    }
+
+    private void verifySavepointRedeploy(
+            FlinkDeployment deployment,
+            List<Tuple3<String, JobStatusMessage, Configuration>> runningJobs,
+            String savepoint)
+            throws Exception {
+        var job = deployment.getSpec().getJob();
+        job.setInitialSavepointPath(savepoint);
+        job.setSavepointRedeployNonce(
+                Optional.ofNullable(job.getSavepointRedeployNonce()).orElse(0L) + 1);
+        reconciler.reconcile(deployment, context);
+        boolean shouldRun = deployment.getSpec().getJob().getState() == JobState.RUNNING;
+
+        if (shouldRun) {
+            // Verify job is redeployed with sp
+            assertEquals(1, runningJobs.size());
+            assertEquals(savepoint, runningJobs.get(0).f0);
+        } else {
+            // Verify that job is stopped
+            assertTrue(runningJobs.isEmpty());
+        }
+
+        var status = deployment.getStatus();
+        assertEquals(
+                shouldRun
+                        ? JobManagerDeploymentStatus.DEPLOYING
+                        : JobManagerDeploymentStatus.MISSING,
+                status.getJobManagerDeploymentStatus());
+
+        // Verify that savepoint and upgrade mode is recorded correctly in reconciled spec
+        if (savepoint != null) {
+            assertEquals(
+                    savepoint,
+                    status.getJobStatus().getSavepointInfo().getLastSavepoint().getLocation());
+        } else {
+            assertEquals(
+                    UpgradeMode.STATELESS,
+                    status.getReconciliationStatus()
+                            .deserializeLastReconciledSpec()
+                            .getJob()
+                            .getUpgradeMode());
+        }
+
+        assertTrue(status.getReconciliationStatus().isLastReconciledSpecStable());
     }
 
     private void offsetReconcilerClock(FlinkDeployment dep, Duration offset) {

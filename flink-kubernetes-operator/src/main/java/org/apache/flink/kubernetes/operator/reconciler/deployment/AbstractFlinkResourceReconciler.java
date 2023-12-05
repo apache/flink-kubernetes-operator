@@ -162,11 +162,14 @@ public abstract class AbstractFlinkResourceReconciler<
             }
             triggerSpecChangeEvent(cr, specDiff, ctx.getKubernetesClient());
 
-            // Try scaling if this is not an upgrade change
-            boolean scaled = diffType != DiffType.UPGRADE && scale(ctx, deployConfig);
+            // Try scaling if this is not an upgrade/redeploy change
+            boolean scaled =
+                    diffType != DiffType.SAVEPOINT_REDEPLOY
+                            && diffType != DiffType.UPGRADE
+                            && scale(ctx, deployConfig);
 
             // Reconcile spec change unless scaling was enough
-            if (scaled || reconcileSpecChange(ctx, deployConfig, lastReconciledSpec)) {
+            if (scaled || reconcileSpecChange(diffType, ctx, deployConfig, lastReconciledSpec)) {
                 // If we executed a scale or spec upgrade action we return, otherwise we
                 // continue to reconcile other changes
                 return;
@@ -244,6 +247,7 @@ public abstract class AbstractFlinkResourceReconciler<
      * Reconcile spec upgrade on the currently deployed/suspended Flink resource and update the
      * status accordingly.
      *
+     * @param diffType SpecChange diff type.
      * @param ctx Reconciliation context.
      * @param deployConfig Deployment configuration.
      * @param lastReconciledSpec Last reconciled spec
@@ -251,7 +255,10 @@ public abstract class AbstractFlinkResourceReconciler<
      * @return True if spec change reconciliation was executed
      */
     protected abstract boolean reconcileSpecChange(
-            FlinkResourceContext<CR> ctx, Configuration deployConfig, SPEC lastReconciledSpec)
+            DiffType diffType,
+            FlinkResourceContext<CR> ctx,
+            Configuration deployConfig,
+            SPEC lastReconciledSpec)
             throws Exception;
 
     /**

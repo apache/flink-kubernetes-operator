@@ -34,6 +34,8 @@ public @interface SpecDiff {
 
     KubernetesDeploymentMode[] mode() default {};
 
+    boolean onNullIgnore() default false;
+
     /** Spec diff config annotation. */
     @Target(ElementType.FIELD)
     @Retention(RetentionPolicy.RUNTIME)

@@ -21,6 +21,7 @@ import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
@@ -61,6 +62,7 @@ public class SessionReconciler
 
     @Override
     protected boolean reconcileSpecChange(
+            DiffType diffType,
             FlinkResourceContext<FlinkDeployment> ctx,
             Configuration deployConfig,
             FlinkDeploymentSpec lastReconciledSpec)

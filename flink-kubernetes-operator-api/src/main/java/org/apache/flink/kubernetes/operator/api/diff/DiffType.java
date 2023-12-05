@@ -28,7 +28,9 @@ public enum DiffType {
     /** Scalable spec change. */
     SCALE,
     /** Upgradable spec change. */
-    UPGRADE;
+    UPGRADE,
+    /** Full redeploy from new state. */
+    SAVEPOINT_REDEPLOY;
 
     public static DiffType max(DiffType left, DiffType right) {
         return (left.ordinal() >= right.ordinal()) ? left : right;
