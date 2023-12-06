@@ -42,7 +42,10 @@ public class KubernetesScalingRealizerTest {
                                 .getSpec()
                                 .getFlinkConfiguration()
                                 .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
-                .isEqualTo("a:1,b:2");
+                .satisfiesAnyOf(
+                        // Currently no enforced order inside the overrides string
+                        overrides -> assertThat(overrides).isEqualTo("a:1,b:2"),
+                        overrides -> assertThat(overrides).isEqualTo("b:2,a:1"));
     }
 
     @Test
