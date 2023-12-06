@@ -23,11 +23,27 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Tests for KubernetesScalingRealizer. */
 public class KubernetesScalingRealizerTest {
+
+    @Test
+    public void testApplyOverrides() {
+        KubernetesJobAutoScalerContext ctx =
+                TestingKubernetesAutoscalerUtils.createContext("test", null);
+
+        new KubernetesScalingRealizer().realize(ctx, Map.of("a", "1", "b", "2"));
+
+        assertThat(
+                        ctx.getResource()
+                                .getSpec()
+                                .getFlinkConfiguration()
+                                .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
+                .isEqualTo("a:1,b:2");
+    }
 
     @Test
     public void testAutoscalerOverridesStringDoesNotChangeUnlessOverridesChange() {
