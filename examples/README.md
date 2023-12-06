@@ -172,4 +172,5 @@ For the detailed description of advanced configuration techniques follow this
 #### Enabling TLS on your deployments
 
 In order for the operator to communicate with the rest service of a deployment you need to mount a jks/pkcs12 secret onto the operator that uses the same ca certificate as those used by your deployments.
+N.b. Make sure you use the same mount location and keystore password for your deployment as you have for the operator
 [This](flink-tls-example) example provides a pre-install.yaml file that you would need to apply to your cluster before helm installing your cluster using the value tls.create=true. It creates an issuer that is CA Certificate backed that can be used for both the operator and the examples provided

@@ -198,7 +198,7 @@ postStart: {}
 # Configuration for tls
 tls:
   create: false
-  certSecret: flink-operator-cert
-  certPasswordSecretRef:
+  secretName: flink-operator-cert
+  secretKeyRef:
     name: operator-certificate-password
     key: password

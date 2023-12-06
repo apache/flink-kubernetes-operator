@@ -21,7 +21,6 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.client.deployment.ClusterRetrieveException;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
@@ -199,25 +198,12 @@ public abstract class AbstractFlinkService implements FlinkService {
         if (requireHaMetadata) {
             validateHaMetadataExists(conf);
         }
-        try {
-            deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
-        } catch (RuntimeException e) {
-            LOG.warn("Caught Exception " + e.getMessage());
-            if (!isValidRuntimeException(conf, e)) {
-                throw e;
-            }
-        }
+
+        deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
     }
 
     public void submitSessionCluster(Configuration conf) throws Exception {
-        try {
-            deploySessionCluster(conf);
-        } catch (RuntimeException e) {
-            LOG.warn("Caught Exception " + e.getMessage());
-            if (!isValidRuntimeException(conf, e)) {
-                throw e;
-            }
-        }
+        deploySessionCluster(conf);
     }
 
     @Override
@@ -1147,20 +1133,5 @@ public abstract class AbstractFlinkService implements FlinkService {
                             conf.removeConfig(SecurityOptions.SSL_KEYSTORE_PASSWORD);
                         });
         return conf;
-    }
-
-    private boolean isValidRuntimeException(Configuration conf, RuntimeException e) {
-        final Optional<String> trustStorePath = EnvUtils.get(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH);
-        // The ClusterDescriptors always try and create a RestClient from the config
-        // that would be given to the deployment. When SSL is enabled it will throw
-        // a ClusterRetrieveException as the operator does not have the certs where they
-        // would be mounted on the client
-        if (SecurityOptions.isRestSSLEnabled(conf)
-                && trustStorePath.isPresent()
-                && Files.exists(Paths.get(trustStorePath.get()))
-                && e.getCause() instanceof ClusterRetrieveException) {
-            return true;
-        }
-        return false;
     }
 }
