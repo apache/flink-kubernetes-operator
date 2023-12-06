@@ -81,8 +81,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
                 conf,
                 getResourceMetricGroup(),
                 () -> getFlinkService().getClusterClient(conf),
-                resource,
-                getKubernetesClient());
+                this);
     }
 
     @Nullable
@@ -104,6 +103,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
      *
      * @return Config currently deployed.
      */
+    @Nullable
     public Configuration getObserveConfig() {
         if (observeConfig != null) {
             return observeConfig;
@@ -118,6 +118,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
      * @param spec Spec for which the config should be created.
      * @return Deployment configuration.
      */
+    @Nullable
     public abstract Configuration getDeployConfig(AbstractFlinkSpec spec);
 
     /**

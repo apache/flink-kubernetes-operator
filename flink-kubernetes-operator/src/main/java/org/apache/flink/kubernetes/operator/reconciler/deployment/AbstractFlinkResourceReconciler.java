@@ -186,6 +186,7 @@ public abstract class AbstractFlinkResourceReconciler<
                 ctx.getResource().getSpec().getJob() != null
                         && ctx.getObserveConfig().getBoolean(AUTOSCALER_ENABLED);
         autoScalerCtx.getConfiguration().set(AUTOSCALER_ENABLED, autoscalerEnabled);
+
         autoscaler.scale(autoScalerCtx);
     }
 

@@ -23,20 +23,20 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.function.SupplierWithException;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import lombok.Getter;
 
 import javax.annotation.Nullable;
 
 /** An implementation of JobAutoscalerContext for Kubernetes. */
 public class KubernetesJobAutoScalerContext extends JobAutoScalerContext<ResourceID> {
 
-    private final AbstractFlinkResource<?, ?> resource;
-
-    private final KubernetesClient kubernetesClient;
+    @Getter private final FlinkResourceContext<?> resourceContext;
 
     public KubernetesJobAutoScalerContext(
             @Nullable JobID jobID,
@@ -44,24 +44,22 @@ public class KubernetesJobAutoScalerContext extends JobAutoScalerContext<Resourc
             Configuration configuration,
             MetricGroup metricGroup,
             SupplierWithException<RestClusterClient<String>, Exception> restClientSupplier,
-            AbstractFlinkResource<?, ?> resource,
-            KubernetesClient kubernetesClient) {
+            FlinkResourceContext<?> resourceContext) {
         super(
-                ResourceID.fromResource(resource),
+                ResourceID.fromResource(resourceContext.getResource()),
                 jobID,
                 jobStatus,
                 configuration,
                 metricGroup,
                 restClientSupplier);
-        this.resource = resource;
-        this.kubernetesClient = kubernetesClient;
+        this.resourceContext = resourceContext;
     }
 
     public AbstractFlinkResource<?, ?> getResource() {
-        return resource;
+        return resourceContext.getResource();
     }
 
     public KubernetesClient getKubernetesClient() {
-        return kubernetesClient;
+        return resourceContext.getKubernetesClient();
     }
 }

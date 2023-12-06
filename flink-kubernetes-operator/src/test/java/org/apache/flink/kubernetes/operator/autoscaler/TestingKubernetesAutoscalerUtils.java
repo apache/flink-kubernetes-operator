@@ -22,6 +22,8 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -42,7 +44,16 @@ public class TestingKubernetesAutoscalerUtils {
                 new Configuration(),
                 new UnregisteredMetricsGroup(),
                 () -> new RestClusterClient<>(new Configuration(), "test-cluster"),
-                cr,
-                kubernetesClient);
+                new FlinkDeploymentContext(
+                        cr,
+                        new TestUtils.TestingContext<>() {
+                            @Override
+                            public KubernetesClient getClient() {
+                                return kubernetesClient;
+                            }
+                        },
+                        null,
+                        new FlinkConfigManager(new Configuration()),
+                        null));
     }
 }

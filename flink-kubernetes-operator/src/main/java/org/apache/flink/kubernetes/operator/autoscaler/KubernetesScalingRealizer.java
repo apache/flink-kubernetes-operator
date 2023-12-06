@@ -23,8 +23,9 @@ import org.apache.flink.configuration.PipelineOptions;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
+import javax.annotation.Nullable;
+
 import java.util.Map;
-import java.util.TreeMap;
 
 /** The Kubernetes implementation for applying parallelism overrides. */
 public class KubernetesScalingRealizer
@@ -33,14 +34,34 @@ public class KubernetesScalingRealizer
     @Override
     public void realize(
             KubernetesJobAutoScalerContext context, Map<String, String> parallelismOverrides) {
-        // Make sure the keys are sorted via TreeMap to prevent changing the spec when none of the
-        // entries changed but the key order is different!
-        parallelismOverrides = new TreeMap<>(parallelismOverrides);
+
         context.getResource()
                 .getSpec()
                 .getFlinkConfiguration()
                 .put(
                         PipelineOptions.PARALLELISM_OVERRIDES.key(),
-                        ConfigurationUtils.convertValue(parallelismOverrides, String.class));
+                        getOverrideString(context, parallelismOverrides));
+    }
+
+    @Nullable
+    private static String getOverrideString(
+            KubernetesJobAutoScalerContext context, Map<String, String> newOverrides) {
+        if (context.getResource().getStatus().getReconciliationStatus().isBeforeFirstDeployment()) {
+            return ConfigurationUtils.convertValue(newOverrides, String.class);
+        }
+
+        var conf = context.getResourceContext().getObserveConfig();
+        var currentOverrides =
+                conf.getOptional(PipelineOptions.PARALLELISM_OVERRIDES).orElse(Map.of());
+
+        // Check that the overrides actually changed and not just the String representation.
+        // This way we prevent reconciling a NOOP config change which would unnecessarily redeploy
+        // the pipeline.
+        if (currentOverrides.equals(newOverrides)) {
+            // If overrides are identical, use the previous string as-is.
+            return conf.getValue(PipelineOptions.PARALLELISM_OVERRIDES);
+        } else {
+            return ConfigurationUtils.convertValue(newOverrides, String.class);
+        }
     }
 }

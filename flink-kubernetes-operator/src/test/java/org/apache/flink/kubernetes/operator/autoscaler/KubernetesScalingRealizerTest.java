@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 
 import org.junit.jupiter.api.Test;
 
@@ -30,23 +31,59 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class KubernetesScalingRealizerTest {
 
     @Test
-    public void testAutoscalerOverridesVertexIdsAreSorted() {
-
+    public void testApplyOverrides() {
         KubernetesJobAutoScalerContext ctx =
                 TestingKubernetesAutoscalerUtils.createContext("test", null);
 
-        // Create map which returns keys unsorted
-        Map<String, String> overrides = new LinkedHashMap<>();
-        overrides.put("b", "2");
-        overrides.put("a", "1");
-
-        new KubernetesScalingRealizer().realize(ctx, overrides);
+        new KubernetesScalingRealizer().realize(ctx, Map.of("a", "1", "b", "2"));
 
         assertThat(
                         ctx.getResource()
                                 .getSpec()
                                 .getFlinkConfiguration()
                                 .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
-                .isEqualTo("a:1,b:2");
+                .satisfiesAnyOf(
+                        // Currently no enforced order inside the overrides string
+                        overrides -> assertThat(overrides).isEqualTo("a:1,b:2"),
+                        overrides -> assertThat(overrides).isEqualTo("b:2,a:1"));
+    }
+
+    @Test
+    public void testAutoscalerOverridesStringDoesNotChangeUnlessOverridesChange() {
+        // Create an overrides map which returns the keys in a deterministic order
+        LinkedHashMap<String, String> newOverrides = new LinkedHashMap<>();
+        newOverrides.put("b", "2");
+        newOverrides.put("a", "1");
+
+        assertOverridesDoNotChange("a:1,b:2", newOverrides);
+        assertOverridesDoNotChange("b:2,a:1", newOverrides);
+    }
+
+    private void assertOverridesDoNotChange(
+            String currentOverrides, LinkedHashMap<String, String> newOverrides) {
+
+        KubernetesJobAutoScalerContext ctx =
+                TestingKubernetesAutoscalerUtils.createContext("test", null);
+        FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
+
+        // Create resource with existing parallelism overrides
+        resource.getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), currentOverrides);
+        resource.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(resource.getSpec(), resource);
+        resource.getSpec()
+                .getFlinkConfiguration()
+                .remove(PipelineOptions.PARALLELISM_OVERRIDES.key());
+
+        new KubernetesScalingRealizer().realize(ctx, newOverrides);
+
+        assertThat(
+                        ctx.getResource()
+                                .getSpec()
+                                .getFlinkConfiguration()
+                                .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
+                .isEqualTo(currentOverrides);
     }
 }
