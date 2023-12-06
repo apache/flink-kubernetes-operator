@@ -23,7 +23,6 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,6 +31,18 @@ public class KubernetesScalingRealizerTest {
 
     @Test
     public void testAutoscalerOverridesStringDoesNotChangeUnlessOverridesChange() {
+        // Create an overrides map which returns the keys in a deterministic order
+        LinkedHashMap<String, String> newOverrides = new LinkedHashMap<>();
+        newOverrides.put("b", "2");
+        newOverrides.put("a", "1");
+
+        assertOverridesDoNotChange("a:1,b:2", newOverrides);
+        assertOverridesDoNotChange("b:2,a:1", newOverrides);
+    }
+
+    private void assertOverridesDoNotChange(
+            String currentOverrides, LinkedHashMap<String, String> newOverrides) {
+
         KubernetesJobAutoScalerContext ctx =
                 TestingKubernetesAutoscalerUtils.createContext("test", null);
         FlinkDeployment resource = (FlinkDeployment) ctx.getResource();
@@ -39,7 +50,7 @@ public class KubernetesScalingRealizerTest {
         // Create resource with existing parallelism overrides
         resource.getSpec()
                 .getFlinkConfiguration()
-                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), "a:1,b:2");
+                .put(PipelineOptions.PARALLELISM_OVERRIDES.key(), currentOverrides);
         resource.getStatus()
                 .getReconciliationStatus()
                 .serializeAndSetLastReconciledSpec(resource.getSpec(), resource);
@@ -47,18 +58,13 @@ public class KubernetesScalingRealizerTest {
                 .getFlinkConfiguration()
                 .remove(PipelineOptions.PARALLELISM_OVERRIDES.key());
 
-        // Create an overrides map which returns the keys in a different order
-        Map<String, String> overrides = new LinkedHashMap<>();
-        overrides.put("b", "2");
-        overrides.put("a", "1");
-
-        new KubernetesScalingRealizer().realize(ctx, overrides);
+        new KubernetesScalingRealizer().realize(ctx, newOverrides);
 
         assertThat(
                         ctx.getResource()
                                 .getSpec()
                                 .getFlinkConfiguration()
                                 .get(PipelineOptions.PARALLELISM_OVERRIDES.key()))
-                .isEqualTo("a:1,b:2");
+                .isEqualTo(currentOverrides);
     }
 }
