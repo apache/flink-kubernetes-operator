@@ -43,7 +43,13 @@ If you are upgrading from `kubernetes-operator-1.0.0` or later, please refer to 
 
 We will cover these steps in detail in the next sections.
 
-### 1. Upgrading the CRD
+### 1. Upgrading the Java client library
+
+If you use the Flink Kubernetes operator Java client library, you need to update it first to ensure that responses from
+the new operator version can be parsed properly. For minor releases, the new version of the Java library is
+backwards-compatible with the previous minor version of the operator.
+
+### 2. Upgrading the CRD
 
 The first step of the upgrade process is upgrading the CRDs for `FlinkDeployment` and `FlinkSessionJob` resources.
 This step must be completed manually and is not part of the helm installation logic.
@@ -57,7 +63,7 @@ kubectl replace -f helm/flink-kubernetes-operator/crds/flinksessionjobs.flink.ap
 Please note that we are using the `replace` command here which ensures that running deployments are unaffected.
 {{< /hint >}}
 
-### 2. Upgrading the Helm deployment
+### 3. Upgrading the Helm deployment
 
 {{< hint danger >}}
 Before upgrading, please compare the version difference between the currently generated yaml and the running yaml, which will be used for backup and restore.
