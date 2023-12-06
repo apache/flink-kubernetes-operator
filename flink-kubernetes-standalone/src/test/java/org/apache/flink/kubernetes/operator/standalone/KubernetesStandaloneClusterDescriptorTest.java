@@ -21,6 +21,7 @@ import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.client.deployment.application.ApplicationConfiguration;
 import org.apache.flink.configuration.BlobServerOptions;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ResourceManagerOptions;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
@@ -44,9 +45,11 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils.*;
+import static org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils.JM_ENV_VALUE;
+import static org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils.TEST_NAMESPACE;
+import static org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils.TM_ENV_VALUE;
+import static org.apache.flink.kubernetes.operator.kubeclient.utils.TestUtils.USER_ENV_VAR;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -78,6 +81,12 @@ public class KubernetesStandaloneClusterDescriptorTest {
         flinkConfig.setString(BlobServerOptions.PORT, String.valueOf(0));
         flinkConfig.setString(TaskManagerOptions.RPC_PORT, String.valueOf(0));
         flinkConfig.setString(RestOptions.BIND_PORT, String.valueOf(0));
+        flinkConfig.setString(
+                ResourceManagerOptions.CONTAINERIZED_MASTER_ENV_PREFIX + USER_ENV_VAR,
+                JM_ENV_VALUE);
+        flinkConfig.setString(
+                ResourceManagerOptions.CONTAINERIZED_TASK_MANAGER_ENV_PREFIX + USER_ENV_VAR,
+                TM_ENV_VALUE);
 
         var clusterClientProvider = clusterDescriptor.deploySessionCluster(clusterSpecification);
 
@@ -113,16 +122,17 @@ public class KubernetesStandaloneClusterDescriptorTest {
         assertTrue(
                 jmDeployment.getSpec().getTemplate().getSpec().getContainers().stream()
                         .anyMatch(c -> c.getArgs().contains("jobmanager")));
-        List<EnvVar> envVars = jmDeployment.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv();
-        assertTrue(envVars.stream().anyMatch(env -> env.getName().equals(USER_ENV_VAR) && env.getValue().equals(JM_ENV_VALUE)));
+        List<EnvVar> envVars =
+                jmDeployment.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv();
+        assertTrue(envVars.contains(new EnvVar(USER_ENV_VAR, JM_ENV_VALUE, null)));
+
         Deployment tmDeployment =
                 deployments.stream()
                         .filter(d -> d.getMetadata().getName().equals(expectedTMDeploymentName))
                         .findFirst()
                         .orElse(null);
         envVars = tmDeployment.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv();
-        assertTrue(envVars.stream().anyMatch(env -> env.getName().equals(USER_ENV_VAR) && env.getValue().equals(TM_ENV_VALUE)));
-
+        assertTrue(envVars.contains(new EnvVar(USER_ENV_VAR, TM_ENV_VALUE, null)));
 
         var clusterClient = clusterClientProvider.getClusterClient();
 

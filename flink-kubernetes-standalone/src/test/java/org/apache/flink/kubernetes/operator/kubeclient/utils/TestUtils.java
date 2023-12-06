@@ -21,7 +21,6 @@ import org.apache.flink.client.deployment.ClusterSpecification;
 import org.apache.flink.configuration.BlobServerOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
-import org.apache.flink.configuration.ResourceManagerOptions;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
@@ -110,8 +109,6 @@ public class TestUtils {
                 TaskManagerOptions.RPC_PORT, String.valueOf(Constants.TASK_MANAGER_RPC_PORT));
         flinkConf.setString(BlobServerOptions.PORT, String.valueOf(Constants.BLOB_SERVER_PORT));
         flinkConf.setString(RestOptions.BIND_PORT, String.valueOf(Constants.REST_PORT));
-        flinkConf.setString(ResourceManagerOptions.CONTAINERIZED_MASTER_ENV_PREFIX + USER_ENV_VAR, JM_ENV_VALUE);
-        flinkConf.setString(ResourceManagerOptions.CONTAINERIZED_TASK_MANAGER_ENV_PREFIX + USER_ENV_VAR, TM_ENV_VALUE);
         return flinkConf;
     }
 }

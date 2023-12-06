@@ -76,7 +76,9 @@ public class StandaloneKubernetesTaskManagerParameters extends AbstractKubernete
     @Override
     public Map<String, String> getEnvironments() {
         // TMs have environment set using the pod template and config containerized.taskmanager.env
-        return new HashMap<>(ConfigurationUtils.getPrefixedKeyValuePairs(ResourceManagerOptions.CONTAINERIZED_TASK_MANAGER_ENV_PREFIX, flinkConfig));
+        return new HashMap<>(
+                ConfigurationUtils.getPrefixedKeyValuePairs(
+                        ResourceManagerOptions.CONTAINERIZED_TASK_MANAGER_ENV_PREFIX, flinkConfig));
     }
 
     @Override
