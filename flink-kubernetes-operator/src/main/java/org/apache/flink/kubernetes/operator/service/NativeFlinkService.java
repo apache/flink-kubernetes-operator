@@ -106,7 +106,7 @@ public class NativeFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void submitSessionCluster(Configuration conf) throws Exception {
+    public void deploySessionCluster(Configuration conf) throws Exception {
         submitClusterInternal(removeOperatorConfigs(conf));
     }
 

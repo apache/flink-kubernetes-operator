@@ -194,3 +194,11 @@ operatorHealth:
 
 # Set postStart hook of the main container
 postStart: {}
+
+# Configuration for tls
+tls:
+  create: false
+  secretName: flink-operator-cert
+  secretKeyRef:
+    name: operator-certificate-password
+    key: password

@@ -110,6 +110,17 @@ spec:
               value: -Dlog4j.configurationFile=/opt/flink/conf/log4j-operator.properties
             - name: JVM_ARGS
               value: {{ .Values.jvmArgs.operator }}
+            {{- if .Values.tls.create }}
+            - name: OPERATOR_KEYSTORE_PATH
+              value: /opt/flink/tls-cert/keystore.jks
+            - name: OPERATOR_TRUSTSTORE_PATH
+              value: /opt/flink/tls-cert/truststore.jks
+            - name: OPERATOR_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- toYaml .Values.tls.secretKeyRef | nindent 18 }}
+                  optional: true
+            {{- end }}
             {{- with .Values.operatorPod.env }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -130,6 +141,10 @@ spec:
             - name: flink-artifacts-volume
               mountPath: /opt/flink/artifacts
             {{- end }}
+          {{- if .Values.tls.create }}
+            - name: flink-operator-cert-secret
+              mountPath: /opt/flink/tls-cert
+          {{- end }}
           {{- if and (index .Values "operatorHealth") (index .Values.operatorHealth "livenessProbe") }}
           livenessProbe:
             {{- toYaml .Values.operatorHealth.livenessProbe | nindent 12 }}
@@ -228,6 +243,12 @@ spec:
             items:
             - key: keystore.p12
               path: keystore.p12
+        {{- end }}
+        {{- if .Values.tls.create }}
+        - name: flink-operator-cert-secret
+          secret:
+            secretName: {{ .Values.tls.secretName }}
+            optional: true
         {{- end }}
 ---
 {{- if .Values.defaultConfiguration.create }}

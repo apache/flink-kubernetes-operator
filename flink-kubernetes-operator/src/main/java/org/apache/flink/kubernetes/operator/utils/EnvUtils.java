@@ -56,6 +56,9 @@ public class EnvUtils {
     public static final String ENV_OPERATOR_NAME = "OPERATOR_NAME";
     public static final String ENV_OPERATOR_NAMESPACE = "OPERATOR_NAMESPACE";
     public static final String ENV_WATCH_NAMESPACES = "WATCH_NAMESPACES";
+    public static final String ENV_OPERATOR_KEYSTORE_PASSWORD = "OPERATOR_KEYSTORE_PASSWORD";
+    public static final String ENV_OPERATOR_KEYSTORE_PATH = "OPERATOR_KEYSTORE_PATH";
+    public static final String ENV_OPERATOR_TRUSTSTORE_PATH = "OPERATOR_TRUSTSTORE_PATH";
 
     private static final String PROP_FILE = ".flink-kubernetes-operator.version.properties";
     private static final String FAIL_MESSAGE =

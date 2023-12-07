@@ -25,6 +25,7 @@ import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.configuration.SecurityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.kubeclient.decorators.ExternalServiceDecorator;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -46,6 +47,7 @@ import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -90,7 +92,6 @@ import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
-import org.apache.flink.util.ConfigurationException;
 import org.apache.flink.util.ExceptionUtils;
 import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkException;
@@ -116,6 +117,7 @@ import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -133,7 +135,6 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
-import static org.apache.flink.runtime.rest.messages.queue.QueueStatus.Id.IN_PROGRESS;
 
 /**
  * An abstract {@link FlinkService} containing some common implementations for the native and
@@ -170,6 +171,8 @@ public abstract class AbstractFlinkService implements FlinkService {
     protected abstract void deployApplicationCluster(JobSpec jobSpec, Configuration conf)
             throws Exception;
 
+    protected abstract void deploySessionCluster(Configuration conf) throws Exception;
+
     @Override
     public KubernetesClient getKubernetesClient() {
         return kubernetesClient;
@@ -197,6 +200,11 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
 
         deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
+    }
+
+    @Override
+    public void submitSessionCluster(Configuration conf) throws Exception {
+        deploySessionCluster(conf);
     }
 
     @Override
@@ -753,6 +761,10 @@ public abstract class AbstractFlinkService implements FlinkService {
         final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
         final int port = conf.getInteger(RestOptions.PORT);
+        Configuration operatorRestConf = conf;
+        if (SecurityOptions.isRestSSLEnabled(conf)) {
+            operatorRestConf = getOperatorRestConfig(conf);
+        }
         final String host =
                 ObjectUtils.firstNonNull(
                         operatorConfig.getFlinkServiceHostOverride(),
@@ -761,7 +773,9 @@ public abstract class AbstractFlinkService implements FlinkService {
         final String restServerAddress = String.format("http://%s:%s", host, port);
         LOG.debug("Creating RestClusterClient({})", restServerAddress);
         return new RestClusterClient<>(
-                conf, clusterId, (c, e) -> new StandaloneClientHAServices(restServerAddress));
+                operatorRestConf,
+                clusterId,
+                (c, e) -> new StandaloneClientHAServices(restServerAddress));
     }
 
     @VisibleForTesting
@@ -838,8 +852,12 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @VisibleForTesting
-    protected RestClient getRestClient(Configuration conf) throws ConfigurationException {
-        return new RestClient(conf, executorService);
+    protected RestClient getRestClient(Configuration conf) throws Exception {
+        Configuration operatorRestConf = conf;
+        if (SecurityOptions.isRestSSLEnabled(conf)) {
+            operatorRestConf = getOperatorRestConfig(operatorRestConf);
+        }
+        return new RestClient(operatorRestConf, executorService);
     }
 
     private String findJarURI(JobSpec jobSpec) {
@@ -1076,5 +1094,45 @@ public abstract class AbstractFlinkService implements FlinkService {
                 || !JobStatus.valueOf(currentJobState).isGloballyTerminalState()) {
             status.getJobStatus().setState(JobStatus.FINISHED.name());
         }
+    }
+
+    private Configuration getOperatorRestConfig(Configuration origConfig) throws IOException {
+        Configuration conf = new Configuration(origConfig);
+        EnvUtils.get(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH)
+                .ifPresent(
+                        path -> {
+                            if (Files.notExists(Paths.get(path))) {
+                                return;
+                            }
+                            conf.set(
+                                    SecurityOptions.SSL_REST_TRUSTSTORE,
+                                    EnvUtils.getRequired(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH));
+                            conf.set(
+                                    SecurityOptions.SSL_REST_TRUSTSTORE_PASSWORD,
+                                    EnvUtils.getRequired(EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD));
+                            if (SecurityOptions.isRestSSLAuthenticationEnabled(conf)
+                                    && EnvUtils.get(EnvUtils.ENV_OPERATOR_KEYSTORE_PATH)
+                                            .isPresent()) {
+                                conf.set(
+                                        SecurityOptions.SSL_REST_KEYSTORE,
+                                        EnvUtils.getRequired(EnvUtils.ENV_OPERATOR_KEYSTORE_PATH));
+                                conf.set(
+                                        SecurityOptions.SSL_REST_KEYSTORE_PASSWORD,
+                                        EnvUtils.getRequired(
+                                                EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD));
+                                conf.set(
+                                        SecurityOptions.SSL_REST_KEY_PASSWORD,
+                                        EnvUtils.getRequired(
+                                                EnvUtils.ENV_OPERATOR_KEYSTORE_PASSWORD));
+                            } else {
+                                conf.removeConfig(SecurityOptions.SSL_REST_KEYSTORE);
+                                conf.removeConfig(SecurityOptions.SSL_REST_KEYSTORE_PASSWORD);
+                            }
+                            conf.removeConfig(SecurityOptions.SSL_TRUSTSTORE);
+                            conf.removeConfig(SecurityOptions.SSL_TRUSTSTORE_PASSWORD);
+                            conf.removeConfig(SecurityOptions.SSL_KEYSTORE);
+                            conf.removeConfig(SecurityOptions.SSL_KEYSTORE_PASSWORD);
+                        });
+        return conf;
     }
 }
