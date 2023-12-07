@@ -202,6 +202,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         deployApplicationCluster(jobSpec, removeOperatorConfigs(conf));
     }
 
+    @Override
     public void submitSessionCluster(Configuration conf) throws Exception {
         deploySessionCluster(conf);
     }
