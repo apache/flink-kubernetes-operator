@@ -288,12 +288,33 @@ Rollback is currently only supported for `FlinkDeployments`.
 
 ## Manual Recovery
 
-There are cases when manual intervention is required from the user to recover a Flink application deployment.
+There are cases when manual intervention is required from the user to recover a Flink application deployment or to restore to a user specified state.
 
 In most of these situations the main reason for this is that the deployment got into a state where the operator cannot determine the health of the application or the latest checkpoint information to be used for recovery.
 While these cases are not common, we need to be prepared to handle them.
 
-Fortunately almost any issue can be recovered by the user manually by using the following steps:
+Users have two options to restore a job from a target savepoint / checkpoint
+
+### Redeploy using the savepointRedeployNonce
+
+It is possible to redeploy a `FlinkDeployment` or `FlinkSessionJob` resource from a target savepoint by using the combination of `savepointRedeployNonce` and `initialSavepointPath` in the job spec:
+
+```yaml
+ job:
+   initialSavepointPath: file://redeploy-target-savepoint
+   savepointRedeployNonce: null -> 1
+```
+
+When changing the `savepointRedeployNonce` the operator will redeploy the job to the savepoint defined in the `initialSavepointPath` or empty state if the path is null. 
+
+{{< hint warning >}}
+Rollbacks are not supported after redeployments.
+{{< /hint >}}
+
+### Delete and recreate the custom resource 
+ 
+Alternatively you can completely delete and recreate the custom resources to solve almost any issues. This will fully reset the status information to start from a clean slate.
+However, this also means that savepoint history is lost and the operator won't clean up past periodic savepoints taken before the deletion.
 
  1. Locate the latest checkpoint/savepoint metafile in your configured checkpoint/savepoint directory.
  2. Delete the `FlinkDeployment` resource for your application
@@ -303,10 +324,3 @@ Fortunately almost any issue can be recovered by the user manually by using the 
 
 These steps ensure that the operator will start completely fresh from the user defined savepoint path and can hopefully fully recover.
 Keep an eye on your job to see what could have cause the problem in the first place.
-
-{{< hint info >}}
-The main idea behind the recovery process is that the user needs to manually override the target checkpoint/savepoint location because it is not known to the operator.
-The only way to do this is to delete the previous deployment resource fully, and recreate it with `initialSavepointPath` set.
-
-The `initialSavepointPath` setting only takes effect on the first deployment and the operator takes over checkpoint management after that.
-{{< /hint >}}
