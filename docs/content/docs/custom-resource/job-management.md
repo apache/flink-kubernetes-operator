@@ -302,7 +302,8 @@ It is possible to redeploy a `FlinkDeployment` or `FlinkSessionJob` resource fro
 ```yaml
  job:
    initialSavepointPath: file://redeploy-target-savepoint
-   savepointRedeployNonce: null -> 1
+   # If not set previously, set to 1, otherwise increment, e.g. 2
+   savepointRedeployNonce: 1
 ```
 
 When changing the `savepointRedeployNonce` the operator will redeploy the job to the savepoint defined in the `initialSavepointPath` or empty state if the path is null. 
