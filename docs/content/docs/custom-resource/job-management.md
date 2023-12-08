@@ -306,7 +306,7 @@ It is possible to redeploy a `FlinkDeployment` or `FlinkSessionJob` resource fro
    savepointRedeployNonce: 1
 ```
 
-When changing the `savepointRedeployNonce` the operator will redeploy the job to the savepoint defined in the `initialSavepointPath` or empty state if the path is null. 
+When changing the `savepointRedeployNonce` the operator will redeploy the job to the savepoint defined in the `initialSavepointPath`. The savepoint path must not be empty. 
 
 {{< hint warning >}}
 Rollbacks are not supported after redeployments.

@@ -533,6 +533,94 @@ public class DefaultValidatorTest {
                 validatorWithDefaultConfig);
     }
 
+    @Test
+    public void testSavepointRedeployValidation() {
+        testSuccess(
+                dep -> {
+                    var job = dep.getSpec().getJob();
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(dep.getSpec(), dep);
+                    job.setSavepointRedeployNonce(1L);
+                    job.setInitialSavepointPath("s");
+                });
+
+        testSuccess(
+                dep -> {
+                    var job = dep.getSpec().getJob();
+                    job.setSavepointRedeployNonce(1L);
+                    job.setInitialSavepointPath("s");
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(dep.getSpec(), dep);
+
+                    job.setSavepointRedeployNonce(null);
+                    job.setInitialSavepointPath("s");
+                });
+
+        testSuccess(
+                dep -> {
+                    var job = dep.getSpec().getJob();
+                    job.setSavepointRedeployNonce(1L);
+                    job.setInitialSavepointPath("s");
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(dep.getSpec(), dep);
+
+                    job.setSavepointRedeployNonce(null);
+                    job.setInitialSavepointPath(null);
+                });
+
+        testSuccess(
+                dep -> {
+                    var job = dep.getSpec().getJob();
+                    job.setSavepointRedeployNonce(1L);
+                    job.setInitialSavepointPath("s");
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(dep.getSpec(), dep);
+
+                    job.setSavepointRedeployNonce(2L);
+                    job.setInitialSavepointPath("s");
+                });
+
+        testError(
+                dep -> {
+                    var job = dep.getSpec().getJob();
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(dep.getSpec(), dep);
+                    job.setSavepointRedeployNonce(1L);
+                    job.setInitialSavepointPath(null);
+                },
+                "InitialSavepointPath must not be empty for savepoint redeployment");
+
+        testError(
+                dep -> {
+                    var job = dep.getSpec().getJob();
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(dep.getSpec(), dep);
+                    job.setSavepointRedeployNonce(1L);
+                    job.setInitialSavepointPath(" ");
+                },
+                "InitialSavepointPath must not be empty for savepoint redeployment");
+
+        testError(
+                dep -> {
+                    var job = dep.getSpec().getJob();
+                    job.setSavepointRedeployNonce(1L);
+                    job.setInitialSavepointPath("s");
+                    dep.getStatus()
+                            .getReconciliationStatus()
+                            .serializeAndSetLastReconciledSpec(dep.getSpec(), dep);
+
+                    job.setSavepointRedeployNonce(2L);
+                    job.setInitialSavepointPath(null);
+                },
+                "InitialSavepointPath must not be empty for savepoint redeployment");
+    }
+
     @ParameterizedTest
     @EnumSource(UpgradeMode.class)
     public void testFlinkVersionChangeValidation(UpgradeMode toUpgradeMode) {

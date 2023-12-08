@@ -124,6 +124,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -1260,8 +1261,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         verifySavepointRedeploy(deployment, runningJobs, "sp-t2");
 
-        // Test redeploy from empty state
-        verifySavepointRedeploy(deployment, runningJobs, null);
+        // Null initialSavepoint path is not allowed. Normally caught during validation
+        assertThrows(
+                NullPointerException.class,
+                () -> verifySavepointRedeploy(deployment, runningJobs, null));
 
         // Test savepoint redeploy when jobstate is set to suspended
         deployment.getSpec().getJob().setState(JobState.SUSPENDED);
@@ -1269,8 +1272,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         if (upgradeMode != UpgradeMode.STATELESS) {
             // When we suspended with a new initial savepoint path simple spec changes should use
-            // the correct savepoint
-            // This doesn't apply to stateless mode as that starts from empty state after suspend
+            // the correct savepoint. This doesn't apply to stateless mode as that starts from empty
+            // state after suspend
             deployment.getSpec().getJob().setParallelism(321);
             verifySavepointRedeploy(deployment, runningJobs, "sp-t3");
 
@@ -1315,18 +1318,15 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 status.getJobManagerDeploymentStatus());
 
         // Verify that savepoint and upgrade mode is recorded correctly in reconciled spec
-        if (savepoint != null) {
-            assertEquals(
-                    savepoint,
-                    status.getJobStatus().getSavepointInfo().getLastSavepoint().getLocation());
-        } else {
-            assertEquals(
-                    UpgradeMode.STATELESS,
-                    status.getReconciliationStatus()
-                            .deserializeLastReconciledSpec()
-                            .getJob()
-                            .getUpgradeMode());
-        }
+        assertEquals(
+                savepoint,
+                status.getJobStatus().getSavepointInfo().getLastSavepoint().getLocation());
+        assertEquals(
+                UpgradeMode.SAVEPOINT,
+                status.getReconciliationStatus()
+                        .deserializeLastReconciledSpec()
+                        .getJob()
+                        .getUpgradeMode());
 
         assertTrue(status.getReconciliationStatus().isLastReconciledSpecStable());
     }

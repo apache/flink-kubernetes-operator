@@ -329,24 +329,18 @@ public abstract class AbstractJobReconciler<
             throws Exception {
         LOG.info("Redeploying from savepoint");
         cancelJob(ctx, UpgradeMode.STATELESS);
-        var savepointOpt =
-                Optional.ofNullable(currentDeploySpec.getJob().getInitialSavepointPath());
-        currentDeploySpec
-                .getJob()
-                .setUpgradeMode(
-                        savepointOpt.isPresent() ? UpgradeMode.SAVEPOINT : UpgradeMode.STATELESS);
-        savepointOpt.ifPresent(
-                s ->
-                        status.getJobStatus()
-                                .getSavepointInfo()
-                                .setLastSavepoint(Savepoint.of(s, SnapshotTriggerType.MANUAL)));
+        var savepoint = currentDeploySpec.getJob().getInitialSavepointPath();
+        currentDeploySpec.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+        status.getJobStatus()
+                .getSavepointInfo()
+                .setLastSavepoint(Savepoint.of(savepoint, SnapshotTriggerType.UNKNOWN));
 
         if (desiredJobState == JobState.RUNNING) {
             deploy(
                     ctx,
                     currentDeploySpec,
                     ctx.getDeployConfig(currentDeploySpec),
-                    savepointOpt,
+                    Optional.of(savepoint),
                     false);
         }
         ReconciliationUtils.updateStatusForDeployedSpec(resource, deployConfig, clock);

@@ -67,8 +67,8 @@ public class JobSpec implements Diffable<JobSpec> {
     private Long savepointTriggerNonce;
 
     /**
-     * Savepoint path used by the job the first time it is deployed. Upgrades/redeployments will not
-     * be affected.
+     * Savepoint path used by the job the first time it is deployed or during savepoint
+     * redeployments (triggered by changing the savepointRedeployNonce).
      */
     @SpecDiff(DiffType.IGNORE)
     private String initialSavepointPath;
@@ -90,9 +90,8 @@ public class JobSpec implements Diffable<JobSpec> {
 
     /**
      * Nonce used to trigger a full redeployment of the job from the savepoint path specified in
-     * initialSavepointPath or from empty state if initialSavepointPath is null. In order to trigger
-     * redeployment, change the number to a different non-null value. Rollback is not possible after
-     * redeployment.
+     * initialSavepointPath. In order to trigger redeployment, change the number to a different
+     * non-null value. Rollback is not possible after redeployment.
      */
     @SpecDiff(value = DiffType.SAVEPOINT_REDEPLOY, onNullIgnore = true)
     private Long savepointRedeployNonce;
