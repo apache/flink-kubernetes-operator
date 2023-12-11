@@ -31,26 +31,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class AutoScalerOptionsTest {
 
     @Test
-    void testAllConfigurationKeysHaveFallBackConfigured() {
+    void testPrefixForAutoscalerOptions() {
         assertThat(retrieveAutoscalerConfigOptions())
                 .allSatisfy(
-                        configOption ->
-                                assertThat(configOption.fallbackKeys())
-                                        .anySatisfy(
-                                                fallbackKey -> {
-                                                    assertThat(fallbackKey.getKey())
+                        configOption -> {
+                            assertThat(configOption.key())
+                                    .startsWith(AutoScalerOptions.AUTOSCALER_CONF_PREFIX);
+                            assertThat(configOption.fallbackKeys())
+                                    .allSatisfy(
+                                            fallback ->
+                                                    assertThat(fallback.getKey())
                                                             .startsWith(
                                                                     AutoScalerOptions
-                                                                            .OLD_K8S_OP_CONF_PREFIX);
-                                                    assertThat(
-                                                                    fallbackKey
-                                                                            .getKey()
-                                                                            .substring(
-                                                                                    AutoScalerOptions
-                                                                                            .OLD_K8S_OP_CONF_PREFIX
-                                                                                            .length()))
-                                                            .isEqualTo(configOption.key());
-                                                }));
+                                                                            .AUTOSCALER_CONF_PREFIX));
+                        });
     }
 
     private static List<ConfigOption<?>> retrieveAutoscalerConfigOptions() {

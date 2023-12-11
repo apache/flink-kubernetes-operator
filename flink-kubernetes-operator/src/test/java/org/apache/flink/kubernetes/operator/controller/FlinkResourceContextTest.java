@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
@@ -40,6 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -148,6 +150,30 @@ public class FlinkResourceContextTest {
         assertTrue(sessionJobCtx.getObserveConfig() == conf);
         assertTrue(sessionJobCtx.getObserveConfig() == conf);
         assertEquals(2, counter.get());
+    }
+
+    @Test
+    void testLegacyConfigurationMigration() {
+        var conf = new Configuration();
+        String toBeMigratedKey =
+                AutoScalerOptions.LEGACY_CONF_PREFIX + AutoScalerOptions.TARGET_UTILIZATION.key();
+        conf.setString(toBeMigratedKey, "0.23");
+        conf.setString("another.config.entry", "another value");
+        configManager =
+                new FlinkConfigManager(conf) {
+                    @Override
+                    public Configuration getObserveConfig(FlinkDeployment deployment) {
+                        return conf;
+                    }
+                };
+
+        var deployCtx = getContext(TestUtils.buildApplicationCluster());
+        Configuration effectiveConfig = deployCtx.getJobAutoScalerContext().getConfiguration();
+
+        assertThat(effectiveConfig.get(AutoScalerOptions.TARGET_UTILIZATION)).isEqualTo(0.23);
+        assertThat(effectiveConfig.toMap().get(toBeMigratedKey)).isNull();
+        assertThat(effectiveConfig.getString("another.config.entry", ""))
+                .isEqualTo("another value");
     }
 
     FlinkResourceContext getContext(AbstractFlinkResource<?, ?> cr) {
