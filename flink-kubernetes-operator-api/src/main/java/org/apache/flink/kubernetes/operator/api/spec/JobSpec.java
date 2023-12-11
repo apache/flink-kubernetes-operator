@@ -61,21 +61,21 @@ public class JobSpec implements Diffable<JobSpec> {
 
     /**
      * Nonce used to manually trigger savepoint for the running job. In order to trigger a
-     * savepoint, change the number to anything other than the current value.
+     * savepoint, change the number to a different non-null value.
      */
     @SpecDiff(DiffType.IGNORE)
     private Long savepointTriggerNonce;
 
     /**
-     * Savepoint path used by the job the first time it is deployed. Upgrades/redeployments will not
-     * be affected.
+     * Savepoint path used by the job the first time it is deployed or during savepoint
+     * redeployments (triggered by changing the savepointRedeployNonce).
      */
     @SpecDiff(DiffType.IGNORE)
     private String initialSavepointPath;
 
     /**
      * Nonce used to manually trigger checkpoint for the running job. In order to trigger a
-     * checkpoint, change the number to anything other than the current value.
+     * checkpoint, change the number to a different non-null value.
      */
     @SpecDiff(DiffType.IGNORE)
     private Long checkpointTriggerNonce;
@@ -87,4 +87,12 @@ public class JobSpec implements Diffable<JobSpec> {
     /** Allow checkpoint state that cannot be mapped to any job vertex in tasks. */
     @SpecDiff(DiffType.IGNORE)
     private Boolean allowNonRestoredState;
+
+    /**
+     * Nonce used to trigger a full redeployment of the job from the savepoint path specified in
+     * initialSavepointPath. In order to trigger redeployment, change the number to a different
+     * non-null value. Rollback is not possible after redeployment.
+     */
+    @SpecDiff(value = DiffType.SAVEPOINT_REDEPLOY, onNullIgnore = true)
+    private Long savepointRedeployNonce;
 }

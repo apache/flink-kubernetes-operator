@@ -28,6 +28,7 @@ import lombok.Getter;
 import lombok.NonNull;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Contains a collection of the differences between two {@link Diffable} objects.
@@ -49,7 +50,8 @@ public class DiffResult<T> {
         this.before = before;
         this.after = after;
         this.diffList = diffList;
-        this.type = getSpechChangeType(diffList);
+        this.type =
+                DiffType.from(diffList.stream().map(Diff::getType).collect(Collectors.toList()));
     }
 
     public int getNumDiffs() {
@@ -98,17 +100,6 @@ public class DiffResult<T> {
         builder.setLength(builder.length() - 2);
         builder.append("]");
         return String.format("Diff: %s", builder);
-    }
-
-    private static DiffType getSpechChangeType(List<Diff<?>> diffs) {
-        var type = DiffType.IGNORE;
-        for (var diff : diffs) {
-            type = DiffType.max(type, diff.getType());
-            if (type == DiffType.UPGRADE) {
-                return type;
-            }
-        }
-        return type;
     }
 
     private static void addField(

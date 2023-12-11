@@ -448,6 +448,14 @@ public class DefaultValidator implements FlinkResourceValidator {
                                 "Job could not be upgraded to last-state while config key[%s] is not set",
                                 CheckpointingOptions.SAVEPOINT_DIRECTORY.key()));
             }
+
+            if (newJob.getSavepointRedeployNonce() != null
+                    && !newJob.getSavepointRedeployNonce()
+                            .equals(oldJob.getSavepointRedeployNonce())
+                    && StringUtils.isNullOrWhitespaceOnly(newJob.getInitialSavepointPath())) {
+                return Optional.of(
+                        "InitialSavepointPath must not be empty for savepoint redeployment");
+            }
         }
 
         return Optional.empty();

@@ -19,6 +19,9 @@ package org.apache.flink.kubernetes.operator.api.diff;
 
 import org.apache.flink.annotation.Experimental;
 
+import java.util.Collection;
+import java.util.Comparator;
+
 /** Spec change type. */
 @Experimental
 public enum DiffType {
@@ -28,9 +31,18 @@ public enum DiffType {
     /** Scalable spec change. */
     SCALE,
     /** Upgradable spec change. */
-    UPGRADE;
+    UPGRADE,
+    /** Full redeploy from new state. */
+    SAVEPOINT_REDEPLOY;
 
-    public static DiffType max(DiffType left, DiffType right) {
-        return (left.ordinal() >= right.ordinal()) ? left : right;
+    /**
+     * Aggregate a collection of {@link DiffType}s into the type that minimally subsumes all the
+     * diffs. We rely on the fact that the enum values are sorted this way.
+     *
+     * @param diffs Collection of diffs.
+     * @return Aggregated {@link DiffType}
+     */
+    public static DiffType from(Collection<DiffType> diffs) {
+        return diffs.stream().max(Comparator.comparing(DiffType::ordinal)).orElse(DiffType.IGNORE);
     }
 }
