@@ -33,6 +33,7 @@ import io.fabric8.kubernetes.api.model.networking.v1.HTTPIngressRuleValueBuilder
 import io.fabric8.kubernetes.api.model.networking.v1.IngressBuilder;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRule;
 import io.fabric8.kubernetes.api.model.networking.v1.IngressRuleBuilder;
+import io.fabric8.kubernetes.api.model.networking.v1beta1.IngressTLS;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -43,7 +44,9 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /** Ingress utilities. */
 public class IngressUtils {
@@ -93,24 +96,45 @@ public class IngressUtils {
         if (ingressInNetworkingV1(client)) {
             return new IngressBuilder()
                     .withNewMetadata()
+                    .withLabels(spec.getIngress().getLabels())
                     .withAnnotations(spec.getIngress().getAnnotations())
                     .withName(objectMeta.getName())
                     .withNamespace(objectMeta.getNamespace())
                     .endMetadata()
                     .withNewSpec()
                     .withIngressClassName(spec.getIngress().getClassName())
+                    .withTls(spec.getIngress().getTls())
                     .withRules(getIngressRule(objectMeta, spec, effectiveConfig))
                     .endSpec()
                     .build();
         } else {
+            List<IngressTLS> ingressTLS =
+                    Optional.ofNullable(spec.getIngress().getTls())
+                            .map(
+                                    list ->
+                                            list.stream()
+                                                    .map(
+                                                            v1Tls -> {
+                                                                IngressTLS v1beta1Tls =
+                                                                        new IngressTLS();
+                                                                v1beta1Tls.setHosts(
+                                                                        v1Tls.getHosts());
+                                                                v1beta1Tls.setSecretName(
+                                                                        v1Tls.getSecretName());
+                                                                return v1beta1Tls;
+                                                            })
+                                                    .collect(Collectors.toList()))
+                            .orElse(Collections.emptyList());
             return new io.fabric8.kubernetes.api.model.networking.v1beta1.IngressBuilder()
                     .withNewMetadata()
                     .withAnnotations(spec.getIngress().getAnnotations())
+                    .withLabels(spec.getIngress().getLabels())
                     .withName(objectMeta.getName())
                     .withNamespace(objectMeta.getNamespace())
                     .endMetadata()
                     .withNewSpec()
                     .withIngressClassName(spec.getIngress().getClassName())
+                    .withTls(ingressTLS)
                     .withRules(getIngressRuleForV1beta1(objectMeta, spec, effectiveConfig))
                     .endSpec()
                     .build();
