@@ -55,6 +55,9 @@ spec:
       {{- if .Values.operatorPod.nodeSelector }}
       nodeSelector: {{ toYaml .Values.operatorPod.nodeSelector | nindent 8 }}
       {{- end }}
+      {{- if .Values.operatorPod.affinity }}
+      affinity: {{ toYaml .Values.operatorPod.affinity | nindent 8 }}
+      {{- end }}
       {{- with .Values.operatorPod.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
