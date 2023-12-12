@@ -71,9 +71,7 @@ public class AutoscalerFlinkMetrics {
     }
 
     public void registerScalingMetrics(
-            List<JobVertexID> jobVertices,
-            Supplier<Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
-                    metricsSupplier) {
+            List<JobVertexID> jobVertices, Supplier<EvaluatedMetrics> metricsSupplier) {
         if (scalingMetricsInitialized) {
             // It is important that we only initialize these metrics once because the Flink API does
             // not support registering counters / gauges multiple times.
@@ -88,13 +86,14 @@ public class AutoscalerFlinkMetrics {
             MetricGroup jobVertexGroup =
                     metricGroup.addGroup(JOB_VERTEX_ID, jobVertexID.toHexString());
 
-            for (ScalingMetric scalingMetric : ScalingMetric.values()) {
+            for (ScalingMetric scalingMetric : ScalingMetric.REPORTED_VERTEX_METRICS) {
                 MetricGroup scalingMetricGroup = jobVertexGroup.addGroup(scalingMetric.name());
 
                 scalingMetricGroup.gauge(
                         CURRENT,
                         () ->
                                 Optional.ofNullable(metricsSupplier.get())
+                                        .map(EvaluatedMetrics::getVertexMetrics)
                                         .map(m -> m.get(jobVertexID))
                                         .map(metrics -> metrics.get(scalingMetric))
                                         .map(EvaluatedScalingMetric::getCurrent)
@@ -105,6 +104,7 @@ public class AutoscalerFlinkMetrics {
                             AVERAGE,
                             () ->
                                     Optional.ofNullable(metricsSupplier.get())
+                                            .map(EvaluatedMetrics::getVertexMetrics)
                                             .map(m -> m.get(jobVertexID))
                                             .map(metrics -> metrics.get(scalingMetric))
                                             .map(EvaluatedScalingMetric::getAverage)
