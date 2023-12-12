@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler.config;
 
 import org.apache.flink.configuration.ConfigOption;
+import org.apache.flink.configuration.Configuration;
 
 import org.junit.jupiter.api.Test;
 
@@ -45,6 +46,35 @@ public class AutoScalerOptionsTest {
                                                                     AutoScalerOptions
                                                                             .AUTOSCALER_CONF_PREFIX));
                         });
+    }
+
+    @Test
+    void testMigration() {
+        var config = new Configuration();
+        String toBeMigratedKey = "kubernetes.operator.actual.config.key";
+        config.setString(toBeMigratedKey, "0.23");
+        config.setString("another.key", "another value");
+
+        var migratedConfig = AutoScalerOptions.migrateOldConfigKeys(config);
+
+        var configMap = migratedConfig.toMap();
+        assertThat(configMap.size()).isEqualTo(2);
+        assertThat(configMap).containsEntry("actual.config.key", "0.23");
+        assertThat(configMap).doesNotContainKey(toBeMigratedKey);
+        assertThat(configMap).containsEntry("another.key", "another value");
+    }
+
+    @Test
+    void testDoNotOverrideExistingKeys() {
+        var config = new Configuration();
+        config.setString("kubernetes.operator.config.key", "0.23");
+        config.setString("config.key", "0.42");
+
+        var migratedConfig = AutoScalerOptions.migrateOldConfigKeys(config);
+
+        var configMap = migratedConfig.toMap();
+        assertThat(configMap.size()).isEqualTo(1);
+        assertThat(configMap).containsEntry("config.key", "0.42");
     }
 
     private static List<ConfigOption<?>> retrieveAutoscalerConfigOptions() {

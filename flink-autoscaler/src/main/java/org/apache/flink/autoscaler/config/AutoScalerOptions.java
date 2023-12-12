@@ -20,9 +20,13 @@ package org.apache.flink.autoscaler.config;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.util.Preconditions;
 
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /** Config options related to the autoscaler module. */
 public class AutoScalerOptions {
@@ -232,4 +236,27 @@ public class AutoScalerOptions {
                     .durationType()
                     .defaultValue(Duration.ofSeconds(10))
                     .withDescription("The timeout for waiting the flink rest client to return.");
+
+    /** Migrate config keys still prefixed with the old Kubernetes operator prefix. */
+    public static Configuration migrateOldConfigKeys(Configuration config) {
+        Preconditions.checkNotNull(config);
+        config = new Configuration(config);
+
+        Set<String> toBeMigrated = new HashSet<>();
+        for (String key : config.keySet()) {
+            if (key.startsWith(LEGACY_CONF_PREFIX)) {
+                toBeMigrated.add(key);
+            }
+        }
+        for (String key : toBeMigrated) {
+            String migratedKey = key.substring(LEGACY_CONF_PREFIX.length());
+            boolean keyDoesNotExist = config.getString(migratedKey, null) == null;
+            if (keyDoesNotExist) {
+                String migratedValue = Preconditions.checkNotNull(config.getString(key, null));
+                config.setString(migratedKey, migratedValue);
+            }
+            config.removeKey(key);
+        }
+        return config;
+    }
 }

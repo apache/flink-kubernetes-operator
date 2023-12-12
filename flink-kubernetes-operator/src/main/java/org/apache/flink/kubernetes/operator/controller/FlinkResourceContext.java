@@ -20,7 +20,6 @@ package org.apache.flink.kubernetes.operator.controller;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
-import org.apache.flink.autoscaler.config.KeyMigratingConfiguration;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
@@ -66,9 +65,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
     }
 
     private KubernetesJobAutoScalerContext createJobAutoScalerContext() {
-        Configuration conf =
-                new KeyMigratingConfiguration(
-                        AutoScalerOptions.LEGACY_CONF_PREFIX, getObserveConfig());
+        Configuration conf = AutoScalerOptions.migrateOldConfigKeys(getObserveConfig());
         conf.set(
                 AutoScalerOptions.FLINK_CLIENT_TIMEOUT,
                 getOperatorConfig().getFlinkClientTimeout());
