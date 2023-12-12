@@ -24,7 +24,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.util.Preconditions;
 
 import java.time.Duration;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -240,22 +239,17 @@ public class AutoScalerOptions {
     /** Migrate config keys still prefixed with the old Kubernetes operator prefix. */
     public static Configuration migrateOldConfigKeys(Configuration config) {
         Preconditions.checkNotNull(config);
+        Set<String> allKeys = config.keySet();
         config = new Configuration(config);
-
-        Set<String> toBeMigrated = new HashSet<>();
-        for (String key : config.keySet()) {
+        for (String key : allKeys) {
             if (key.startsWith(LEGACY_CONF_PREFIX)) {
-                toBeMigrated.add(key);
+                String migratedKey = key.substring(LEGACY_CONF_PREFIX.length());
+                if (!config.containsKey(migratedKey)) {
+                    String migratedValue = config.getString(key, null);
+                    config.setString(migratedKey, migratedValue);
+                }
+                config.removeKey(key);
             }
-        }
-        for (String key : toBeMigrated) {
-            String migratedKey = key.substring(LEGACY_CONF_PREFIX.length());
-            boolean keyDoesNotExist = config.getString(migratedKey, null) == null;
-            if (keyDoesNotExist) {
-                String migratedValue = Preconditions.checkNotNull(config.getString(key, null));
-                config.setString(migratedKey, migratedValue);
-            }
-            config.removeKey(key);
         }
         return config;
     }
