@@ -41,6 +41,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD;
@@ -150,6 +151,9 @@ public class ScalingMetricEvaluator {
                 LOAD,
                 new EvaluatedScalingMetric(
                         latestVertexMetrics.get(LOAD), getAverage(LOAD, vertex, metricsHistory)));
+
+        Optional.ofNullable(latestVertexMetrics.get(LAG))
+                .ifPresent(l -> evaluatedMetrics.put(LAG, EvaluatedScalingMetric.of(l)));
 
         evaluatedMetrics.put(
                 PARALLELISM, EvaluatedScalingMetric.of(topology.getParallelisms().get(vertex)));

@@ -17,6 +17,10 @@
 
 package org.apache.flink.autoscaler.metrics;
 
+import lombok.Getter;
+
+import java.util.Set;
+
 /**
  * Supported scaling metrics. These represent high level metrics computed from Flink job metrics
  * that are used for scaling decisions in the autoscaler module.
@@ -76,13 +80,24 @@ public enum ScalingMetric {
     /** Percentage of max heap used (between 0 and 1). */
     HEAP_USAGE(true);
 
-    private final boolean calculateAverage;
+    @Getter private final boolean calculateAverage;
+
+    /** List of {@link ScalingMetric}s to be reported as per vertex Flink metrics. */
+    public static final Set<ScalingMetric> REPORTED_VERTEX_METRICS =
+            Set.of(
+                    LOAD,
+                    TRUE_PROCESSING_RATE,
+                    TARGET_DATA_RATE,
+                    CATCH_UP_DATA_RATE,
+                    LAG,
+                    PARALLELISM,
+                    RECOMMENDED_PARALLELISM,
+                    MAX_PARALLELISM,
+                    SCALE_UP_RATE_THRESHOLD,
+                    SCALE_DOWN_RATE_THRESHOLD,
+                    EXPECTED_PROCESSING_RATE);
 
     ScalingMetric(boolean calculateAverage) {
         this.calculateAverage = calculateAverage;
-    }
-
-    public boolean isCalculateAverage() {
-        return calculateAverage;
     }
 }

@@ -187,6 +187,13 @@ public class MetricsCollectionAndEvaluationTest {
 
         assertNotNull(metricsCollector.getHistories().get(context.getJobKey()));
 
+        // Make sure all reported vertex metrics are evaluated, we expect complete metrics when a
+        // vertex is actually scaled
+        // Also for sources we have LAG metrics that is not available for other vertices
+        assertEquals(
+                ScalingMetric.REPORTED_VERTEX_METRICS,
+                evaluation.getVertexMetrics().get(source1).keySet());
+
         metricsCollector.cleanup(context.getJobKey());
         assertNull(metricsCollector.getHistories().get(context.getJobKey()));
         assertNull(metricsCollector.getAvailableVertexMetricNames().get(context.getJobKey()));

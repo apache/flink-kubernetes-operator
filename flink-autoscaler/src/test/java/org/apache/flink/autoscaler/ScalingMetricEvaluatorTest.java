@@ -142,6 +142,10 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(
                 EvaluatedScalingMetric.of(1000),
                 evaluatedMetrics.get(sink).get(ScalingMetric.CATCH_UP_DATA_RATE));
+        assertEquals(
+                EvaluatedScalingMetric.of(1000),
+                evaluatedMetrics.get(source).get(ScalingMetric.LAG));
+        assertFalse(evaluatedMetrics.get(sink).containsKey(ScalingMetric.LAG));
 
         conf.set(CATCH_UP_DURATION, Duration.ofSeconds(1));
         evaluatedMetrics =
