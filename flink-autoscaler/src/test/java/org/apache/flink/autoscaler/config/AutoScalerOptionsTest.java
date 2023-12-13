@@ -58,22 +58,24 @@ public class AutoScalerOptionsTest {
         var migratedConfig = AutoScalerOptions.migrateOldConfigKeys(config);
 
         var configMap = migratedConfig.toMap();
-        assertThat(configMap.size()).isEqualTo(2);
+        assertThat(configMap.size()).isEqualTo(3);
         assertThat(configMap).containsEntry("job.autoscaler.actual.config.key", "0.23");
-        assertThat(configMap).doesNotContainKey(toBeMigratedKey);
+        assertThat(configMap).containsEntry(toBeMigratedKey, "0.23");
         assertThat(configMap).containsEntry("another.key", "another value");
     }
 
     @Test
     void testConfigMigrationDoNotOverrideExistingKeys() {
         var config = new Configuration();
-        config.setString("kubernetes.operator.job.autoscaler.config.key", "0.23");
+        String toBeMigratedKey = "kubernetes.operator.job.autoscaler.config.key";
+        config.setString(toBeMigratedKey, "0.23");
         config.setString("job.autoscaler.config.key", "0.42");
 
         var migratedConfig = AutoScalerOptions.migrateOldConfigKeys(config);
 
         var configMap = migratedConfig.toMap();
-        assertThat(configMap.size()).isEqualTo(1);
+        assertThat(configMap.size()).isEqualTo(2);
+        assertThat(configMap).containsEntry(toBeMigratedKey, "0.23");
         assertThat(configMap).containsEntry("job.autoscaler.config.key", "0.42");
     }
 

@@ -171,9 +171,8 @@ public class FlinkResourceContextTest {
         Configuration effectiveConfig = deployCtx.getJobAutoScalerContext().getConfiguration();
 
         assertThat(effectiveConfig.get(AutoScalerOptions.TARGET_UTILIZATION)).isEqualTo(0.23);
-        assertThat(effectiveConfig.toMap().get(toBeMigratedKey)).isNull();
-        assertThat(effectiveConfig.getString("another.config.entry", ""))
-                .isEqualTo("another value");
+        assertThat(effectiveConfig.toMap().get(toBeMigratedKey)).isEqualTo("0.23");
+        assertThat(effectiveConfig.toMap().get("another.config.entry")).isEqualTo("another value");
     }
 
     FlinkResourceContext getContext(AbstractFlinkResource<?, ?> cr) {

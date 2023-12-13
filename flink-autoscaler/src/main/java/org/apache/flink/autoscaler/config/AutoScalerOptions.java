@@ -241,15 +241,19 @@ public class AutoScalerOptions {
         Preconditions.checkNotNull(config);
         Set<String> allKeys = config.keySet();
         config = new Configuration(config);
-        String legacyAutoscalerConfig = LEGACY_CONF_PREFIX + AUTOSCALER_CONF_PREFIX;
+        String legacyAutoscalerConfigPrefix = LEGACY_CONF_PREFIX + AUTOSCALER_CONF_PREFIX;
+
         for (String key : allKeys) {
-            if (key.startsWith(legacyAutoscalerConfig)) {
+            if (key.startsWith(legacyAutoscalerConfigPrefix)) {
                 String migratedKey = key.substring(LEGACY_CONF_PREFIX.length());
                 if (!config.containsKey(migratedKey)) {
-                    String migratedValue = config.getString(key, null);
+                    String migratedValue =
+                            Preconditions.checkNotNull(
+                                    config.getString(key, null),
+                                    "Value for key %s must not be null",
+                                    key);
                     config.setString(migratedKey, migratedValue);
                 }
-                config.removeKey(key);
             }
         }
         return config;
