@@ -56,7 +56,23 @@ spec:
       nodeSelector: {{ toYaml .Values.operatorPod.nodeSelector | nindent 8 }}
       {{- end }}
       {{- if .Values.operatorPod.affinity }}
-      affinity: {{ toYaml .Values.operatorPod.affinity | nindent 8 }}
+      affinity:
+        podAntiAffinity:
+          {{ if eq .Values.operatorPod.affinity.type "requiredDuringSchedulingIgnoredDuringExecution"}}
+          {{ .Values.operatorPod.affinity.type }}:
+          - labelSelector:
+              matchExpressions:
+                {{- include "flink-operator.selectorLabels" . | nindent 16 }}
+            topologyKey: "kubernetes.io/hostname"
+          {{ else }}
+          {{ .Values.operatorPod.affinity.type }}:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    {{- include "flink-operator.selectorLabels" . | nindent 20 }}
+                topologyKey: "kubernetes.io/hostname"
+          {{ end }}
       {{- end }}
       {{- with .Values.operatorPod.tolerations }}
       tolerations:
