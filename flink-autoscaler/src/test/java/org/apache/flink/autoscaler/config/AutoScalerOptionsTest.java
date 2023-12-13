@@ -49,9 +49,9 @@ public class AutoScalerOptionsTest {
     }
 
     @Test
-    void testMigration() {
+    void testConfigMigration() {
         var config = new Configuration();
-        String toBeMigratedKey = "kubernetes.operator.actual.config.key";
+        String toBeMigratedKey = "kubernetes.operator.job.autoscaler.actual.config.key";
         config.setString(toBeMigratedKey, "0.23");
         config.setString("another.key", "another value");
 
@@ -59,22 +59,34 @@ public class AutoScalerOptionsTest {
 
         var configMap = migratedConfig.toMap();
         assertThat(configMap.size()).isEqualTo(2);
-        assertThat(configMap).containsEntry("actual.config.key", "0.23");
+        assertThat(configMap).containsEntry("job.autoscaler.actual.config.key", "0.23");
         assertThat(configMap).doesNotContainKey(toBeMigratedKey);
         assertThat(configMap).containsEntry("another.key", "another value");
     }
 
     @Test
-    void testDoNotOverrideExistingKeys() {
+    void testConfigMigrationDoNotOverrideExistingKeys() {
         var config = new Configuration();
-        config.setString("kubernetes.operator.config.key", "0.23");
-        config.setString("config.key", "0.42");
+        config.setString("kubernetes.operator.job.autoscaler.config.key", "0.23");
+        config.setString("job.autoscaler.config.key", "0.42");
 
         var migratedConfig = AutoScalerOptions.migrateOldConfigKeys(config);
 
         var configMap = migratedConfig.toMap();
         assertThat(configMap.size()).isEqualTo(1);
-        assertThat(configMap).containsEntry("config.key", "0.42");
+        assertThat(configMap).containsEntry("job.autoscaler.config.key", "0.42");
+    }
+
+    @Test
+    void testConfigMigrationIgnoreNonAutoscalerKeys() {
+        var config = new Configuration();
+        config.setString("kubernetes.operator.config.key", "value");
+
+        var migratedConfig = AutoScalerOptions.migrateOldConfigKeys(config);
+
+        var configMap = migratedConfig.toMap();
+        assertThat(configMap.size()).isEqualTo(1);
+        assertThat(configMap).containsEntry("kubernetes.operator.config.key", "value");
     }
 
     private static List<ConfigOption<?>> retrieveAutoscalerConfigOptions() {

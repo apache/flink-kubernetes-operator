@@ -30,11 +30,11 @@ import java.util.Set;
 /** Config options related to the autoscaler module. */
 public class AutoScalerOptions {
 
-    /** Old config namespace which is still kept for backwards-compatibility. */
-    public static final String LEGACY_CONF_PREFIX = "kubernetes.operator.";
-
     /** Prefix for all autoscaler options. */
     public static final String AUTOSCALER_CONF_PREFIX = "job.autoscaler.";
+
+    /** Old config namespace which is still kept for backwards-compatibility. */
+    public static final String LEGACY_CONF_PREFIX = "kubernetes.operator.";
 
     private static String autoScalerConfigKey(String key) {
         return AUTOSCALER_CONF_PREFIX + key;
@@ -241,8 +241,9 @@ public class AutoScalerOptions {
         Preconditions.checkNotNull(config);
         Set<String> allKeys = config.keySet();
         config = new Configuration(config);
+        String legacyAutoscalerConfig = LEGACY_CONF_PREFIX + AUTOSCALER_CONF_PREFIX;
         for (String key : allKeys) {
-            if (key.startsWith(LEGACY_CONF_PREFIX)) {
+            if (key.startsWith(legacyAutoscalerConfig)) {
                 String migratedKey = key.substring(LEGACY_CONF_PREFIX.length());
                 if (!config.containsKey(migratedKey)) {
                     String migratedValue = config.getString(key, null);
