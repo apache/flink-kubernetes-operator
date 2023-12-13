@@ -67,6 +67,7 @@ import java.util.stream.Stream;
 
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.updateVertexList;
 import static org.apache.flink.autoscaler.utils.AutoScalerUtils.excludeVerticesFromScaling;
+import static org.apache.flink.autoscaler.utils.DateTimeUtils.readable;
 
 /** Metric collector using flink rest api. */
 public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerContext<KEY>> {
@@ -106,7 +107,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         // We detect job change compared to our collected metrics by checking against the earliest
         // metric timestamp
         if (!metricHistory.isEmpty() && jobUpdateTs.isAfter(metricHistory.firstKey())) {
-            LOG.info("Job updated at {}. Clearing metrics.", jobUpdateTs);
+            LOG.info("Job updated at {}. Clearing metrics.", readable(jobUpdateTs));
             stateStore.removeCollectedMetrics(ctx);
             cleanup(ctx.getJobKey());
             metricHistory.clear();
@@ -134,14 +135,14 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         metricHistory.put(now, scalingMetrics);
 
         if (isStabilizing) {
-            LOG.info("Stabilizing until {}", stableTime);
+            LOG.info("Stabilizing until {}", readable(stableTime));
             stateStore.storeCollectedMetrics(ctx, metricHistory);
             return new CollectedMetricHistory(topology, Collections.emptySortedMap());
         }
 
         var collectedMetrics = new CollectedMetricHistory(topology, metricHistory);
         if (now.isBefore(windowFullTime)) {
-            LOG.info("Metric window not full until {}", windowFullTime);
+            LOG.info("Metric window not full until {}", readable(windowFullTime));
         } else {
             collectedMetrics.setFullyCollected(true);
             // Trim metrics outside the metric window from metrics history
