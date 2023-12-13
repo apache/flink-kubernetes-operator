@@ -23,7 +23,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl flink-kubernetes-standalone,flink-kubernetes-operator-api,flink-kubernetes-operator,flink-autoscaler,flink-kubernetes-webhook -DskipTests=$SKIP_TESTS
+RUN --mount=type=cache,target=/root/.m2 mvn -ntp clean install -pl flink-kubernetes-standalone,flink-kubernetes-operator-api,flink-kubernetes-operator,flink-autoscaler,flink-kubernetes-webhook,flink-kubernetes-mutator -DskipTests=$SKIP_TESTS
 
 RUN cd /app/tools/license; mkdir jars; cd jars; \
     cp /app/flink-kubernetes-operator/target/flink-kubernetes-operator-*-shaded.jar . && \
@@ -31,6 +31,9 @@ RUN cd /app/tools/license; mkdir jars; cd jars; \
     cp /app/flink-kubernetes-standalone/target/flink-kubernetes-standalone-*.jar . && \
     cp -r /app/flink-kubernetes-operator/target/plugins ./plugins && \
     cd ../ && ./collect_license_files.sh ./jars ./licenses-output
+
+RUN mkdir -p ./plugins/flink-kubernetes-mutator && \
+    cp /app/flink-kubernetes-mutator/target/flink-kubernetes-mutator-*.jar ./plugins/flink-kubernetes-mutator
 
 # stage
 FROM eclipse-temurin:11-jre-jammy
@@ -54,6 +57,10 @@ COPY --from=build /app/flink-kubernetes-standalone/target/$KUBERNETES_STANDALONE
 COPY --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
 COPY --from=build /app/tools/license/licenses-output/NOTICE .
 COPY --from=build /app/tools/license/licenses-output/licenses ./licenses
+# copy custom mutator jar
+COPY --from=build /app/flink-kubernetes-mutator/target/flink-kubernetes-mutator-*.jar $FLINK_HOME/plugins/flink-kubernetes-mutator/
+COPY --from=build /app/flink-kubernetes-mutator/target/flink-kubernetes-mutator-*.jar $OPERATOR_LIB
+
 COPY docker-entrypoint.sh /
 
 RUN chown -R flink:flink $FLINK_HOME && \
