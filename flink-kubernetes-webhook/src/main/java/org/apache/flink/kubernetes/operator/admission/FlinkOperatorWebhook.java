@@ -21,8 +21,10 @@ import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.admission.mutator.FlinkMutator;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.fs.FileSystemWatchService;
+import org.apache.flink.kubernetes.operator.mutator.FlinkResourceMutator;
 import org.apache.flink.kubernetes.operator.ssl.ReloadableSslContext;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
+import org.apache.flink.kubernetes.operator.utils.MutatorUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
@@ -63,10 +65,12 @@ public class FlinkOperatorWebhook {
             informerManager.setNamespaces(operatorConfig.getWatchedNamespaces());
         }
         Set<FlinkResourceValidator> validators = ValidatorUtils.discoverValidators(configManager);
+        Set<FlinkResourceMutator> mutators = MutatorUtils.discoverMutators(configManager);
 
         AdmissionHandler endpoint =
                 new AdmissionHandler(
-                        new FlinkValidator(validators, informerManager), new FlinkMutator());
+                        new FlinkValidator(validators, informerManager),
+                        new FlinkMutator(mutators, informerManager));
 
         ChannelInitializer<SocketChannel> initializer = createChannelInitializer(endpoint);
         NioEventLoopGroup bossGroup = new NioEventLoopGroup(1);

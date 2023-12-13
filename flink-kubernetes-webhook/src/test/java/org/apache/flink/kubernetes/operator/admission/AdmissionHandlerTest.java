@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.utils.MutatorUtils;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
 import org.apache.flink.shaded.netty4.io.netty.buffer.Unpooled;
@@ -41,6 +42,7 @@ import io.fabric8.kubernetes.api.model.GroupVersionKind;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionRequest;
 import io.fabric8.kubernetes.api.model.admission.v1.AdmissionReview;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -67,7 +69,9 @@ public class AdmissionHandlerTest {
                     new FlinkValidator(
                             ValidatorUtils.discoverValidators(new FlinkConfigManager(ns -> {})),
                             new InformerManager(null)),
-                    new FlinkMutator());
+                    new FlinkMutator(
+                            MutatorUtils.discoverMutators(new FlinkConfigManager(ns -> {})),
+                            new InformerManager(new KubernetesClientBuilder().build())));
 
     @Test
     public void testHandleIllegalRequest() {
@@ -136,6 +140,10 @@ public class AdmissionHandlerTest {
     public void testMutateHandler() throws Exception {
         final EmbeddedChannel embeddedChannel = new EmbeddedChannel(admissionHandler);
         var sessionJob = new FlinkSessionJob();
+        ObjectMeta objectMeta = new ObjectMeta();
+        objectMeta.setName("basic-session-cluster");
+        objectMeta.setNamespace("testNamespace");
+        sessionJob.setMetadata(objectMeta);
         sessionJob.setSpec(
                 FlinkSessionJobSpec.builder()
                         .job(JobSpec.builder().jarURI("http://myjob.jar").build())
