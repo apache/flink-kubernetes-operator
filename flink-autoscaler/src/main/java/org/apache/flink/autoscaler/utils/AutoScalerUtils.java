@@ -23,12 +23,18 @@ import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
+import org.quartz.impl.calendar.CronCalendar;
+import org.quartz.impl.calendar.DailyCalendar;
+
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
@@ -36,7 +42,6 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE
 
 /** AutoScaler utilities. */
 public class AutoScalerUtils {
-
     public static double getTargetProcessingCapacity(
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             Configuration conf,
@@ -93,5 +98,107 @@ public class AutoScalerUtils {
         }
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, new ArrayList<>(excludedIds));
         return anyAdded;
+    }
+
+    /** Quartz doesn't have the invertTimeRange flag so rewrite this method. */
+    static boolean isTimeIncluded(CronCalendar cron, long timeInMillis) {
+        if (cron.getBaseCalendar() != null
+                && !cron.getBaseCalendar().isTimeIncluded(timeInMillis)) {
+            return false;
+        } else {
+            return cron.getCronExpression().isSatisfiedBy(new Date(timeInMillis));
+        }
+    }
+
+    static Optional<DailyCalendar> interpretAsDaily(String subExpression) {
+        String[] splits = subExpression.split("-");
+        if (splits.length != 2) {
+            return Optional.empty();
+        }
+        try {
+            DailyCalendar daily = new DailyCalendar(splits[0], splits[1]);
+            daily.setInvertTimeRange(true);
+            return Optional.of(daily);
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    static Optional<CronCalendar> interpretAsCron(String subExpression) {
+        try {
+            return Optional.of(new CronCalendar(subExpression));
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    static Optional<String> validateExcludedExpression(String expression) {
+        String[] subExpressions = expression.split("&&");
+        Optional<DailyCalendar> daily = Optional.empty();
+        Optional<CronCalendar> cron = Optional.empty();
+        if (subExpressions.length > 2) {
+            return Optional.of(
+                    String.format(
+                            "Invalid value %s in the autoscaler config %s",
+                            expression, AutoScalerOptions.EXCLUDED_PERIODS.key()));
+        }
+
+        for (String subExpression : subExpressions) {
+            subExpression = subExpression.strip();
+            daily = interpretAsDaily(subExpression);
+            cron = interpretAsCron(subExpression);
+
+            if (daily.isEmpty() && cron.isEmpty()) {
+                return Optional.of(
+                        String.format(
+                                "Invalid value %s in the autoscaler config %s, the value is neither a valid daily expression nor a valid cron expression",
+                                expression, AutoScalerOptions.EXCLUDED_PERIODS.key()));
+            }
+        }
+
+        if (subExpressions.length == 2 && (daily.isEmpty() || cron.isEmpty())) {
+            return Optional.of(
+                    String.format(
+                            "Invalid value %s in the autoscaler config %s, the value can not be configured as dailyExpression && dailyExpression or cronExpression && cronExpression",
+                            expression, AutoScalerOptions.EXCLUDED_PERIODS.key()));
+        }
+        return Optional.empty();
+    }
+
+    static boolean inExcludedPeriod(String expression, Instant instant) {
+        String[] subExpressions = expression.split("&&");
+        boolean result = true;
+        for (String subExpression : subExpressions) {
+            subExpression = subExpression.strip();
+            Optional<DailyCalendar> daily = interpretAsDaily(subExpression);
+            if (daily.isPresent()) {
+                result = result && daily.get().isTimeIncluded(instant.toEpochMilli());
+            } else {
+                Optional<CronCalendar> cron = interpretAsCron(subExpression);
+                result = result && isTimeIncluded(cron.get(), instant.toEpochMilli());
+            }
+        }
+        return result;
+    }
+
+    public static boolean inExcludedPeriods(Configuration conf, Instant instant) {
+        List<String> excludedExpressions = conf.get(AutoScalerOptions.EXCLUDED_PERIODS);
+        for (String expression : excludedExpressions) {
+            if (inExcludedPeriod(expression, instant)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static Optional<String> validateExcludedPeriods(Configuration conf) {
+        List<String> excludedExpressions = conf.get(AutoScalerOptions.EXCLUDED_PERIODS);
+        for (String expression : excludedExpressions) {
+            Optional<String> errorMsg = validateExcludedExpression(expression);
+            if (errorMsg.isPresent()) {
+                return errorMsg;
+            }
+        }
+        return Optional.empty();
     }
 }

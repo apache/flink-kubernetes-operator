@@ -23,6 +23,12 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -55,5 +61,70 @@ public class AutoScalerUtilsTest {
         assertEquals(
                 Set.of(v1.toString(), v2.toString(), v3.toString()),
                 new HashSet<>(conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS)));
+    }
+
+    @Test
+    public void testValidateExcludedPeriods() {
+        Configuration conf = new Configuration();
+        conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of("09:13:17-08:15:18"));
+        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isPresent());
+
+        conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of("09:13:17-25:15:18"));
+        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isPresent());
+
+        conf.set(
+                AutoScalerOptions.EXCLUDED_PERIODS,
+                List.of("09:13:17-11:15:18", "18:01:20-16:00:00"));
+        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isPresent());
+
+        conf.set(
+                AutoScalerOptions.EXCLUDED_PERIODS,
+                List.of("09:13:17-11:15:18 && 12:01:20-16:00:00"));
+        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isPresent());
+
+        conf.set(
+                AutoScalerOptions.EXCLUDED_PERIODS,
+                List.of("09:13:17-11:15:18", "14:01:20-16:00:00"));
+        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isEmpty());
+
+        conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of("* * * ? * 2,5555"));
+        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isPresent());
+
+        conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of("* * * ? * 2,5 && 18:01:20-16:00:00"));
+        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isPresent());
+
+        conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of("* * * ? * 2,5 && * * 11-13 * * ?"));
+        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isPresent());
+
+        conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of("* * * ? * 2,5 && 14:01:20-16:00:00"));
+        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isPresent());
+    }
+
+    @Test
+    public void testExcludedPeriods() {
+        Configuration conf = new Configuration();
+        conf.set(
+                AutoScalerOptions.EXCLUDED_PERIODS,
+                List.of("09:13:17-11:15:18", "14:01:20-16:00:00"));
+        // 2023-12-04 is Thursday
+        ZonedDateTime zonedDateTime =
+                ZonedDateTime.of(
+                        LocalDate.of(2023, 12, 14),
+                        LocalTime.of(14, 01, 30),
+                        ZoneId.systemDefault());
+        Instant instant = Instant.ofEpochSecond(zonedDateTime.toEpochSecond());
+        assertTrue(AutoScalerUtils.inExcludedPeriods(conf, instant));
+        assertFalse(AutoScalerUtils.inExcludedPeriods(conf, instant.minusSeconds(20)));
+        assertTrue(AutoScalerUtils.inExcludedPeriods(conf, instant.minus(4, ChronoUnit.HOURS)));
+
+        conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of("* * 14-16 * * ?"));
+        assertTrue(AutoScalerUtils.inExcludedPeriods(conf, instant));
+        assertFalse(AutoScalerUtils.inExcludedPeriods(conf, instant.minusSeconds(100)));
+
+        // excluded periods is 14:01:20-16:00:00 in Monday and Thursday
+        conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of("* * * ? * 2,5 && 14:01:20-16:00:00"));
+        assertTrue(AutoScalerUtils.inExcludedPeriods(conf, instant));
+        assertFalse(AutoScalerUtils.inExcludedPeriods(conf, instant.minus(1, ChronoUnit.DAYS)));
+        assertTrue(AutoScalerUtils.inExcludedPeriods(conf, instant.minus(3, ChronoUnit.DAYS)));
     }
 }

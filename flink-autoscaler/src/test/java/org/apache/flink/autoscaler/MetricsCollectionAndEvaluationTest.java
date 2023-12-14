@@ -42,13 +42,16 @@ import org.junit.jupiter.api.Test;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
+import static java.time.temporal.ChronoUnit.SECONDS;
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -612,6 +615,73 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(260), ZoneId.systemDefault()));
         assertEquals(
                 2, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(2, stateStore.getCollectedMetrics(context).size());
+    }
+
+    @Test
+    public void testMetricCollectionDuringExcludedPeriods() throws Exception {
+        var source = new JobVertexID();
+        var topology = new JobTopology(new VertexInfo(source, Set.of(), 10, 720));
+        Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> metrics =
+                Map.of(
+                        source,
+                        new HashMap<>(
+                                Map.of(
+                                        FlinkMetric.PENDING_RECORDS,
+                                        new AggregatedMetric(
+                                                "", Double.NaN, Double.NaN, Double.NaN, 1000000.),
+                                        FlinkMetric.BACKPRESSURE_TIME_PER_SEC,
+                                        new AggregatedMetric(
+                                                "", Double.NaN, Double.NaN, 600., Double.NaN),
+                                        FlinkMetric.BUSY_TIME_PER_SEC,
+                                        new AggregatedMetric(
+                                                "", Double.NaN, 200., Double.NaN, Double.NaN),
+                                        FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
+                                        new AggregatedMetric(
+                                                "", Double.NaN, Double.NaN, Double.NaN, 1000.),
+                                        FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
+                                        new AggregatedMetric(
+                                                "", Double.NaN, Double.NaN, Double.NaN, 500.))));
+
+        metricsCollector = new TestingMetricsCollector(topology);
+        metricsCollector.setJobUpdateTs(startTime);
+        metricsCollector.setCurrentMetrics(metrics);
+
+        context.getConfiguration()
+                .set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofSeconds(100));
+        context.getConfiguration().set(AutoScalerOptions.METRICS_WINDOW, Duration.ofSeconds(400));
+        // Set excluded period to 500-800
+        LocalTime localTime =
+                ZonedDateTime.ofInstant(Instant.ofEpochSecond(500), ZoneId.systemDefault())
+                        .toLocalTime();
+        String stablePeriod =
+                new StringBuilder(localTime.toString())
+                        .append("-")
+                        .append(localTime.plus(300, SECONDS).toString())
+                        .toString();
+        context.getConfiguration().set(AutoScalerOptions.EXCLUDED_PERIODS, List.of(stablePeriod));
+
+        // Within stabilization period we simply collect metrics but do not return them
+        metricsCollector.setClock(Clock.fixed(Instant.ofEpochSecond(50), ZoneId.systemDefault()));
+        assertTrue(
+                metricsCollector.updateMetrics(context, stateStore).getMetricHistory().isEmpty());
+        assertEquals(1, stateStore.getCollectedMetrics(context).size());
+
+        // Outside stabilization period but not reach full window(520)
+        metricsCollector.setClock(Clock.fixed(Instant.ofEpochSecond(120), ZoneId.systemDefault()));
+        assertEquals(
+                2, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(2, stateStore.getCollectedMetrics(context).size());
+
+        // Reach full window(520) but in excluded period(500-800) we trim the metrics
+        metricsCollector.setClock(Clock.fixed(Instant.ofEpochSecond(520), ZoneId.systemDefault()));
+        assertEquals(
+                2, metricsCollector.updateMetrics(context, stateStore).getMetricHistory().size());
+        assertEquals(2, stateStore.getCollectedMetrics(context).size());
+
+        // Once we reach full window and outside excluded period we set fullyCollected
+        metricsCollector.setClock(Clock.fixed(Instant.ofEpochSecond(810), ZoneId.systemDefault()));
+        assertTrue(metricsCollector.updateMetrics(context, stateStore).isFullyCollected());
         assertEquals(2, stateStore.getCollectedMetrics(context).size());
     }
 
