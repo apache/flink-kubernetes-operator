@@ -57,20 +57,19 @@ spec:
       {{- end }}
       {{- if .Values.operatorPod.affinity }}
       affinity:
-        podAntiAffinity:
-          {{ if eq .Values.operatorPod.affinity.type "requiredDuringSchedulingIgnoredDuringExecution"}}
+        podAntiAffinity: {{ if eq .Values.operatorPod.affinity.type "requiredDuringSchedulingIgnoredDuringExecution"}}
           {{ .Values.operatorPod.affinity.type }}:
           - labelSelector:
-              matchExpressions:
-                {{- include "flink-operator.selectorLabels" . | nindent 16 }}
+              matchLabels:
+                {{- include "flink-operator.labels" . | nindent 16 }}
             topologyKey: "kubernetes.io/hostname"
           {{ else }}
           {{ .Values.operatorPod.affinity.type }}:
             - weight: 100
               podAffinityTerm:
                 labelSelector:
-                  matchExpressions:
-                    {{- include "flink-operator.selectorLabels" . | nindent 20 }}
+                  matchLabels:
+                    {{- include "flink-operator.labels" . | nindent 20 }}
                 topologyKey: "kubernetes.io/hostname"
           {{ end }}
       {{- end }}
