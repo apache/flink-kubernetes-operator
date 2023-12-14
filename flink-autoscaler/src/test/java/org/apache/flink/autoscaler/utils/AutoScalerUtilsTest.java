@@ -97,7 +97,7 @@ public class AutoScalerUtilsTest {
         assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isPresent());
 
         conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of("* * * ? * 2,5 && 14:01:20-16:00:00"));
-        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isPresent());
+        assertTrue(AutoScalerUtils.validateExcludedPeriods(conf).isEmpty());
     }
 
     @Test

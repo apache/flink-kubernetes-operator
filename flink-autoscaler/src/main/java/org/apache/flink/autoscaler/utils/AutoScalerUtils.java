@@ -134,8 +134,8 @@ public class AutoScalerUtils {
 
     static Optional<String> validateExcludedExpression(String expression) {
         String[] subExpressions = expression.split("&&");
-        Optional<DailyCalendar> daily = Optional.empty();
-        Optional<CronCalendar> cron = Optional.empty();
+        Optional<DailyCalendar> dailyCalendar = Optional.empty();
+        Optional<CronCalendar> cronCalendar = Optional.empty();
         if (subExpressions.length > 2) {
             return Optional.of(
                     String.format(
@@ -145,8 +145,10 @@ public class AutoScalerUtils {
 
         for (String subExpression : subExpressions) {
             subExpression = subExpression.strip();
-            daily = interpretAsDaily(subExpression);
-            cron = interpretAsCron(subExpression);
+            Optional<DailyCalendar> daily = interpretAsDaily(subExpression);
+            dailyCalendar = daily.isPresent() ? daily : dailyCalendar;
+            Optional<CronCalendar> cron = interpretAsCron(subExpression);
+            cronCalendar = cron.isPresent() ? cron : cronCalendar;
 
             if (daily.isEmpty() && cron.isEmpty()) {
                 return Optional.of(
@@ -156,7 +158,7 @@ public class AutoScalerUtils {
             }
         }
 
-        if (subExpressions.length == 2 && (daily.isEmpty() || cron.isEmpty())) {
+        if (subExpressions.length == 2 && (dailyCalendar.isEmpty() || cronCalendar.isEmpty())) {
             return Optional.of(
                     String.format(
                             "Invalid value %s in the autoscaler config %s, the value can not be configured as dailyExpression && dailyExpression or cronExpression && cronExpression",
