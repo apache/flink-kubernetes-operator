@@ -57,6 +57,21 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  tls:
+                    items:
+                      properties:
+                        hosts:
+                          items:
+                            type: string
+                          type: array
+                        secretName:
+                          type: string
+                      type: object
+                    type: array
                 type: object
               podTemplate:
                 properties:

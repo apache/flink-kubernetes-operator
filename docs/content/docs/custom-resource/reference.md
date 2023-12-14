@@ -96,6 +96,8 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | template | java.lang.String | Ingress template for the JobManager service. |
 | className | java.lang.String | Ingress className for the Flink deployment. |
 | annotations | java.util.Map<java.lang.String,java.lang.String> | Ingress annotations. |
+| labels | java.util.Map<java.lang.String,java.lang.String> | Ingress labels. |
+| tls | java.util.List<io.fabric8.kubernetes.api.model.networking.v1.IngressTLS> | Ingress tls. |
 
 ### JobManagerSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec
