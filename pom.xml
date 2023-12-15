@@ -97,6 +97,8 @@ under the License.
 
         <assertj.version>3.21.0</assertj.version>
 
+        <quartz.version>2.3.2</quartz.version>
+
         <flink-kubernetes-operator.surefire.baseArgLine>-XX:+IgnoreUnrecognizedVMOptions ${surefire.module.config}</flink-kubernetes-operator.surefire.baseArgLine>
 
         <!-- This property should contain the add-opens/add-exports commands required for the tests
