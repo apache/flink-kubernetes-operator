@@ -66,6 +66,11 @@ jobs:
           cd flink-kubernetes-webhook
           mvn verify -Dit.skip=false
           cd ..
+      - name: Tests in flink-autoscaler-plugin-jdbc
+        run: |
+          cd flink-autoscaler-plugin-jdbc
+          mvn verify -Dit.skip=false
+          cd ..
   e2e_ci:
     runs-on: ubuntu-latest
     strategy:
