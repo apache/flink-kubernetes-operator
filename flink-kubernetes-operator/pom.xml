@@ -208,18 +208,6 @@ under the License.
             <artifactId>junit-jupiter-params</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <dependency>
-            <groupId>io.javaoperatorsdk</groupId>
-            <artifactId>kubernetes-webhooks-framework-core</artifactId>
-            <version>${operator.sdk.webhook-framework.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>*</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
     </dependencies>
 
     <build>

@@ -51,13 +51,11 @@ public class FlinkMutator implements Mutator<HasMetadata> {
     @Override
     public HasMetadata mutate(HasMetadata resource, Operation operation)
             throws NotAllowedException {
-        if (operation == Operation.CREATE) {
+        if (operation == Operation.CREATE || operation == Operation.UPDATE) {
             LOG.debug("Mutating resource {}", resource);
             if (CrdConstants.KIND_SESSION_JOB.equals(resource.getKind())) {
                 return mutateSessionJob(resource);
             }
-        }
-        if (operation == Operation.CREATE || operation == Operation.UPDATE) {
             if (CrdConstants.KIND_FLINK_DEPLOYMENT.equals(resource.getKind())) {
                 return mutateDeployment(resource);
             }
