@@ -89,7 +89,7 @@ This step is very important to ensure that reconciliation runs even if the user 
 
 Last step is the reconciliation phase which will execute any required cluster actions to bring the resource to the last desired (valid) spec. In some cases the desired spec is reached in a single reconcile loop, in others we might need multiple passes as we will see.
 
-It’s very important to understand that the Observer phase records a point-in-time view of the cluster and resources into the status. In most cases this can change at any future time (a running job can fail at any time), in same rare cases it is stable (a terminally failed or completed job will stay that way). Therefore the reconciler logic must always take into account the possibility that the cluster status has already drifted from what is in the status (most of the complications arise from this need).
+It’s very important to understand that the Observer phase records a point-in-time view of the cluster and resources into the status. In most cases this can change at any future time (a running job can fail at any time), in some rare cases it is stable (a terminally failed or completed job will stay that way). Therefore the reconciler logic must always take into account the possibility that the cluster status has already drifted from what is in the status (most of the complications arise from this need).
 
 {{< img src="/img/concepts/reconciler_classes.svg" alt="Reconciler Class Hierarchy" >}}
 
@@ -115,7 +115,7 @@ To ensure we can always recover the deployment status and what is running on the
 
 The AbstractJobReconciler is responsible for executing the shared logic for Flink resources that also manage jobs (Application and SessionJob clusters). Here the core part of the logic deals with managing job state and executing stateful job updates in a safe manner.
 
-Depending on the type of Spec change SCALE/UPGRADE the job reconciler has slightly different codepaths. For scale operations if standalone mode and reactive scaling is enabled we only need to rescale the taskmanagers. In the future we might also add more efficient rescaling here for other cluster types (such as using the rescale API once implemented in upstream Flink)
+Depending on the type of Spec change SCALE/UPGRADE the job reconciler has slightly different codepaths. For scale operations, if standalone mode and reactive scaling is enabled, we only need to rescale the taskmanagers. In the future we might also add more efficient rescaling here for other cluster types (such as using the rescale API once implemented in upstream Flink)
 
 If an UPGRADE type change is detected in the spec we execute the job upgrade flow:
 
@@ -127,7 +127,7 @@ If an UPGRADE type change is detected in the spec we execute the job upgrade flo
 
 The operator must always respect the upgrade mode setting when it comes to stateful upgrades to avoid data loss. There is however some flexibility in the mechanism to account for unhealthy jobs and to provide extra safeguards during version upgrades. The **getAvailableUpgradeMode** method is an important corner stone in the upgrade logic, and it is used to decide what actualy upgrade mode should be used given the request from the user and current cluster state.
 
-In normal healthy cases, the available upgrade mode will be the same as what the user has in the spec. However there are some cases where we have to change between savepoint and last-state upgrade mode. Savepoint upgrade mode can only be used if the job is healthy and running, for failing, restarting or otherwise unhealthy deployments, we are allowed to use last-state upgrade mode as long as HA metadata is available (and not explicitly configured otherwise). This allows us to have a robust upgrade flow even if a job failed, while keeping state conistency.
+In normal healthy cases, the available upgrade mode will be the same as what the user has in the spec. However, there are some cases where we have to change between savepoint and last-state upgrade mode. Savepoint upgrade mode can only be used if the job is healthy and running, for failing, restarting or otherwise unhealthy deployments, we are allowed to use last-state upgrade mode as long as HA metadata is available (and not explicitly configured otherwise). This allows us to have a robust upgrade flow even if a job failed, while keeping state consistency.
 
 Last-state upgrade mode refers to upgrading using the checkpoint information stored in the HA metadata. HA metadata format may not be compatible when upgrading between Flink minor versions therefore a version change must force savepoint upgrade mode and require a healthy running job.
 
@@ -153,7 +153,7 @@ Another way to look at it is that the Flink Operator uses the resource status as
 
 The status update mechanism is implemented in the StatusRecorder class, which serves both as a cache for the latest status and the updater logic. We need to always update our CR status from the cache in the beginning of the controller flow as we are bypassing the JOSDK update-mechanism/caches which can cause old status instances to be returned. For the actual status update we use a modified optimistic locking mechanism which only updates the status if the status has not been externally modified in the meantime.
 
-Under normal circumstances this assumption holds as the operator is the sole owner/updater of the status. Exceptions here might indicate that the user tempered with the status or another operator instance might be running at the same time managing the same resources, which can cause to serious issues.
+Under normal circumstances this assumption holds as the operator is the sole owner/updater of the status. Exceptions here might indicate that the user tampered with the status or another operator instance might be running at the same time managing the same resources, which can lead to serious issues.
 
 ## JOSDK vs Operator interface naming conflicts
 
