@@ -29,8 +29,7 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class CollectedMetrics {
-    private Map<JobVertexID, Map<ScalingMetric, Double>> vertexMetrics;
-    private Map<Edge, Double> outputRatios;
-    private Map<ScalingMetric, Double> globalMetrics;
+public class EvaluatedMetrics {
+    private Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> vertexMetrics;
+    private Map<ScalingMetric, EvaluatedScalingMetric> globalMetrics;
 }

@@ -67,6 +67,7 @@ import java.util.stream.Stream;
 
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.updateVertexList;
 import static org.apache.flink.autoscaler.utils.AutoScalerUtils.excludeVerticesFromScaling;
+import static org.apache.flink.autoscaler.utils.DateTimeUtils.readable;
 
 /** Metric collector using flink rest api. */
 public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerContext<KEY>> {
@@ -74,9 +75,9 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
 
     private final Map<KEY, Map<JobVertexID, Map<String, FlinkMetric>>> availableVertexMetricNames =
             new ConcurrentHashMap<>();
-
     private final Map<KEY, SortedMap<Instant, CollectedMetrics>> histories =
             new ConcurrentHashMap<>();
+    protected final Map<KEY, Boolean> jobsWithGcMetrics = new ConcurrentHashMap<KEY, Boolean>();
 
     private Clock clock = Clock.systemDefaultZone();
 
@@ -106,7 +107,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         // We detect job change compared to our collected metrics by checking against the earliest
         // metric timestamp
         if (!metricHistory.isEmpty() && jobUpdateTs.isAfter(metricHistory.firstKey())) {
-            LOG.info("Job updated at {}. Clearing metrics.", jobUpdateTs);
+            LOG.info("Job updated at {}. Clearing metrics.", readable(jobUpdateTs));
             stateStore.removeCollectedMetrics(ctx);
             cleanup(ctx.getJobKey());
             metricHistory.clear();
@@ -126,22 +127,25 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         // Aggregated job vertex metrics collected from Flink based on the filtered metric names
         var collectedVertexMetrics = queryAllAggregatedMetrics(ctx, filteredVertexMetricNames);
 
+        var collectedTmMetrics = queryTmMetrics(ctx);
+
         // The computed scaling metrics based on the collected aggregated vertex metrics
         var scalingMetrics =
-                convertToScalingMetrics(jobKey, collectedVertexMetrics, topology, conf);
+                convertToScalingMetrics(
+                        jobKey, collectedVertexMetrics, collectedTmMetrics, topology, conf);
 
         // Add scaling metrics to history if they were computed successfully
         metricHistory.put(now, scalingMetrics);
 
         if (isStabilizing) {
-            LOG.info("Stabilizing until {}", stableTime);
+            LOG.info("Stabilizing until {}", readable(stableTime));
             stateStore.storeCollectedMetrics(ctx, metricHistory);
             return new CollectedMetricHistory(topology, Collections.emptySortedMap());
         }
 
         var collectedMetrics = new CollectedMetricHistory(topology, metricHistory);
         if (now.isBefore(windowFullTime)) {
-            LOG.info("Metric window not full until {}", windowFullTime);
+            LOG.info("Metric window not full until {}", readable(windowFullTime));
         } else {
             collectedMetrics.setFullyCollected(true);
             // Trim metrics outside the metric window from metrics history
@@ -150,6 +154,9 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         stateStore.storeCollectedMetrics(ctx, metricHistory);
         return collectedMetrics;
     }
+
+    protected abstract Map<FlinkMetric, AggregatedMetric> queryTmMetrics(Context ctx)
+            throws Exception;
 
     protected Duration getMetricWindowSize(Configuration conf) {
         return conf.get(AutoScalerOptions.METRICS_WINDOW);
@@ -218,7 +225,6 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                     var sourceVertex = entry.getKey();
                     var numPartitions =
                             queryAggregatedMetricNames(restClient, jobId, sourceVertex).stream()
-                                    .map(AggregatedMetric::getId)
                                     .filter(partitionRegex.asMatchPredicate())
                                     .count();
                     if (numPartitions > 0) {
@@ -246,6 +252,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     private CollectedMetrics convertToScalingMetrics(
             KEY jobKey,
             Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> collectedMetrics,
+            Map<FlinkMetric, AggregatedMetric> collectedTmMetrics,
             JobTopology jobTopology,
             Configuration conf) {
 
@@ -306,7 +313,11 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
 
         var outputRatios = ScalingMetrics.computeOutputRatios(collectedMetrics, jobTopology);
         LOG.debug("Output ratios: {}", outputRatios);
-        return new CollectedMetrics(out, outputRatios);
+
+        var globalMetrics = ScalingMetrics.computeGlobalMetrics(collectedTmMetrics);
+        LOG.debug("Global metrics: {}", globalMetrics);
+
+        return new CollectedMetrics(out, outputRatios, globalMetrics);
     }
 
     private static Supplier<Double> observedTprAvg(
@@ -462,7 +473,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
 
     @VisibleForTesting
     @SneakyThrows
-    protected Collection<AggregatedMetric> queryAggregatedMetricNames(
+    protected Collection<String> queryAggregatedMetricNames(
             RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
         var parameters = new AggregatedSubtaskMetricsParameters();
         var pathIt = parameters.getPathParameters().iterator();
@@ -476,7 +487,10 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                         parameters,
                         EmptyRequestBody.getInstance())
                 .get()
-                .getMetrics();
+                .getMetrics()
+                .stream()
+                .map(AggregatedMetric::getId)
+                .collect(Collectors.toSet());
     }
 
     protected abstract Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>>
@@ -496,6 +510,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     public void cleanup(KEY jobKey) {
         histories.remove(jobKey);
         availableVertexMetricNames.remove(jobKey);
+        jobsWithGcMetrics.remove(jobKey);
     }
 
     @VisibleForTesting

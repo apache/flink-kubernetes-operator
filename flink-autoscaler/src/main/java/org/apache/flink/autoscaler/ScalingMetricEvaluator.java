@@ -22,6 +22,7 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.Edge;
+import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.topology.JobTopology;
@@ -34,11 +35,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD;
@@ -46,6 +49,8 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZ
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CURRENT_PROCESSING_RATE;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.GC_PRESSURE;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_USAGE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.LAG;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.LOAD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
@@ -62,7 +67,7 @@ public class ScalingMetricEvaluator {
 
     private static final Logger LOG = LoggerFactory.getLogger(ScalingMetricEvaluator.class);
 
-    public Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluate(
+    public EvaluatedMetrics evaluate(
             Configuration conf, CollectedMetricHistory collectedMetrics, Duration restartTime) {
 
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
@@ -84,7 +89,8 @@ public class ScalingMetricEvaluator {
                             restartTime));
         }
 
-        return scalingOutput;
+        var globalMetrics = evaluateGlobalMetrics(metricsHistory);
+        return new EvaluatedMetrics(scalingOutput, globalMetrics);
     }
 
     @VisibleForTesting
@@ -145,6 +151,9 @@ public class ScalingMetricEvaluator {
                 LOAD,
                 new EvaluatedScalingMetric(
                         latestVertexMetrics.get(LOAD), getAverage(LOAD, vertex, metricsHistory)));
+
+        Optional.ofNullable(latestVertexMetrics.get(LAG))
+                .ifPresent(l -> evaluatedMetrics.put(LAG, EvaluatedScalingMetric.of(l)));
 
         evaluatedMetrics.put(
                 PARALLELISM, EvaluatedScalingMetric.of(topology.getParallelisms().get(vertex)));
@@ -297,16 +306,38 @@ public class ScalingMetricEvaluator {
         }
     }
 
+    @VisibleForTesting
+    protected static Map<ScalingMetric, EvaluatedScalingMetric> evaluateGlobalMetrics(
+            SortedMap<Instant, CollectedMetrics> metricHistory) {
+        var latest = metricHistory.get(metricHistory.lastKey()).getGlobalMetrics();
+        var out = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
+
+        var gcPressure = latest.getOrDefault(GC_PRESSURE, Double.NaN);
+        var lastHeapUsage = latest.getOrDefault(HEAP_USAGE, Double.NaN);
+
+        out.put(GC_PRESSURE, EvaluatedScalingMetric.of(gcPressure));
+        out.put(
+                HEAP_USAGE,
+                new EvaluatedScalingMetric(
+                        lastHeapUsage, getAverageGlobalMetric(HEAP_USAGE, metricHistory)));
+        return out;
+    }
+
+    private static double getAverageGlobalMetric(
+            ScalingMetric metric, SortedMap<Instant, CollectedMetrics> metricsHistory) {
+        return getAverage(metric, null, metricsHistory);
+    }
+
     public static double getAverage(
             ScalingMetric metric,
-            JobVertexID jobVertexId,
+            @Nullable JobVertexID jobVertexId,
             SortedMap<Instant, CollectedMetrics> metricsHistory) {
         return getAverage(metric, jobVertexId, metricsHistory, 1);
     }
 
     public static double getAverage(
             ScalingMetric metric,
-            JobVertexID jobVertexId,
+            @Nullable JobVertexID jobVertexId,
             SortedMap<Instant, CollectedMetrics> metricsHistory,
             int minElements) {
 
@@ -314,7 +345,10 @@ public class ScalingMetricEvaluator {
         int n = 0;
         boolean anyInfinite = false;
         for (var collectedMetrics : metricsHistory.values()) {
-            var metrics = collectedMetrics.getVertexMetrics().get(jobVertexId);
+            var metrics =
+                    jobVertexId != null
+                            ? collectedMetrics.getVertexMetrics().get(jobVertexId)
+                            : collectedMetrics.getGlobalMetrics();
             double num = metrics.getOrDefault(metric, Double.NaN);
             if (Double.isNaN(num)) {
                 continue;

@@ -23,12 +23,10 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
-import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
-import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.configuration.PipelineOptions;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
@@ -63,8 +61,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     private Clock clock = Clock.systemDefaultZone();
 
     @VisibleForTesting
-    final Map<KEY, Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>>
-            lastEvaluatedMetrics = new ConcurrentHashMap<>();
+    final Map<KEY, EvaluatedMetrics> lastEvaluatedMetrics = new ConcurrentHashMap<>();
 
     @VisibleForTesting
     final Map<KEY, AutoscalerFlinkMetrics> flinkMetrics = new ConcurrentHashMap<>();
@@ -177,14 +174,14 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
         lastEvaluatedMetrics.put(ctx.getJobKey(), evaluatedMetrics);
 
-        initRecommendedParallelism(evaluatedMetrics);
+        initRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
         autoscalerMetrics.registerScalingMetrics(
                 jobTopology.getVerticesInTopologicalOrder(),
                 () -> lastEvaluatedMetrics.get(ctx.getJobKey()));
 
         if (!collectedMetrics.isFullyCollected()) {
             // We have done an upfront evaluation, but we are not ready for scaling.
-            resetRecommendedParallelism(evaluatedMetrics);
+            resetRecommendedParallelism(evaluatedMetrics.getVertexMetrics());
             return;
         }
 

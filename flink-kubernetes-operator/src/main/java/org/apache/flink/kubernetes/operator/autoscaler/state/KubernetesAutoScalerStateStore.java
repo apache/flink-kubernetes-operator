@@ -27,6 +27,7 @@ import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -71,7 +72,8 @@ public class KubernetesAutoScalerStateStore
     protected static final ObjectMapper YAML_MAPPER =
             new ObjectMapper(yamlFactory())
                     .registerModule(new JavaTimeModule())
-                    .registerModule(new AutoScalerSerDeModule());
+                    .registerModule(new AutoScalerSerDeModule())
+                    .setSerializationInclusion(JsonInclude.Include.NON_NULL);
 
     private final ConfigMapStore configMapStore;
 

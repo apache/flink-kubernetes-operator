@@ -15,22 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.flink.autoscaler.metrics;
+package org.apache.flink.autoscaler.utils;
 
-import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.junit.jupiter.api.Test;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import java.time.Instant;
+import java.time.ZoneId;
 
-import java.util.Map;
+import static org.assertj.core.api.Assertions.assertThat;
 
-/** Collected scaling metrics. */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class CollectedMetrics {
-    private Map<JobVertexID, Map<ScalingMetric, Double>> vertexMetrics;
-    private Map<Edge, Double> outputRatios;
-    private Map<ScalingMetric, Double> globalMetrics;
+/** Test for {@link DateTimeUtils}. */
+public class DateTimeUtilsTest {
+
+    @Test
+    public void testConvertInstantToReadableFormat() {
+        Instant instant = Instant.ofEpochMilli(1702456327000L);
+        String readableFormat1 = DateTimeUtils.readable(instant, ZoneId.of("Asia/Shanghai"));
+        String readableFormat2 = DateTimeUtils.readable(instant, ZoneId.of("Europe/Berlin"));
+        assertThat(readableFormat1).isEqualTo("2023-12-13 16:32:07");
+        assertThat(readableFormat2).isEqualTo("2023-12-13 09:32:07");
+    }
 }

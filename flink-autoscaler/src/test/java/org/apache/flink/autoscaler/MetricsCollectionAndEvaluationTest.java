@@ -23,7 +23,6 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.MetricNotFoundException;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
@@ -188,6 +187,13 @@ public class MetricsCollectionAndEvaluationTest {
 
         assertNotNull(metricsCollector.getHistories().get(context.getJobKey()));
 
+        // Make sure all reported vertex metrics are evaluated, we expect complete metrics when a
+        // vertex is actually scaled
+        // Also for sources we have LAG metrics that is not available for other vertices
+        assertEquals(
+                ScalingMetric.REPORTED_VERTEX_METRICS,
+                evaluation.getVertexMetrics().get(source1).keySet());
+
         metricsCollector.cleanup(context.getJobKey());
         assertNull(metricsCollector.getHistories().get(context.getJobKey()));
         assertNull(metricsCollector.getAvailableVertexMetricNames().get(context.getJobKey()));
@@ -255,18 +261,12 @@ public class MetricsCollectionAndEvaluationTest {
                 Map.of(
                         source1,
                         List.of(
-                                new AggregatedMetric(
-                                        "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.0.anotherMetric"),
-                                new AggregatedMetric(
-                                        "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.anotherTopic.partition.0.currentOffset"),
-                                new AggregatedMetric(
-                                        "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.0.currentOffset"),
-                                new AggregatedMetric(
-                                        "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.1.currentOffset"),
-                                new AggregatedMetric(
-                                        "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.2.currentOffset"),
-                                new AggregatedMetric(
-                                        "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.3.currentOffset"))));
+                                "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.0.anotherMetric",
+                                "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.anotherTopic.partition.0.currentOffset",
+                                "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.0.currentOffset",
+                                "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.1.currentOffset",
+                                "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.2.currentOffset",
+                                "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.3.currentOffset")));
 
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
         assertEquals(5, collectedMetrics.getJobTopology().getMaxParallelisms().get(source1));
@@ -371,20 +371,36 @@ public class MetricsCollectionAndEvaluationTest {
                                         "", Double.NaN, Double.NaN, Double.NaN, 500.))));
 
         var collectedMetrics = collectMetrics();
-
-        Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluation =
+        var evaluation =
                 evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
         assertEquals(
-                500., evaluation.get(source1).get(ScalingMetric.TARGET_DATA_RATE).getCurrent());
+                500.,
+                evaluation
+                        .getVertexMetrics()
+                        .get(source1)
+                        .get(ScalingMetric.TARGET_DATA_RATE)
+                        .getCurrent());
         assertEquals(
                 5000.,
-                evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getCurrent());
+                evaluation
+                        .getVertexMetrics()
+                        .get(source1)
+                        .get(ScalingMetric.TRUE_PROCESSING_RATE)
+                        .getCurrent());
         assertEquals(
                 1250.,
-                evaluation.get(source1).get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD).getCurrent());
+                evaluation
+                        .getVertexMetrics()
+                        .get(source1)
+                        .get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD)
+                        .getCurrent());
         assertEquals(
                 500.,
-                evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
+                evaluation
+                        .getVertexMetrics()
+                        .get(source1)
+                        .get(ScalingMetric.SCALE_UP_RATE_THRESHOLD)
+                        .getCurrent());
 
         scalingExecutor.scaleResource(
                 context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
@@ -644,18 +660,36 @@ public class MetricsCollectionAndEvaluationTest {
 
         var collectedMetrics = collectMetrics();
 
-        Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluation =
+        var evaluation =
                 evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
-        assertEquals(0, evaluation.get(source1).get(ScalingMetric.TARGET_DATA_RATE).getCurrent());
+        assertEquals(
+                0,
+                evaluation
+                        .getVertexMetrics()
+                        .get(source1)
+                        .get(ScalingMetric.TARGET_DATA_RATE)
+                        .getCurrent());
         assertEquals(
                 Double.POSITIVE_INFINITY,
-                evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getAverage());
+                evaluation
+                        .getVertexMetrics()
+                        .get(source1)
+                        .get(ScalingMetric.TRUE_PROCESSING_RATE)
+                        .getAverage());
         assertEquals(
                 0.,
-                evaluation.get(source1).get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD).getCurrent());
+                evaluation
+                        .getVertexMetrics()
+                        .get(source1)
+                        .get(ScalingMetric.SCALE_DOWN_RATE_THRESHOLD)
+                        .getCurrent());
         assertEquals(
                 0.,
-                evaluation.get(source1).get(ScalingMetric.SCALE_UP_RATE_THRESHOLD).getCurrent());
+                evaluation
+                        .getVertexMetrics()
+                        .get(source1)
+                        .get(ScalingMetric.SCALE_UP_RATE_THRESHOLD)
+                        .getCurrent());
 
         scalingExecutor.scaleResource(
                 context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
@@ -673,11 +707,17 @@ public class MetricsCollectionAndEvaluationTest {
                 .getMetricHistory()
                 .put(
                         Instant.ofEpochSecond(1234),
-                        new CollectedMetrics(newMetrics, lastCollected.getOutputRatios()));
+                        new CollectedMetrics(
+                                newMetrics, lastCollected.getOutputRatios(), Map.of()));
 
         evaluation = evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
         assertEquals(
-                3., evaluation.get(source1).get(ScalingMetric.TRUE_PROCESSING_RATE).getAverage());
+                3.,
+                evaluation
+                        .getVertexMetrics()
+                        .get(source1)
+                        .get(ScalingMetric.TRUE_PROCESSING_RATE)
+                        .getAverage());
     }
 
     private CollectedMetricHistory collectMetrics() throws Exception {

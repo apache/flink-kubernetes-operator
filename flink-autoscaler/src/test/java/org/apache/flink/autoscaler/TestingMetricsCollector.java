@@ -48,7 +48,7 @@ public class TestingMetricsCollector<KEY, Context extends JobAutoScalerContext<K
     @Setter
     private Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> currentMetrics = new HashMap<>();
 
-    @Setter private Map<JobVertexID, Collection<AggregatedMetric>> metricNames = new HashMap<>();
+    @Setter private Map<JobVertexID, Collection<String>> metricNames = new HashMap<>();
 
     public TestingMetricsCollector(JobTopology jobTopology) {
         this.jobTopology = jobTopology;
@@ -72,9 +72,14 @@ public class TestingMetricsCollector<KEY, Context extends JobAutoScalerContext<K
     }
 
     @Override
-    protected Collection<AggregatedMetric> queryAggregatedMetricNames(
+    protected Collection<String> queryAggregatedMetricNames(
             RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
         return metricNames.getOrDefault(jobVertexID, Collections.emptyList());
+    }
+
+    @Override
+    protected Map<FlinkMetric, AggregatedMetric> queryTmMetrics(Context ctx) {
+        return Map.of();
     }
 
     @Override

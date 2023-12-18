@@ -59,7 +59,6 @@ public class RecommendedParallelismTest {
     private AutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
 
     private TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>> metricsCollector;
-    private ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingExecutor;
 
     private JobVertexID source, sink;
 
@@ -72,8 +71,6 @@ public class RecommendedParallelismTest {
         TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventCollector =
                 new TestingEventCollector<>();
         stateStore = new InMemoryAutoScalerStateStore<>();
-
-        scalingExecutor = new ScalingExecutor<>(eventCollector, stateStore);
 
         source = new JobVertexID();
         sink = new JobVertexID();
@@ -100,7 +97,7 @@ public class RecommendedParallelismTest {
                 new JobAutoScalerImpl<>(
                         metricsCollector,
                         new ScalingMetricEvaluator(),
-                        scalingExecutor,
+                        new ScalingExecutor<>(eventCollector, stateStore),
                         eventCollector,
                         new TestingScalingRealizer<>(),
                         stateStore);
@@ -239,6 +236,7 @@ public class RecommendedParallelismTest {
                 autoscaler
                         .lastEvaluatedMetrics
                         .get(context.getJobKey())
+                        .getVertexMetrics()
                         .get(jobVertexID)
                         .get(scalingMetric);
         return metric == null ? null : metric.getCurrent();
