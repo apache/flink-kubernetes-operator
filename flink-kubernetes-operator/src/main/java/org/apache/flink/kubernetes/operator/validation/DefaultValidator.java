@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
-import org.apache.flink.autoscaler.utils.AutoScalerUtils;
+import org.apache.flink.autoscaler.utils.CalendarUtils;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
@@ -584,7 +584,7 @@ public class DefaultValidator implements FlinkResourceValidator {
                 validateNumber(flinkConfiguration, AutoScalerOptions.TARGET_UTILIZATION, 0.0d),
                 validateNumber(
                         flinkConfiguration, AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d),
-                AutoScalerUtils.validateExcludedPeriods(flinkConfiguration));
+                CalendarUtils.validateExcludedPeriods(flinkConfiguration));
     }
 
     private static <T extends Number> Optional<String> validateNumber(

@@ -77,6 +77,7 @@ public class AutoScalerOptions {
                     .stringType()
                     .asList()
                     .defaultValues()
+                    .withFallbackKeys(oldOperatorConfigKey("excluded.periods"))
                     .withDescription(
                             "A (semicolon-separated) list of expressions indicate excluded periods during which autoscaling execution is forbidden, the expression consist of two optional subexpressions concatenated with &&, "
                                     + "one is cron expression in Quartz format (6 or 7 positions), "
