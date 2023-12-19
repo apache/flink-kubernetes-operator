@@ -150,7 +150,9 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
             LOG.info("Metric window not full until {}", readable(windowFullTime));
         } else {
             if (isExcluded) {
-                LOG.info("autoscaling now in excluded period");
+                LOG.info(
+                        "Autoscaling on halt based on exclusion rule {}",
+                        conf.get(AutoScalerOptions.EXCLUDED_PERIODS));
             } else {
                 collectedMetrics.setFullyCollected(true);
             }
