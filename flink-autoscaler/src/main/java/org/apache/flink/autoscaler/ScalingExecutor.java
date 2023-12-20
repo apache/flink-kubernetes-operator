@@ -24,6 +24,8 @@ import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.autoscaler.utils.CalendarUtils;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.slf4j.Logger;
@@ -101,11 +103,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         updateRecommendedParallelism(evaluatedMetrics.getVertexMetrics(), scalingSummaries);
 
-        var scaleEnabled = conf.get(SCALING_ENABLED);
-        autoScalerEventHandler.handleScalingEvent(
-                context, scalingSummaries, scaleEnabled, conf.get(SCALING_EVENT_INTERVAL));
-
-        if (!scaleEnabled) {
+        if (blockScalingExecution(context, scalingSummaries, conf, now)) {
             return false;
         }
 
@@ -263,5 +261,25 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                     }
                 });
         return overrides;
+    }
+
+    private boolean blockScalingExecution(
+            Context context,
+            Map<JobVertexID, ScalingSummary> scalingSummaries,
+            Configuration conf,
+            Instant now) {
+        var scaleEnabled = conf.get(SCALING_ENABLED);
+        var isExcluded = CalendarUtils.inExcludedPeriods(conf, now);
+        autoScalerEventHandler.handleScalingEvent(
+                context,
+                scalingSummaries,
+                scaleEnabled,
+                isExcluded,
+                conf.get(SCALING_EVENT_INTERVAL));
+
+        if (!scaleEnabled || isExcluded) {
+            return true;
+        }
+        return false;
     }
 }

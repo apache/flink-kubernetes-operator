@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler.event;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nullable;
@@ -27,6 +28,8 @@ import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.Map;
 
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
@@ -41,8 +44,12 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_
 public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>> {
     String SCALING_SUMMARY_ENTRY =
             " Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f";
-    String SCALING_SUMMARY_HEADER_SCALING_DISABLED = "Recommended parallelism change:";
-    String SCALING_SUMMARY_HEADER_SCALING_ENABLED = "Scaling vertices:";
+    String SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED_REASON =
+            "Scaling execution disabled by config %s:%s, ";
+    String SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED =
+            SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED_REASON
+                    + "recommended parallelism change:";
+    String SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED = "Scaling vertices:";
     String SCALING_REPORT_REASON = "ScalingReport";
     String SCALING_REPORT_KEY = "ScalingExecutor";
 
@@ -70,9 +77,11 @@ public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
             Context context,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             boolean scaled,
+            boolean isExcluded,
             Duration interval) {
         // Provide default implementation without proper deduplication
-        var scalingReport = scalingReport(scalingSummaries, scaled);
+        var scalingReport =
+                scalingReport(scalingSummaries, scaled, isExcluded, context.getConfiguration());
         handleEvent(
                 context,
                 Type.Normal,
@@ -83,12 +92,27 @@ public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
     }
 
     static String scalingReport(
-            Map<JobVertexID, ScalingSummary> scalingSummaries, boolean scalingEnabled) {
-        StringBuilder sb =
-                new StringBuilder(
-                        scalingEnabled
-                                ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
-                                : SCALING_SUMMARY_HEADER_SCALING_DISABLED);
+            Map<JobVertexID, ScalingSummary> scalingSummaries,
+            boolean scalingEnabled,
+            boolean isExcluded,
+            Configuration config) {
+        StringBuilder sb = new StringBuilder();
+        if (!scalingEnabled) {
+            sb.append(
+                    String.format(
+                            SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED,
+                            SCALING_ENABLED.key(),
+                            false));
+        } else if (isExcluded) {
+            sb.append(
+                    String.format(
+                            SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED,
+                            EXCLUDED_PERIODS.key(),
+                            config.get(EXCLUDED_PERIODS)));
+        } else {
+            sb.append(SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED);
+        }
+
         scalingSummaries.forEach(
                 (v, s) ->
                         sb.append(

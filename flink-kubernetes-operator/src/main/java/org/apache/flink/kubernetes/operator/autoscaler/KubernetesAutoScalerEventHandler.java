@@ -67,13 +67,15 @@ public class KubernetesAutoScalerEventHandler
             KubernetesJobAutoScalerContext context,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             boolean scaled,
+            boolean isExcluded,
             Duration interval) {
-        if (scaled) {
+        if (scaled && !isExcluded) {
             AutoScalerEventHandler.super.handleScalingEvent(
-                    context, scalingSummaries, scaled, null);
+                    context, scalingSummaries, scaled, isExcluded, null);
         } else {
-            var conf = context.getConfiguration();
-            var scalingReport = AutoScalerEventHandler.scalingReport(scalingSummaries, scaled);
+            var scalingReport =
+                    AutoScalerEventHandler.scalingReport(
+                            scalingSummaries, scaled, isExcluded, context.getConfiguration());
             var labels = Map.of(PARALLELISM_MAP_KEY, getParallelismHashCode(scalingSummaries));
 
             @Nullable

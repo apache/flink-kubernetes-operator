@@ -29,7 +29,6 @@ import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetrics;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
-import org.apache.flink.autoscaler.utils.CalendarUtils;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -116,7 +115,6 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         var topology = getJobTopology(ctx, stateStore, jobDetailsInfo);
         var stableTime = jobUpdateTs.plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
         final boolean isStabilizing = now.isBefore(stableTime);
-        final boolean isExcluded = CalendarUtils.inExcludedPeriods(conf, now);
 
         // Calculate timestamp when the metric windows is full
         var metricWindowSize = getMetricWindowSize(conf);
@@ -149,13 +147,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         if (now.isBefore(windowFullTime)) {
             LOG.info("Metric window not full until {}", readable(windowFullTime));
         } else {
-            if (isExcluded) {
-                LOG.info(
-                        "Autoscaling on halt based on exclusion rule {}",
-                        conf.get(AutoScalerOptions.EXCLUDED_PERIODS));
-            } else {
-                collectedMetrics.setFullyCollected(true);
-            }
+            collectedMetrics.setFullyCollected(true);
             // Trim metrics outside the metric window from metrics history
             metricHistory.headMap(now.minus(metricWindowSize)).clear();
         }
