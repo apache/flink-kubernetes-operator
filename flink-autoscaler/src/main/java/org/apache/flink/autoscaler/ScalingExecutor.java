@@ -277,9 +277,6 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 isExcluded,
                 conf.get(SCALING_EVENT_INTERVAL));
 
-        if (!scaleEnabled || isExcluded) {
-            return true;
-        }
-        return false;
+      return !scaleEnabled || isExcluded;
     }
 }
