@@ -46,7 +46,6 @@ import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJo
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_REPORT_REASON;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_ENTRY;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED;
-import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED_REASON;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -270,10 +269,7 @@ public class ScalingExecutorTest {
                         .contains(
                                 scalingEnabled
                                         ? SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED
-                                        : SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
-                                                .split(
-                                                        SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED_REASON)[
-                                                1]));
+                                        : SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED));
         assertEquals(SCALING_REPORT_REASON, event.getReason());
 
         metrics =

@@ -38,8 +38,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedMap;
 
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_EXECUTION_DISABLED_REASON;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
@@ -103,7 +107,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
 
         updateRecommendedParallelism(evaluatedMetrics.getVertexMetrics(), scalingSummaries);
 
-        if (blockScalingExecution(context, scalingSummaries, conf, now)) {
+        if (checkIfBlockedAndTriggerScalingEvent(context, scalingSummaries, conf, now)) {
             return false;
         }
 
@@ -263,20 +267,34 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         return overrides;
     }
 
-    private boolean blockScalingExecution(
+    private boolean checkIfBlockedAndTriggerScalingEvent(
             Context context,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             Configuration conf,
             Instant now) {
         var scaleEnabled = conf.get(SCALING_ENABLED);
         var isExcluded = CalendarUtils.inExcludedPeriods(conf, now);
+        String message;
+        if (!scaleEnabled) {
+            message =
+                    SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
+                            + String.format(
+                                    SCALING_EXECUTION_DISABLED_REASON,
+                                    SCALING_ENABLED.key(),
+                                    false);
+        } else if (isExcluded) {
+            message =
+                    SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
+                            + String.format(
+                                    SCALING_EXECUTION_DISABLED_REASON,
+                                    EXCLUDED_PERIODS.key(),
+                                    conf.get(EXCLUDED_PERIODS));
+        } else {
+            message = SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
+        }
         autoScalerEventHandler.handleScalingEvent(
-                context,
-                scalingSummaries,
-                scaleEnabled,
-                isExcluded,
-                conf.get(SCALING_EVENT_INTERVAL));
+                context, scalingSummaries, message, conf.get(SCALING_EVENT_INTERVAL));
 
-      return !scaleEnabled || isExcluded;
+        return !scaleEnabled || isExcluded;
     }
 }

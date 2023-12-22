@@ -20,7 +20,6 @@ package org.apache.flink.autoscaler.event;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nullable;
@@ -28,8 +27,6 @@ import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.Map;
 
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
-import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
@@ -44,12 +41,11 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_
 public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>> {
     String SCALING_SUMMARY_ENTRY =
             " Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f";
-    String SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED_REASON =
-            "Scaling execution disabled by config %s:%s, ";
+    String SCALING_EXECUTION_DISABLED_REASON = "%s:%s, recommended parallelism change:";
     String SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED =
-            SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED_REASON
-                    + "recommended parallelism change:";
-    String SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED = "Scaling vertices:";
+            "Scaling execution disabled by config ";
+    String SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED =
+            "Scaling execution enabled, begin scaling vertices:";
     String SCALING_REPORT_REASON = "ScalingReport";
     String SCALING_REPORT_KEY = "ScalingExecutor";
 
@@ -70,18 +66,15 @@ public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
      * Handle scaling reports.
      *
      * @param interval Define the interval to suppress duplicate events.
-     * @param scaled Whether AutoScaler actually scaled the Flink job or just generate advice for
-     *     scaling.
+     * @param message Message describe the event.
      */
     default void handleScalingEvent(
             Context context,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
-            boolean scaled,
-            boolean isExcluded,
+            String message,
             Duration interval) {
         // Provide default implementation without proper deduplication
-        var scalingReport =
-                scalingReport(scalingSummaries, scaled, isExcluded, context.getConfiguration());
+        var scalingReport = scalingReport(scalingSummaries, message);
         handleEvent(
                 context,
                 Type.Normal,
@@ -91,28 +84,8 @@ public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
                 interval);
     }
 
-    static String scalingReport(
-            Map<JobVertexID, ScalingSummary> scalingSummaries,
-            boolean scalingEnabled,
-            boolean isExcluded,
-            Configuration config) {
-        StringBuilder sb = new StringBuilder();
-        if (!scalingEnabled) {
-            sb.append(
-                    String.format(
-                            SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED,
-                            SCALING_ENABLED.key(),
-                            false));
-        } else if (isExcluded) {
-            sb.append(
-                    String.format(
-                            SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED,
-                            EXCLUDED_PERIODS.key(),
-                            config.get(EXCLUDED_PERIODS)));
-        } else {
-            sb.append(SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED);
-        }
-
+    static String scalingReport(Map<JobVertexID, ScalingSummary> scalingSummaries, String message) {
+        StringBuilder sb = new StringBuilder(message);
         scalingSummaries.forEach(
                 (v, s) ->
                         sb.append(
