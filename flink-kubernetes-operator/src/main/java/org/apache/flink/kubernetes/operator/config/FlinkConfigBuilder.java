@@ -68,6 +68,7 @@ import java.nio.file.Files;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Optional;
 
 import static org.apache.flink.configuration.DeploymentOptions.SHUTDOWN_ON_APPLICATION_FINISH;
 import static org.apache.flink.configuration.DeploymentOptions.SUBMIT_FAILED_JOB_ON_APPLICATION_ERROR;
@@ -375,7 +376,22 @@ public class FlinkConfigBuilder {
                     * effectiveConfig.get(TaskManagerOptions.NUM_TASK_SLOTS);
         }
 
+        Optional<Integer> maxOverrideParallelism = getMaxParallelismFromOverrideConfig();
+        if (maxOverrideParallelism.isPresent() && maxOverrideParallelism.get() > 0) {
+            return maxOverrideParallelism.get();
+        }
+
         return spec.getJob().getParallelism();
+    }
+
+    private Optional<Integer> getMaxParallelismFromOverrideConfig() {
+        return effectiveConfig
+                .getOptional(PipelineOptions.PARALLELISM_OVERRIDES)
+                .flatMap(
+                        overrides ->
+                                overrides.values().stream()
+                                        .map(Integer::valueOf)
+                                        .max(Integer::compareTo));
     }
 
     protected Configuration build() {
