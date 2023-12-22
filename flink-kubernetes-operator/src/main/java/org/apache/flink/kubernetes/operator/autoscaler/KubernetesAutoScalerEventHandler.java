@@ -68,7 +68,7 @@ public class KubernetesAutoScalerEventHandler
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             String message,
             Duration interval) {
-        if (message.contains(SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED)) {
+        if (message.contains(SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED)) {
             AutoScalerEventHandler.super.handleScalingEvent(
                     context, scalingSummaries, message, null);
         } else {
