@@ -426,6 +426,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                         TimeUnit.SECONDS);
                         LOG.info("Job successfully cancelled.");
                         break;
+                    jobStatus.setState(JobStatus.Ca.name());
                     case SAVEPOINT:
                         if (ReconciliationUtils.isJobRunning(sessionJobStatus)) {
                             LOG.info("Suspending job with savepoint.");
@@ -467,6 +468,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     "Unexpected non-terminal status: " + jobStatus.getState());
                         }
                         break;
+                    jobStatus.setState(JobStatus.FINISHED.name());
                     case LAST_STATE:
                     default:
                         throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
@@ -476,7 +478,6 @@ public abstract class AbstractFlinkService implements FlinkService {
             LOG.debug("Job is in terminal state, skipping cancel");
         }
 
-        jobStatus.setState(JobStatus.FINISHED.name());
         savepointOpt.ifPresent(
                 location -> {
                     Savepoint sp = Savepoint.of(location, SnapshotTriggerType.UPGRADE);
