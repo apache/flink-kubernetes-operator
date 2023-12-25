@@ -304,6 +304,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                         }
                     }
                     deleteClusterDeployment(deployment.getMetadata(), deploymentStatus, conf, true);
+                    deploymentStatus.getJobStatus().setState(JobStatus.CANCELED.name());
                     break;
                 case SAVEPOINT:
                     final String savepointDirectory =
@@ -369,16 +370,17 @@ public abstract class AbstractFlinkService implements FlinkService {
                         deleteClusterDeployment(
                                 deployment.getMetadata(), deploymentStatus, conf, true);
                     }
+                    deploymentStatus.getJobStatus().setState(JobStatus.FINISHED.name());
                     break;
                 case LAST_STATE:
                     deleteClusterDeployment(
                             deployment.getMetadata(), deploymentStatus, conf, false);
+                    deploymentStatus.getJobStatus().setState(JobStatus.FINISHED.name());
                     break;
                 default:
                     throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
             }
         }
-        deploymentStatus.getJobStatus().setState(JobStatus.FINISHED.name());
         savepointOpt.ifPresent(
                 location -> {
                     Savepoint sp =

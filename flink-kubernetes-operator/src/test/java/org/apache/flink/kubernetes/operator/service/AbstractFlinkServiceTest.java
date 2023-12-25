@@ -465,6 +465,40 @@ public class AbstractFlinkServiceTest {
     }
 
     @Test
+    public void cancelSessionJobWithStatelessUpgradeModeTest() throws Exception {
+        final TestingClusterClient<String> testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        final CompletableFuture<JobID> cancelFuture = new CompletableFuture<>();
+        testingClusterClient.setCancelFunction(
+                jobID -> {
+                    cancelFuture.complete(jobID);
+                    return CompletableFuture.completedFuture(Acknowledge.get());
+                });
+
+        var flinkService = new TestingService(testingClusterClient);
+
+        JobID jobID = JobID.generate();
+        var session = TestUtils.buildSessionCluster(FlinkVersion.v1_17);
+        session.getStatus()
+                .getReconciliationStatus()
+                .serializeAndSetLastReconciledSpec(session.getSpec(), session);
+        var job = TestUtils.buildSessionJob();
+
+        JobStatus jobStatus = job.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
+        ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
+
+        var deployConf = configManager.getSessionJobConfig(session, job.getSpec());
+
+        flinkService.cancelSessionJob(job, UpgradeMode.STATELESS, deployConf);
+        assertTrue(cancelFuture.isDone());
+        assertEquals(jobID, cancelFuture.get());
+        assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
+        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.CANCELED.name());
+    }
+
+    @Test
     public void cancelJobWithLastStateUpgradeModeTest() throws Exception {
         var deployment = TestUtils.buildApplicationCluster();
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
