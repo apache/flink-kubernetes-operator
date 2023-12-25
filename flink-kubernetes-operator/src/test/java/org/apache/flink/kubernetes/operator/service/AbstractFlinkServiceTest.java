@@ -487,7 +487,7 @@ public class AbstractFlinkServiceTest {
         JobStatus jobStatus = job.getStatus().getJobStatus();
         jobStatus.setJobId(jobID.toHexString());
         jobStatus.setState(org.apache.flink.api.common.JobStatus.RUNNING.name());
-        ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
+        ReconciliationUtils.updateStatusForDeployedSpec(job, configuration);
 
         var deployConf = configManager.getSessionJobConfig(session, job.getSpec());
 
