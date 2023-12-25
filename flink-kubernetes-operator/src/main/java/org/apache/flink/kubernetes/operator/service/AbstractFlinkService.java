@@ -424,9 +424,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                                 .get(
                                         operatorConfig.getFlinkCancelJobTimeout().toSeconds(),
                                         TimeUnit.SECONDS);
+                        jobStatus.setState(JobStatus.CANCELED.name());
                         LOG.info("Job successfully cancelled.");
                         break;
-                    jobStatus.setState(JobStatus.Ca.name());
                     case SAVEPOINT:
                         if (ReconciliationUtils.isJobRunning(sessionJobStatus)) {
                             LOG.info("Suspending job with savepoint.");
@@ -450,6 +450,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                                                         .OPERATOR_SAVEPOINT_FORMAT_TYPE))
                                                 .get(timeout, TimeUnit.SECONDS);
                                 savepointOpt = Optional.of(savepoint);
+                                jobStatus.setState(JobStatus.FINISHED.name());
                                 LOG.info(
                                         "Job successfully suspended with savepoint {}.", savepoint);
                             } catch (TimeoutException exception) {
@@ -468,7 +469,6 @@ public abstract class AbstractFlinkService implements FlinkService {
                                     "Unexpected non-terminal status: " + jobStatus.getState());
                         }
                         break;
-                    jobStatus.setState(JobStatus.FINISHED.name());
                     case LAST_STATE:
                     default:
                         throw new RuntimeException("Unsupported upgrade mode " + upgradeMode);
