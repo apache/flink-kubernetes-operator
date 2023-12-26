@@ -288,6 +288,7 @@ public class AbstractFlinkServiceTest {
         assertTrue(cancelFuture.isDone());
         assertEquals(jobID, cancelFuture.get());
         assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
+        assertEquals(org.apache.flink.api.common.JobStatus.CANCELED.name(), jobStatus.getState());
     }
 
     @ParameterizedTest
@@ -455,7 +456,7 @@ public class AbstractFlinkServiceTest {
         assertTrue(stopWithSavepointFuture.isDone());
         assertEquals(jobID, stopWithSavepointFuture.get().f0);
         assertEquals(savepointPath, jobStatus.getSavepointInfo().getLastSavepoint().getLocation());
-        assertEquals(jobStatus.getState(), org.apache.flink.api.common.JobStatus.FINISHED.name());
+        assertEquals(org.apache.flink.api.common.JobStatus.FINISHED.name(), jobStatus.getState());
 
         if (drainOnSavepoint) {
             assertTrue(stopWithSavepointFuture.get().f1);
