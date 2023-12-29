@@ -17,10 +17,15 @@
 
 package org.apache.flink.autoscaler.standalone.config;
 
+import org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.description.Description;
 
 import java.time.Duration;
+
+import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.JDBC;
+import static org.apache.flink.configuration.description.TextElement.code;
 
 /** Config options related to the autoscaler standalone module. */
 public class AutoscalerStandaloneOptions {
@@ -59,4 +64,49 @@ public class AutoscalerStandaloneOptions {
                     .withDeprecatedKeys("flinkClusterPort")
                     .withDescription(
                             "The port of flink cluster when the flink-cluster fetcher is used.");
+
+    public static final ConfigOption<StateStoreType> STATE_STORE_TYPE =
+            autoscalerStandaloneConfig("state-store.type")
+                    .enumType(StateStoreType.class)
+                    .defaultValue(StateStoreType.MEMORY)
+                    .withDescription("The autoscaler state store type.");
+
+    public static final ConfigOption<String> STATE_STORE_JDBC_URL =
+            autoscalerStandaloneConfig("state-store.jdbc.url")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            Description.builder()
+                                    .text(
+                                            "The jdbc url of jdbc state store when %s has been set to %s, such as: %s.",
+                                            code(STATE_STORE_TYPE.key()),
+                                            code(JDBC.toString()),
+                                            code("jdbc:mysql://localhost:3306/flink_autoscaler"))
+                                    .linebreak()
+                                    .text("This option is required when using JDBC state store.")
+                                    .build());
+
+    public static final ConfigOption<String> STATE_STORE_JDBC_USERNAME =
+            autoscalerStandaloneConfig("state-store.jdbc.username")
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            Description.builder()
+                                    .text(
+                                            "The jdbc username of jdbc state store when %s has been set to %s.",
+                                            code(STATE_STORE_TYPE.key()), code(JDBC.toString()))
+                                    .build());
+
+    public static final ConfigOption<String> STATE_STORE_JDBC_PASSWORD_ENV_VARIABLE =
+            autoscalerStandaloneConfig("state-store.jdbc.password-env-variable")
+                    .stringType()
+                    .defaultValue("STATE_STORE_JDBC_PWD")
+                    .withDescription(
+                            Description.builder()
+                                    .text(
+                                            "The environment variable name of jdbc state store password when %s has been set to %s. "
+                                                    + "In general, the environment variable name doesn't need to be changed. Users need to "
+                                                    + "export the password using this environment variable.",
+                                            code(STATE_STORE_TYPE.key()), code(JDBC.toString()))
+                                    .build());
 }
