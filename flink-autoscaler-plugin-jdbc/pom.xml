@@ -33,7 +33,6 @@ under the License.
 
     <properties>
         <testcontainers.version>1.18.2</testcontainers.version>
-        <derby.version>10.15.2.0</derby.version>
         <postgres.version>42.5.4</postgres.version>
         <mysql.version>8.0.33</mysql.version>
     </properties>

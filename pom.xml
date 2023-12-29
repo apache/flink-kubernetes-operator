@@ -107,6 +107,8 @@ under the License.
 		     It MUST be a space-separated list not containing any newlines,
 		     of entries in the form '[-]{2}add-[opens|exports]=<module>/<package>=ALL-UNNAMED'.-->
         <surefire.module.config/>
+
+        <derby.version>10.15.2.0</derby.version>
     </properties>
 
     <dependencyManagement>
