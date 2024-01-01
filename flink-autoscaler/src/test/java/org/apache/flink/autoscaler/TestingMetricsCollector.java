@@ -25,6 +25,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
+import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 
 import lombok.Setter;
 
@@ -75,6 +76,11 @@ public class TestingMetricsCollector<KEY, Context extends JobAutoScalerContext<K
     protected Collection<String> queryAggregatedMetricNames(
             RestClusterClient<?> restClient, JobID jobID, JobVertexID jobVertexID) {
         return metricNames.getOrDefault(jobVertexID, Collections.emptyList());
+    }
+
+    @Override
+    protected Map<FlinkMetric, Metric> queryJmMetrics(Context ctx) throws Exception {
+        return Map.of();
     }
 
     @Override

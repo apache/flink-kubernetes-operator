@@ -20,14 +20,15 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
+import org.apache.flink.autoscaler.resources.ResourceRequirements;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.function.SupplierWithException;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 
 import javax.annotation.Nullable;
@@ -38,10 +39,10 @@ import javax.annotation.Nullable;
  * @param <KEY> The job key.
  */
 @Experimental
-@AllArgsConstructor
+@RequiredArgsConstructor
 @ToString
 @Builder(toBuilder = true)
-public class JobAutoScalerContext<KEY> {
+public class JobAutoScalerContext<KEY> implements ResourceRequirements {
 
     /** The identifier of each flink job. */
     @Getter private final KEY jobKey;

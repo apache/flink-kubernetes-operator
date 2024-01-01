@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.configuration.Configuration;
@@ -204,6 +205,58 @@ public class ScalingExecutorTest {
         assertTrue(
                 scalingDecisionExecutor.scaleResource(
                         context, metrics, new HashMap<>(), new ScalingTracking(), now));
+    }
+
+    @Test
+    public void testBlockScalingOnFailedResourceCheck() throws Exception {
+        var sourceHexString = "0bfd135746ac8efb3cce668b12e16d3a";
+        var source = JobVertexID.fromHexString(sourceHexString);
+        var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
+        var sink = JobVertexID.fromHexString(sinkHexString);
+        var now = Instant.now();
+        var metrics =
+                new EvaluatedMetrics(
+                        Map.of(source, evaluated(10, 100, 50), sink, evaluated(10, 100, 50)),
+                        Map.of(
+                                ScalingMetric.NUM_TASK_SLOTS_USED,
+                                EvaluatedScalingMetric.of(9),
+                                ScalingMetric.NUM_TOTAL_TASK_SLOTS,
+                                EvaluatedScalingMetric.of(10),
+                                ScalingMetric.NUM_TASK_MANAGERS,
+                                EvaluatedScalingMetric.of(5),
+                                ScalingMetric.GC_PRESSURE,
+                                EvaluatedScalingMetric.of(Double.NaN),
+                                ScalingMetric.HEAP_USAGE,
+                                EvaluatedScalingMetric.of(Double.NaN)));
+
+        // Would normally scale without resource usage check
+        assertTrue(
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+
+        scalingDecisionExecutor =
+                new ScalingExecutor<>(
+                        eventCollector,
+                        stateStore,
+                        new ResourceCheck() {
+                            @Override
+                            public boolean trySchedule(
+                                    int currentInstances,
+                                    int newInstances,
+                                    double cpuPerInstance,
+                                    double memoryPerInstance) {
+                                return false;
+                            }
+                        });
+
+        // Scaling blocked due to unavailable resources
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        TestingAutoscalerUtils.createResourceAwareContext(),
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        now));
     }
 
     @ParameterizedTest

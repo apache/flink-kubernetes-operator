@@ -49,17 +49,27 @@ public class TestingAutoscalerUtils {
                 getRestClusterClientSupplier());
     }
 
-    public static JobAutoScalerContext<JobID> createJobAutoScalerContext(JobStatus jobStatus) {
+    public static JobAutoScalerContext<JobID> createResourceAwareContext() {
+        JobID jobId = JobID.generate();
         MetricRegistry registry = NoOpMetricRegistry.INSTANCE;
         GenericMetricGroup metricGroup = new GenericMetricGroup(registry, null, "test");
-        final JobID jobID = new JobID();
-        return new JobAutoScalerContext<JobID>(
-                jobID,
-                jobID,
-                jobStatus,
+        return new JobAutoScalerContext<>(
+                jobId,
+                jobId,
+                JobStatus.RUNNING,
                 new Configuration(),
                 metricGroup,
-                getRestClusterClientSupplier());
+                TestingAutoscalerUtils.getRestClusterClientSupplier()) {
+            @Override
+            public double getTaskManagerCpu() {
+                return 100;
+            }
+
+            @Override
+            public double getTaskManagerMemory() {
+                return 65536;
+            }
+        };
     }
 
     public static SupplierWithException<RestClusterClient<String>, Exception>

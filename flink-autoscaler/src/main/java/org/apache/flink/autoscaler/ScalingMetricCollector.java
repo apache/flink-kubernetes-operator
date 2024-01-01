@@ -40,6 +40,7 @@ import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsParameters;
+import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 import org.apache.flink.util.Preconditions;
 
 import lombok.SneakyThrows;
@@ -127,12 +128,18 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         // Aggregated job vertex metrics collected from Flink based on the filtered metric names
         var collectedVertexMetrics = queryAllAggregatedMetrics(ctx, filteredVertexMetricNames);
 
+        var collectedJmMetrics = queryJmMetrics(ctx);
         var collectedTmMetrics = queryTmMetrics(ctx);
 
         // The computed scaling metrics based on the collected aggregated vertex metrics
         var scalingMetrics =
                 convertToScalingMetrics(
-                        jobKey, collectedVertexMetrics, collectedTmMetrics, topology, conf);
+                        jobKey,
+                        collectedVertexMetrics,
+                        collectedJmMetrics,
+                        collectedTmMetrics,
+                        topology,
+                        conf);
 
         // Add scaling metrics to history if they were computed successfully
         metricHistory.put(now, scalingMetrics);
@@ -154,6 +161,8 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         stateStore.storeCollectedMetrics(ctx, metricHistory);
         return collectedMetrics;
     }
+
+    protected abstract Map<FlinkMetric, Metric> queryJmMetrics(Context ctx) throws Exception;
 
     protected abstract Map<FlinkMetric, AggregatedMetric> queryTmMetrics(Context ctx)
             throws Exception;
@@ -240,18 +249,13 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     }
 
     /**
-     * Given a map of collected Flink vertex metrics we compute the scaling metrics for each job
+     * Given a series of collected Flink vertex metrics we compute the scaling metrics for each job
      * vertex.
-     *
-     * @param jobKey KEY
-     * @param collectedMetrics Collected Flink metrics
-     * @param jobTopology Topology
-     * @param conf Configuration
-     * @return Collected metrics.
      */
     private CollectedMetrics convertToScalingMetrics(
             KEY jobKey,
             Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> collectedMetrics,
+            Map<FlinkMetric, Metric> collectedJmMetrics,
             Map<FlinkMetric, AggregatedMetric> collectedTmMetrics,
             JobTopology jobTopology,
             Configuration conf) {
@@ -314,7 +318,8 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         var outputRatios = ScalingMetrics.computeOutputRatios(collectedMetrics, jobTopology);
         LOG.debug("Output ratios: {}", outputRatios);
 
-        var globalMetrics = ScalingMetrics.computeGlobalMetrics(collectedTmMetrics);
+        var globalMetrics =
+                ScalingMetrics.computeGlobalMetrics(collectedJmMetrics, collectedTmMetrics);
         LOG.debug("Global metrics: {}", globalMetrics);
 
         return new CollectedMetrics(out, outputRatios, globalMetrics);

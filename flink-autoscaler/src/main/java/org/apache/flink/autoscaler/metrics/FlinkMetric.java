@@ -43,7 +43,10 @@ public enum FlinkMetric {
 
     HEAP_MAX(s -> s.equals("Status.JVM.Memory.Heap.Max")),
     HEAP_USED(s -> s.equals("Status.JVM.Memory.Heap.Used")),
-    TOTAL_GC_TIME_PER_SEC(s -> s.equals("Status.JVM.GarbageCollector.All.TimeMsPerSecond"));
+    TOTAL_GC_TIME_PER_SEC(s -> s.equals("Status.JVM.GarbageCollector.All.TimeMsPerSecond")),
+    NUM_TASK_MANAGERS(s -> s.equals("numRegisteredTaskManagers")),
+    NUM_TASK_SLOTS_TOTAL(s -> s.equals("taskSlotsTotal")),
+    NUM_TASK_SLOTS_AVAILABLE(s -> s.equals("taskSlotsAvailable"));
 
     public static final Map<FlinkMetric, AggregatedMetric> FINISHED_METRICS =
             Map.of(
