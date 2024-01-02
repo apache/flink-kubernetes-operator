@@ -72,6 +72,21 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Stabilization period in which no new scaling will be executed");
 
+    public static final ConfigOption<List<String>> EXCLUDED_PERIODS =
+            autoScalerConfig("excluded.periods")
+                    .stringType()
+                    .asList()
+                    .defaultValues()
+                    .withFallbackKeys(oldOperatorConfigKey("excluded.periods"))
+                    .withDescription(
+                            "A (semicolon-separated) list of expressions indicate excluded periods during which autoscaling execution is forbidden, the expression consist of two optional subexpressions concatenated with &&, "
+                                    + "one is cron expression in Quartz format (6 or 7 positions), "
+                                    + "for example, * * 9-11,14-16 * * ? means exclude from 9:00:00am to 11:59:59am and from 2:00:00pm to 4:59:59pm every day, * * * ? * 2-6 means exclude every weekday, etc."
+                                    + "see http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html for the usage of cron expression."
+                                    + "Caution: in most case cron expression is enough, we introduce the other subexpression: daily expression, because cron can only represent integer hour period without minutes and "
+                                    + "seconds suffix, daily expression's formation is startTime-endTime, such as 9:30:30-10:50:20, when exclude from 9:30:30-10:50:20 in Monday and Thursday "
+                                    + "we can express it as 9:30:30-10:50:20 && * * * ? * 2,5");
+
     public static final ConfigOption<Double> TARGET_UTILIZATION =
             autoScalerConfig("target.utilization")
                     .doubleType()

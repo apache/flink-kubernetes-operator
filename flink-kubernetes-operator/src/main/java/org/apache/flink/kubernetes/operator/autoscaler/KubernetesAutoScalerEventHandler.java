@@ -66,14 +66,13 @@ public class KubernetesAutoScalerEventHandler
     public void handleScalingEvent(
             KubernetesJobAutoScalerContext context,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
-            boolean scaled,
+            String message,
             Duration interval) {
-        if (scaled) {
+        if (message.contains(SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED)) {
             AutoScalerEventHandler.super.handleScalingEvent(
-                    context, scalingSummaries, scaled, null);
+                    context, scalingSummaries, message, null);
         } else {
-            var conf = context.getConfiguration();
-            var scalingReport = AutoScalerEventHandler.scalingReport(scalingSummaries, scaled);
+            var scalingReport = AutoScalerEventHandler.scalingReport(scalingSummaries, message);
             var labels = Map.of(PARALLELISM_MAP_KEY, getParallelismHashCode(scalingSummaries));
 
             @Nullable

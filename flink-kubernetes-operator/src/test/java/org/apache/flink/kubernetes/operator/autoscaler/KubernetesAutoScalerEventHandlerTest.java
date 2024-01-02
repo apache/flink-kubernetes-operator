@@ -38,10 +38,16 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.time.Duration;
 import java.util.Map;
 
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_EXECUTION_DISABLED_REASON;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_ENTRY;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
 import static org.apache.flink.kubernetes.operator.autoscaler.KubernetesAutoScalerEventHandler.PARALLELISM_MAP_KEY;
 import static org.apache.flink.kubernetes.operator.autoscaler.TestingKubernetesAutoscalerUtils.createContext;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for {@link KubernetesAutoScalerStateStore}. */
@@ -183,7 +189,16 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         ScalingMetric.TARGET_DATA_RATE,
                                         evaluatedScalingMetric)));
 
-        eventHandler.handleScalingEvent(ctx, scalingSummaries1, scaled, interval);
+        String message =
+                scaled
+                        ? SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED
+                        : SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
+                                + String.format(
+                                        SCALING_EXECUTION_DISABLED_REASON,
+                                        SCALING_ENABLED.key(),
+                                        false);
+
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, message, interval);
         var event = eventCollector.events.poll();
         assertTrue(
                 event.getMessage()
@@ -204,7 +219,7 @@ public class KubernetesAutoScalerEventHandlerTest {
         assertEquals(1, event.getCount());
 
         // Parallelism map doesn't change.
-        eventHandler.handleScalingEvent(ctx, scalingSummaries1, scaled, interval);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, message, interval);
         Event newEvent;
         if (interval != null && interval.toMillis() > 0 && !scaled) {
             assertEquals(0, eventCollector.events.size());
@@ -229,7 +244,7 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         evaluatedScalingMetric,
                                         ScalingMetric.TARGET_DATA_RATE,
                                         evaluatedScalingMetric)));
-        eventHandler.handleScalingEvent(ctx, scalingSummaries2, scaled, interval);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries2, message, interval);
 
         assertEquals(1, eventCollector.events.size());
 
@@ -254,7 +269,7 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         evaluatedScalingMetric,
                                         ScalingMetric.TARGET_DATA_RATE,
                                         evaluatedScalingMetric)));
-        eventHandler.handleScalingEvent(ctx, scalingSummaries2, scaled, interval);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries2, message, interval);
 
         if (interval != null && interval.toMillis() > 0 && !scaled) {
             assertEquals(0, eventCollector.events.size());
@@ -286,14 +301,19 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         ScalingMetric.TARGET_DATA_RATE,
                                         evaluatedScalingMetric)));
 
-        eventHandler.handleScalingEvent(ctx, scalingSummaries1, true, interval);
+        var enabledMessage = SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
+        var disabledMessage =
+                SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
+                        + String.format(
+                                SCALING_EXECUTION_DISABLED_REASON, SCALING_ENABLED.key(), false);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, enabledMessage, interval);
         var event = eventCollector.events.poll();
         assertEquals(null, event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
         assertEquals(1, event.getCount());
 
         // Get recommendation event even parallelism map doesn't change and within supression
         // interval
-        eventHandler.handleScalingEvent(ctx, scalingSummaries1, false, interval);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, disabledMessage, interval);
         assertEquals(1, eventCollector.events.size());
         event = eventCollector.events.poll();
         assertTrue(
@@ -313,7 +333,7 @@ public class KubernetesAutoScalerEventHandlerTest {
 
         // Get recommendation event even parallelism map doesn't change and within supression
         // interval
-        eventHandler.handleScalingEvent(ctx, scalingSummaries1, true, interval);
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, enabledMessage, interval);
         assertEquals(1, eventCollector.events.size());
         event = eventCollector.events.poll();
         assertTrue(
@@ -329,6 +349,80 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         1.00)));
 
         assertEquals(null, event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
+        assertEquals(3, event.getCount());
+    }
+
+    @Test
+    public void testSwitchingExcludedPeriods() {
+        var jobVertexID = JobVertexID.fromHexString("1b51e99e55e89e404d9a0443fd98d9e2");
+        var evaluatedScalingMetric = new EvaluatedScalingMetric();
+        var interval = Duration.ofSeconds(1800);
+        evaluatedScalingMetric.setAverage(1);
+        evaluatedScalingMetric.setCurrent(2);
+        Map<JobVertexID, ScalingSummary> scalingSummaries1 =
+                Map.of(
+                        jobVertexID,
+                        new ScalingSummary(
+                                1,
+                                2,
+                                Map.of(
+                                        ScalingMetric.TRUE_PROCESSING_RATE,
+                                        evaluatedScalingMetric,
+                                        ScalingMetric.EXPECTED_PROCESSING_RATE,
+                                        evaluatedScalingMetric,
+                                        ScalingMetric.TARGET_DATA_RATE,
+                                        evaluatedScalingMetric)));
+
+        var enabledMessage = SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
+        var disabledMessage =
+                SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
+                        + String.format(
+                                SCALING_EXECUTION_DISABLED_REASON,
+                                EXCLUDED_PERIODS.key(),
+                                "10:00-11:00");
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, enabledMessage, interval);
+        var event = eventCollector.events.poll();
+        assertNull(event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
+        assertEquals(1, event.getCount());
+
+        // Get recommendation event even parallelism map doesn't change and within supression
+        // interval
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, disabledMessage, interval);
+        assertEquals(1, eventCollector.events.size());
+        event = eventCollector.events.poll();
+        assertTrue(
+                event.getMessage()
+                        .contains(
+                                String.format(
+                                        SCALING_SUMMARY_ENTRY,
+                                        jobVertexID,
+                                        1,
+                                        2,
+                                        1.00,
+                                        2.00,
+                                        1.00)));
+
+        assertEquals("1286380436", event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
+        assertEquals(2, event.getCount());
+
+        // Get recommendation event even parallelism map doesn't change and within supression
+        // interval
+        eventHandler.handleScalingEvent(ctx, scalingSummaries1, enabledMessage, interval);
+        assertEquals(1, eventCollector.events.size());
+        event = eventCollector.events.poll();
+        assertTrue(
+                event.getMessage()
+                        .contains(
+                                String.format(
+                                        SCALING_SUMMARY_ENTRY,
+                                        jobVertexID,
+                                        1,
+                                        2,
+                                        1.00,
+                                        2.00,
+                                        1.00)));
+
+        assertNull(event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
         assertEquals(3, event.getCount());
     }
 }

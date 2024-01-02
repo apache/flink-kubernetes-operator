@@ -41,8 +41,11 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_
 public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>> {
     String SCALING_SUMMARY_ENTRY =
             " Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f";
-    String SCALING_SUMMARY_HEADER_SCALING_DISABLED = "Recommended parallelism change:";
-    String SCALING_SUMMARY_HEADER_SCALING_ENABLED = "Scaling vertices:";
+    String SCALING_EXECUTION_DISABLED_REASON = "%s:%s, recommended parallelism change:";
+    String SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED =
+            "Scaling execution disabled by config ";
+    String SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED =
+            "Scaling execution enabled, begin scaling vertices:";
     String SCALING_REPORT_REASON = "ScalingReport";
     String SCALING_REPORT_KEY = "ScalingExecutor";
 
@@ -63,16 +66,15 @@ public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
      * Handle scaling reports.
      *
      * @param interval Define the interval to suppress duplicate events.
-     * @param scaled Whether AutoScaler actually scaled the Flink job or just generate advice for
-     *     scaling.
+     * @param message Message describe the event.
      */
     default void handleScalingEvent(
             Context context,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
-            boolean scaled,
+            String message,
             Duration interval) {
         // Provide default implementation without proper deduplication
-        var scalingReport = scalingReport(scalingSummaries, scaled);
+        var scalingReport = scalingReport(scalingSummaries, message);
         handleEvent(
                 context,
                 Type.Normal,
@@ -82,13 +84,8 @@ public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
                 interval);
     }
 
-    static String scalingReport(
-            Map<JobVertexID, ScalingSummary> scalingSummaries, boolean scalingEnabled) {
-        StringBuilder sb =
-                new StringBuilder(
-                        scalingEnabled
-                                ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
-                                : SCALING_SUMMARY_HEADER_SCALING_DISABLED);
+    static String scalingReport(Map<JobVertexID, ScalingSummary> scalingSummaries, String message) {
+        StringBuilder sb = new StringBuilder(message);
         scalingSummaries.forEach(
                 (v, s) ->
                         sb.append(
