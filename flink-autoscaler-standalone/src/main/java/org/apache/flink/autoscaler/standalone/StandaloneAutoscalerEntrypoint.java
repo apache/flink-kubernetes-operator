@@ -32,15 +32,16 @@ import org.apache.flink.autoscaler.standalone.realizer.RescaleApiScalingRealizer
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.client.program.rest.RestClusterClient;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
-import org.apache.flink.util.TimeUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
-
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.FLINK_CLIENT_TIMEOUT;
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_INTERVAL;
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.FETCHER_FLINK_CLUSTER_HOST;
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.FETCHER_FLINK_CLUSTER_PORT;
 
 /** The entrypoint of the standalone autoscaler. */
 @Experimental
@@ -48,63 +49,36 @@ public class StandaloneAutoscalerEntrypoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(StandaloneAutoscalerEntrypoint.class);
 
-    public static final String SCALING_INTERVAL = "scalingInterval";
-    private static final Duration DEFAULT_SCALING_INTERVAL = Duration.ofSeconds(10);
-
-    // This timeout option is used before the job config is got, such as: listJobs, get
-    // Configuration, etc.
-    public static final String REST_CLIENT_TIMEOUT = "restClientTimeout";
-
-    /** Arguments related to {@link FlinkClusterJobListFetcher}. */
-    public static final String FLINK_CLUSTER_HOST = "flinkClusterHost";
-
-    private static final String DEFAULT_FLINK_CLUSTER_HOST = "localhost";
-
-    public static final String FLINK_CLUSTER_PORT = "flinkClusterPort";
-    private static final int DEFAULT_FLINK_CLUSTER_PORT = 8081;
-
     public static <KEY, Context extends JobAutoScalerContext<KEY>> void main(String[] args) {
-        var parameters = ParameterTool.fromArgs(args);
-        LOG.info("The standalone autoscaler is started, parameters: {}", parameters.toMap());
-
-        var scalingInterval = DEFAULT_SCALING_INTERVAL;
-        if (parameters.get(SCALING_INTERVAL) != null) {
-            scalingInterval = TimeUtils.parseDuration(parameters.get(SCALING_INTERVAL));
-        }
-
-        var restClientTimeout = FLINK_CLIENT_TIMEOUT.defaultValue();
-        if (parameters.get(REST_CLIENT_TIMEOUT) != null) {
-            restClientTimeout = TimeUtils.parseDuration(parameters.get(REST_CLIENT_TIMEOUT));
-        }
+        var conf = ParameterTool.fromArgs(args).getConfiguration();
+        LOG.info("The standalone autoscaler is started, configuration: {}", conf);
 
         // Initialize JobListFetcher and JobAutoScaler.
         var eventHandler = new LoggingEventHandler<KEY, Context>();
-        JobListFetcher<KEY, Context> jobListFetcher =
-                createJobListFetcher(parameters, restClientTimeout);
+        JobListFetcher<KEY, Context> jobListFetcher = createJobListFetcher(conf);
         var autoScaler = createJobAutoscaler(eventHandler);
 
         var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
-                        scalingInterval, jobListFetcher, eventHandler, autoScaler);
+                        conf.get(CONTROL_LOOP_INTERVAL), jobListFetcher, eventHandler, autoScaler);
         autoscalerExecutor.start();
     }
 
     private static <KEY, Context extends JobAutoScalerContext<KEY>>
-            JobListFetcher<KEY, Context> createJobListFetcher(
-                    ParameterTool parameters, Duration restClientTimeout) {
-        var host = parameters.get(FLINK_CLUSTER_HOST, DEFAULT_FLINK_CLUSTER_HOST);
-        var port = parameters.getInt(FLINK_CLUSTER_PORT, DEFAULT_FLINK_CLUSTER_PORT);
+            JobListFetcher<KEY, Context> createJobListFetcher(Configuration conf) {
+        var host = conf.get(FETCHER_FLINK_CLUSTER_HOST);
+        var port = conf.get(FETCHER_FLINK_CLUSTER_PORT);
         var restServerAddress = String.format("http://%s:%s", host, port);
 
         return (JobListFetcher<KEY, Context>)
                 new FlinkClusterJobListFetcher(
-                        conf ->
+                        configuration ->
                                 new RestClusterClient<>(
-                                        conf,
+                                        configuration,
                                         "clusterId",
                                         (c, e) ->
                                                 new StandaloneClientHAServices(restServerAddress)),
-                        restClientTimeout);
+                        conf.get(FLINK_CLIENT_TIMEOUT));
     }
 
     private static <KEY, Context extends JobAutoScalerContext<KEY>>
