@@ -221,7 +221,7 @@ public class ScalingMetrics {
             numRecordsInPerSecond =
                     flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC);
         }
-        if (isSource && (numRecordsInPerSecond == null || numRecordsInPerSecond.getSum() == 0)) {
+        if (!isSource && (numRecordsInPerSecond == null || numRecordsInPerSecond.getSum() == 0)) {
             numRecordsInPerSecond =
                     flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC);
         }
