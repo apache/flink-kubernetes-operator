@@ -99,7 +99,7 @@ class RescaleApiScalingRealizerTest {
                     .isCompletedWithValue(
                             Optional.of(createResourceRequirements(newResourceRequirements)));
             assertThat(eventCollector.events).hasSize(1);
-            var event = eventCollector.events.getFirst();
+            var event = eventCollector.events.peek();
             assertThat(event.getContext()).isEqualTo(jobContext);
             assertThat(event.getReason()).isEqualTo(SCALING);
         } else {

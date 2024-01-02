@@ -30,9 +30,16 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicLong;
 
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_INTERVAL;
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_PARALLELISM;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -42,7 +49,7 @@ class StandaloneAutoscalerExecutorTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void testScaling(boolean throwExceptionWhileScale) {
+    void testScaling(boolean throwExceptionWhileScale) throws Exception {
         JobAutoScalerContext<JobID> jobContext1 = createJobAutoScalerContext();
         JobAutoScalerContext<JobID> jobContext2 = createJobAutoScalerContext();
         var jobList = List.of(jobContext1, jobContext2);
@@ -51,32 +58,52 @@ class StandaloneAutoscalerExecutorTest {
                         ? Set.of(jobContext1.getJobKey(), jobContext2.getJobKey())
                         : Set.of();
 
-        var actualScaleContexts = new ArrayList<JobAutoScalerContext<JobID>>();
+        var actualScaleContexts =
+                Collections.synchronizedList(new ArrayList<JobAutoScalerContext<JobID>>());
 
         var eventCollector = new TestingEventCollector<JobID, JobAutoScalerContext<JobID>>();
-        var autoscalerExecutor =
+        final Configuration conf = new Configuration();
+        conf.set(CONTROL_LOOP_PARALLELISM, 1);
+        var countDownLatch = new CountDownLatch(jobList.size());
+        try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
-                        Duration.ofSeconds(2),
+                        conf,
                         () -> jobList,
                         eventCollector,
-                        createJobAutoScaler(actualScaleContexts, exceptionKeys));
+                        new JobAutoScaler<>() {
+                            @Override
+                            public void scale(JobAutoScalerContext<JobID> context) {
+                                actualScaleContexts.add(context);
+                                countDownLatch.countDown();
+                                if (exceptionKeys.contains(context.getJobKey())) {
+                                    throw new RuntimeException("Excepted exception.");
+                                }
+                            }
 
-        autoscalerExecutor.scaling();
-        assertThat(actualScaleContexts).isEqualTo(jobList);
-        assertThat(eventCollector.events)
-                .hasSameSizeAs(exceptionKeys)
-                .allMatch(
-                        event ->
-                                event.getReason()
-                                        .equals(StandaloneAutoscalerExecutor.AUTOSCALER_ERROR));
+                            @Override
+                            public void cleanup(JobID jobKey) {
+                                fail("Should be called.");
+                            }
+                        })) {
+            autoscalerExecutor.scaling();
+            countDownLatch.await();
+
+            assertThat(actualScaleContexts).isEqualTo(jobList);
+            assertThat(eventCollector.events)
+                    .hasSameSizeAs(exceptionKeys)
+                    .allMatch(
+                            event ->
+                                    event.getReason()
+                                            .equals(StandaloneAutoscalerExecutor.AUTOSCALER_ERROR));
+        }
     }
 
     @Test
     void testFetchException() {
         var eventCollector = new TestingEventCollector<JobID, JobAutoScalerContext<JobID>>();
-        var autoscalerExecutor =
+        try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
-                        Duration.ofSeconds(2),
+                        new Configuration(),
                         () -> {
                             throw new RuntimeException("Excepted exception.");
                         },
@@ -91,33 +118,110 @@ class StandaloneAutoscalerExecutorTest {
                             public void cleanup(JobID jobID) {
                                 fail("Should be called.");
                             }
-                        });
+                        })) {
 
-        // scaling shouldn't throw exception even if fetch fails
-        assertDoesNotThrow(autoscalerExecutor::scaling);
+            // scaling shouldn't throw exception even if fetch fails
+            assertDoesNotThrow(autoscalerExecutor::scaling);
+        }
+    }
+
+    @Test
+    void testScalingParallelism() {
+        var parallelism = 10;
+
+        var jobList = new ArrayList<JobAutoScalerContext<JobID>>();
+        for (int i = 0; i < parallelism; i++) {
+            jobList.add(createJobAutoScalerContext());
+        }
+
+        final var countDownLatch = new CountDownLatch(parallelism);
+        final Configuration conf = new Configuration();
+        conf.set(CONTROL_LOOP_PARALLELISM, parallelism);
+
+        try (var autoscalerExecutor =
+                new StandaloneAutoscalerExecutor<>(
+                        conf,
+                        () -> jobList,
+                        new TestingEventCollector<>(),
+                        new JobAutoScaler<>() {
+                            @Override
+                            public void scale(JobAutoScalerContext<JobID> context)
+                                    throws Exception {
+                                countDownLatch.countDown();
+                                // The await can be done when all jobs are scaling together.
+                                countDownLatch.await();
+                            }
+
+                            @Override
+                            public void cleanup(JobID jobID) {
+                                fail("Should be called.");
+                            }
+                        })) {
+            autoscalerExecutor.scaling();
+        }
+    }
+
+    /** Test the rest of jobs aren't affected when scaling of one job is very slow. */
+    @Test
+    void testOneJobScalingSlow() throws Exception {
+        var parallelism = 10;
+
+        final var jobContextWithIndex = new HashMap<JobAutoScalerContext<JobID>, Integer>();
+        final var jobContextWithScalingCounter =
+                new HashMap<JobAutoScalerContext<JobID>, AtomicLong>();
+        for (int i = 0; i < parallelism; i++) {
+            final JobAutoScalerContext<JobID> jobAutoScalerContext = createJobAutoScalerContext();
+            jobContextWithIndex.put(jobAutoScalerContext, i);
+            jobContextWithScalingCounter.put(jobAutoScalerContext, new AtomicLong(0));
+        }
+
+        // Quick jobs will count down after scaling expectedScalingCount times, and the slow job
+        // will wait for these quick jobs.
+        // Slow job completes slowJobFuture when all quick jobs are done.
+        final var expectedScalingCount = 20;
+        final var countDownLatch = new CountDownLatch(parallelism - 1);
+        final var slowJobFuture = new CompletableFuture<Void>();
+
+        final Configuration conf = new Configuration();
+        conf.set(CONTROL_LOOP_PARALLELISM, 2);
+        conf.set(CONTROL_LOOP_INTERVAL, Duration.ofMillis(100));
+
+        try (var autoscalerExecutor =
+                new StandaloneAutoscalerExecutor<>(
+                        conf,
+                        jobContextWithIndex::keySet,
+                        new TestingEventCollector<>(),
+                        new JobAutoScaler<>() {
+                            @Override
+                            public void scale(JobAutoScalerContext<JobID> context)
+                                    throws Exception {
+                                final int index = jobContextWithIndex.get(context);
+                                final long scalingCounter =
+                                        jobContextWithScalingCounter.get(context).incrementAndGet();
+                                if (index == 0) {
+                                    // index 0 is slot context
+                                    countDownLatch.await();
+                                    // The scaling count of each quick job reaches
+                                    // expectedScalingCount.
+                                    slowJobFuture.complete(null);
+                                } else if (scalingCounter == expectedScalingCount) {
+                                    countDownLatch.countDown();
+                                }
+                            }
+
+                            @Override
+                            public void cleanup(JobID jobID) {
+                                fail("Should be called.");
+                            }
+                        })) {
+            autoscalerExecutor.start();
+            slowJobFuture.get();
+        }
     }
 
     private static JobAutoScalerContext<JobID> createJobAutoScalerContext() {
         var jobID = new JobID();
         return new JobAutoScalerContext<>(
                 jobID, jobID, JobStatus.RUNNING, new Configuration(), null, null);
-    }
-
-    private static JobAutoScaler<JobID, JobAutoScalerContext<JobID>> createJobAutoScaler(
-            List<JobAutoScalerContext<JobID>> actualScaleContexts, Set<JobID> exceptionKeys) {
-        return new JobAutoScaler<>() {
-            @Override
-            public void scale(JobAutoScalerContext<JobID> context) {
-                actualScaleContexts.add(context);
-                if (exceptionKeys.contains(context.getJobKey())) {
-                    throw new RuntimeException("Excepted exception.");
-                }
-            }
-
-            @Override
-            public void cleanup(JobID jobKey) {
-                fail("Should be called.");
-            }
-        };
     }
 }

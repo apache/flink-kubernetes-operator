@@ -21,6 +21,8 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
 import org.apache.flink.shaded.guava30.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -31,9 +33,17 @@ import javax.annotation.Nonnull;
 
 import java.io.Closeable;
 import java.time.Duration;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_INTERVAL;
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_PARALLELISM;
 
 /** The executor of the standalone autoscaler. */
 public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerContext<KEY>>
@@ -48,22 +58,35 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
     private final AutoScalerEventHandler<KEY, Context> eventHandler;
     private final JobAutoScaler<KEY, Context> autoScaler;
     private final ScheduledExecutorService scheduledExecutorService;
+    private final ExecutorService scalingThreadPool;
+
+    /**
+     * Maintain a set of job keys that during scaling, it should be updated at {@link
+     * #scheduledExecutorService} thread.
+     */
+    private final Set<KEY> scalingJobKeys;
 
     public StandaloneAutoscalerExecutor(
-            @Nonnull Duration scalingInterval,
+            @Nonnull Configuration conf,
             @Nonnull JobListFetcher<KEY, Context> jobListFetcher,
             @Nonnull AutoScalerEventHandler<KEY, Context> eventHandler,
             @Nonnull JobAutoScaler<KEY, Context> autoScaler) {
-        this.scalingInterval = scalingInterval;
+        this.scalingInterval = conf.get(CONTROL_LOOP_INTERVAL);
         this.jobListFetcher = jobListFetcher;
         this.eventHandler = eventHandler;
         this.autoScaler = autoScaler;
         this.scheduledExecutorService =
                 Executors.newSingleThreadScheduledExecutor(
                         new ThreadFactoryBuilder()
-                                .setNameFormat("StandaloneAutoscalerControlLoop")
+                                .setNameFormat("autoscaler-standalone-control-loop")
                                 .setDaemon(false)
                                 .build());
+
+        int parallelism = conf.get(CONTROL_LOOP_PARALLELISM);
+        this.scalingThreadPool =
+                Executors.newFixedThreadPool(
+                        parallelism, new ExecutorThreadFactory("autoscaler-standalone-scaling"));
+        this.scalingJobKeys = new HashSet<>();
     }
 
     public void start() {
@@ -75,29 +98,53 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
     @Override
     public void close() {
         scheduledExecutorService.shutdownNow();
+        scalingThreadPool.shutdownNow();
     }
 
     @VisibleForTesting
     protected void scaling() {
         LOG.info("Standalone autoscaler starts scaling.");
+        Collection<Context> jobList;
         try {
-            var jobList = jobListFetcher.fetch();
-            for (var jobContext : jobList) {
-                try {
-                    autoScaler.scale(jobContext);
-                } catch (Throwable e) {
-                    LOG.error("Error while scaling job", e);
-                    eventHandler.handleEvent(
-                            jobContext,
-                            AutoScalerEventHandler.Type.Warning,
-                            AUTOSCALER_ERROR,
-                            e.getMessage(),
-                            null,
-                            null);
-                }
-            }
+            jobList = jobListFetcher.fetch();
         } catch (Throwable e) {
             LOG.error("Error while fetch job list.", e);
+            return;
+        }
+
+        for (var jobContext : jobList) {
+            final var jobKey = jobContext.getJobKey();
+            if (scalingJobKeys.contains(jobKey)) {
+                continue;
+            }
+            scalingJobKeys.add(jobKey);
+            CompletableFuture.runAsync(() -> scalingSingleJob(jobContext), scalingThreadPool)
+                    .whenCompleteAsync(
+                            (result, throwable) -> {
+                                if (throwable != null) {
+                                    LOG.error(
+                                            "Error while jobKey: {} executing scaling .",
+                                            jobKey,
+                                            throwable);
+                                }
+                                scalingJobKeys.remove(jobKey);
+                            },
+                            scheduledExecutorService);
+        }
+    }
+
+    private void scalingSingleJob(Context jobContext) {
+        try {
+            autoScaler.scale(jobContext);
+        } catch (Throwable e) {
+            LOG.error("Error while scaling job", e);
+            eventHandler.handleEvent(
+                    jobContext,
+                    AutoScalerEventHandler.Type.Warning,
+                    AUTOSCALER_ERROR,
+                    e.getMessage(),
+                    null,
+                    null);
         }
     }
 }
