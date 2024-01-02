@@ -39,7 +39,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.FLINK_CLIENT_TIMEOUT;
-import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_INTERVAL;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.FETCHER_FLINK_CLUSTER_HOST;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.FETCHER_FLINK_CLUSTER_PORT;
 
@@ -59,8 +58,7 @@ public class StandaloneAutoscalerEntrypoint {
         var autoScaler = createJobAutoscaler(eventHandler);
 
         var autoscalerExecutor =
-                new StandaloneAutoscalerExecutor<>(
-                        conf.get(CONTROL_LOOP_INTERVAL), jobListFetcher, eventHandler, autoScaler);
+                new StandaloneAutoscalerExecutor<>(conf, jobListFetcher, eventHandler, autoScaler);
         autoscalerExecutor.start();
     }
 

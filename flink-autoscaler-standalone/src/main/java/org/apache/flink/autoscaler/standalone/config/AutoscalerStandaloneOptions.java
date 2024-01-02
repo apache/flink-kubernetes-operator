@@ -38,6 +38,12 @@ public class AutoscalerStandaloneOptions {
                     .withDeprecatedKeys("scalingInterval")
                     .withDescription("The interval of autoscaler standalone control loop.");
 
+    public static final ConfigOption<Integer> CONTROL_LOOP_PARALLELISM =
+            autoscalerStandaloneConfig("control-loop.parallelism")
+                    .intType()
+                    .defaultValue(100)
+                    .withDescription("The parallelism of autoscaler standalone control loop.");
+
     public static final ConfigOption<String> FETCHER_FLINK_CLUSTER_HOST =
             autoscalerStandaloneConfig("fetcher.flink-cluster.host")
                     .stringType()
