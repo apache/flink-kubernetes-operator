@@ -32,7 +32,6 @@ import io.javaoperatorsdk.webhook.admission.mutation.Mutator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
 import java.util.Optional;
 import java.util.Set;
 
@@ -72,8 +71,6 @@ public class FlinkMutator implements Mutator<HasMetadata> {
             var deployment =
                     informerManager.getFlinkDepInformer(namespace).getStore().getByKey(key);
 
-            setSessionTargetLabel(sessionJob);
-
             for (FlinkResourceMutator mutator : mutators) {
                 FlinkSessionJob flinkSessionJob =
                         mutator.mutateSessionJob(sessionJob, Optional.ofNullable(deployment));
@@ -96,21 +93,6 @@ public class FlinkMutator implements Mutator<HasMetadata> {
             return flinkDeployment;
         } catch (Exception e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    private void setSessionTargetLabel(FlinkSessionJob flinkSessionJob) {
-        var labels = flinkSessionJob.getMetadata().getLabels();
-        if (labels == null) {
-            labels = new HashMap<>();
-        }
-        var deploymentName = flinkSessionJob.getSpec().getDeploymentName();
-        if (deploymentName != null
-                && !deploymentName.equals(labels.get(CrdConstants.LABEL_TARGET_SESSION))) {
-            labels.put(
-                    CrdConstants.LABEL_TARGET_SESSION,
-                    flinkSessionJob.getSpec().getDeploymentName());
-            flinkSessionJob.getMetadata().setLabels(labels);
         }
     }
 }

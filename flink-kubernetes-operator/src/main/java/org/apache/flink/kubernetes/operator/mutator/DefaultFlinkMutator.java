@@ -17,9 +17,11 @@
 
 package org.apache.flink.kubernetes.operator.mutator;
 
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 
+import java.util.HashMap;
 import java.util.Optional;
 
 /** Default Flink Mutator. */
@@ -35,6 +37,23 @@ public class DefaultFlinkMutator implements FlinkResourceMutator {
     public FlinkSessionJob mutateSessionJob(
             FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
 
+        setSessionTargetLabel(sessionJob);
+
         return sessionJob;
+    }
+
+    private void setSessionTargetLabel(FlinkSessionJob flinkSessionJob) {
+        var labels = flinkSessionJob.getMetadata().getLabels();
+        if (labels == null) {
+            labels = new HashMap<>();
+        }
+        var deploymentName = flinkSessionJob.getSpec().getDeploymentName();
+        if (deploymentName != null
+                && !deploymentName.equals(labels.get(CrdConstants.LABEL_TARGET_SESSION))) {
+            labels.put(
+                    CrdConstants.LABEL_TARGET_SESSION,
+                    flinkSessionJob.getSpec().getDeploymentName());
+            flinkSessionJob.getMetadata().setLabels(labels);
+        }
     }
 }
