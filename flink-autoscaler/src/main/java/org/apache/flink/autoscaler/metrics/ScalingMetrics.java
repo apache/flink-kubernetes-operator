@@ -217,7 +217,7 @@ public class ScalingMetrics {
             JobVertexID jobVertexID,
             boolean isSource) {
         // Generate numRecordsInPerSecond from 3 metrics:
-        // 1. If the vertex is not the source, use NUM_RECORDS_IN_PER_SEC metric
+        // 1. If available, directly use the NUM_RECORDS_IN_PER_SEC task metric.
         var numRecordsInPerSecond = flinkMetrics.get(FlinkMetric.NUM_RECORDS_IN_PER_SEC);
         // 2. If the vertex is the source, use SOURCE_TASK_NUM_RECORDS_IN_PER_SEC metric first.
         if (isSource && (numRecordsInPerSecond == null || numRecordsInPerSecond.getSum() == 0)) {
