@@ -224,7 +224,7 @@ public class ScalingMetrics {
             numRecordsInPerSecond =
                     flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC);
         }
-        // 3. If the vertex is the source and SOURCE_TASK_NUM_RECORDS_IN_PER_SEC metric not available
+        // 3. If the vertex contains a source operator which does not emit input metrics, use output metrics instead.
         // then use SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC metric
         if (isSource && (numRecordsInPerSecond == null || numRecordsInPerSecond.getSum() == 0)) {
             numRecordsInPerSecond =
