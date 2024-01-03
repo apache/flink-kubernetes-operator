@@ -217,14 +217,13 @@ public class ScalingMetrics {
             JobVertexID jobVertexID,
             boolean isSource) {
         var numRecordsInPerSecond = flinkMetrics.get(FlinkMetric.NUM_RECORDS_IN_PER_SEC);
+
+        // If the vertex is the source, then use SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC metric
         if (isSource && (numRecordsInPerSecond == null || numRecordsInPerSecond.getSum() == 0)) {
-            numRecordsInPerSecond =
-                    flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC);
-        }
-        if (!isSource && (numRecordsInPerSecond == null || numRecordsInPerSecond.getSum() == 0)) {
             numRecordsInPerSecond =
                     flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC);
         }
+
         if (numRecordsInPerSecond == null) {
             LOG.warn("Received null input rate for {}. Returning NaN.", jobVertexID);
             return Double.NaN;
