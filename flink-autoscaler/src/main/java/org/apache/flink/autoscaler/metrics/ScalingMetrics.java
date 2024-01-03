@@ -216,9 +216,15 @@ public class ScalingMetrics {
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             JobVertexID jobVertexID,
             boolean isSource) {
+        // If the vertex is not the source, use NUM_RECORDS_IN_PER_SEC metric
         var numRecordsInPerSecond = flinkMetrics.get(FlinkMetric.NUM_RECORDS_IN_PER_SEC);
-
-        // If the vertex is the source, then use SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC metric
+        // If the vertex is the source, use SOURCE_TASK_NUM_RECORDS_IN_PER_SEC metric
+        if (isSource && (numRecordsInPerSecond == null || numRecordsInPerSecond.getSum() == 0)) {
+            numRecordsInPerSecond =
+                    flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC);
+        }
+        // If the vertex is the source and SOURCE_TASK_NUM_RECORDS_IN_PER_SEC metric not available
+        // then use SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC metric
         if (isSource && (numRecordsInPerSecond == null || numRecordsInPerSecond.getSum() == 0)) {
             numRecordsInPerSecond =
                     flinkMetrics.get(FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC);
