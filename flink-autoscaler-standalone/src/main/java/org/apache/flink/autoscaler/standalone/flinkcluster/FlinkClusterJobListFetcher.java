@@ -30,7 +30,7 @@ import org.apache.flink.runtime.rest.messages.job.JobManagerJobConfigurationHead
 import org.apache.flink.util.function.FunctionWithException;
 
 import java.time.Duration;
-import java.util.List;
+import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -51,7 +51,7 @@ public class FlinkClusterJobListFetcher
     }
 
     @Override
-    public List<JobAutoScalerContext<JobID>> fetch() throws Exception {
+    public Collection<JobAutoScalerContext<JobID>> fetch() throws Exception {
         try (var restClusterClient = restClientGetter.apply(new Configuration())) {
             return restClusterClient
                     .listJobs()
