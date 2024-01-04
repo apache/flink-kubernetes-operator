@@ -20,11 +20,11 @@ package org.apache.flink.autoscaler.standalone;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 
-import java.util.List;
+import java.util.Collection;
 
 /** The JobListFetcher will fetch the jobContext of all jobs. */
 @Experimental
 public interface JobListFetcher<KEY, Context extends JobAutoScalerContext<KEY>> {
 
-    List<Context> fetch() throws Exception;
+    Collection<Context> fetch() throws Exception;
 }
