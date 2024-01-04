@@ -133,7 +133,8 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
         }
     }
 
-    private void scalingSingleJob(Context jobContext) {
+    @VisibleForTesting
+    protected void scalingSingleJob(Context jobContext) {
         try {
             autoScaler.scale(jobContext);
         } catch (Throwable e) {
