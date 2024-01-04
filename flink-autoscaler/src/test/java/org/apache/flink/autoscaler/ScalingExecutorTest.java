@@ -35,6 +35,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,8 +45,8 @@ import java.util.stream.Collectors;
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_REPORT_REASON;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_ENTRY;
-import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_DISABLED;
-import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_ENABLED;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED;
+import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -169,6 +171,41 @@ public class ScalingExecutorTest {
                         context, metrics, new HashMap<>(), new ScalingTracking(), now));
     }
 
+    @Test
+    public void testExcludedPeriodsForScaling() throws Exception {
+        var sourceHexString = "0bfd135746ac8efb3cce668b12e16d3a";
+        var source = JobVertexID.fromHexString(sourceHexString);
+        var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
+        var sink = JobVertexID.fromHexString(sinkHexString);
+        var conf = context.getConfiguration();
+        var now = Instant.now();
+        var localTime = ZonedDateTime.ofInstant(now, ZoneId.systemDefault()).toLocalTime();
+        // scaling execution in excluded periods
+        var excludedPeriod =
+                new StringBuilder(localTime.toString().split("\\.")[0])
+                        .append("-")
+                        .append(localTime.plusSeconds(300).toString().split("\\.")[0])
+                        .toString();
+        conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of(excludedPeriod));
+        var metrics =
+                new EvaluatedMetrics(
+                        Map.of(source, evaluated(10, 110, 100), sink, evaluated(10, 110, 100)),
+                        dummyGlobalMetrics);
+        assertFalse(
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+        // scaling execution outside excluded periods
+        excludedPeriod =
+                new StringBuilder(localTime.plusSeconds(100).toString().split("\\.")[0])
+                        .append("-")
+                        .append(localTime.plusSeconds(300).toString().split("\\.")[0])
+                        .toString();
+        conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of(excludedPeriod));
+        assertTrue(
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     public void testScalingEventsWith0IntervalConfig(boolean scalingEnabled) throws Exception {
@@ -231,8 +268,8 @@ public class ScalingExecutorTest {
                 event.getMessage()
                         .contains(
                                 scalingEnabled
-                                        ? SCALING_SUMMARY_HEADER_SCALING_ENABLED
-                                        : SCALING_SUMMARY_HEADER_SCALING_DISABLED));
+                                        ? SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED
+                                        : SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED));
         assertEquals(SCALING_REPORT_REASON, event.getReason());
 
         metrics =

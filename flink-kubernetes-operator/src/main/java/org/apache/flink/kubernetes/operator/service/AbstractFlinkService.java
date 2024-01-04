@@ -113,9 +113,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.MalformedURLException;
 import java.net.Socket;
 import java.net.SocketAddress;
-import java.net.URI;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
@@ -234,21 +235,27 @@ public abstract class AbstractFlinkService implements FlinkService {
 
     @Override
     public boolean isJobManagerPortReady(Configuration config) {
-        final URI uri;
+        SocketAddress socketAddress;
         try (var clusterClient = getClusterClient(config)) {
-            uri = URI.create(clusterClient.getWebInterfaceURL());
+            socketAddress = getSocketAddress(clusterClient);
+
         } catch (Exception ex) {
             throw new FlinkRuntimeException(ex);
         }
-        SocketAddress socketAddress = new InetSocketAddress(uri.getHost(), uri.getPort());
-        Socket socket = new Socket();
-        try {
+
+        try (Socket socket = new Socket()) {
             socket.connect(socketAddress, 1000);
-            socket.close();
             return true;
         } catch (IOException e) {
             return false;
         }
+    }
+
+    protected SocketAddress getSocketAddress(RestClusterClient<String> clusterClient)
+            throws MalformedURLException {
+        final URL url = new URL(clusterClient.getWebInterfaceURL());
+        LOG.debug("JobManager webinterface url {}", clusterClient.getWebInterfaceURL());
+        return new InetSocketAddress(url.getHost(), url.getPort());
     }
 
     @Override

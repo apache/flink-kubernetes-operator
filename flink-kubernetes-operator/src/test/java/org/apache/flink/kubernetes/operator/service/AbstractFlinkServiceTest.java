@@ -126,6 +126,7 @@ import java.util.stream.Collectors;
 import static org.apache.flink.kubernetes.operator.api.status.SavepointFormatType.NATIVE;
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -1022,6 +1023,26 @@ public class AbstractFlinkServiceTest {
         try (var socket = new ServerSocket(port)) {
             assertTrue(flinkService.isJobManagerPortReady(configuration));
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {"http://127.0.0.1:8081", "http://dev-test:8081", "http://dev-test.01:8081"})
+    void testValidSocketAddresses(String inputAddress) throws Exception {
+
+        var clusterClient =
+                new TestingClusterClient<String>(configuration) {
+                    @Override
+                    public String getWebInterfaceURL() {
+                        return inputAddress;
+                    }
+                };
+        var flinkService = new TestingService(clusterClient);
+
+        assertDoesNotThrow(
+                () -> {
+                    flinkService.getSocketAddress(clusterClient);
+                });
     }
 
     class TestingService extends AbstractFlinkService {

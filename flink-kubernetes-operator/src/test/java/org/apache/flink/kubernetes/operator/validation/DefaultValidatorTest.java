@@ -825,6 +825,16 @@ public class DefaultValidatorTest {
     }
 
     @Test
+    public void testAutoScalerDeploymentWithInvalidExcludedPeriods() {
+        var result =
+                testAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(
+                                        AutoScalerOptions.EXCLUDED_PERIODS.key(), "12:00-10:00"));
+        assertTrue(result.isPresent());
+    }
+
+    @Test
     public void testNonEnabledAutoScalerDeploymentJob() {
         var result =
                 testAutoScalerConfiguration(
@@ -914,6 +924,16 @@ public class DefaultValidatorTest {
         assertErrorContains(
                 result,
                 getFormattedErrorMessage(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.0d));
+    }
+
+    @Test
+    public void testValidateSessionJobWithInvalidExcludedPeriods() {
+        var result =
+                testSessionJobAutoScalerConfiguration(
+                        flinkConf ->
+                                flinkConf.put(
+                                        AutoScalerOptions.EXCLUDED_PERIODS.key(), "12:00-10:00"));
+        assertTrue(result.isPresent());
     }
 
     @Test

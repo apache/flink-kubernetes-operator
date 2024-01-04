@@ -134,6 +134,12 @@ Like other resource options these can be configured on both an operator and a pe
 
 {{< generated/auto_scaler_configuration >}}
 
+### Autoscaler Standalone Configuration
+
+Unlike other resource options, these options only work with autoscaler standalone process.
+
+{{< generated/autoscaler_standalone_configuration >}}
+
 ### System Metrics Configuration
 
 Operator system metrics configuration. Cannot be overridden on a per-resource basis.

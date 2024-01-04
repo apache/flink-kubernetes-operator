@@ -26,10 +26,11 @@ import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedList;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 
@@ -37,7 +38,7 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABL
 public class TestingEventCollector<KEY, Context extends JobAutoScalerContext<KEY>>
         implements AutoScalerEventHandler<KEY, Context> {
 
-    public final LinkedList<Event<KEY, Context>> events = new LinkedList<>();
+    public final Queue<Event<KEY, Context>> events = new LinkedBlockingQueue<>();
 
     public final Map<String, Event<KEY, Context>> eventMap = new ConcurrentHashMap<>();
 

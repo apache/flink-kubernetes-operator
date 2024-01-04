@@ -70,7 +70,7 @@ kubectl delete flinkdeployment my-deployment
 ```
 
 {{< hint danger >}}
-Deleting a deployment will remove all checkpoint and status information. Future deployments will from an empty state unless manually overridden by the user.
+Deleting a deployment will remove all checkpoint and status information. Future deployments will start from an empty state unless manually overridden by the user.
 {{< /hint >}}
 
 ## Stateful and stateless application upgrades
