@@ -93,7 +93,7 @@ class StandaloneAutoscalerExecutorTest {
                 }) {
 
             autoscalerExecutor.scaling();
-            // Wait for all scalings are finished.
+            // Wait for all scalings to go finished.
             countDownLatch.await();
 
             assertThat(actualScaleContexts).isEqualTo(jobList);
