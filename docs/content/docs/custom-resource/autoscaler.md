@@ -260,17 +260,46 @@ job.autoscaler.metrics.window : 3m
 > `ScalingReport` will show the recommended parallelism for each vertex.
 
 After the flink job starts, please start the StandaloneAutoscaler process by the
-following command.
+following command. Please download released autoscaler-standalone jar from 
+[here](https://repo.maven.apache.org/maven2/org/apache/flink/flink-autoscaler-standalone/) first.
 
 ```
 java -cp flink-autoscaler-standalone-{{< version >}}.jar \
 org.apache.flink.autoscaler.standalone.StandaloneAutoscalerEntrypoint \
---flinkClusterHost localhost \
---flinkClusterPort 8081
+--autoscaler.standalone.fetcher.flink-cluster.host localhost \
+--autoscaler.standalone.fetcher.flink-cluster.port 8081
 ```
 
-Updating the `flinkClusterHost` and `flinkClusterPort` based on your flink cluster.
-In general, the host and port are the same as Flink WebUI.
+Updating the `autoscaler.standalone.fetcher.flink-cluster.host` and `autoscaler.standalone.fetcher.flink-cluster.port` 
+based on your flink cluster. In general, the host and port are the same as Flink WebUI.
+
+### Using the JDBC Autoscaler State Store
+
+A driver dependency is required to connect to a specified database. Here are drivers currently supported, 
+please download JDBC driver and initialize database and table first.
+
+| Driver     | Group Id                   | Artifact Id            | JAR                                                                             | Schema                  |
+|:-----------|:---------------------------|:-----------------------|:--------------------------------------------------------------------------------|-------------------------|
+| MySQL      | `mysql`                    | `mysql-connector-java` | [Download](https://repo.maven.apache.org/maven2/mysql/mysql-connector-java/)    | [Table DDL](https://github.com/apache/flink-kubernetes-operator/blob/main/flink-autoscaler-plugin-jdbc/src/main/resources/schema/mysql_schema.sql)     |
+| PostgreSQL | `org.postgresql`           | `postgresql`           | [Download](https://jdbc.postgresql.org/download/)                               | [Table DDL](https://github.com/apache/flink-kubernetes-operator/blob/main/flink-autoscaler-plugin-jdbc/src/main/resources/schema/postgres_schema.sql)  |
+| Derby      | `org.apache.derby`         | `derby`                | [Download](http://db.apache.org/derby/derby_downloads.html)                     | [Table DDL](https://github.com/apache/flink-kubernetes-operator/blob/main/flink-autoscaler-plugin-jdbc/src/main/resources/schema/derby_schema.sql)     |
+
+```
+JDBC_DRIVER_JAR=./mysql-connector-java-8.0.30.jar
+# export the password of jdbc state store
+export STATE_STORE_JDBC_PWD=123456
+
+java -cp flink-autoscaler-standalone-{{< version >}}.jar:${JDBC_DRIVER_JAR} \
+org.apache.flink.autoscaler.standalone.StandaloneAutoscalerEntrypoint \
+--autoscaler.standalone.fetcher.flink-cluster.host localhost \
+--autoscaler.standalone.fetcher.flink-cluster.port 8081 \
+--autoscaler.standalone.state-store.type jdbc \
+--autoscaler.standalone.state-store.jdbc.url jdbc:mysql://localhost:3306/flink_autoscaler \
+--autoscaler.standalone.state-store.jdbc.username root
+```
+
+All supported options for autoscaler standalone can be viewed 
+[here]({{< ref "docs/operations/configuration#autoscaler-standalone-configuration" >}}).
 
 ### Extensibility of autoscaler standalone
 
