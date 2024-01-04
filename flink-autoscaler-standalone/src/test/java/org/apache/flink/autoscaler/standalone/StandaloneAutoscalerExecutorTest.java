@@ -50,10 +50,10 @@ class StandaloneAutoscalerExecutorTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void testScaling(boolean throwExceptionWhileScale) throws Exception {
-        JobAutoScalerContext<JobID> jobContext1 = createJobAutoScalerContext();
-        JobAutoScalerContext<JobID> jobContext2 = createJobAutoScalerContext();
+        var jobContext1 = createJobAutoScalerContext();
+        var jobContext2 = createJobAutoScalerContext();
         var jobList = List.of(jobContext1, jobContext2);
-        Set<JobID> exceptionKeys =
+        var exceptionKeys =
                 throwExceptionWhileScale
                         ? Set.of(jobContext1.getJobKey(), jobContext2.getJobKey())
                         : Set.of();
@@ -62,30 +62,38 @@ class StandaloneAutoscalerExecutorTest {
                 Collections.synchronizedList(new ArrayList<JobAutoScalerContext<JobID>>());
 
         var eventCollector = new TestingEventCollector<JobID, JobAutoScalerContext<JobID>>();
-        final Configuration conf = new Configuration();
+        final var conf = new Configuration();
         conf.set(CONTROL_LOOP_PARALLELISM, 1);
         var countDownLatch = new CountDownLatch(jobList.size());
+
+        final var jobAutoScaler =
+                new JobAutoScaler<JobID, JobAutoScalerContext<JobID>>() {
+                    @Override
+                    public void scale(JobAutoScalerContext<JobID> context) {
+                        actualScaleContexts.add(context);
+                        if (exceptionKeys.contains(context.getJobKey())) {
+                            throw new RuntimeException("Excepted exception.");
+                        }
+                    }
+
+                    @Override
+                    public void cleanup(JobID jobKey) {
+                        fail("Should be called.");
+                    }
+                };
+
         try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
-                        conf,
-                        () -> jobList,
-                        eventCollector,
-                        new JobAutoScaler<>() {
-                            @Override
-                            public void scale(JobAutoScalerContext<JobID> context) {
-                                actualScaleContexts.add(context);
-                                countDownLatch.countDown();
-                                if (exceptionKeys.contains(context.getJobKey())) {
-                                    throw new RuntimeException("Excepted exception.");
-                                }
-                            }
+                        conf, () -> jobList, eventCollector, jobAutoScaler) {
+                    @Override
+                    protected void scalingSingleJob(JobAutoScalerContext<JobID> jobContext) {
+                        super.scalingSingleJob(jobContext);
+                        countDownLatch.countDown();
+                    }
+                }) {
 
-                            @Override
-                            public void cleanup(JobID jobKey) {
-                                fail("Should be called.");
-                            }
-                        })) {
             autoscalerExecutor.scaling();
+            // Wait for all scalings are finished.
             countDownLatch.await();
 
             assertThat(actualScaleContexts).isEqualTo(jobList);
