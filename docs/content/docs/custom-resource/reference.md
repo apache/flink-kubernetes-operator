@@ -248,6 +248,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | jobManagerDeploymentStatus | org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus | Last observed status of the JobManager deployment. |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentReconciliationStatus | Status of the last reconcile operation. |
 | taskManager | org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo | Information about the TaskManagers for the scale subresource. |
+| conditions | io.fabric8.kubernetes.api.model.Condition | The conditions array is a set of types with a status that make up the computed state of a FlinkDeployment at any time |
 
 ### FlinkSessionJobReconciliationStatus
 **Class**: org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobReconciliationStatus
