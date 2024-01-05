@@ -21,12 +21,15 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.fabric8.kubernetes.api.model.Condition;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
+
+import java.util.List;
 
 /** Last observed status of the Flink Session job. */
 @Experimental
@@ -42,4 +45,6 @@ public class FlinkSessionJobStatus extends CommonStatus<FlinkSessionJobSpec> {
     /** Status of the last reconcile operation. */
     private FlinkSessionJobReconciliationStatus reconciliationStatus =
             new FlinkSessionJobReconciliationStatus();
+
+    private List<Condition> conditions;
 }

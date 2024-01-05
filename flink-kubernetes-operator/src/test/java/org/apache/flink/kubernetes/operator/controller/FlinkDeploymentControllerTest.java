@@ -68,6 +68,7 @@ import java.util.stream.Collectors;
 import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -129,7 +130,7 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING.name(),
                 appCluster.getStatus().getJobStatus().getState());
-        assertEquals(7, testController.getInternalStatusUpdateCount());
+        assertEquals(9, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
 
         FlinkDeploymentReconciliationStatus reconciliationStatus =
@@ -1170,6 +1171,10 @@ public class FlinkDeploymentControllerTest {
         assertNull(appCluster.getStatus().getError());
         assertEquals(appCluster.getSpec(), reconciliationStatus.deserializeLastReconciledSpec());
         assertNull(appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains("Job manager is getting deployed");
 
         updateControl = testController.reconcile(appCluster, context);
         assertEquals(
@@ -1178,12 +1183,16 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 appCluster.getStatus().getJobStatus().getState());
-        assertEquals(5, testController.getInternalStatusUpdateCount());
+        assertEquals(6, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
                         configManager.getOperatorConfiguration().getRestApiReadyDelay().toMillis()),
                 updateControl.getScheduleDelay());
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains("JobManager deployment port is ready, waiting for the Flink REST API");
 
         updateControl = testController.reconcile(appCluster, context);
         assertEquals(
@@ -1192,12 +1201,16 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING.name(),
                 appCluster.getStatus().getJobStatus().getState());
-        assertEquals(6, testController.getInternalStatusUpdateCount());
+        assertEquals(8, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
                         configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
                 updateControl.getScheduleDelay());
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains("JobManager is running and ready to receive REST API calls.");
 
         // Stable loop
         updateControl = testController.reconcile(appCluster, context);
@@ -1207,12 +1220,17 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING.name(),
                 appCluster.getStatus().getJobStatus().getState());
-        assertEquals(6, testController.getInternalStatusUpdateCount());
+        assertEquals(8, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
                         configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
                 updateControl.getScheduleDelay());
+
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains("JobManager is running and ready to receive REST API calls.");
 
         // Validate job status
         JobStatus jobStatus = appCluster.getStatus().getJobStatus();

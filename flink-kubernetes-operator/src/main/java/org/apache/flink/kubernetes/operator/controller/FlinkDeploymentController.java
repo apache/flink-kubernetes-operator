@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.status.CommonCRStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
@@ -35,6 +36,7 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
+import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -49,6 +51,8 @@ import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -158,6 +162,7 @@ public class FlinkDeploymentController
             throw new ReconciliationException(e);
         }
 
+        setCRStatus(flinkApp);
         LOG.debug("End of reconciliation");
         statusRecorder.patchAndCacheStatus(flinkApp, ctx.getKubernetesClient());
         return ReconciliationUtils.toUpdateControl(
@@ -168,6 +173,9 @@ public class FlinkDeploymentController
             FlinkResourceContext<FlinkDeployment> ctx, DeploymentFailedException dfe) {
         var flinkApp = ctx.getResource();
         LOG.error("Flink Deployment failed", dfe);
+        final List<Condition> conditions = new ArrayList<>();
+        conditions.add(CommonCRStatus.crErrorCondition(dfe.getMessage()));
+        flinkApp.getStatus().setConditions(conditions);
         flinkApp.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
         flinkApp.getStatus().getJobStatus().setState(JobStatus.RECONCILING.name());
         ReconciliationUtils.updateForReconciliationError(ctx, dfe);
@@ -226,5 +234,29 @@ public class FlinkDeploymentController
             }
         }
         return true;
+    }
+
+    private void setCRStatus(FlinkDeployment flinkApp) {
+        final List<Condition> conditions = new ArrayList<>();
+        FlinkDeploymentStatus deploymentStatus = flinkApp.getStatus();
+        switch (deploymentStatus.getJobManagerDeploymentStatus()) {
+            case READY:
+                conditions.add(
+                        CommonCRStatus.crReadyTrueCondition(
+                                "JobManager is running and ready to receive REST API calls."));
+                break;
+            case DEPLOYED_NOT_READY:
+                conditions.add(
+                        CommonCRStatus.crReadyFalseCondition(
+                                "JobManager deployment port is ready, waiting for the Flink REST API"));
+                break;
+            case DEPLOYING:
+                conditions.add(
+                        CommonCRStatus.crReadyFalseCondition("Job manager is getting deployed"));
+                break;
+        }
+        if (!conditions.isEmpty()) {
+            deploymentStatus.setConditions(conditions);
+        }
     }
 }
