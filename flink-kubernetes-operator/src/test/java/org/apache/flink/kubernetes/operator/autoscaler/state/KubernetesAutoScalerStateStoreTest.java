@@ -18,32 +18,30 @@
 package org.apache.flink.kubernetes.operator.autoscaler.state;
 
 import org.apache.flink.autoscaler.ScalingSummary;
-import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.state.AbstractAutoScalerStateStoreTest;
+import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
-import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.updateVertexList;
 import static org.apache.flink.kubernetes.operator.autoscaler.TestingKubernetesAutoscalerUtils.createContext;
 import static org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore.serializeEvaluatedMetrics;
 import static org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore.serializeScalingHistory;
@@ -53,141 +51,37 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for {@link KubernetesAutoScalerStateStore}. */
 @EnableKubernetesMockClient(crud = true)
-public class KubernetesAutoScalerStateStoreTest {
+public class KubernetesAutoScalerStateStoreTest
+        extends AbstractAutoScalerStateStoreTest<ResourceID, KubernetesJobAutoScalerContext> {
 
     KubernetesClient kubernetesClient;
 
     ConfigMapStore configMapStore;
 
-    KubernetesAutoScalerStateStore stateStore;
+    @Override
+    protected AutoScalerStateStore<ResourceID, KubernetesJobAutoScalerContext>
+            createPhysicalAutoScalerStateStore() {
+        return new KubernetesAutoScalerStateStore(new ConfigMapStore(kubernetesClient));
+    }
 
-    KubernetesJobAutoScalerContext ctx;
+    @Override
+    protected AutoScalerStateStore<ResourceID, KubernetesJobAutoScalerContext>
+            createCachedAutoScalerStateStore() {
+        return new KubernetesAutoScalerStateStore(configMapStore);
+    }
 
-    @BeforeEach
-    void setup() {
+    @Override
+    protected KubernetesJobAutoScalerContext createJobContext() {
+        return createContext("cr1", kubernetesClient);
+    }
+
+    @Override
+    protected void preSetup() {
         configMapStore = new ConfigMapStore(kubernetesClient);
-        stateStore = new KubernetesAutoScalerStateStore(configMapStore);
-        ctx = createContext("cr1", kubernetesClient);
     }
 
     @Test
-    public void testTopologyUpdate() throws Exception {
-        var v1 = new JobVertexID();
-        var v2 = new JobVertexID();
-        var v3 = new JobVertexID();
-
-        var summaries = new HashMap<JobVertexID, ScalingSummary>();
-        summaries.put(v1, new ScalingSummary(1, 2, null));
-        summaries.put(v2, new ScalingSummary(1, 2, null));
-
-        var now = Instant.now();
-
-        addToScalingHistoryAndStore(stateStore, ctx, now, summaries);
-        stateStore.flush(ctx);
-
-        Assertions.assertEquals(
-                summaries.keySet(), getTrimmedScalingHistory(stateStore, ctx, now).keySet());
-        Assertions.assertEquals(
-                summaries.keySet(),
-                getTrimmedScalingHistory(
-                                new KubernetesAutoScalerStateStore(configMapStore), ctx, now)
-                        .keySet());
-        Assertions.assertEquals(
-                summaries.keySet(),
-                getTrimmedScalingHistory(
-                                new KubernetesAutoScalerStateStore(
-                                        new ConfigMapStore(kubernetesClient)),
-                                ctx,
-                                now)
-                        .keySet());
-
-        updateVertexList(stateStore, ctx, now, Set.of(v2, v3));
-        stateStore.flush(ctx);
-
-        // Expect v1 to be removed
-        Assertions.assertEquals(
-                Set.of(v2), getTrimmedScalingHistory(stateStore, ctx, now).keySet());
-        Assertions.assertEquals(
-                Set.of(v2),
-                getTrimmedScalingHistory(
-                                new KubernetesAutoScalerStateStore(configMapStore), ctx, now)
-                        .keySet());
-        Assertions.assertEquals(
-                Set.of(v2),
-                getTrimmedScalingHistory(
-                                new KubernetesAutoScalerStateStore(
-                                        new ConfigMapStore(kubernetesClient)),
-                                ctx,
-                                now)
-                        .keySet());
-    }
-
-    @Test
-    public void testHistorySizeConfigs() throws Exception {
-        var v1 = new JobVertexID();
-
-        var history = new HashMap<JobVertexID, ScalingSummary>();
-        history.put(v1, new ScalingSummary(1, 2, null));
-
-        var conf = ctx.getConfiguration();
-        conf.set(AutoScalerOptions.VERTEX_SCALING_HISTORY_COUNT, 2);
-        conf.set(AutoScalerOptions.VERTEX_SCALING_HISTORY_AGE, Duration.ofSeconds(10));
-
-        var now = Instant.now();
-
-        // Verify count based expiration
-        addToScalingHistoryAndStore(stateStore, ctx, now, history);
-        Assertions.assertEquals(1, getTrimmedScalingHistory(stateStore, ctx, now).get(v1).size());
-
-        addToScalingHistoryAndStore(stateStore, ctx, now.plus(Duration.ofSeconds(1)), history);
-        addToScalingHistoryAndStore(stateStore, ctx, now.plus(Duration.ofSeconds(2)), history);
-
-        Assertions.assertEquals(
-                2,
-                getTrimmedScalingHistory(stateStore, ctx, now.plus(Duration.ofSeconds(2)))
-                        .get(v1)
-                        .size());
-        Assertions.assertEquals(
-                Set.of(now.plus(Duration.ofSeconds(1)), now.plus(Duration.ofSeconds(2))),
-                getTrimmedScalingHistory(stateStore, ctx, now.plus(Duration.ofSeconds(2)))
-                        .get(v1)
-                        .keySet());
-
-        // Verify time based expiration
-        addToScalingHistoryAndStore(stateStore, ctx, now.plus(Duration.ofSeconds(15)), history);
-        stateStore.flush(ctx);
-
-        Assertions.assertEquals(
-                1,
-                getTrimmedScalingHistory(stateStore, ctx, now.plus(Duration.ofSeconds(15)))
-                        .get(v1)
-                        .size());
-        Assertions.assertEquals(
-                Set.of(now.plus(Duration.ofSeconds(15))),
-                getTrimmedScalingHistory(stateStore, ctx, now.plus(Duration.ofSeconds(15)))
-                        .get(v1)
-                        .keySet());
-        Assertions.assertEquals(
-                Set.of(now.plus(Duration.ofSeconds(15))),
-                getTrimmedScalingHistory(
-                                new KubernetesAutoScalerStateStore(configMapStore),
-                                ctx,
-                                now.plus(Duration.ofSeconds(15)))
-                        .get(v1)
-                        .keySet());
-        Assertions.assertEquals(
-                Set.of(now.plus(Duration.ofSeconds(15))),
-                getTrimmedScalingHistory(
-                                new KubernetesAutoScalerStateStore(
-                                        new ConfigMapStore(kubernetesClient)),
-                                ctx,
-                                now.plus(Duration.ofSeconds(15)))
-                        .get(v1)
-                        .keySet());
-    }
-
-    @Test
-    public void testCompressionMigration() throws Exception {
+    void testCompressionMigration() throws Exception {
         var jobUpdateTs = Instant.now();
         var v1 = new JobVertexID();
 
@@ -235,7 +129,7 @@ public class KubernetesAutoScalerStateStoreTest {
     }
 
     @Test
-    public void testMetricsTrimming() throws Exception {
+    void testMetricsTrimming() throws Exception {
         var v1 = new JobVertexID();
         Random rnd = new Random();
 
@@ -287,7 +181,7 @@ public class KubernetesAutoScalerStateStoreTest {
                                         .length()
                         < KubernetesAutoScalerStateStore.MAX_CM_BYTES);
 
-        stateStore.trimHistoryToMaxCmSize(ctx);
+        ((KubernetesAutoScalerStateStore) stateStore).trimHistoryToMaxCmSize(ctx);
         assertTrue(
                 configMapStore
                                         .getSerializedState(
@@ -306,7 +200,7 @@ public class KubernetesAutoScalerStateStoreTest {
     }
 
     @Test
-    public void testDiscardInvalidHistory() throws Exception {
+    void testDiscardInvalidHistory() throws Exception {
         configMapStore.putSerializedState(
                 ctx, KubernetesAutoScalerStateStore.COLLECTED_METRICS_KEY, "invalid");
         configMapStore.putSerializedState(
@@ -336,31 +230,8 @@ public class KubernetesAutoScalerStateStoreTest {
     }
 
     @Test
-    public void testDiscardAllState() {
-        stateStore.storeCollectedMetrics(
-                ctx, new TreeMap<>(Map.of(Instant.now(), new CollectedMetrics())));
-        stateStore.storeScalingHistory(
-                ctx,
-                Map.of(
-                        new JobVertexID(),
-                        new TreeMap<>(Map.of(Instant.now(), new ScalingSummary()))));
-        stateStore.storeParallelismOverrides(ctx, Map.of(new JobVertexID().toHexString(), "23"));
-
-        assertThat(stateStore.getCollectedMetrics(ctx)).isNotEmpty();
-        assertThat(stateStore.getScalingHistory(ctx)).isNotEmpty();
-        assertThat(stateStore.getParallelismOverrides(ctx)).isNotEmpty();
-
-        stateStore.flush(ctx);
-
-        assertThat(stateStore.getCollectedMetrics(ctx)).isNotEmpty();
-        assertThat(stateStore.getScalingHistory(ctx)).isNotEmpty();
-        assertThat(stateStore.getParallelismOverrides(ctx)).isNotEmpty();
-
-        stateStore.clearAll(ctx);
-
-        assertThat(stateStore.getCollectedMetrics(ctx)).isEmpty();
-        assertThat(stateStore.getScalingHistory(ctx)).isEmpty();
-        assertThat(stateStore.getParallelismOverrides(ctx)).isEmpty();
+    protected void testDiscardAllState() throws Exception {
+        super.testDiscardAllState();
 
         // We haven't flushed the clear operation, ConfigMap in Kubernetes should not be empty
         assertThat(configMapStore.getConfigMapFromKubernetes(ctx).getDataReadOnly()).isNotEmpty();
