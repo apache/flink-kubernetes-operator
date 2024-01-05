@@ -273,6 +273,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | error | java.lang.String | Error information about the FlinkDeployment/FlinkSessionJob. |
 | lifecycleState | org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState | Lifecycle state of the Flink resource (including being rolled back, failed etc.). |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobReconciliationStatus | Status of the last reconcile operation. |
+| conditions | io.fabric8.kubernetes.api.model.Condition | The conditions array is a set of types with a status that make up the computed state of a FlinkSessionJob at any time |
 
 ### JobManagerDeploymentStatus
 **Class**: org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus
