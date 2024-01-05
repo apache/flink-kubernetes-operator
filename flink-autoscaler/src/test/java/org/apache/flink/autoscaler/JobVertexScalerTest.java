@@ -431,7 +431,9 @@ public class JobVertexScalerTest {
         var event = eventCollector.events.poll();
         assertThat(event).isNotNull();
         assertThat(event.getMessage())
-                .isEqualTo(String.format(INEFFECTIVE_MESSAGE_FORMAT, jobVertexID));
+                .isEqualTo(
+                        String.format(
+                                INEFFECTIVE_MESSAGE_FORMAT, jobVertexID, 90.0, 5.0, "enabled"));
         assertThat(event.getReason()).isEqualTo(INEFFECTIVE_SCALING);
         assertEquals(1, event.getCount());
 
@@ -463,9 +465,26 @@ public class JobVertexScalerTest {
         event = eventCollector.events.poll();
         assertThat(event).isNotNull();
         assertThat(event.getMessage())
-                .isEqualTo(String.format(INEFFECTIVE_MESSAGE_FORMAT, jobVertexID));
+                .isEqualTo(
+                        String.format(
+                                INEFFECTIVE_MESSAGE_FORMAT, jobVertexID, 90.0, 5.0, "enabled"));
         assertThat(event.getReason()).isEqualTo(INEFFECTIVE_SCALING);
         assertEquals(2, event.getCount());
+
+        // Test ineffective scaling switched off
+        conf.set(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED, false);
+        assertEquals(
+                40,
+                vertexScaler.computeScaleTargetParallelism(
+                        context, jobVertexID, evaluated, history, restartTime));
+        assertEquals(1, eventCollector.events.size());
+        event = eventCollector.events.poll();
+        assertThat(event).isNotNull();
+        assertThat(event.getMessage())
+                .isEqualTo(
+                        String.format(
+                                INEFFECTIVE_MESSAGE_FORMAT, jobVertexID, 90.0, 5.0, "disabled"));
+        assertThat(event.getReason()).isEqualTo(INEFFECTIVE_SCALING);
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(

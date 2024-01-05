@@ -58,7 +58,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
 
     @VisibleForTesting
     protected static final String INEFFECTIVE_MESSAGE_FORMAT =
-            "Skipping further scale up after ineffective previous scale up for %s";
+            "Ineffective scaling detected for %s (expected increase: %s, actual increase %s). Blocking of ineffective scaling decisions is %s";
 
     private Clock clock = Clock.system(ZoneId.systemDefault());
 
@@ -214,7 +214,16 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             return false;
         }
 
-        var message = String.format(INEFFECTIVE_MESSAGE_FORMAT, vertex);
+        boolean blockIneffectiveScalings =
+                conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED);
+
+        var message =
+                String.format(
+                        INEFFECTIVE_MESSAGE_FORMAT,
+                        vertex,
+                        expectedIncrease,
+                        actualIncrease,
+                        blockIneffectiveScalings ? "enabled" : "disabled");
 
         autoScalerEventHandler.handleEvent(
                 context,
@@ -224,7 +233,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 null,
                 conf.get(SCALING_EVENT_INTERVAL));
 
-        if (conf.get(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED)) {
+        if (blockIneffectiveScalings) {
             LOG.warn(
                     "Ineffective scaling detected for {}, expected increase {}, actual {}",
                     vertex,
