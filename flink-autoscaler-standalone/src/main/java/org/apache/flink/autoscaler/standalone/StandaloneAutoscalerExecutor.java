@@ -28,6 +28,7 @@ import org.apache.flink.shaded.guava30.com.google.common.util.concurrent.ThreadF
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import javax.annotation.Nonnull;
 
@@ -136,6 +137,7 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
     @VisibleForTesting
     protected void scalingSingleJob(Context jobContext) {
         try {
+            MDC.put("job.key", jobContext.getJobKey().toString());
             autoScaler.scale(jobContext);
         } catch (Throwable e) {
             LOG.error("Error while scaling job", e);
@@ -146,6 +148,8 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
                     e.getMessage(),
                     null,
                     null);
+        } finally {
+            MDC.clear();
         }
     }
 }
