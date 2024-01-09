@@ -581,6 +581,12 @@ public class ScalingMetricEvaluatorTest {
                         ScalingMetric.HEAP_USAGE,
                         EvaluatedScalingMetric.of(Double.NaN),
                         ScalingMetric.GC_PRESSURE,
+                        EvaluatedScalingMetric.of(Double.NaN),
+                        ScalingMetric.NUM_TASK_MANAGERS,
+                        EvaluatedScalingMetric.of(Double.NaN),
+                        ScalingMetric.NUM_TOTAL_TASK_SLOTS,
+                        EvaluatedScalingMetric.of(Double.NaN),
+                        ScalingMetric.NUM_TASK_SLOTS_USED,
                         EvaluatedScalingMetric.of(Double.NaN)),
                 ScalingMetricEvaluator.evaluateGlobalMetrics(globalMetrics));
 
@@ -595,7 +601,13 @@ public class ScalingMetricEvaluatorTest {
                         ScalingMetric.HEAP_USAGE,
                         new EvaluatedScalingMetric(0.5, 0.5),
                         ScalingMetric.GC_PRESSURE,
-                        EvaluatedScalingMetric.of(0.6)),
+                        EvaluatedScalingMetric.of(0.6),
+                        ScalingMetric.NUM_TASK_MANAGERS,
+                        EvaluatedScalingMetric.of(Double.NaN),
+                        ScalingMetric.NUM_TOTAL_TASK_SLOTS,
+                        EvaluatedScalingMetric.of(Double.NaN),
+                        ScalingMetric.NUM_TASK_SLOTS_USED,
+                        EvaluatedScalingMetric.of(Double.NaN)),
                 ScalingMetricEvaluator.evaluateGlobalMetrics(globalMetrics));
 
         globalMetrics.put(
@@ -603,13 +615,29 @@ public class ScalingMetricEvaluatorTest {
                 new CollectedMetrics(
                         Map.of(),
                         Map.of(),
-                        Map.of(ScalingMetric.HEAP_USAGE, 0.7, ScalingMetric.GC_PRESSURE, 0.8)));
+                        Map.of(
+                                ScalingMetric.HEAP_USAGE,
+                                0.7,
+                                ScalingMetric.GC_PRESSURE,
+                                0.8,
+                                ScalingMetric.NUM_TASK_MANAGERS,
+                                10.,
+                                ScalingMetric.NUM_TOTAL_TASK_SLOTS,
+                                50.,
+                                ScalingMetric.NUM_TASK_SLOTS_USED,
+                                42.)));
         assertEquals(
                 Map.of(
                         ScalingMetric.HEAP_USAGE,
                         new EvaluatedScalingMetric(0.7, 0.6),
                         ScalingMetric.GC_PRESSURE,
-                        EvaluatedScalingMetric.of(0.8)),
+                        EvaluatedScalingMetric.of(0.8),
+                        ScalingMetric.NUM_TASK_MANAGERS,
+                        EvaluatedScalingMetric.of(10.),
+                        ScalingMetric.NUM_TOTAL_TASK_SLOTS,
+                        EvaluatedScalingMetric.of(50.),
+                        ScalingMetric.NUM_TASK_SLOTS_USED,
+                        EvaluatedScalingMetric.of(42.)),
                 ScalingMetricEvaluator.evaluateGlobalMetrics(globalMetrics));
     }
 
