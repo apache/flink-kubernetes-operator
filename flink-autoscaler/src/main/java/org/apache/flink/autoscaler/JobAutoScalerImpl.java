@@ -181,12 +181,11 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
         var scalingHistory = getTrimmedScalingHistory(stateStore, ctx, now);
         // A scaling tracking without an end time gets created whenever a scaling decision is
-        // applied. Here, when the job transitions to RUNNING, we record the time for it.
-        if (ctx.getJobStatus() == JobStatus.RUNNING) {
-            if (scalingTracking.recordRestartDurationIfTrackedAndParallelismMatches(
-                    now, jobTopology, scalingHistory)) {
-                stateStore.storeScalingTracking(ctx, scalingTracking);
-            }
+        // applied. Here, we record the end time for it (runScalingLogic is only called when the job
+        // transitions back into the RUNNING state).
+        if (scalingTracking.recordRestartDurationIfTrackedAndParallelismMatches(
+                now, jobTopology, scalingHistory)) {
+            stateStore.storeScalingTracking(ctx, scalingTracking);
         }
 
         if (!collectedMetrics.isFullyCollected()) {
