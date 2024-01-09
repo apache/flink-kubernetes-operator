@@ -26,6 +26,7 @@ import io.fabric8.kubernetes.api.model.Node;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -91,7 +92,16 @@ public class ClusterResourceManager implements ResourceCheck {
         }
 
         if (shouldRefreshView(clusterResourceView, refreshInterval)) {
-            clusterResourceView = createResourceView(kubernetesClient);
+            try {
+                clusterResourceView = createResourceView(kubernetesClient);
+            } catch (KubernetesClientException e) {
+                if (e.getCode() == 403) {
+                    LOG.warn(
+                            "No permission to retrieve node resource usage. Resource check disabled.");
+                    return true;
+                }
+                throw e;
+            }
         }
 
         if (newInstances <= currentInstances) {
