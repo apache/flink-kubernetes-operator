@@ -268,6 +268,13 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         var globalMetrics = evaluatedMetrics.getGlobalMetrics();
+        if (!(globalMetrics.containsKey(ScalingMetric.NUM_TASK_MANAGERS)
+                && globalMetrics.containsKey(ScalingMetric.NUM_TOTAL_TASK_SLOTS)
+                && globalMetrics.containsKey(ScalingMetric.NUM_TASK_SLOTS_USED))) {
+            LOG.info("JM metrics not ready yet");
+            return true;
+        }
+
         var vertexMetrics = evaluatedMetrics.getVertexMetrics();
 
         int oldParallelismSum =
