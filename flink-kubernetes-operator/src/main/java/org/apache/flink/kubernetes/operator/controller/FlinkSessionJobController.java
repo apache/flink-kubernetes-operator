@@ -17,10 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
-import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
-import org.apache.flink.kubernetes.operator.api.status.CommonCRStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
@@ -34,7 +32,6 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
-import io.fabric8.kubernetes.api.model.Condition;
 import io.javaoperatorsdk.operator.api.reconciler.Cleaner;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import io.javaoperatorsdk.operator.api.reconciler.ControllerConfiguration;
@@ -48,8 +45,6 @@ import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -129,7 +124,6 @@ public class FlinkSessionJobController
                     josdkContext.getClient());
             throw new ReconciliationException(e);
         }
-        setCRStatus(flinkSessionJob);
         statusRecorder.patchAndCacheStatus(flinkSessionJob, ctx.getKubernetesClient());
         return ReconciliationUtils.toUpdateControl(
                 ctx.getOperatorConfig(), flinkSessionJob, previousJob, true);
@@ -190,34 +184,5 @@ public class FlinkSessionJobController
             }
         }
         return true;
-    }
-
-    private void setCRStatus(FlinkSessionJob flinkSessionJob) {
-        final List<Condition> conditions = new ArrayList<>();
-        if (flinkSessionJob.getStatus().getJobStatus() != null) {
-            if (JobStatus.RUNNING
-                    .name()
-                    .equals(flinkSessionJob.getStatus().getJobStatus().getState())) {
-                conditions.add(CommonCRStatus.crReadyTrueCondition("Job is running"));
-            }
-            if (JobStatus.CREATED
-                    .name()
-                    .equals(flinkSessionJob.getStatus().getJobStatus().getState())) {
-                conditions.add(CommonCRStatus.crReadyFalseCondition("Job is created"));
-            }
-            if (JobStatus.CANCELED
-                    .name()
-                    .equals(flinkSessionJob.getStatus().getJobStatus().getState())) {
-                conditions.add(CommonCRStatus.crReadyFalseCondition("Job is cancelled"));
-            }
-            if (JobStatus.FAILED
-                    .name()
-                    .equals(flinkSessionJob.getStatus().getJobStatus().getState())) {
-                conditions.add(CommonCRStatus.crErrorCondition("Job is failed"));
-            }
-        }
-        if (!conditions.isEmpty()) {
-            flinkSessionJob.getStatus().setConditions(conditions);
-        }
     }
 }

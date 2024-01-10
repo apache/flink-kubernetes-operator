@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.kubernetes.operator.api.status;
+package org.apache.flink.kubernetes.operator.api.utils;
 
 import io.fabric8.kubernetes.api.model.Condition;
 import io.fabric8.kubernetes.api.model.ConditionBuilder;
@@ -24,18 +24,18 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 /** Status of CR. */
-public class CommonCRStatus {
+public class ConditionUtils {
 
-    public static Condition crReadyTrueCondition(final String message) {
+    public static Condition ready(final String message) {
         return crCondition("Ready", "True", message, "Ready");
     }
 
-    public static Condition crReadyFalseCondition(final String message) {
+    public static Condition notReady(final String message) {
         return crCondition("Ready", "False", message, "Progressing");
     }
 
-    public static Condition crErrorCondition(final String message) {
-        return crCondition("Error", "True", message, "UnhandledException");
+    public static Condition error(final String message) {
+        return crCondition("Error", "True", message, "The job terminally failed");
     }
 
     public static Condition crCondition(

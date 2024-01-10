@@ -117,12 +117,13 @@ class FlinkSessionJobControllerTest {
         updateControl = testController.reconcile(sessionJob, context);
 
         assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
+        assertEquals(5, testController.getInternalStatusUpdateCount());
+        assertFalse(updateControl.isUpdateStatus());
         assertThat(sessionJob.getStatus().getConditions())
                 .hasSize(1)
                 .extracting("message")
-                .contains("Job is running");
-        assertEquals(6, testController.getInternalStatusUpdateCount());
-        assertFalse(updateControl.isUpdateStatus());
+                .contains(
+                        "The resource deployment is considered to be stable and won’t be rolled back");
 
         FlinkSessionJobReconciliationStatus reconciliationStatus =
                 sessionJob.getStatus().getReconciliationStatus();
@@ -596,7 +597,7 @@ class FlinkSessionJobControllerTest {
         // Running
         updateControl = testController.reconcile(sessionJob, context);
         assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
-        assertEquals(5, testController.getInternalStatusUpdateCount());
+        assertEquals(4, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -606,7 +607,7 @@ class FlinkSessionJobControllerTest {
         // Stable loop
         updateControl = testController.reconcile(sessionJob, context);
         assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
-        assertEquals(5, testController.getInternalStatusUpdateCount());
+        assertEquals(4, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -622,5 +623,10 @@ class FlinkSessionJobControllerTest {
         assertEquals(
                 sessionJob.getStatus().getReconciliationStatus().getLastReconciledSpec(),
                 sessionJob.getStatus().getReconciliationStatus().getLastStableSpec());
+        assertThat(sessionJob.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(
+                        "The resource deployment is considered to be stable and won’t be rolled back");
     }
 }

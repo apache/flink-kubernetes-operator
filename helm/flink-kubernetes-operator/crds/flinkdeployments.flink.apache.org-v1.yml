@@ -9707,23 +9707,6 @@ spec:
                   replicas:
                     type: integer
                 type: object
-              conditions:
-                items:
-                  properties:
-                    lastTransitionTime:
-                      type: string
-                    message:
-                      type: string
-                    observedGeneration:
-                      type: integer
-                    reason:
-                      type: string
-                    status:
-                      type: string
-                    type:
-                      type: string
-                  type: object
-                type: array
               jobStatus:
                 properties:
                   jobName:
@@ -9860,6 +9843,23 @@ spec:
                 - ROLLED_BACK
                 - FAILED
                 type: string
+              conditions:
+                items:
+                  properties:
+                    lastTransitionTime:
+                      type: string
+                    message:
+                      type: string
+                    observedGeneration:
+                      type: integer
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  type: object
+                type: array
             type: object
         type: object
     served: true
