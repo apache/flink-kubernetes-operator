@@ -21,7 +21,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.Instant;
+import java.time.Duration;
 
 /**
  * Class for tracking scaling details, including time it took for the job to transition to the
@@ -31,5 +31,5 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ScalingRecord {
-    private Instant endTime;
+    private Duration restartDuration;
 }

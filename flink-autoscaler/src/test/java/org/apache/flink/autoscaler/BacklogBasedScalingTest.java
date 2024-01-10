@@ -346,7 +346,7 @@ public class BacklogBasedScalingTest {
     }
 
     @Test
-    public void shouldTrackEndOfScalingTimeCorrectly() throws Exception {
+    public void shouldTrackRestartDurationCorrectly() throws Exception {
         var now = Instant.ofEpochMilli(0);
         setClocksTo(now);
         metricsCollector.setJobUpdateTs(now);
@@ -406,7 +406,13 @@ public class BacklogBasedScalingTest {
     private void assertLastTrackingEndTimeIs(Instant expectedEndTime) throws Exception {
         var scalingTracking = stateStore.getScalingTracking(context);
         var latestScalingRecordEntry = scalingTracking.getLatestScalingRecordEntry().get();
-        assertThat(latestScalingRecordEntry.getValue().getEndTime()).isEqualTo(expectedEndTime);
+        var startTime = latestScalingRecordEntry.getKey();
+        var restartDuration = latestScalingRecordEntry.getValue().getRestartDuration();
+        if (expectedEndTime == null) {
+            assertThat(restartDuration).isNull();
+        } else {
+            assertThat(restartDuration).isEqualTo(Duration.between(startTime, expectedEndTime));
+        }
     }
 
     @Test
