@@ -30,6 +30,7 @@ Flink Deployments. The operator features the following amongst others:
 - Upgrade, suspend and delete deployments
 - Full logging and metrics integration
 - Flexible deployments and native integration with Kubernetes tooling
+- Flink Job Autoscaler
 
 {{< img src="/img/overview.svg" alt="Flink Kubernetes Operator Overview" >}}
 
