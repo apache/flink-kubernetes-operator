@@ -80,8 +80,6 @@ public enum ScalingMetric {
     /** Percentage of max heap used (between 0 and 1). */
     HEAP_USAGE(true),
 
-    NUM_TASK_MANAGERS(false),
-    NUM_TOTAL_TASK_SLOTS(false),
     NUM_TASK_SLOTS_USED(false);
 
     @Getter private final boolean calculateAverage;

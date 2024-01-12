@@ -22,6 +22,7 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -114,6 +115,8 @@ public class RestApiMetricsCollectorTest {
                         JobStatus.RUNNING,
                         conf,
                         new UnregisteredMetricsGroup(),
+                        0,
+                        MemorySize.ZERO,
                         () -> restClusterClient);
 
         var jobVertexIDMapMap = collector.queryAllAggregatedMetrics(context, metrics);
@@ -149,15 +152,10 @@ public class RestApiMetricsCollectorTest {
                         collector.queryJmMetrics(
                                 client,
                                 Map.of(
-                                        "numRegisteredTaskManagers", FlinkMetric.NUM_TASK_MANAGERS,
                                         "taskSlotsTotal", FlinkMetric.NUM_TASK_SLOTS_TOTAL,
                                         "taskSlotsAvailable",
                                                 FlinkMetric.NUM_TASK_SLOTS_AVAILABLE));
                 try {
-                    System.out.println(flinkMetricMetricMap);
-                    assertEquals(
-                            "1",
-                            flinkMetricMetricMap.get(FlinkMetric.NUM_TASK_MANAGERS).getValue());
                     assertEquals(
                             "3",
                             flinkMetricMetricMap.get(FlinkMetric.NUM_TASK_SLOTS_TOTAL).getValue());
@@ -230,6 +228,8 @@ public class RestApiMetricsCollectorTest {
                         JobStatus.RUNNING,
                         conf,
                         new UnregisteredMetricsGroup(),
+                        0,
+                        MemorySize.ZERO,
                         () -> client);
         var collector = new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>();
 

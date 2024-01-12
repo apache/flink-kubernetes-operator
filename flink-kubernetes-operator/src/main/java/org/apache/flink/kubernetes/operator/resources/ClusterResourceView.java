@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.resources;
 
+import org.apache.flink.configuration.MemorySize;
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -32,7 +34,7 @@ public class ClusterResourceView {
 
     private final List<KubernetesNodeResourceInfo> nodes;
 
-    public boolean tryReserve(double cpu, double memory) {
+    public boolean tryReserve(double cpu, MemorySize memory) {
         for (KubernetesNodeResourceInfo node : nodes) {
             if (node.tryReserve(cpu, memory)) {
                 return true;
@@ -41,9 +43,9 @@ public class ClusterResourceView {
         return false;
     }
 
-    public void release(double cpu, double memory) {
+    public void release(double cpu, MemorySize memory) {
         for (KubernetesNodeResourceInfo node : nodes) {
-            if (node.tryRelease(cpu, memory)) {
+            if (node.tryRelease(cpu, memory.getBytes())) {
                 return;
             }
         }

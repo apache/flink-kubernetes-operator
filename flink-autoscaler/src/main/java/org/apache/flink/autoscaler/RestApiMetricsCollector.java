@@ -111,7 +111,6 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
     protected Map<FlinkMetric, Metric> queryJmMetrics(Context ctx) {
         Map<String, FlinkMetric> metrics =
                 Map.of(
-                        "numRegisteredTaskManagers", FlinkMetric.NUM_TASK_MANAGERS,
                         "taskSlotsTotal", FlinkMetric.NUM_TASK_SLOTS_TOTAL,
                         "taskSlotsAvailable", FlinkMetric.NUM_TASK_SLOTS_AVAILABLE);
         try (var restClient = ctx.getRestClusterClient()) {

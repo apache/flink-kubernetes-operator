@@ -17,13 +17,23 @@
 
 package org.apache.flink.autoscaler.resources;
 
+import org.apache.flink.configuration.MemorySize;
+
 /** An interface for checking the available capacity of the underlying resources. */
 public interface ResourceCheck {
 
-    /** Simulates scheduling the provided number of resources. */
+    /**
+     * Simulates scheduling the provided number of TaskManager instances.
+     *
+     * @param currentInstances The current number of instances.
+     * @param newInstances The new number of instances.
+     * @param cpuPerInstance The number of CPU per instances.
+     * @param memoryPerInstance The amount of memory in bytes per instances.
+     * @return true if a scheduling configuration was found, false otherwise.
+     */
     boolean trySchedule(
             int currentInstances,
             int newInstances,
             double cpuPerInstance,
-            double memoryPerInstance);
+            MemorySize memoryPerInstance);
 }

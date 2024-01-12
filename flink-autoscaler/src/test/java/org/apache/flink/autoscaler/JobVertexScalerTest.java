@@ -24,6 +24,7 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -71,6 +72,8 @@ public class JobVertexScalerTest {
                         JobStatus.RUNNING,
                         conf,
                         new UnregisteredMetricsGroup(),
+                        0,
+                        MemorySize.ZERO,
                         null);
         restartTime = conf.get(AutoScalerOptions.RESTART_TIME);
     }

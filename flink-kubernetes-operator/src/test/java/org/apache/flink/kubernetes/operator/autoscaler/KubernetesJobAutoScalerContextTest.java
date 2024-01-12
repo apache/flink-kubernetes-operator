@@ -64,7 +64,6 @@ public class KubernetesJobAutoScalerContextTest {
                                 null));
 
         assertThat(context.getTaskManagerCpu()).isEqualTo(23.);
-        assertThat(context.getTaskManagerMemory())
-                .isEqualTo((double) MemorySize.parse("1024mb").getBytes());
+        assertThat(context.getTaskManagerMemory()).isEqualTo(MemorySize.parse("1024mb"));
     }
 }

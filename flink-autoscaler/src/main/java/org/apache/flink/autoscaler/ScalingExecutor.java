@@ -28,6 +28,8 @@ import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.utils.CalendarUtils;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.slf4j.Logger;
@@ -260,17 +262,17 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Context ctx) {
 
         final double taskManagerCpu = ctx.getTaskManagerCpu();
-        final double taskManagerMemory = ctx.getTaskManagerMemory();
+        final MemorySize taskManagerMemory = ctx.getTaskManagerMemory();
 
-        if (taskManagerCpu <= 0 || taskManagerMemory <= 0) {
+        if (taskManagerCpu <= 0
+                || taskManagerMemory == null
+                || taskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
             // We can't extract the requirements, we can't make any assumptions
             return false;
         }
 
         var globalMetrics = evaluatedMetrics.getGlobalMetrics();
-        if (!(globalMetrics.containsKey(ScalingMetric.NUM_TASK_MANAGERS)
-                && globalMetrics.containsKey(ScalingMetric.NUM_TOTAL_TASK_SLOTS)
-                && globalMetrics.containsKey(ScalingMetric.NUM_TASK_SLOTS_USED))) {
+        if (!globalMetrics.containsKey(ScalingMetric.NUM_TASK_SLOTS_USED)) {
             LOG.info("JM metrics not ready yet");
             return true;
         }
@@ -301,17 +303,16 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         final int numTaskSlotsAfterRescale;
         if (oldParallelismSum == numTaskSlotsUsed) {
             // Slot sharing activated
-            numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::sum);
+            numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::max);
         } else {
             // Assuming slot sharing is not activated
-            numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::max);
+            numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::sum);
         }
 
-        var numTotalTaskSlots = globalMetrics.get(ScalingMetric.NUM_TOTAL_TASK_SLOTS).getCurrent();
-        int currentNumTms = (int) globalMetrics.get(ScalingMetric.NUM_TASK_MANAGERS).getCurrent();
+        int taskSlotsPerTm = ctx.getConfiguration().get(TaskManagerOptions.NUM_TASK_SLOTS);
+        int currentNumTms = (int) Math.ceil(numTaskSlotsUsed / (double) taskSlotsPerTm);
 
-        var numSlotsPerTm = numTotalTaskSlots / currentNumTms;
-        var newNumTms = (int) Math.ceil(numTaskSlotsAfterRescale / numSlotsPerTm);
+        var newNumTms = (int) Math.ceil(numTaskSlotsAfterRescale / (double) taskSlotsPerTm);
 
         return !resourceCheck.trySchedule(
                 currentNumTms, newNumTms, taskManagerCpu, taskManagerMemory);

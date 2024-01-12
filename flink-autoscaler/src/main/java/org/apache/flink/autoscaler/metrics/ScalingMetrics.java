@@ -171,9 +171,6 @@ public class ScalingMetrics {
         var out = new HashMap<ScalingMetric, Double>();
 
         try {
-            var numRegisteredTaskManagers =
-                    Double.valueOf(
-                            collectedJmMetrics.get(FlinkMetric.NUM_TASK_MANAGERS).getValue());
             var numTotalTaskSlots =
                     Double.valueOf(
                             collectedJmMetrics.get(FlinkMetric.NUM_TASK_SLOTS_TOTAL).getValue());
@@ -182,8 +179,6 @@ public class ScalingMetrics {
                             collectedJmMetrics
                                     .get(FlinkMetric.NUM_TASK_SLOTS_AVAILABLE)
                                     .getValue());
-            out.put(ScalingMetric.NUM_TASK_MANAGERS, numRegisteredTaskManagers);
-            out.put(ScalingMetric.NUM_TOTAL_TASK_SLOTS, numTotalTaskSlots);
             out.put(ScalingMetric.NUM_TASK_SLOTS_USED, numTotalTaskSlots - numTaskSlotsAvailable);
         } catch (Exception e) {
             LOG.debug("Slot metrics and registered task managers not available");

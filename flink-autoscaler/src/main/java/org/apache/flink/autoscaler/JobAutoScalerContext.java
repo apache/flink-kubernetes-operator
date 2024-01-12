@@ -20,9 +20,9 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
-import org.apache.flink.autoscaler.resources.ResourceRequirements;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.function.SupplierWithException;
 
@@ -42,7 +42,7 @@ import javax.annotation.Nullable;
 @RequiredArgsConstructor
 @ToString
 @Builder(toBuilder = true)
-public class JobAutoScalerContext<KEY> implements ResourceRequirements {
+public class JobAutoScalerContext<KEY> {
 
     /** The identifier of each flink job. */
     @Getter private final KEY jobKey;
@@ -55,6 +55,12 @@ public class JobAutoScalerContext<KEY> implements ResourceRequirements {
     @Getter private final Configuration configuration;
 
     @Getter private final MetricGroup metricGroup;
+
+    /** Task manager CPU as a fraction (if available). */
+    @Getter private final double taskManagerCpu;
+
+    /** Task manager memory size (if available). */
+    @Getter @Nullable private final MemorySize taskManagerMemory;
 
     @ToString.Exclude
     private final SupplierWithException<RestClusterClient<String>, Exception> restClientSupplier;

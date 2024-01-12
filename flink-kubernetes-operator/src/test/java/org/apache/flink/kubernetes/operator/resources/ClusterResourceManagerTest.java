@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.resources;
 
+import org.apache.flink.configuration.MemorySize;
+
 import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.Node;
 import io.fabric8.kubernetes.api.model.NodeStatus;
@@ -54,7 +56,7 @@ public class ClusterResourceManagerTest {
         var currentInstances = 0;
         var newInstances = 1;
         var cpu = 0.5;
-        var memory = 128;
+        var memory = MemorySize.parse("128 mb");
 
         // Cluster is at size zero and no autoscaling information is available
         assertThat(manager.trySchedule(currentInstances, newInstances, cpu, memory)).isFalse();
@@ -65,7 +67,7 @@ public class ClusterResourceManagerTest {
         var currentInstances = 0;
         var newInstances = 1;
         var cpu = 0.5;
-        var memory = 128;
+        var memory = MemorySize.parse("128 mb");
 
         createNodes(newInstances, cpu, memory);
 
@@ -82,7 +84,7 @@ public class ClusterResourceManagerTest {
         var currentInstances = 0;
         var newInstances = 10;
         var cpu = 1;
-        var memory = 1024;
+        var memory = MemorySize.parse("1024 mb");
 
         createNodes(1, cpu, memory);
         assertThat(manager.trySchedule(currentInstances, newInstances, cpu, memory)).isFalse();
@@ -97,7 +99,8 @@ public class ClusterResourceManagerTest {
         var currentInstances = 0;
         var newInstances = 1;
         var cpu = 1;
-        var memory = 1024;
+        var memory = MemorySize.parse("1024 mb");
+
         createNodes(newInstances, cpu, memory);
 
         assertThat(manager.trySchedule(currentInstances, newInstances * 2, cpu, memory)).isFalse();
@@ -110,7 +113,8 @@ public class ClusterResourceManagerTest {
         var currentInstances = 0;
         var newInstances = 1;
         var cpu = 1;
-        var memory = 1024;
+        var memory = MemorySize.parse("1024 mb");
+
         createNodes(newInstances, cpu, memory);
 
         assertThat(manager.clusterResourceView).isNull();
@@ -128,28 +132,30 @@ public class ClusterResourceManagerTest {
         manager = new ClusterResourceManager(Duration.ZERO, kubernetesClient);
 
         assertThat(manager.clusterResourceView).isNull();
-        assertThat(manager.trySchedule(0, 1, 1, 128)).isFalse();
+        assertThat(manager.trySchedule(0, 1, 1, MemorySize.parse("128 mb"))).isFalse();
         assertThat(manager.clusterResourceView).isNotNull();
 
         var resourceViewBackup = manager.clusterResourceView;
-        assertThat(manager.trySchedule(0, 1, 1, 128)).isFalse();
+        assertThat(manager.trySchedule(0, 1, 1, MemorySize.parse("128 mb"))).isFalse();
         assertThat(manager.clusterResourceView).isNotSameAs(resourceViewBackup);
     }
 
     @Test
     void testDisabled() {
         manager = new ClusterResourceManager(Duration.ofSeconds(-1), kubernetesClient);
-        assertThat(manager.trySchedule(0, Integer.MAX_VALUE, Double.MAX_VALUE, Double.MAX_VALUE))
+        assertThat(
+                        manager.trySchedule(
+                                0, Integer.MAX_VALUE, Double.MAX_VALUE, MemorySize.MAX_VALUE))
                 .isTrue();
     }
 
-    private void createNodes(int numNodes, double cpuPerNode, double memPerNode) {
+    private void createNodes(int numNodes, double cpuPerNode, MemorySize memPerNode) {
         for (int i = 1; i <= numNodes; i++) {
             createNode("node" + i, cpuPerNode, memPerNode);
         }
     }
 
-    private void createNode(String name, double cpuPerNode, double memPerNode) {
+    private void createNode(String name, double cpuPerNode, MemorySize memPerNode) {
         Node node = new Node();
         node.setMetadata(new ObjectMeta());
         node.getMetadata().setName(name);
@@ -162,7 +168,7 @@ public class ClusterResourceManagerTest {
         NodeMetrics nodeMetrics = new NodeMetrics();
         nodeMetrics.setMetadata(new ObjectMeta());
         nodeMetrics.getMetadata().setName(name);
-        nodeMetrics.setUsage(createResourceMap(0, 0));
+        nodeMetrics.setUsage(createResourceMap(0, MemorySize.ZERO));
         kubernetesClient.resource(nodeMetrics).create();
     }
 
@@ -176,12 +182,12 @@ public class ClusterResourceManagerTest {
         kubernetesClient.resource(configMap).create();
     }
 
-    private static Map<String, Quantity> createResourceMap(double cpu, double memory) {
+    private static Map<String, Quantity> createResourceMap(double cpu, MemorySize memory) {
         return Map.of(
                 "cpu",
                 Quantity.fromNumericalAmount(BigDecimal.valueOf(cpu), null),
                 "memory",
-                Quantity.fromNumericalAmount(BigDecimal.valueOf(memory), null));
+                Quantity.fromNumericalAmount(BigDecimal.valueOf(memory.getBytes()), null));
     }
 
     static final String CLUSTER_AUTOSCALING_STATUS =

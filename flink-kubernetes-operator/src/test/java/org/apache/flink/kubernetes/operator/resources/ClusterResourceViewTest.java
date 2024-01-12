@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.resources;
 
+import org.apache.flink.configuration.MemorySize;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -39,7 +41,7 @@ public class ClusterResourceViewTest {
         var clusterResourceView = new ClusterResourceView(nodes);
 
         var cpu = 10;
-        var mem = 128;
+        var mem = MemorySize.parse("128 bytes");
 
         assertThat(clusterResourceView.tryReserve(cpu, mem)).isTrue();
         assertThat(clusterResourceView.tryReserve(cpu, mem)).isFalse();

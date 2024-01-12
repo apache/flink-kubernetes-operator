@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -230,6 +231,13 @@ class StandaloneAutoscalerExecutorTest {
     private static JobAutoScalerContext<JobID> createJobAutoScalerContext() {
         var jobID = new JobID();
         return new JobAutoScalerContext<>(
-                jobID, jobID, JobStatus.RUNNING, new Configuration(), null, null);
+                jobID,
+                jobID,
+                JobStatus.RUNNING,
+                new Configuration(),
+                null,
+                0,
+                MemorySize.ZERO,
+                null);
     }
 }

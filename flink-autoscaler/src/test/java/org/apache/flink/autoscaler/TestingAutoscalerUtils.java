@@ -21,6 +21,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.NoOpMetricRegistry;
@@ -46,6 +47,8 @@ public class TestingAutoscalerUtils {
                 JobStatus.RUNNING,
                 new Configuration(),
                 metricGroup,
+                0,
+                MemorySize.ZERO,
                 getRestClusterClientSupplier());
     }
 
@@ -59,6 +62,8 @@ public class TestingAutoscalerUtils {
                 JobStatus.RUNNING,
                 new Configuration(),
                 metricGroup,
+                0,
+                MemorySize.ZERO,
                 TestingAutoscalerUtils.getRestClusterClientSupplier()) {
             @Override
             public double getTaskManagerCpu() {
@@ -66,8 +71,8 @@ public class TestingAutoscalerUtils {
             }
 
             @Override
-            public double getTaskManagerMemory() {
-                return 65536;
+            public MemorySize getTaskManagerMemory() {
+                return MemorySize.parse("65536 bytes");
             }
         };
     }

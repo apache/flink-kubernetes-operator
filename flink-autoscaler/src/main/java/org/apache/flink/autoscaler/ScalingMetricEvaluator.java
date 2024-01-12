@@ -54,9 +54,7 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_USAGE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.LAG;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.LOAD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_TASK_MANAGERS;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_TASK_SLOTS_USED;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_TOTAL_TASK_SLOTS;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.OBSERVED_TPR;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
@@ -324,12 +322,6 @@ public class ScalingMetricEvaluator {
                 new EvaluatedScalingMetric(
                         lastHeapUsage, getAverageGlobalMetric(HEAP_USAGE, metricHistory)));
 
-        out.put(
-                NUM_TASK_MANAGERS,
-                EvaluatedScalingMetric.of(latest.getOrDefault(NUM_TASK_MANAGERS, Double.NaN)));
-        out.put(
-                NUM_TOTAL_TASK_SLOTS,
-                EvaluatedScalingMetric.of(latest.getOrDefault(NUM_TOTAL_TASK_SLOTS, Double.NaN)));
         out.put(
                 NUM_TASK_SLOTS_USED,
                 EvaluatedScalingMetric.of(latest.getOrDefault(NUM_TASK_SLOTS_USED, Double.NaN)));

@@ -24,6 +24,7 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.JobResourceRequirements;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -148,6 +149,8 @@ class RescaleApiScalingRealizerTest {
                         JobStatus.CANCELLING,
                         conf,
                         null,
+                        0,
+                        MemorySize.ZERO,
                         () ->
                                 fail(
                                         "The rest client shouldn't be created if the job isn't running."));
@@ -164,7 +167,14 @@ class RescaleApiScalingRealizerTest {
             JobID jobID,
             SupplierWithException<RestClusterClient<String>, Exception> restClientSupplier) {
         return new JobAutoScalerContext<>(
-                jobID, jobID, JobStatus.RUNNING, new Configuration(), null, restClientSupplier);
+                jobID,
+                jobID,
+                JobStatus.RUNNING,
+                new Configuration(),
+                null,
+                0,
+                MemorySize.ZERO,
+                restClientSupplier);
     }
 
     private JobResourceRequirements createResourceRequirements(

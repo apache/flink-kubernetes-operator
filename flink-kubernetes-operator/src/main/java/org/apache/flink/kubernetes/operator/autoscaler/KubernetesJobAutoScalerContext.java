@@ -43,12 +43,6 @@ public class KubernetesJobAutoScalerContext extends JobAutoScalerContext<Resourc
 
     @Getter private final FlinkResourceContext<?> resourceContext;
 
-    /** Task manager CPU as a fraction (if available). */
-    @Getter private final double taskManagerCpu;
-
-    /** Task manager memory in bytes (if available). */
-    @Getter private final double taskManagerMemory;
-
     public KubernetesJobAutoScalerContext(
             @Nullable JobID jobID,
             @Nullable JobStatus jobStatus,
@@ -62,15 +56,12 @@ public class KubernetesJobAutoScalerContext extends JobAutoScalerContext<Resourc
                 jobStatus,
                 configuration,
                 metricGroup,
+                Optional.ofNullable(configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU))
+                        .orElse(0.),
+                Optional.ofNullable(configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY))
+                        .orElse(MemorySize.ZERO),
                 restClientSupplier);
         this.resourceContext = resourceContext;
-        this.taskManagerCpu =
-                Optional.ofNullable(configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU))
-                        .orElse(0.);
-        this.taskManagerMemory =
-                Optional.ofNullable(configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY))
-                        .orElse(MemorySize.ZERO)
-                        .getBytes();
     }
 
     public AbstractFlinkResource<?, ?> getResource() {

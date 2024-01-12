@@ -27,6 +27,7 @@ import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -220,10 +221,6 @@ public class ScalingExecutorTest {
                         Map.of(
                                 ScalingMetric.NUM_TASK_SLOTS_USED,
                                 EvaluatedScalingMetric.of(9),
-                                ScalingMetric.NUM_TOTAL_TASK_SLOTS,
-                                EvaluatedScalingMetric.of(10),
-                                ScalingMetric.NUM_TASK_MANAGERS,
-                                EvaluatedScalingMetric.of(5),
                                 ScalingMetric.GC_PRESSURE,
                                 EvaluatedScalingMetric.of(Double.NaN),
                                 ScalingMetric.HEAP_USAGE,
@@ -244,7 +241,7 @@ public class ScalingExecutorTest {
                                     int currentInstances,
                                     int newInstances,
                                     double cpuPerInstance,
-                                    double memoryPerInstance) {
+                                    MemorySize memoryPerInstance) {
                                 return false;
                             }
                         });

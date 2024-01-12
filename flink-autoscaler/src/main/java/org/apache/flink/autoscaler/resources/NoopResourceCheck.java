@@ -17,12 +17,14 @@
 
 package org.apache.flink.autoscaler.resources;
 
+import org.apache.flink.configuration.MemorySize;
+
 /** Noop implementation for checking for available resources. */
 public class NoopResourceCheck implements ResourceCheck {
 
     @Override
     public boolean trySchedule(
-            int currentInstances, int newInstances, double numCpu, double numMemory) {
+            int currentInstances, int newInstances, double numCpu, MemorySize numMemory) {
         return true;
     }
 }

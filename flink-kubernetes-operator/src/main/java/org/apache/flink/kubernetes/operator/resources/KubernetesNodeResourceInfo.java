@@ -17,6 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.resources;
 
+import org.apache.flink.configuration.MemorySize;
+
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -29,10 +31,10 @@ public class KubernetesNodeResourceInfo {
     private KubernetesResource cpu;
     private KubernetesResource memory;
 
-    public boolean tryReserve(double cpuAmount, double memoryAmount) {
-        if (cpu.getFree() >= cpuAmount && memory.getFree() >= memoryAmount) {
+    public boolean tryReserve(double cpuAmount, MemorySize memoryAmount) {
+        if (cpu.getFree() >= cpuAmount && memory.getFree() >= memoryAmount.getBytes()) {
             cpu.setPending(cpu.getPending() + cpuAmount);
-            memory.setPending(memory.getPending() + memoryAmount);
+            memory.setPending(memory.getPending() + memoryAmount.getBytes());
             return true;
         }
         return false;

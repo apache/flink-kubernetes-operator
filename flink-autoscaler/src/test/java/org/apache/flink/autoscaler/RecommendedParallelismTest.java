@@ -29,6 +29,7 @@ import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
@@ -251,6 +252,8 @@ public class RecommendedParallelismTest {
                         JobStatus.CREATED,
                         context.getConfiguration(),
                         context.getMetricGroup(),
+                        0,
+                        MemorySize.ZERO,
                         getRestClusterClientSupplier());
     }
 
@@ -263,6 +266,8 @@ public class RecommendedParallelismTest {
                         JobStatus.RUNNING,
                         context.getConfiguration(),
                         context.getMetricGroup(),
+                        0,
+                        MemorySize.ZERO,
                         getRestClusterClientSupplier());
     }
 

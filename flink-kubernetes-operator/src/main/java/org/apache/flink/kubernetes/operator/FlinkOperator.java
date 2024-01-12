@@ -62,7 +62,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
-import java.time.Duration;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -167,11 +166,8 @@ public class FlinkOperator {
         var metricManager =
                 MetricManager.createFlinkDeploymentMetricManager(baseConfig, metricGroup);
         var statusRecorder = StatusRecorder.create(client, metricManager, listeners);
-        Duration refreshClusterViewInterval =
-                configManager
-                        .getDefaultConfig()
-                        .get(KubernetesOperatorConfigOptions.REFRESH_CLUSTER_RESOURCE_VIEW);
-        var clusterResourceManager = new ClusterResourceManager(refreshClusterViewInterval, client);
+        var clusterResourceManager =
+                ClusterResourceManager.of(configManager.getDefaultConfig(), client);
         var autoscaler = AutoscalerFactory.create(client, eventRecorder, clusterResourceManager);
         var reconcilerFactory = new ReconcilerFactory(eventRecorder, statusRecorder, autoscaler);
         var observerFactory = new FlinkDeploymentObserverFactory(eventRecorder);

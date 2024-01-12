@@ -19,6 +19,9 @@ package org.apache.flink.kubernetes.operator.resources;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.resources.ResourceCheck;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.ConfigMap;
@@ -74,6 +77,11 @@ public class ClusterResourceManager implements ResourceCheck {
 
     @VisibleForTesting ClusterResourceView clusterResourceView;
 
+    public static ClusterResourceManager of(Configuration config, KubernetesClient client) {
+        return new ClusterResourceManager(
+                config.get(KubernetesOperatorConfigOptions.REFRESH_CLUSTER_RESOURCE_VIEW), client);
+    }
+
     public ClusterResourceManager(Duration refreshInterval, KubernetesClient kubernetesClient) {
         this.refreshInterval = refreshInterval;
         this.kubernetesClient = kubernetesClient;
@@ -84,7 +92,7 @@ public class ClusterResourceManager implements ResourceCheck {
             int currentInstances,
             int newInstances,
             double cpuPerInstance,
-            double memoryPerInstance) {
+            MemorySize memoryPerInstance) {
 
         if (refreshInterval.isNegative()) {
             // Feature disabled
@@ -104,8 +112,8 @@ public class ClusterResourceManager implements ResourceCheck {
             }
         }
 
-        if (newInstances <= currentInstances) {
-            LOG.debug("Fewer or same amount of resources used after scaling.");
+        if (currentInstances == newInstances) {
+            LOG.debug("Same amount of resources used after scaling.");
             return true;
         }
 
@@ -128,7 +136,7 @@ public class ClusterResourceManager implements ResourceCheck {
             int currentInstances,
             int newInstances,
             double cpuPerInstance,
-            double memoryPerInstance) {
+            MemorySize memoryPerInstance) {
 
         resourceView.cancelPending();
 

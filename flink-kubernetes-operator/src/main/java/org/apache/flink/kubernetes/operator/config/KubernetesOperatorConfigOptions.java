@@ -609,7 +609,7 @@ public class KubernetesOperatorConfigOptions {
     public static final ConfigOption<Duration> REFRESH_CLUSTER_RESOURCE_VIEW =
             operatorConfig("cluster.resource-view.refresh-interval")
                     .durationType()
-                    .defaultValue(Duration.ofMinutes(5))
+                    .defaultValue(Duration.ofMinutes(-1))
                     .withDescription(
-                            "How often to retrieve Kubernetes cluster resource usage information. This information is used to avoid running out of cluster resources when scaling up resources.");
+                            "How often to retrieve Kubernetes cluster resource usage information. This information is used to avoid running out of cluster resources when scaling up resources. Negative values disable the feature.");
 }
