@@ -112,11 +112,6 @@ public class ClusterResourceManager implements ResourceCheck {
             }
         }
 
-        if (currentInstances == newInstances) {
-            LOG.debug("Same amount of resources used after scaling.");
-            return true;
-        }
-
         return trySchedule(
                 clusterResourceView,
                 currentInstances,

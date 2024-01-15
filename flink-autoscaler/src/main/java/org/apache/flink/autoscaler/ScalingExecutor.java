@@ -259,7 +259,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     private boolean scalingWouldExceedClusterResources(
             EvaluatedMetrics evaluatedMetrics,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
-            Context ctx) {
+            JobAutoScalerContext<?> ctx) {
 
         final double taskManagerCpu = ctx.getTaskManagerCpu();
         final MemorySize taskManagerMemory = ctx.getTaskManagerMemory();
@@ -301,18 +301,19 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         double numTaskSlotsUsed = globalMetrics.get(ScalingMetric.NUM_TASK_SLOTS_USED).getCurrent();
 
         final int numTaskSlotsAfterRescale;
-        if (oldParallelismSum == numTaskSlotsUsed) {
-            // Slot sharing activated
-            numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::max);
-        } else {
-            // Assuming slot sharing is not activated
+        if (oldParallelismSum >= numTaskSlotsUsed) {
+            // Slot sharing is (partially) deactivated,
+            // assuming no slot sharing in absence of additional data.
             numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::sum);
+        } else {
+            // Slot sharing is activated
+            numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::max);
         }
 
         int taskSlotsPerTm = ctx.getConfiguration().get(TaskManagerOptions.NUM_TASK_SLOTS);
-        int currentNumTms = (int) Math.ceil(numTaskSlotsUsed / (double) taskSlotsPerTm);
 
-        var newNumTms = (int) Math.ceil(numTaskSlotsAfterRescale / (double) taskSlotsPerTm);
+        int currentNumTms = (int) Math.ceil(numTaskSlotsUsed / (double) taskSlotsPerTm);
+        int newNumTms = (int) Math.ceil(numTaskSlotsAfterRescale / (double) taskSlotsPerTm);
 
         return !resourceCheck.trySchedule(
                 currentNumTms, newNumTms, taskManagerCpu, taskManagerMemory);
