@@ -28,7 +28,7 @@ public interface ResourceCheck {
      * @param currentInstances The current number of instances.
      * @param newInstances The new number of instances.
      * @param cpuPerInstance The number of CPU per instances.
-     * @param memoryPerInstance The amount of memory in bytes per instances.
+     * @param memoryPerInstance The total memory size per instances.
      * @return true if a scheduling configuration was found, false otherwise.
      */
     boolean trySchedule(
