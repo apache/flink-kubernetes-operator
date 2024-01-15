@@ -33,7 +33,7 @@ It can be any type of Flink cluster, includes:
 You can start a Flink Streaming job with the following ConfigOptions.
 
 ```
-# Enable Adaptvie scheduler to play the in-place rescaling.
+# Enable Adaptive scheduler to play the in-place rescaling.
 jobmanager.scheduler : adaptive
 
 # Enable autoscale and scaling
