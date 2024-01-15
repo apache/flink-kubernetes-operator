@@ -124,3 +124,67 @@ That folder is added to classpath upon initialization.
     COPY target/$ARTIFACT1 $OPERATOR_LIB
     COPY target/$ARTIFACT2 $OPERATOR_LIB
 ```
+
+## Custom Flink Resource Mutators
+
+`FlinkResourceMutator`, an interface for ,mutating the resources of `FlinkDeployment` and `FlinkSessionJob`,  is a pluggable component based on the [Plugins](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/filesystems/plugins) mechanism. During development, we can customize the implementation of `FlinkResourceMutator` and make sure to retain the service definition in `META-INF/services`.
+The following steps demonstrate how to develop and use a custom mutator.
+
+1. Implement `FlinkResourceMutator` interface:
+    ```java
+    package org.apache.flink.mutator;
+
+   import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+   import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+   import org.apache.flink.kubernetes.operator.mutator.FlinkResourceMutator;
+
+   import java.util.Optional;
+
+   /** Custom Flink Mutator. */
+   public class CustomFlinkMutator implements FlinkResourceMutator {
+
+    @Override
+    public FlinkDeployment mutateDeployment(FlinkDeployment deployment) {
+
+        return deployment;
+    }
+
+    @Override
+    public FlinkSessionJob mutateSessionJob(
+            FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
+
+        return sessionJob;
+    }
+}
+
+    ```
+
+2. Create service definition file `org.apache.flink.kubernetes.operator.mutator.FlinkResourceMutator` in `META-INF/services`.   With custom `FlinkResourceMutator` implementation, the service definition describes as follows:
+    ```text
+    org.apache.flink.mutator.CustomFlinkMutator
+    ```
+
+3. Use the Maven tool to package the project and generate the custom mutator JAR.
+
+4. Create Dockerfile to build a custom image from the `apache/flink-kubernetes-operator` official image and copy the generated JAR to custom mutator plugin directory.
+   `/opt/flink/plugins` is the value of `FLINK_PLUGINS_DIR` environment variable in the flink-kubernetes-operator helm chart. The structure of custom mutator directory under `/opt/flink/plugins` is as follows:
+    ```text
+    /opt/flink/plugins
+        ├── custom-mutator
+        │   ├── custom-mutator.jar
+        └── ...
+    ```
+
+   With the custom mutator directory location, the Dockerfile is defined as follows:
+    ```shell script
+    FROM apache/flink-kubernetes-operator
+    ENV FLINK_PLUGINS_DIR=/opt/flink/plugins
+    ENV CUSTOM_MUTATOR_DIR=custom-mutator
+    RUN mkdir $FLINK_PLUGINS_DIR/$CUSTOM_MUTATOR_DIR
+    COPY custom-mutator.jar $FLINK_PLUGINS_DIR/$CUSTOM_MUTATOR_DIR/
+    ```
+
+5. Install the flink-kubernetes-operator helm chart with the custom image and verify the `deploy/flink-kubernetes-operator` log has:
+    ```text
+    2023-12-12 06:26:56,667 o.a.f.k.o.u.MutatorUtils [INFO ] Discovered mutator from plugin directory[/opt/flink/plugins]: org.apache.flink.mutator.CustomFlinkMutator.
+    ```
