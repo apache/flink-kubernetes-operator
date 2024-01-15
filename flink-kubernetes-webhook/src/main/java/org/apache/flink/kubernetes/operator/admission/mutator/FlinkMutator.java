@@ -72,9 +72,7 @@ public class FlinkMutator implements Mutator<HasMetadata> {
                     informerManager.getFlinkDepInformer(namespace).getStore().getByKey(key);
 
             for (FlinkResourceMutator mutator : mutators) {
-                FlinkSessionJob flinkSessionJob =
-                        mutator.mutateSessionJob(sessionJob, Optional.ofNullable(deployment));
-                sessionJob = flinkSessionJob;
+                sessionJob = mutator.mutateSessionJob(sessionJob, Optional.ofNullable(deployment));
             }
 
             return sessionJob;
@@ -87,8 +85,7 @@ public class FlinkMutator implements Mutator<HasMetadata> {
         try {
             var flinkDeployment = mapper.convertValue(resource, FlinkDeployment.class);
             for (FlinkResourceMutator mutator : mutators) {
-                FlinkDeployment deployment = mutator.mutateDeployment(flinkDeployment);
-                flinkDeployment = deployment;
+                flinkDeployment = mutator.mutateDeployment(flinkDeployment);
             }
             return flinkDeployment;
         } catch (Exception e) {
