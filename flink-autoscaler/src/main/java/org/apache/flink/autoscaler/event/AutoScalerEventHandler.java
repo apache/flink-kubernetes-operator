@@ -40,7 +40,7 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_
 @Experimental
 public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContext<KEY>> {
     String SCALING_SUMMARY_ENTRY =
-            " Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f";
+            "{ Vertex ID %s | Parallelism %d -> %d | Processing capacity %.2f -> %.2f | Target data rate %.2f}";
     String SCALING_EXECUTION_DISABLED_REASON = "%s:%s, recommended parallelism change:";
     String SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED =
             "Scaling execution disabled by config ";
