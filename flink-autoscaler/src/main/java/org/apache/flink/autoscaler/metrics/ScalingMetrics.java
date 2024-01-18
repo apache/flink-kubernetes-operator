@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
+import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 
 import org.apache.commons.math3.util.Precision;
 import org.slf4j.Logger;
@@ -161,12 +162,27 @@ public class ScalingMetrics {
     }
 
     public static Map<ScalingMetric, Double> computeGlobalMetrics(
+            Map<FlinkMetric, Metric> collectedJmMetrics,
             Map<FlinkMetric, AggregatedMetric> collectedTmMetrics) {
         if (collectedTmMetrics == null) {
             return null;
         }
 
         var out = new HashMap<ScalingMetric, Double>();
+
+        try {
+            var numTotalTaskSlots =
+                    Double.valueOf(
+                            collectedJmMetrics.get(FlinkMetric.NUM_TASK_SLOTS_TOTAL).getValue());
+            var numTaskSlotsAvailable =
+                    Double.valueOf(
+                            collectedJmMetrics
+                                    .get(FlinkMetric.NUM_TASK_SLOTS_AVAILABLE)
+                                    .getValue());
+            out.put(ScalingMetric.NUM_TASK_SLOTS_USED, numTotalTaskSlots - numTaskSlotsAvailable);
+        } catch (Exception e) {
+            LOG.debug("Slot metrics and registered task managers not available");
+        }
 
         var gcTime = collectedTmMetrics.get(FlinkMetric.TOTAL_GC_TIME_PER_SEC);
         if (gcTime != null) {

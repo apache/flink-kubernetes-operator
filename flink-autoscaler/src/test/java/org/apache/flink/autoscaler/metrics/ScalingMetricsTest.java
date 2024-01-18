@@ -482,13 +482,15 @@ public class ScalingMetricsTest {
 
     @Test
     public void testGlobalMetrics() {
-        assertEquals(Map.of(), ScalingMetrics.computeGlobalMetrics(Map.of()));
+        assertEquals(Map.of(), ScalingMetrics.computeGlobalMetrics(Map.of(), Map.of()));
         assertEquals(
                 Map.of(),
-                ScalingMetrics.computeGlobalMetrics(Map.of(FlinkMetric.HEAP_USED, aggMax(100))));
+                ScalingMetrics.computeGlobalMetrics(
+                        Map.of(), Map.of(FlinkMetric.HEAP_USED, aggMax(100))));
         assertEquals(
                 Map.of(ScalingMetric.HEAP_USAGE, 0.5, ScalingMetric.GC_PRESSURE, 0.25),
                 ScalingMetrics.computeGlobalMetrics(
+                        Map.of(),
                         Map.of(
                                 FlinkMetric.HEAP_USED,
                                 aggMax(100),

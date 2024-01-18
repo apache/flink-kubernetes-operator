@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerImpl;
+import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 
@@ -29,6 +30,8 @@ import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+
 /** Test loading the default autoscaling implementation from the classpath. */
 @EnableKubernetesMockClient(crud = true)
 public class AutoscalerFactoryTest {
@@ -38,7 +41,10 @@ public class AutoscalerFactoryTest {
     @Test
     void testLoadDefaultImplementation() {
         JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoScaler =
-                AutoscalerFactory.create(kubernetesClient, new EventRecorder(new EventCollector()));
+                AutoscalerFactory.create(
+                        kubernetesClient,
+                        new EventRecorder(new EventCollector()),
+                        new ClusterResourceManager(Duration.ZERO, kubernetesClient));
         Assertions.assertTrue(autoScaler instanceof JobAutoScalerImpl);
     }
 }

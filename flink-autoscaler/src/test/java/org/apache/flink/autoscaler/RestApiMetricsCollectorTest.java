@@ -22,9 +22,12 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.minicluster.MiniCluster;
+import org.apache.flink.runtime.minicluster.MiniClusterConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
 import org.apache.flink.runtime.rest.messages.MessageHeaders;
 import org.apache.flink.runtime.rest.messages.MessageParameters;
@@ -35,10 +38,12 @@ import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetricsResponseBody;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedTaskManagerMetricsHeaders;
+import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricsFilterParameter;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.HashMap;
 import java.util.List;
@@ -110,6 +115,8 @@ public class RestApiMetricsCollectorTest {
                         JobStatus.RUNNING,
                         conf,
                         new UnregisteredMetricsGroup(),
+                        0,
+                        MemorySize.ZERO,
                         () -> restClusterClient);
 
         var jobVertexIDMapMap = collector.queryAllAggregatedMetrics(context, metrics);
@@ -120,6 +127,51 @@ public class RestApiMetricsCollectorTest {
         AggregatedMetric pendingRecordsMetric = vertexMetrics.get(FlinkMetric.PENDING_RECORDS);
         Assertions.assertNotNull(pendingRecordsMetric);
         assertEquals(pendingRecordsMetric.getSum(), 200);
+    }
+
+    @Test
+    @Timeout(60)
+    public void testJmMetricCollection() throws Exception {
+        try (MiniCluster miniCluster =
+                new MiniCluster(
+                        new MiniClusterConfiguration.Builder()
+                                .setNumTaskManagers(1)
+                                .setNumSlotsPerTaskManager(3)
+                                .build())) {
+            miniCluster.start();
+            var client =
+                    new RestClusterClient<>(
+                            new Configuration(),
+                            "cluster",
+                            (c, e) ->
+                                    new StandaloneClientHAServices(
+                                            miniCluster.getRestAddress().get().toString()));
+            do {
+                var collector = new RestApiMetricsCollector<>();
+                Map<FlinkMetric, Metric> flinkMetricMetricMap =
+                        collector.queryJmMetrics(
+                                client,
+                                Map.of(
+                                        "taskSlotsTotal", FlinkMetric.NUM_TASK_SLOTS_TOTAL,
+                                        "taskSlotsAvailable",
+                                                FlinkMetric.NUM_TASK_SLOTS_AVAILABLE));
+                try {
+                    assertEquals(
+                            "3",
+                            flinkMetricMetricMap.get(FlinkMetric.NUM_TASK_SLOTS_TOTAL).getValue());
+                    assertEquals(
+                            "3",
+                            flinkMetricMetricMap
+                                    .get(FlinkMetric.NUM_TASK_SLOTS_AVAILABLE)
+                                    .getValue());
+                    break;
+                } catch (NullPointerException e) {
+                    // Metrics might not be available yet (timeout above will eventually kill this
+                    // test)
+                    Thread.sleep(100);
+                }
+            } while (true);
+        }
     }
 
     @Test
@@ -176,6 +228,8 @@ public class RestApiMetricsCollectorTest {
                         JobStatus.RUNNING,
                         conf,
                         new UnregisteredMetricsGroup(),
+                        0,
+                        MemorySize.ZERO,
                         () -> client);
         var collector = new RestApiMetricsCollector<JobID, JobAutoScalerContext<JobID>>();
 

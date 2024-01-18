@@ -29,6 +29,9 @@ import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetricsRespo
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsParameters;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedTaskManagerMetricsHeaders;
+import org.apache.flink.runtime.rest.messages.job.metrics.JobManagerMetricsHeaders;
+import org.apache.flink.runtime.rest.messages.job.metrics.JobManagerMetricsMessageParameters;
+import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricsAggregationParameter;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricsFilterParameter;
 
@@ -103,6 +106,41 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
         }
     }
 
+    @Override
+    @SneakyThrows
+    protected Map<FlinkMetric, Metric> queryJmMetrics(Context ctx) {
+        Map<String, FlinkMetric> metrics =
+                Map.of(
+                        "taskSlotsTotal", FlinkMetric.NUM_TASK_SLOTS_TOTAL,
+                        "taskSlotsAvailable", FlinkMetric.NUM_TASK_SLOTS_AVAILABLE);
+        try (var restClient = ctx.getRestClusterClient()) {
+            return queryJmMetrics(restClient, metrics);
+        }
+    }
+
+    @SneakyThrows
+    protected Map<FlinkMetric, Metric> queryJmMetrics(
+            RestClusterClient<?> restClient, Map<String, FlinkMetric> metrics) {
+
+        var parameters = new JobManagerMetricsMessageParameters();
+        var queryParamIt = parameters.getQueryParameters().iterator();
+
+        MetricsFilterParameter filterParameter = (MetricsFilterParameter) queryParamIt.next();
+        filterParameter.resolve(List.copyOf(metrics.keySet()));
+
+        var responseBody =
+                restClient
+                        .sendRequest(
+                                JobManagerMetricsHeaders.getInstance(),
+                                parameters,
+                                EmptyRequestBody.getInstance())
+                        .get();
+
+        return responseBody.getMetrics().stream()
+                .collect(Collectors.toMap(m -> metrics.get(m.getId()), m -> m));
+    }
+
+    @Override
     protected Map<FlinkMetric, AggregatedMetric> queryTmMetrics(Context ctx) throws Exception {
         try (var restClient = ctx.getRestClusterClient()) {
             // Unfortunately we cannot simply query for all metric names as Flink doesn't return

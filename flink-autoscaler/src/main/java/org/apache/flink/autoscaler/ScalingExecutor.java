@@ -23,13 +23,19 @@ import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.resources.NoopResourceCheck;
+import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.utils.CalendarUtils;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -63,23 +69,22 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     private final JobVertexScaler<KEY, Context> jobVertexScaler;
     private final AutoScalerEventHandler<KEY, Context> autoScalerEventHandler;
     private final AutoScalerStateStore<KEY, Context> autoScalerStateStore;
+    private final ResourceCheck resourceCheck;
 
     public ScalingExecutor(
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
             AutoScalerStateStore<KEY, Context> autoScalerStateStore) {
-        this(
-                new JobVertexScaler<>(autoScalerEventHandler),
-                autoScalerEventHandler,
-                autoScalerStateStore);
+        this(autoScalerEventHandler, autoScalerStateStore, null);
     }
 
     public ScalingExecutor(
-            JobVertexScaler<KEY, Context> jobVertexScaler,
             AutoScalerEventHandler<KEY, Context> autoScalerEventHandler,
-            AutoScalerStateStore<KEY, Context> autoScalerStateStore) {
-        this.jobVertexScaler = jobVertexScaler;
+            AutoScalerStateStore<KEY, Context> autoScalerStateStore,
+            @Nullable ResourceCheck resourceCheck) {
+        this.jobVertexScaler = new JobVertexScaler<>(autoScalerEventHandler);
         this.autoScalerEventHandler = autoScalerEventHandler;
         this.autoScalerStateStore = autoScalerStateStore;
+        this.resourceCheck = resourceCheck != null ? resourceCheck : new NoopResourceCheck();
     }
 
     public boolean scaleResource(
@@ -108,6 +113,10 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         updateRecommendedParallelism(evaluatedMetrics.getVertexMetrics(), scalingSummaries);
 
         if (checkIfBlockedAndTriggerScalingEvent(context, scalingSummaries, conf, now)) {
+            return false;
+        }
+
+        if (scalingWouldExceedClusterResources(evaluatedMetrics, scalingSummaries, context)) {
             return false;
         }
 
@@ -246,6 +255,69 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         return false;
+    }
+
+    private boolean scalingWouldExceedClusterResources(
+            EvaluatedMetrics evaluatedMetrics,
+            Map<JobVertexID, ScalingSummary> scalingSummaries,
+            JobAutoScalerContext<?> ctx) {
+
+        final double taskManagerCpu = ctx.getTaskManagerCpu();
+        final MemorySize taskManagerMemory = ctx.getTaskManagerMemory();
+
+        if (taskManagerCpu <= 0
+                || taskManagerMemory == null
+                || taskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
+            // We can't extract the requirements, we can't make any assumptions
+            return false;
+        }
+
+        var globalMetrics = evaluatedMetrics.getGlobalMetrics();
+        if (!globalMetrics.containsKey(ScalingMetric.NUM_TASK_SLOTS_USED)) {
+            LOG.info("JM metrics not ready yet");
+            return true;
+        }
+
+        var vertexMetrics = evaluatedMetrics.getVertexMetrics();
+
+        int oldParallelismSum =
+                vertexMetrics.values().stream()
+                        .map(map -> (int) map.get(ScalingMetric.PARALLELISM).getCurrent())
+                        .reduce(0, Integer::sum);
+
+        Map<JobVertexID, Integer> newParallelisms = new HashMap<>();
+        for (Map.Entry<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> entry :
+                vertexMetrics.entrySet()) {
+            JobVertexID jobVertexID = entry.getKey();
+            ScalingSummary scalingSummary = scalingSummaries.get(jobVertexID);
+            if (scalingSummary != null) {
+                newParallelisms.put(jobVertexID, scalingSummary.getNewParallelism());
+            } else {
+                newParallelisms.put(
+                        jobVertexID,
+                        (int) entry.getValue().get(ScalingMetric.PARALLELISM).getCurrent());
+            }
+        }
+
+        double numTaskSlotsUsed = globalMetrics.get(ScalingMetric.NUM_TASK_SLOTS_USED).getCurrent();
+
+        final int numTaskSlotsAfterRescale;
+        if (oldParallelismSum >= numTaskSlotsUsed) {
+            // Slot sharing is (partially) deactivated,
+            // assuming no slot sharing in absence of additional data.
+            numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::sum);
+        } else {
+            // Slot sharing is activated
+            numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::max);
+        }
+
+        int taskSlotsPerTm = ctx.getConfiguration().get(TaskManagerOptions.NUM_TASK_SLOTS);
+
+        int currentNumTms = (int) Math.ceil(numTaskSlotsUsed / (double) taskSlotsPerTm);
+        int newNumTms = (int) Math.ceil(numTaskSlotsAfterRescale / (double) taskSlotsPerTm);
+
+        return !resourceCheck.trySchedule(
+                currentNumTms, newNumTms, taskManagerCpu, taskManagerMemory);
     }
 
     private static Map<String, String> getVertexParallelismOverrides(

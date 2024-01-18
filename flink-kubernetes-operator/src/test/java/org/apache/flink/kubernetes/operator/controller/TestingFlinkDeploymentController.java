@@ -32,6 +32,7 @@ import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
+import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
 import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -52,6 +53,7 @@ import io.javaoperatorsdk.operator.processing.event.source.EventSource;
 import lombok.Getter;
 import org.junit.jupiter.api.Assertions;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
@@ -95,7 +97,10 @@ public class TestingFlinkDeploymentController
                         eventRecorder,
                         statusRecorder,
                         AutoscalerFactory.create(
-                                flinkService.getKubernetesClient(), eventRecorder));
+                                flinkService.getKubernetesClient(),
+                                eventRecorder,
+                                new ClusterResourceManager(
+                                        Duration.ZERO, flinkService.getKubernetesClient())));
         canaryResourceManager = new CanaryResourceManager<>(configManager);
         flinkDeploymentController =
                 new FlinkDeploymentController(

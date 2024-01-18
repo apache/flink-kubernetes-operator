@@ -604,4 +604,12 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(false)
                     .withDescription(
                             "Indicate whether the job should be drained when stopping with savepoint.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Duration> REFRESH_CLUSTER_RESOURCE_VIEW =
+            operatorConfig("cluster.resource-view.refresh-interval")
+                    .durationType()
+                    .defaultValue(Duration.ofMinutes(-1))
+                    .withDescription(
+                            "How often to retrieve Kubernetes cluster resource usage information. This information is used to avoid running out of cluster resources when scaling up resources. Negative values disable the feature.");
 }

@@ -21,6 +21,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.NoOpMetricRegistry;
@@ -46,20 +47,34 @@ public class TestingAutoscalerUtils {
                 JobStatus.RUNNING,
                 new Configuration(),
                 metricGroup,
+                0,
+                MemorySize.ZERO,
                 getRestClusterClientSupplier());
     }
 
-    public static JobAutoScalerContext<JobID> createJobAutoScalerContext(JobStatus jobStatus) {
+    public static JobAutoScalerContext<JobID> createResourceAwareContext() {
+        JobID jobId = JobID.generate();
         MetricRegistry registry = NoOpMetricRegistry.INSTANCE;
         GenericMetricGroup metricGroup = new GenericMetricGroup(registry, null, "test");
-        final JobID jobID = new JobID();
-        return new JobAutoScalerContext<JobID>(
-                jobID,
-                jobID,
-                jobStatus,
+        return new JobAutoScalerContext<>(
+                jobId,
+                jobId,
+                JobStatus.RUNNING,
                 new Configuration(),
                 metricGroup,
-                getRestClusterClientSupplier());
+                0,
+                MemorySize.ZERO,
+                TestingAutoscalerUtils.getRestClusterClientSupplier()) {
+            @Override
+            public double getTaskManagerCpu() {
+                return 100;
+            }
+
+            @Override
+            public MemorySize getTaskManagerMemory() {
+                return MemorySize.parse("65536 bytes");
+            }
+        };
     }
 
     public static SupplierWithException<RestClusterClient<String>, Exception>
