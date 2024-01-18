@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
+import org.apache.flink.streaming.api.environment.CheckpointConfig;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +32,9 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW;
+import static org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL;
+import static org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT;
+import static org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions.TOLERABLE_FAILURE_NUMBER;
 
 /** Evaluates whether the cluster is healthy. */
 public class ClusterHealthEvaluator {
@@ -174,6 +178,30 @@ public class ClusterHealthEvaluator {
             return true;
         }
 
+        var completedCheckpointsCheckWindow =
+                configuration.get(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW);
+
+        CheckpointConfig checkpointConfig = new CheckpointConfig();
+        checkpointConfig.configure(configuration);
+        var checkpointingInterval = checkpointConfig.getCheckpointInterval();
+        var checkpointingTimeout = checkpointConfig.getCheckpointTimeout();
+        var tolerationFailureNumber = checkpointConfig.getTolerableCheckpointFailureNumber() + 1;
+        var minCompletedCheckpointsCheckWindow =
+                Math.max(
+                        checkpointingInterval * tolerationFailureNumber,
+                        checkpointingTimeout * tolerationFailureNumber);
+        if (completedCheckpointsCheckWindow.toMillis() < minCompletedCheckpointsCheckWindow) {
+            LOG.warn(
+                    "{} is not long enough. Default to max({} * {}, {} * {}): {}ms",
+                    OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW.key(),
+                    CHECKPOINTING_INTERVAL.key(),
+                    TOLERABLE_FAILURE_NUMBER.key(),
+                    CHECKPOINTING_TIMEOUT.key(),
+                    TOLERABLE_FAILURE_NUMBER.key(),
+                    minCompletedCheckpointsCheckWindow);
+            completedCheckpointsCheckWindow = Duration.ofMillis(minCompletedCheckpointsCheckWindow);
+        }
+
         if (observedClusterHealthInfo.getNumCompletedCheckpoints()
                 < lastValidClusterHealthInfo.getNumCompletedCheckpoints()) {
             LOG.debug(
@@ -191,8 +219,6 @@ public class ClusterHealthEvaluator {
         LOG.debug("Time difference between health infos: {}", Duration.ofMillis(timestampDiffMs));
 
         boolean isHealthy = true;
-        var completedCheckpointsCheckWindow =
-                configuration.get(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW);
         var completedCheckpointsCheckWindowMs = completedCheckpointsCheckWindow.toMillis();
 
         if (observedClusterHealthInfo.getNumCompletedCheckpoints()

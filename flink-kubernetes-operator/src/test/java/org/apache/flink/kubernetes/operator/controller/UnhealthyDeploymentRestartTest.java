@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -39,6 +40,8 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD;
+import static org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator.getLastValidClusterHealthInfo;
+import static org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator.setLastValidClusterHealthInfo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
@@ -130,6 +133,14 @@ public class UnhealthyDeploymentRestartTest {
 
         // Make deployment unhealthy
         flinkService.setMetricValue(NUMBER_OF_COMPLETED_CHECKPOINTS_METRIC_NAME, "1");
+        ClusterHealthInfo clusterHealthInfo =
+                getLastValidClusterHealthInfo(appCluster.getStatus().getClusterInfo());
+        // Ensure the last savepoint has been taken more than 10 minutes ago (Default checkpoint
+        // interval)
+        clusterHealthInfo.setNumCompletedCheckpointsIncreasedTimeStamp(
+                clusterHealthInfo.getNumCompletedCheckpointsIncreasedTimeStamp() - 600000);
+        setLastValidClusterHealthInfo(appCluster.getStatus().getClusterInfo(), clusterHealthInfo);
+        testController.getStatusRecorder().patchAndCacheStatus(appCluster, kubernetesClient);
         testController.reconcile(appCluster, context);
         assertEquals(
                 JobManagerDeploymentStatus.DEPLOYING,
