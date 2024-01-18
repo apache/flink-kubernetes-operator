@@ -73,7 +73,7 @@ public class TestingFlinkDeploymentController
 
     @Getter private TestingFlinkResourceContextFactory contextFactory;
 
-    private StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
+    @Getter private StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder;
     @Getter private CanaryResourceManager<FlinkDeployment> canaryResourceManager;
 
     private Map<ResourceID, Tuple2<FlinkDeploymentSpec, Long>> currentGenerations = new HashMap<>();

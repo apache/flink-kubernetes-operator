@@ -170,7 +170,9 @@ public class BaseTestUtils {
                 KubernetesHaServicesFactory.class.getCanonicalName());
         conf.put(HighAvailabilityOptions.HA_STORAGE_PATH.key(), "test");
         conf.put(CheckpointingOptions.SAVEPOINT_DIRECTORY.key(), "test-savepoint-dir");
-        conf.put(CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(), "test-checkpoint-dir");
+        conf.put(
+                CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(),
+                "file:///test/test-checkpoint-dir");
 
         return FlinkDeploymentSpec.builder()
                 .image(IMAGE)

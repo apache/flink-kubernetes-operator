@@ -22,6 +22,9 @@ import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -30,6 +33,7 @@ import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static java.time.Instant.ofEpochMilli;
 import static java.time.Instant.ofEpochSecond;
@@ -37,6 +41,9 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_THRESHOLD;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_RESTARTS_WINDOW;
+import static org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions.CHECKPOINTING_INTERVAL;
+import static org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT;
+import static org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions.TOLERABLE_FAILURE_NUMBER;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -56,6 +63,7 @@ class ClusterHealthEvaluatorTest {
     @BeforeEach
     public void beforeEach() {
         configuration = new Configuration();
+        configuration.set(CHECKPOINTING_TIMEOUT, Duration.ofSeconds(30));
 
         clusterInfo = new HashMap<>();
 
@@ -266,17 +274,56 @@ class ClusterHealthEvaluatorTest {
         assertClusterHealthIs(true);
     }
 
-    @Test
-    public void evaluateShouldMarkClusterUnhealthyWhenNoCompletedCheckpointsOutsideWindow() {
+    private static Stream<Arguments> provideParametersEvaluateCheckpointing() {
+        Instant tenSecInstant = ofEpochSecond(10);
+        Instant twoMinInstant = ofEpochSecond(120);
+        Instant fourMinInstant = twoMinInstant.plus(2, ChronoUnit.MINUTES);
+        return Stream.of(
+                // ShouldMarkClusterUnhealthyWhenNoCompletedCheckpointsOutsideWindow
+                Arguments.of(twoMinInstant, fourMinInstant, 30L, 30L, null, false),
+                // ShouldMarkClusterHealthyWhenCompletedCheckpointsWithOutsideWindowFromCheckpointInterval
+                Arguments.of(twoMinInstant, fourMinInstant, 120L, 30L, null, true),
+                // ShouldMarkClusterUnhealthyWhenNoCompletedCheckpointsWithOutsideWindowFromCheckpointInterval
+                Arguments.of(tenSecInstant, fourMinInstant, 120L, 30L, null, false),
+                // ShouldMarkClusterHealthyWhenCompletedCheckpointsWithOutsideWindowFromCheckpointIntervalTimesNbTolerableFailure
+                Arguments.of(twoMinInstant, fourMinInstant, 30L, 10L, 3, true),
+                // ShouldMarkClusterHealthyWhenNoCompletedCheckpointsWithOutsideWindowFromCheckpointIntervalTimesNbTolerableFailure
+                Arguments.of(tenSecInstant, fourMinInstant, 30L, 10L, 3, false),
+                // ShouldMarkClusterHealthyWhenCompletedCheckpointsWithOutsideWindowFromCheckpointingTimeout
+                Arguments.of(twoMinInstant, fourMinInstant, 30L, 120L, null, true),
+                // ShouldMarkClusterHealthyWhenNoCompletedCheckpointsWithOutsideWindowFromCheckpointingTimeout
+                Arguments.of(tenSecInstant, fourMinInstant, 30L, 120L, null, false),
+                // ShouldMarkClusterHealthyWhenCompletedCheckpointsWithOutsideWindowFromCheckpointingTimeoutTimesNbTolerableFailure
+                Arguments.of(twoMinInstant, fourMinInstant, 10L, 30L, 3, true),
+                // ShouldMarkClusterHealthyWhenNoCompletedCheckpointsWithOutsideWindowFromCheckpointingTimeoutTimesNbTolerableFailure
+                Arguments.of(tenSecInstant, fourMinInstant, 10L, 30L, 3, false));
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideParametersEvaluateCheckpointing")
+    public void evaluateCheckpointing(
+            Instant validInstant1,
+            Instant validInstant2,
+            Long checkpointingInterval,
+            long checkpointingTimeout,
+            Integer tolerationFailureNumber,
+            boolean expectedIsHealthy) {
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED, true);
         configuration.set(
                 OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW, Duration.ofMinutes(1));
+        if (checkpointingInterval != null) {
+            configuration.set(CHECKPOINTING_INTERVAL, Duration.ofSeconds(checkpointingInterval));
+        }
+        configuration.set(CHECKPOINTING_TIMEOUT, Duration.ofSeconds(checkpointingTimeout));
+        if (tolerationFailureNumber != null) {
+            configuration.set(TOLERABLE_FAILURE_NUMBER, tolerationFailureNumber);
+        }
         var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 0);
         var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 0, 0);
 
         setLastValidClusterHealthInfo(observedClusterHealthInfo1);
         clusterHealthEvaluator.evaluate(configuration, clusterInfo, observedClusterHealthInfo2);
-        assertClusterHealthIs(false);
+        assertClusterHealthIs(expectedIsHealthy);
     }
 
     private ClusterHealthInfo createClusterHealthInfo(
