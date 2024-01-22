@@ -398,9 +398,12 @@ public class BacklogBasedScalingTest {
                 new JobTopology(
                         new VertexInfo(source1, Set.of(), 4, 720),
                         new VertexInfo(sink, Set.of(source1), 4, 720)));
+
+        var expectedEndTime = Instant.ofEpochMilli(10);
+        metricsCollector.setJobUpdateTs(expectedEndTime);
         autoscaler.scale(context);
 
-        assertLastTrackingEndTimeIs(now);
+        assertLastTrackingEndTimeIs(expectedEndTime);
     }
 
     private void assertLastTrackingEndTimeIs(Instant expectedEndTime) throws Exception {

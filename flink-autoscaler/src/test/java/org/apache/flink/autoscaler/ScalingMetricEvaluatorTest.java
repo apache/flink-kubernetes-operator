@@ -118,7 +118,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluator
                         .evaluate(
                                 conf,
-                                new CollectedMetricHistory(topology, metricHistory),
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 Duration.ZERO)
                         .getVertexMetrics();
 
@@ -152,7 +152,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluator
                         .evaluate(
                                 conf,
-                                new CollectedMetricHistory(topology, metricHistory),
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 Duration.ZERO)
                         .getVertexMetrics();
         assertEquals(
@@ -175,7 +175,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluator
                         .evaluate(
                                 conf,
-                                new CollectedMetricHistory(topology, metricHistory),
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 Duration.ZERO)
                         .getVertexMetrics();
         assertEquals(
@@ -197,7 +197,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluator
                         .evaluate(
                                 conf,
-                                new CollectedMetricHistory(topology, metricHistory),
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 Duration.ZERO)
                         .getVertexMetrics();
         assertEquals(
@@ -243,7 +243,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluator
                         .evaluate(
                                 conf,
-                                new CollectedMetricHistory(topology, metricHistory),
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 Duration.ZERO)
                         .getVertexMetrics();
         assertEquals(
@@ -461,7 +461,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluator
                         .evaluate(
                                 conf,
-                                new CollectedMetricHistory(topology, metricHistory),
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 restartTime)
                         .getVertexMetrics()
                         .get(source)
@@ -476,7 +476,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluator
                         .evaluate(
                                 conf,
-                                new CollectedMetricHistory(topology, metricHistory),
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 restartTime)
                         .getVertexMetrics()
                         .get(source)
@@ -489,7 +489,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluator
                         .evaluate(
                                 conf,
-                                new CollectedMetricHistory(topology, metricHistory),
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 restartTime)
                         .getVertexMetrics()
                         .get(source)
@@ -531,7 +531,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluator
                         .evaluate(
                                 conf,
-                                new CollectedMetricHistory(topology, metricHistory),
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 restartTime)
                         .getVertexMetrics()
                         .get(source)
@@ -562,7 +562,7 @@ public class ScalingMetricEvaluatorTest {
                 evaluator
                         .evaluate(
                                 conf,
-                                new CollectedMetricHistory(topology, metricHistory),
+                                new CollectedMetricHistory(topology, metricHistory, Instant.now()),
                                 restartTime)
                         .getVertexMetrics()
                         .get(source)

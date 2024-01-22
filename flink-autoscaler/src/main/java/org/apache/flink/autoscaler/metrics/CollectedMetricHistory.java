@@ -30,5 +30,6 @@ import java.util.SortedMap;
 public class CollectedMetricHistory {
     final JobTopology jobTopology;
     final SortedMap<Instant, CollectedMetrics> metricHistory;
+    final Instant jobRunningTs;
     @Setter private boolean fullyCollected;
 }

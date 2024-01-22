@@ -149,10 +149,10 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         if (isStabilizing) {
             LOG.info("Stabilizing until {}", readable(stableTime));
             stateStore.storeCollectedMetrics(ctx, metricHistory);
-            return new CollectedMetricHistory(topology, Collections.emptySortedMap());
+            return new CollectedMetricHistory(topology, Collections.emptySortedMap(), jobRunningTs);
         }
 
-        var collectedMetrics = new CollectedMetricHistory(topology, metricHistory);
+        var collectedMetrics = new CollectedMetricHistory(topology, metricHistory, jobRunningTs);
         if (now.isBefore(windowFullTime)) {
             LOG.info("Metric window not full until {}", readable(windowFullTime));
         } else {
