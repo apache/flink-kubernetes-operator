@@ -160,14 +160,23 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         var collectedMetrics = metricsCollector.updateMetrics(ctx, stateStore);
         var jobTopology = collectedMetrics.getJobTopology();
 
+        var now = clock.instant();
+        var scalingTracking = getTrimmedScalingTracking(stateStore, ctx, now);
+        var scalingHistory = getTrimmedScalingHistory(stateStore, ctx, now);
+        // A scaling tracking without an end time gets created whenever a scaling decision is
+        // applied. Here, we record the end time for it (runScalingLogic is only called when the job
+        // transitions back into the RUNNING state).
+        if (scalingTracking.recordRestartDurationIfTrackedAndParallelismMatches(
+                collectedMetrics.getJobRunningTs(), jobTopology, scalingHistory)) {
+            stateStore.storeScalingTracking(ctx, scalingTracking);
+        }
+
         if (collectedMetrics.getMetricHistory().isEmpty()) {
             return;
         }
         LOG.debug("Collected metrics: {}", collectedMetrics);
 
-        var now = clock.instant();
         // Scaling tracking data contains previous restart times that are taken into account
-        var scalingTracking = getTrimmedScalingTracking(stateStore, ctx, now);
         var restartTime = scalingTracking.getMaxRestartTimeOrDefault(ctx.getConfiguration());
         var evaluatedMetrics =
                 evaluator.evaluate(ctx.getConfiguration(), collectedMetrics, restartTime);
@@ -178,15 +187,6 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         autoscalerMetrics.registerScalingMetrics(
                 jobTopology.getVerticesInTopologicalOrder(),
                 () -> lastEvaluatedMetrics.get(ctx.getJobKey()));
-
-        var scalingHistory = getTrimmedScalingHistory(stateStore, ctx, now);
-        // A scaling tracking without an end time gets created whenever a scaling decision is
-        // applied. Here, we record the end time for it (runScalingLogic is only called when the job
-        // transitions back into the RUNNING state).
-        if (scalingTracking.recordRestartDurationIfTrackedAndParallelismMatches(
-                now, jobTopology, scalingHistory)) {
-            stateStore.storeScalingTracking(ctx, scalingTracking);
-        }
 
         if (!collectedMetrics.isFullyCollected()) {
             // We have done an upfront evaluation, but we are not ready for scaling.
