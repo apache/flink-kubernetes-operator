@@ -48,6 +48,4 @@ else
 fi
 wait_for_status $APPLICATION_IDENTIFIER '.status.lifecycleState' STABLE ${TIMEOUT} || exit 1
 
-check_operator_log_for_errors || exit 1
-
 echo "Successfully run the autoscaler test"

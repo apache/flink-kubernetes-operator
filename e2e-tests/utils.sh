@@ -184,37 +184,6 @@ function patch_flink_config() {
   kubectl patch cm flink-operator-config -n "${operator_pod_namespace}" --type merge -p "${patch}"
 }
 
-function check_operator_log_for_errors {
-  local ignore=$1
-  echo "Checking for operator log errors..."
-  #https://issues.apache.org/jira/browse/FLINK-30310
-  echo "Error checking is temporarily turned off."
-  return 0
-
-  operator_pod_namespace=$(get_operator_pod_namespace)
-  operator_pod_name=$(get_operator_pod_name)
-  echo "Operator namespace: ${operator_pod_namespace} pod: ${operator_pod_name}"
-
-  local cmd="kubectl logs -n ${operator_pod_namespace} ${operator_pod_name}
-    | grep -e '\[\s*ERROR\s*\]'
-    | grep -v 'Failed to submit a listener notification task' `#https://issues.apache.org/jira/browse/FLINK-30147`
-    | grep -v 'Failed to submit job to session cluster' `#https://issues.apache.org/jira/browse/FLINK-30148`
-    | grep -v 'Error during event processing' `#https://issues.apache.org/jira/browse/FLINK-30149`
-    | grep -v 'Error while patching status' `#https://issues.apache.org/jira/browse/FLINK-30283`
-    ${ignore}"
-
-  echo "Filter command: ${cmd}"
-  errors=$(eval ${cmd} || true)
-
-  if [ -z "${errors}" ]; then
-    echo "No errors in log files."
-    return 0
-  else
-    echo -e "Found error in log files.\n\n${errors}"
-    return 1
-  fi
-}
-
 function debug_and_show_logs {
     echo "Debugging failed e2e test:"
     echo "Currently existing Kubernetes resources"
