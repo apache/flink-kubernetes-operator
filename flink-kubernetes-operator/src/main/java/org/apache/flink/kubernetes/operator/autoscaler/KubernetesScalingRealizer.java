@@ -19,7 +19,9 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.configuration.ConfigurationUtils;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
@@ -32,7 +34,7 @@ public class KubernetesScalingRealizer
         implements ScalingRealizer<ResourceID, KubernetesJobAutoScalerContext> {
 
     @Override
-    public void realize(
+    public void realizeParallelismOverrides(
             KubernetesJobAutoScalerContext context, Map<String, String> parallelismOverrides) {
 
         context.getResource()
@@ -41,6 +43,19 @@ public class KubernetesScalingRealizer
                 .put(
                         PipelineOptions.PARALLELISM_OVERRIDES.key(),
                         getOverrideString(context, parallelismOverrides));
+    }
+
+    @Override
+    public void realizeMemoryOverrides(
+            KubernetesJobAutoScalerContext context, MemorySize taskManagerMemoryOverride) {
+        if (context.getResource() instanceof FlinkDeployment) {
+            var flinkDeployment = ((FlinkDeployment) context.getResource());
+            flinkDeployment
+                    .getSpec()
+                    .getTaskManager()
+                    .getResource()
+                    .setMemory(taskManagerMemoryOverride.toString());
+        }
     }
 
     @Nullable

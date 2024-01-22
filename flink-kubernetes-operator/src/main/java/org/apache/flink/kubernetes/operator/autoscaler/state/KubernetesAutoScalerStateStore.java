@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.ScalingTracking;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.utils.AutoScalerSerDeModule;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -38,6 +39,7 @@ import org.apache.flink.shaded.jackson2.org.yaml.snakeyaml.LoaderOptions;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import lombok.SneakyThrows;
 import org.apache.commons.io.IOUtils;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,7 +68,10 @@ public class KubernetesAutoScalerStateStore
     @VisibleForTesting protected static final String COLLECTED_METRICS_KEY = "collectedMetrics";
 
     @VisibleForTesting
+    /* Be careful with changing this field name or the internal structure. Otherwise the parallelism of all autoscaled pipelines might get reset! */
     protected static final String PARALLELISM_OVERRIDES_KEY = "parallelismOverrides";
+
+    protected static final String CONFIG_OVERRIDES_KEY = "configOverrides";
 
     @VisibleForTesting protected static final int MAX_CM_BYTES = 1000000;
 
@@ -188,6 +193,27 @@ public class KubernetesAutoScalerStateStore
                 .orElse(new HashMap<>());
     }
 
+    @NotNull
+    @Override
+    public Configuration getConfigOverrides(KubernetesJobAutoScalerContext jobContext) {
+        return configMapStore
+                .getSerializedState(jobContext, CONFIG_OVERRIDES_KEY)
+                .map(KubernetesAutoScalerStateStore::deserializeConfigOverrides)
+                .orElse(new Configuration());
+    }
+
+    @Override
+    public void storeConfigOverrides(
+            KubernetesJobAutoScalerContext jobContext, Configuration overrides) {
+        configMapStore.putSerializedState(
+                jobContext, CONFIG_OVERRIDES_KEY, serializeConfigOverrides(overrides));
+    }
+
+    @Override
+    public void removeConfigOverrides(KubernetesJobAutoScalerContext jobContext) {
+        configMapStore.removeSerializedState(jobContext, CONFIG_OVERRIDES_KEY);
+    }
+
     @Override
     public void removeParallelismOverrides(KubernetesJobAutoScalerContext jobContext) {
         configMapStore.removeSerializedState(jobContext, PARALLELISM_OVERRIDES_KEY);
@@ -248,6 +274,14 @@ public class KubernetesAutoScalerStateStore
 
     private static Map<String, String> deserializeParallelismOverrides(String overrides) {
         return ConfigurationUtils.convertValue(overrides, Map.class);
+    }
+
+    private static String serializeConfigOverrides(Configuration overrides) {
+        return ConfigurationUtils.convertValue(overrides.toMap(), String.class);
+    }
+
+    private static Configuration deserializeConfigOverrides(String overrides) {
+        return Configuration.fromMap(ConfigurationUtils.convertValue(overrides, Map.class));
     }
 
     @VisibleForTesting

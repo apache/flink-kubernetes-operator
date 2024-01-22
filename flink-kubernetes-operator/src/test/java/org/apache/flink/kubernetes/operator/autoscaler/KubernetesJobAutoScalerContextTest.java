@@ -33,6 +33,8 @@ import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 
 /** Tests for {@link KubernetesJobAutoScalerContext}. */
@@ -63,7 +65,8 @@ public class KubernetesJobAutoScalerContextTest {
                                 new FlinkConfigManager(new Configuration()),
                                 null));
 
-        assertThat(context.getTaskManagerCpu()).isEqualTo(23.);
-        assertThat(context.getTaskManagerMemory()).isEqualTo(MemorySize.parse("1024mb"));
+        assertThat(context.getTaskManagerCpu()).isEqualTo(Optional.of(23.));
+        assertThat(context.getTaskManagerMemory())
+                .isEqualTo(Optional.of(MemorySize.parse("1024mb")));
     }
 }

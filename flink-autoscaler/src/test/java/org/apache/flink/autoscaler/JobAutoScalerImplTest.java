@@ -31,7 +31,10 @@ import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.client.program.rest.RestClusterClient;
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.metrics.Gauge;
 import org.apache.flink.metrics.Metric;
 import org.apache.flink.metrics.MetricGroup;
@@ -40,6 +43,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.metrics.groups.GenericMetricGroup;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -289,6 +293,31 @@ public class JobAutoScalerImplTest {
     }
 
     @Test
+    void testApplyConfigOverrides() throws Exception {
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        null, null, null, eventCollector, scalingRealizer, stateStore);
+
+        // Initially we should return empty overrides, do not crate any state
+        assertThat(stateStore.getConfigOverrides(context).toMap()).isEmpty();
+
+        var config = new Configuration();
+        config.set(TaskManagerOptions.TASK_HEAP_MEMORY, new MemorySize(42));
+        stateStore.storeConfigOverrides(context, config);
+        stateStore.flush(context);
+
+        autoscaler.applyConfigOverrides(context);
+        assertThat(getEvent().getMemoryOverride()).isEqualTo(new MemorySize(42));
+        assertThat(stateStore.getConfigOverrides(context)).isEqualTo(config);
+
+        // Disabling autoscaler should clear overrides
+        context.getConfiguration().setString(AUTOSCALER_ENABLED.key(), "false");
+        autoscaler.scale(context);
+        autoscaler.applyConfigOverrides(context);
+        assertThat(getEvent()).isNull();
+    }
+
+    @Test
     void testAutoscalerDisabled() throws Exception {
         context.getConfiguration().setBoolean(AUTOSCALER_ENABLED, false);
         context.getConfiguration().set(VERTEX_SCALING_HISTORY_AGE, Duration.ofMillis(200));
@@ -319,13 +348,28 @@ public class JobAutoScalerImplTest {
     }
 
     private void assertParallelismOverrides(Map<String, String> expectedOverrides) {
-        TestingScalingRealizer.Event<JobID, JobAutoScalerContext<JobID>> scalingEvent;
-        scalingEvent = scalingRealizer.events.poll();
-        if (expectedOverrides == null) {
-            assertThat(scalingEvent).isNull();
+        TestingScalingRealizer.Event<JobID, JobAutoScalerContext<JobID>> scalingEvent =
+                getEvent(expectedOverrides);
+        if (scalingEvent == null) {
             return;
         }
         assertThat(scalingEvent).isNotNull();
         assertEquals(expectedOverrides, scalingEvent.getParallelismOverrides());
+    }
+
+    @Nullable
+    private TestingScalingRealizer.Event<JobID, JobAutoScalerContext<JobID>> getEvent(
+            Map<String, String> expectedOverrides) {
+        var scalingEvent = getEvent();
+        if (expectedOverrides == null) {
+            assertThat(scalingEvent).isNull();
+            return null;
+        }
+        return scalingEvent;
+    }
+
+    @Nullable
+    private TestingScalingRealizer.Event<JobID, JobAutoScalerContext<JobID>> getEvent() {
+        return scalingRealizer.events.poll();
     }
 }

@@ -488,12 +488,20 @@ public class ScalingMetricsTest {
                 ScalingMetrics.computeGlobalMetrics(
                         Map.of(), Map.of(FlinkMetric.HEAP_USED, aggMax(100))));
         assertEquals(
-                Map.of(ScalingMetric.HEAP_USAGE, 0.5, ScalingMetric.GC_PRESSURE, 0.25),
+                Map.of(
+                        ScalingMetric.HEAP_MAX_USAGE_RATIO,
+                        0.5,
+                        ScalingMetric.GC_PRESSURE,
+                        0.25,
+                        ScalingMetric.HEAP_AVERAGE_SIZE,
+                        75.,
+                        ScalingMetric.HEAP_MAX_SIZE,
+                        200.),
                 ScalingMetrics.computeGlobalMetrics(
                         Map.of(),
                         Map.of(
                                 FlinkMetric.HEAP_USED,
-                                aggMax(100),
+                                aggAvgMax(75, 100),
                                 FlinkMetric.HEAP_MAX,
                                 aggMax(200.),
                                 FlinkMetric.TOTAL_GC_TIME_PER_SEC,
@@ -506,5 +514,9 @@ public class ScalingMetricsTest {
 
     private static AggregatedMetric aggMax(double max) {
         return new AggregatedMetric("", Double.NaN, max, Double.NaN, Double.NaN);
+    }
+
+    private static AggregatedMetric aggAvgMax(double avg, double max) {
+        return new AggregatedMetric("", Double.NaN, max, avg, Double.NaN);
     }
 }

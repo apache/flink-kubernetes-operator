@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler.config;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.MemorySize;
 
 import java.time.Duration;
 import java.util.List;
@@ -249,6 +250,22 @@ public class AutoScalerOptions {
                     .withFallbackKeys(oldOperatorConfigKey("memory.heap-usage.threshold"))
                     .withDescription(
                             "Max allowed percentage of heap usage during scaling operations. Autoscaling will be paused if the heap usage exceeds this threshold.");
+
+    public static final ConfigOption<Boolean> MEMORY_TUNING_ENABLED =
+            autoScalerConfig("memory.tuning.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.enabled"))
+                    .withDescription(
+                            "If enabled, the initial amount of memory specified for TaskManagers will be reduced according to the observed needs.");
+
+    public static final ConfigOption<MemorySize> MEMORY_TUNING_MIN_HEAP =
+            autoScalerConfig("memory.tuning.heap.min")
+                    .memoryType()
+                    .defaultValue(MemorySize.ofMebiBytes(2048L))
+                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.heap.min"))
+                    .withDescription(
+                            "The minimum amount of TaskManager memory, if memory tuning is enabled.");
 
     public static final ConfigOption<Integer> VERTEX_SCALING_HISTORY_COUNT =
             autoScalerConfig("history.max.count")

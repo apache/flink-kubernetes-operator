@@ -63,6 +63,18 @@
             <td>Max allowed percentage of heap usage during scaling operations. Autoscaling will be paused if the heap usage exceeds this threshold.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.memory.tuning.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>If enabled, the initial amount of memory specified for TaskManagers will be reduced according to the observed needs.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.memory.tuning.heap.min</h5></td>
+            <td style="word-wrap: break-word;">2 gb</td>
+            <td>MemorySize</td>
+            <td>The minimum amount of TaskManager memory, if memory tuning is enabled.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.metrics.busy-time.aggregator</h5></td>
             <td style="word-wrap: break-word;">MAX</td>
             <td><p>Enum</p></td>

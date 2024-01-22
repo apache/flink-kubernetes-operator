@@ -192,7 +192,9 @@ public class ScalingMetrics {
         var heapMax = collectedTmMetrics.get(FlinkMetric.HEAP_MAX);
         var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_USED);
         if (heapMax != null && heapUsed != null) {
-            out.put(ScalingMetric.HEAP_USAGE, heapUsed.getMax() / heapMax.getMax());
+            out.put(ScalingMetric.HEAP_AVERAGE_SIZE, heapUsed.getAvg());
+            out.put(ScalingMetric.HEAP_MAX_SIZE, heapMax.getMax());
+            out.put(ScalingMetric.HEAP_MAX_USAGE_RATIO, heapUsed.getMax() / heapMax.getMax());
         }
 
         return out;
@@ -209,6 +211,7 @@ public class ScalingMetrics {
         }
     }
 
+    // TODO: FLINK-34213: Consider using accumulated busy time instead of busyMsPerSecond
     private static double getBusyTimeMsPerSecond(
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             Configuration conf,

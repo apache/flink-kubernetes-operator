@@ -18,6 +18,9 @@
 package org.apache.flink.autoscaler.realizer;
 
 import org.apache.flink.autoscaler.JobAutoScalerContext;
+import org.apache.flink.configuration.MemorySize;
+
+import lombok.Getter;
 
 import java.util.LinkedList;
 import java.util.Map;
@@ -29,28 +32,33 @@ public class TestingScalingRealizer<KEY, Context extends JobAutoScalerContext<KE
     public final LinkedList<Event<KEY, Context>> events = new LinkedList<>();
 
     @Override
-    public void realize(Context context, Map<String, String> parallelismOverrides) {
+    public void realizeParallelismOverrides(
+            Context context, Map<String, String> parallelismOverrides) {
         events.add(new Event<>(context, parallelismOverrides));
+    }
+
+    @Override
+    public void realizeMemoryOverrides(Context context, MemorySize taskManagerMemoryOverride) {
+        events.add(new Event<>(context, taskManagerMemoryOverride));
     }
 
     /** The collected event. */
     public static class Event<KEY, Context extends JobAutoScalerContext<KEY>> {
 
-        private final Context context;
+        @Getter private final Context context;
 
-        private final Map<String, String> parallelismOverrides;
+        @Getter private Map<String, String> parallelismOverrides;
+
+        @Getter private MemorySize memoryOverride;
 
         public Event(Context context, Map<String, String> parallelismOverrides) {
             this.context = context;
             this.parallelismOverrides = parallelismOverrides;
         }
 
-        public Context getContext() {
-            return context;
-        }
-
-        public Map<String, String> getParallelismOverrides() {
-            return parallelismOverrides;
+        public Event(Context context, MemorySize taskManagerMemoryOverride) {
+            this.context = context;
+            this.memoryOverride = taskManagerMemoryOverride;
         }
     }
 }

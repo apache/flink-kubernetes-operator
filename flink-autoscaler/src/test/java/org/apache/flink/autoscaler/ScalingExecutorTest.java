@@ -28,6 +28,7 @@ import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -68,7 +69,7 @@ public class ScalingExecutorTest {
     private static final Map<ScalingMetric, EvaluatedScalingMetric> dummyGlobalMetrics =
             Map.of(
                     ScalingMetric.GC_PRESSURE, EvaluatedScalingMetric.of(Double.NaN),
-                    ScalingMetric.HEAP_USAGE, EvaluatedScalingMetric.of(Double.NaN));
+                    ScalingMetric.HEAP_MAX_USAGE_RATIO, EvaluatedScalingMetric.of(Double.NaN));
 
     @BeforeEach
     public void setup() {
@@ -223,7 +224,9 @@ public class ScalingExecutorTest {
                                 EvaluatedScalingMetric.of(9),
                                 ScalingMetric.GC_PRESSURE,
                                 EvaluatedScalingMetric.of(Double.NaN),
-                                ScalingMetric.HEAP_USAGE,
+                                ScalingMetric.HEAP_MAX_USAGE_RATIO,
+                                EvaluatedScalingMetric.of(Double.NaN),
+                                ScalingMetric.HEAP_MAX_SIZE,
                                 EvaluatedScalingMetric.of(Double.NaN)));
 
         // Would normally scale without resource usage check
@@ -254,6 +257,43 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now));
+    }
+
+    @Test
+    public void testMemoryTuning() throws Exception {
+        context = TestingAutoscalerUtils.createResourceAwareContext();
+        context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
+        context.getConfiguration().set(TaskManagerOptions.NUM_TASK_SLOTS, 5);
+
+        var source = new JobVertexID();
+        var sink = new JobVertexID();
+        var now = Instant.now();
+
+        var globalMetrics =
+                Map.of(
+                        ScalingMetric.NUM_TASK_SLOTS_USED,
+                        EvaluatedScalingMetric.of(9),
+                        ScalingMetric.HEAP_AVERAGE_SIZE,
+                        EvaluatedScalingMetric.avg(MemorySize.parse("5 Gb").getBytes()),
+                        ScalingMetric.HEAP_MAX_SIZE,
+                        EvaluatedScalingMetric.of(MemorySize.parse("10 Gb").getBytes()),
+                        ScalingMetric.HEAP_MAX_USAGE_RATIO,
+                        EvaluatedScalingMetric.of(Double.NaN),
+                        ScalingMetric.GC_PRESSURE,
+                        EvaluatedScalingMetric.of(Double.NaN));
+        var vertexMetrics =
+                Map.of(source, evaluated(10, 50, 100, 50, 0), sink, evaluated(10, 50, 100, 50, 0));
+        var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
+
+        assertTrue(
+                scalingDecisionExecutor.scaleResource(
+                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+        assertEquals(
+                "2.133gb (2290649224 bytes)",
+                stateStore
+                        .getConfigOverrides(context)
+                        .get(TaskManagerOptions.TASK_HEAP_MEMORY)
+                        .toHumanReadableString());
     }
 
     @ParameterizedTest
@@ -350,7 +390,7 @@ public class ScalingExecutorTest {
                         Map.of(
                                 ScalingMetric.GC_PRESSURE,
                                 EvaluatedScalingMetric.of(Double.NaN),
-                                ScalingMetric.HEAP_USAGE,
+                                ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 EvaluatedScalingMetric.of(Double.NaN)));
 
         // Baseline, no GC/Heap metrics
@@ -365,7 +405,7 @@ public class ScalingExecutorTest {
                         Map.of(
                                 ScalingMetric.GC_PRESSURE,
                                 EvaluatedScalingMetric.of(0.49),
-                                ScalingMetric.HEAP_USAGE,
+                                ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 new EvaluatedScalingMetric(0.9, 0.79)));
         assertTrue(
                 scalingDecisionExecutor.scaleResource(
@@ -380,7 +420,7 @@ public class ScalingExecutorTest {
                         Map.of(
                                 ScalingMetric.GC_PRESSURE,
                                 EvaluatedScalingMetric.of(0.51),
-                                ScalingMetric.HEAP_USAGE,
+                                ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 new EvaluatedScalingMetric(0.9, 0.79)));
         assertFalse(
                 scalingDecisionExecutor.scaleResource(
@@ -395,7 +435,7 @@ public class ScalingExecutorTest {
                         Map.of(
                                 ScalingMetric.GC_PRESSURE,
                                 EvaluatedScalingMetric.of(0.49),
-                                ScalingMetric.HEAP_USAGE,
+                                ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 new EvaluatedScalingMetric(0.6, 0.81)));
         assertFalse(
                 scalingDecisionExecutor.scaleResource(
@@ -405,10 +445,11 @@ public class ScalingExecutorTest {
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
-            int parallelism, double target, double procRate, double catchupRate) {
+            int parallelism, double current, double target, double procRate, double catchupRate) {
         var metrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
         metrics.put(ScalingMetric.PARALLELISM, EvaluatedScalingMetric.of(parallelism));
         metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(720));
+        metrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, EvaluatedScalingMetric.avg(current));
         metrics.put(ScalingMetric.TARGET_DATA_RATE, new EvaluatedScalingMetric(target, target));
         metrics.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchupRate));
         metrics.put(
@@ -418,6 +459,11 @@ public class ScalingExecutorTest {
         ScalingMetricEvaluator.computeProcessingRateThresholds(
                 metrics, context.getConfiguration(), false, restartTime);
         return metrics;
+    }
+
+    private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
+            int parallelism, double target, double procRate, double catchupRate) {
+        return evaluated(parallelism, Double.NaN, target, procRate, catchupRate);
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(

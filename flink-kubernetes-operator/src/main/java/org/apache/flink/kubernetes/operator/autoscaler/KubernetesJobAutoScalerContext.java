@@ -26,6 +26,7 @@ import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.function.SupplierWithException;
@@ -56,12 +57,32 @@ public class KubernetesJobAutoScalerContext extends JobAutoScalerContext<Resourc
                 jobStatus,
                 configuration,
                 metricGroup,
-                Optional.ofNullable(configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU))
-                        .orElse(0.),
-                Optional.ofNullable(configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY))
-                        .orElse(MemorySize.ZERO),
                 restClientSupplier);
         this.resourceContext = resourceContext;
+    }
+
+    @Override
+    public Optional<Double> getTaskManagerCpu() {
+        return Optional.ofNullable(
+                getConfiguration().get(KubernetesConfigOptions.TASK_MANAGER_CPU));
+    }
+
+    @Override
+    public Optional<MemorySize> getTaskManagerMemory() {
+        return Optional.ofNullable(getConfiguration().get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
+
+    @Override
+    public Optional<MemorySize> getTaskManagerMemoryFromSpec() {
+        return getJobDeployment()
+                .map(
+                        flinkDeployment ->
+                                MemorySize.parse(
+                                        flinkDeployment
+                                                .getSpec()
+                                                .getTaskManager()
+                                                .getResource()
+                                                .getMemory()));
     }
 
     public AbstractFlinkResource<?, ?> getResource() {
@@ -70,5 +91,13 @@ public class KubernetesJobAutoScalerContext extends JobAutoScalerContext<Resourc
 
     public KubernetesClient getKubernetesClient() {
         return resourceContext.getKubernetesClient();
+    }
+
+    private Optional<FlinkDeployment> getJobDeployment() {
+        AbstractFlinkResource<?, ?> resource = resourceContext.getResource();
+        if (resource instanceof FlinkDeployment) {
+            return Optional.of((FlinkDeployment) resource);
+        }
+        return Optional.empty();
     }
 }

@@ -33,6 +33,8 @@ import lombok.ToString;
 
 import javax.annotation.Nullable;
 
+import java.util.Optional;
+
 /**
  * The job autoscaler context, it includes all details related to the current job.
  *
@@ -56,14 +58,25 @@ public class JobAutoScalerContext<KEY> {
 
     @Getter private final MetricGroup metricGroup;
 
-    /** Task manager CPU as a fraction (if available). */
-    @Getter private final double taskManagerCpu;
-
-    /** Task manager memory size (if available). */
-    @Getter @Nullable private final MemorySize taskManagerMemory;
-
     @ToString.Exclude
     private final SupplierWithException<RestClusterClient<String>, Exception> restClientSupplier;
+
+    /** Retrieve the currently configured TaskManager CPU for this context. */
+    public Optional<Double> getTaskManagerCpu() {
+        // Not supported by default
+        return Optional.empty();
+    }
+
+    /** Retrieve the currently tuned TaskManager memory for this context. */
+    public Optional<MemorySize> getTaskManagerMemory() {
+        // Not supported by default
+        return Optional.empty();
+    }
+
+    /* Get the max amount of memory for the deployment. */
+    public Optional<MemorySize> getTaskManagerMemoryFromSpec() {
+        return Optional.empty();
+    }
 
     public RestClusterClient<String> getRestClusterClient() throws Exception {
         return restClientSupplier.get();

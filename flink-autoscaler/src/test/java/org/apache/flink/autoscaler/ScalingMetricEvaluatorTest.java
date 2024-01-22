@@ -576,7 +576,7 @@ public class ScalingMetricEvaluatorTest {
 
         assertEquals(
                 Map.of(
-                        ScalingMetric.HEAP_USAGE,
+                        ScalingMetric.HEAP_MAX_USAGE_RATIO,
                         EvaluatedScalingMetric.of(Double.NaN),
                         ScalingMetric.GC_PRESSURE,
                         EvaluatedScalingMetric.of(Double.NaN),
@@ -589,10 +589,14 @@ public class ScalingMetricEvaluatorTest {
                 new CollectedMetrics(
                         Map.of(),
                         Map.of(),
-                        Map.of(ScalingMetric.HEAP_USAGE, 0.5, ScalingMetric.GC_PRESSURE, 0.6)));
+                        Map.of(
+                                ScalingMetric.HEAP_MAX_USAGE_RATIO,
+                                0.5,
+                                ScalingMetric.GC_PRESSURE,
+                                0.6)));
         assertEquals(
                 Map.of(
-                        ScalingMetric.HEAP_USAGE,
+                        ScalingMetric.HEAP_MAX_USAGE_RATIO,
                         new EvaluatedScalingMetric(0.5, 0.5),
                         ScalingMetric.GC_PRESSURE,
                         EvaluatedScalingMetric.of(0.6),
@@ -606,7 +610,7 @@ public class ScalingMetricEvaluatorTest {
                         Map.of(),
                         Map.of(),
                         Map.of(
-                                ScalingMetric.HEAP_USAGE,
+                                ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 0.7,
                                 ScalingMetric.GC_PRESSURE,
                                 0.8,
@@ -614,7 +618,7 @@ public class ScalingMetricEvaluatorTest {
                                 42.)));
         assertEquals(
                 Map.of(
-                        ScalingMetric.HEAP_USAGE,
+                        ScalingMetric.HEAP_MAX_USAGE_RATIO,
                         new EvaluatedScalingMetric(0.7, 0.6),
                         ScalingMetric.GC_PRESSURE,
                         EvaluatedScalingMetric.of(0.8),

@@ -25,6 +25,7 @@ import org.apache.flink.autoscaler.ScalingTracking;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.utils.AutoScalerSerDeModule;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -46,6 +47,7 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 import static org.apache.flink.autoscaler.jdbc.state.StateType.COLLECTED_METRICS;
+import static org.apache.flink.autoscaler.jdbc.state.StateType.CONFIG_OVERRIDES;
 import static org.apache.flink.autoscaler.jdbc.state.StateType.PARALLELISM_OVERRIDES;
 import static org.apache.flink.autoscaler.jdbc.state.StateType.SCALING_HISTORY;
 import static org.apache.flink.autoscaler.jdbc.state.StateType.SCALING_TRACKING;
@@ -190,6 +192,28 @@ public class JdbcAutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
     }
 
     @Override
+    public void storeConfigOverrides(Context jobContext, Configuration configOverrides) {
+        jdbcStateStore.putSerializedState(
+                getSerializeKey(jobContext),
+                CONFIG_OVERRIDES,
+                serializeParallelismOverrides(configOverrides.toMap()));
+    }
+
+    @Nonnull
+    @Override
+    public Configuration getConfigOverrides(Context jobContext) {
+        return jdbcStateStore
+                .getSerializedState(getSerializeKey(jobContext), CONFIG_OVERRIDES)
+                .map(JdbcAutoScalerStateStore::deserializeConfigOverrides)
+                .orElse(new Configuration());
+    }
+
+    @Override
+    public void removeConfigOverrides(Context jobContext) {
+        jdbcStateStore.removeSerializedState(getSerializeKey(jobContext), CONFIG_OVERRIDES);
+    }
+
+    @Override
     public void clearAll(Context jobContext) {
         jdbcStateStore.clearAll(getSerializeKey(jobContext));
     }
@@ -250,5 +274,13 @@ public class JdbcAutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
 
     private static Map<String, String> deserializeParallelismOverrides(String overrides) {
         return ConfigurationUtils.convertValue(overrides, Map.class);
+    }
+
+    private static String serializeConfigOverrides(Configuration overrides) {
+        return ConfigurationUtils.convertValue(overrides.toMap(), String.class);
+    }
+
+    private static Configuration deserializeConfigOverrides(String overrides) {
+        return Configuration.fromMap(ConfigurationUtils.convertValue(overrides, Map.class));
     }
 }
