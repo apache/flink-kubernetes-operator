@@ -66,13 +66,6 @@ under the License.
             <scope>provided</scope>
         </dependency>
 
-        <!-- TODO FLINK-33098: These jackson dependencies can be replaced with flink shaded jackson. It can be done
-        after the flink-1.18.1 is released. -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-        </dependency>
-
         <!-- Test dependencies -->
 
         <dependency>

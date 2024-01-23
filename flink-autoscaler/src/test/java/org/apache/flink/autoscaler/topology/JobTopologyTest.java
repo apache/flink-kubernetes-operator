@@ -23,7 +23,8 @@ import org.apache.flink.runtime.jobgraph.jsonplan.JsonPlanGenerator;
 import org.apache.flink.runtime.scheduler.SchedulerBase;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
