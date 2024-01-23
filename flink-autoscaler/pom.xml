@@ -53,19 +53,6 @@ under the License.
             <scope>provided</scope>
         </dependency>
 
-        <!-- TODO FLINK-33098: These jackson dependencies can be replaced with flink shaded jackson. It can be done
-        after the flink-1.18 is released, because the shaded jackson version of flink-1.17 is 2.13.4,
-        it doesn't support loaderOptions. -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-core</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>org.quartz-scheduler</groupId>
             <artifactId>quartz</artifactId>
