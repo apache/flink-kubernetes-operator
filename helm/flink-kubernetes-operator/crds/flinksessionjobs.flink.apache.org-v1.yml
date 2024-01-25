@@ -217,6 +217,8 @@ spec:
                 type: object
               error:
                 type: string
+              observedGeneration:
+                type: integer
               lifecycleState:
                 enum:
                 - CREATED
