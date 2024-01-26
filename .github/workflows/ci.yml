@@ -87,6 +87,7 @@ jobs:
           - test_sessionjob_operations.sh
           - test_multi_sessionjob.sh
           - test_autoscaler.sh
+          - test_flink_operator_ha.sh
         include:
           - namespace: flink
             extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
@@ -113,12 +114,18 @@ jobs:
             test: test_autoscaler.sh
           - version: v1_15
             test: test_dynamic_config.sh
+          - version: v1_15
+            test: test_flink_operator_ha.sh
           - version: v1_16
             test: test_autoscaler.sh
           - version: v1_16
             test: test_dynamic_config.sh
+          - version: v1_16
+            test: test_flink_operator_ha.sh
           - version: v1_17
             test: test_dynamic_config.sh
+          - version: v1_17
+            test: test_flink_operator_ha.sh
           - version: v1_15
             java-version: 17
           - version: v1_16
@@ -164,9 +171,14 @@ jobs:
           docker images
       - name: Start the operator
         run: |
+          if [[ "${{ matrix.test }}" == "test_flink_operator_ha.sh" ]]; then
+            sed -i "s/# kubernetes.operator.leader-election.enabled: false/kubernetes.operator.leader-election.enabled: true/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
+            sed -i "s/# kubernetes.operator.leader-election.lease-name: flink-operator-lease/kubernetes.operator.leader-election.lease-name: flink-operator-lease/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
+            sed -i "s/replicas: 1/replicas: 2/" helm/flink-kubernetes-operator/values.yaml
+          fi 
           helm --debug install flink-kubernetes-operator -n ${{ matrix.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.extraArgs }}
           kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.namespace }} deploy/flink-kubernetes-operator
-          kubectl get pods
+          kubectl get pods -n ${{ matrix.namespace }}
       - name: Run Flink e2e tests
         run: |
           sed -i "s/image: flink:.*/image: ${{ matrix.image }}/" e2e-tests/data/*.yaml

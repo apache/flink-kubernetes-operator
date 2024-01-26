@@ -37,16 +37,16 @@ function wait_for_logs {
 }
 
 function wait_for_operator_logs {
-  local successful_response_regex=$1
-  local timeout=$2
-  operator_pod_name=$(get_operator_pod_name)
+  local operator_pod_name=$1
+  local successful_response_regex=$2
+  local timeout=$3
   operator_pod_namespace=$(get_operator_pod_namespace)
 
     # wait or timeout until the log shows up
-  echo "Waiting for operator log \"$1\"..."
+  echo "Waiting for operator log \"$2\"..."
   for i in $(seq 1 ${timeout}); do
-    if kubectl logs $operator_pod_name -c flink-kubernetes-operator -n "${operator_pod_namespace}" | grep -E "${successful_response_regex}" >/dev/null; then
-      echo "Log \"$1\" shows up."
+    if kubectl logs "${operator_pod_name}" -c flink-kubernetes-operator -n "${operator_pod_namespace}" | grep -E "${successful_response_regex}" >/dev/null; then
+      echo "Log \"$2\" shows up."
       return
     fi
 
@@ -124,12 +124,14 @@ function wait_for_jobmanager_running() {
 }
 
 function get_operator_pod_namespace() {
-    operator_pod_namespace=$(kubectl get pods --selector="app.kubernetes.io/name=flink-kubernetes-operator" -o jsonpath='{..metadata.namespace}' --all-namespaces)
-    if [ "$(grep -c . <<<"${operator_pod_namespace}")" != 1 ]; then
-      echo "Invalid operator pod namespace: ${operator_pod_namespace}" >&2
+    # It will return multiple namespaces split by empty space if there are multiple operator instance in HA mode
+    operator_pod_namespaces=$(kubectl get pods --selector="app.kubernetes.io/name=flink-kubernetes-operator" -o jsonpath='{..metadata.namespace}' --all-namespaces)
+    operator_pod_namespac_array=(${operator_pod_namespaces})
+    if [ "$(grep -c . <<<"${operator_pod_namespac_array[0]}")" != 1 ]; then
+      echo "Invalid operator pod namespace: ${operator_pod_namespac_array[0]}" >&2
       exit 1
     fi
-    echo "${operator_pod_namespace}"
+    echo "${operator_pod_namespac_array[0]}"
 }
 
 function get_operator_pod_name() {
@@ -184,17 +186,52 @@ function patch_flink_config() {
   kubectl patch cm flink-operator-config -n "${operator_pod_namespace}" --type merge -p "${patch}"
 }
 
+function display_current_lease_info() {
+  operator_pod_namespace=$(get_operator_pod_namespace)
+  lease=$(kubectl get lease flink-operator-lease -o yaml -n "${operator_pod_namespace}")
+  echo "Current lease content: ${lease}"
+}
+
+function find_operator_pod_with_leadership() {
+  operator_pod_namespace=$(get_operator_pod_namespace)
+  active_pod_name=$(kubectl get lease flink-operator-lease -o jsonpath='{..spec.holderIdentity}' -n "${operator_pod_namespace}")
+  if [ "$(grep -c . <<<"${active_pod_name}")" != 1 ]; then
+    echo "Invalid leader operator pod name: ${active_pod_name}" >&2
+    exit 1
+  fi
+  echo "${active_pod_name}"
+}
+
+function delete_operator_pod_with_leadership() {
+  active_pod_name=$(find_operator_pod_with_leadership)
+  echo "Leader Operator Pod is ${active_pod_name}"
+  kubectl delete pod "${active_pod_name}" -n "${operator_pod_namespace}"
+  echo "Leader Operator Pod ${active_pod_name} is deleted"
+}
+
 function debug_and_show_logs {
     echo "Debugging failed e2e test:"
     echo "Currently existing Kubernetes resources"
     kubectl get all
     kubectl describe all
 
-    echo "Operator logs:"
     operator_pod_namespace=$(get_operator_pod_namespace)
-    operator_pod_name=$(get_operator_pod_name)
-    echo "Operator namespace: ${operator_pod_namespace} pod: ${operator_pod_name}"
-    kubectl logs -n "${operator_pod_namespace}" "${operator_pod_name}"
+    operator_pod_names=$(get_operator_pod_name)
+    echo "Currently existing Kubernetes resources of operator namespace"
+    kubectl get all -n "${operator_pod_namespace}"
+    kubectl describe all -n "${operator_pod_namespace}"
+
+    operator_pod_namespaces_array=(${operator_pod_names})
+    length=${#operator_pod_namespaces_array[@]}
+
+    # There are two operator pods in HA mode
+    for (( i=0; i<${length}; i++ ));
+    do
+      echo "Operator ${operator_pod_namespaces_array[$i]} logs:"
+      echo "Operator namespace: ${operator_pod_namespace} pod: ${operator_pod_namespaces_array[$i]}}"
+
+      kubectl logs -n "${operator_pod_namespace}" "${operator_pod_namespaces_array[$i]}"
+    done
 
     echo "Flink logs:"
     kubectl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | while read pod;do
