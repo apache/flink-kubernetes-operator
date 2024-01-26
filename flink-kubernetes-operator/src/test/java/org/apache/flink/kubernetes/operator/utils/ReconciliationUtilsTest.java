@@ -34,6 +34,7 @@ import java.time.Clock;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for {@link org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils}. */
@@ -97,5 +98,17 @@ public class ReconciliationUtilsTest {
         updateControl =
                 ReconciliationUtils.toUpdateControl(operatorConfiguration, current, previous, true);
         assertEquals(0, updateControl.getScheduleDelay().get());
+    }
+
+    @Test
+    public void testObservedGenerationStatus() throws Exception {
+        FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
+        app.getSpec().getJob().setState(JobState.RUNNING);
+        app.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
+        app.getMetadata().setGeneration(1L);
+        assertNull(app.getStatus().getObservedGeneration());
+        ReconciliationUtils.updateStatusForDeployedSpec(app, new Configuration());
+        ReconciliationUtils.updateStatusBeforeDeploymentAttempt(app, new Configuration());
+        assertEquals(1L, app.getStatus().getObservedGeneration());
     }
 }

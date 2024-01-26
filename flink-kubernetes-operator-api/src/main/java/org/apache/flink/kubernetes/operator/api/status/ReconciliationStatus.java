@@ -81,6 +81,7 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
     public void serializeAndSetLastReconciledSpec(
             SPEC spec, AbstractFlinkResource<SPEC, ?> resource) {
         setLastReconciledSpec(SpecUtils.writeSpecWithMeta(spec, resource));
+        resource.getStatus().setObservedGeneration(resource.getMetadata().getGeneration());
     }
 
     public void markReconciledSpecAsStable() {

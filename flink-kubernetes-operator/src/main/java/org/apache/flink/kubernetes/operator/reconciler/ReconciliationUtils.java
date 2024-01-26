@@ -420,10 +420,7 @@ public class ReconciliationUtils {
                 // running
                 deployment.getSpec().getJob().setState(JobState.RUNNING);
             }
-            deployment
-                    .getMetadata()
-                    .setGeneration(
-                            lastReconciledSpecWithMeta.getMeta().getMetadata().getGeneration());
+            deployment.getMetadata().setGeneration(status.getObservedGeneration());
             return true;
         }
     }
@@ -469,16 +466,9 @@ public class ReconciliationUtils {
      * @return The spec generation for the upgrade.
      */
     public static Long getUpgradeTargetGeneration(AbstractFlinkResource<?, ?> resource) {
-        var lastSpecWithMeta =
-                resource.getStatus()
-                        .getReconciliationStatus()
-                        .deserializeLastReconciledSpecWithMeta();
+        var observedGeneration = resource.getStatus().getObservedGeneration();
 
-        if (lastSpecWithMeta.getMeta() == null) {
-            return -1L;
-        }
-
-        return lastSpecWithMeta.getMeta().getMetadata().getGeneration();
+        return observedGeneration == null ? -1L : observedGeneration;
     }
 
     /**
@@ -569,5 +559,6 @@ public class ReconciliationUtils {
 
         reconciliationStatus.setLastReconciledSpec(
                 SpecUtils.writeSpecWithMeta(lastSpecWithMeta.getSpec(), newMeta));
+        resource.getStatus().setObservedGeneration(resource.getMetadata().getGeneration());
     }
 }
