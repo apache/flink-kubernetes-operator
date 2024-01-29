@@ -19,6 +19,7 @@ package org.apache.flink.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
@@ -69,6 +70,7 @@ import java.util.stream.Stream;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.updateVertexList;
 import static org.apache.flink.autoscaler.utils.AutoScalerUtils.excludeVerticesFromScaling;
 import static org.apache.flink.autoscaler.utils.DateTimeUtils.readable;
+import static org.apache.flink.util.Preconditions.checkState;
 
 /** Metric collector using flink rest api. */
 public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerContext<KEY>> {
@@ -104,17 +106,17 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
 
         var jobDetailsInfo =
                 getJobDetailsInfo(ctx, conf.get(AutoScalerOptions.FLINK_CLIENT_TIMEOUT));
-        var jobUpdateTs = getJobUpdateTs(jobDetailsInfo);
+        var jobRunningTs = getJobRunningTs(jobDetailsInfo);
         // We detect job change compared to our collected metrics by checking against the earliest
         // metric timestamp
-        if (!metricHistory.isEmpty() && jobUpdateTs.isAfter(metricHistory.firstKey())) {
-            LOG.info("Job updated at {}. Clearing metrics.", readable(jobUpdateTs));
+        if (!metricHistory.isEmpty() && jobRunningTs.isAfter(metricHistory.firstKey())) {
+            LOG.info("Job updated at {}. Clearing metrics.", readable(jobRunningTs));
             stateStore.removeCollectedMetrics(ctx);
             cleanup(ctx.getJobKey());
             metricHistory.clear();
         }
         var topology = getJobTopology(ctx, stateStore, jobDetailsInfo);
-        var stableTime = jobUpdateTs.plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
+        var stableTime = jobRunningTs.plus(conf.get(AutoScalerOptions.STABILIZATION_INTERVAL));
         final boolean isStabilizing = now.isBefore(stableTime);
 
         // Calculate timestamp when the metric windows is full
@@ -181,9 +183,12 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
     }
 
     @VisibleForTesting
-    protected Instant getJobUpdateTs(JobDetailsInfo jobDetailsInfo) {
-        return Instant.ofEpochMilli(
-                jobDetailsInfo.getTimestamps().values().stream().max(Long::compare).get());
+    protected Instant getJobRunningTs(JobDetailsInfo jobDetailsInfo) {
+        final Map<JobStatus, Long> timestamps = jobDetailsInfo.getTimestamps();
+
+        final Long runningTs = timestamps.get(JobStatus.RUNNING);
+        checkState(runningTs != null, "Unable to find when the job was switched to RUNNING.");
+        return Instant.ofEpochMilli(runningTs);
     }
 
     protected JobTopology getJobTopology(

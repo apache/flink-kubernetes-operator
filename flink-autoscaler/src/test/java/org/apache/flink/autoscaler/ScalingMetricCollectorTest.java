@@ -95,7 +95,7 @@ public class ScalingMetricCollectorTest {
                         Map.of(),
                         new JobPlanInfo.RawJson(""));
         var metricsCollector = new RestApiMetricsCollector<>();
-        assertEquals(Instant.ofEpochMilli(3L), metricsCollector.getJobUpdateTs(details));
+        assertEquals(Instant.ofEpochMilli(3L), metricsCollector.getJobRunningTs(details));
     }
 
     @Test
