@@ -229,7 +229,9 @@ public class NativeFlinkServiceTest {
         var reconStatus = flinkDep.getStatus().getReconciliationStatus();
         reconStatus.serializeAndSetLastReconciledSpec(spec, flinkDep);
 
-        appConfig.set(PipelineOptions.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "4"));
+        appConfig.set(
+                PipelineOptions.PARALLELISM_OVERRIDES,
+                Map.of(v1.toHexString(), "4", v2.toHexString(), "1"));
         spec.setFlinkConfiguration(appConfig.toMap());
 
         flinkDep.getStatus().getJobStatus().setState("RUNNING");
@@ -256,13 +258,15 @@ public class NativeFlinkServiceTest {
                 Map.of(
                         v1,
                                 new JobVertexResourceRequirements(
-                                        new JobVertexResourceRequirements.Parallelism(4, 4)),
+                                        new JobVertexResourceRequirements.Parallelism(1, 4)),
                         v2,
                                 new JobVertexResourceRequirements(
-                                        new JobVertexResourceRequirements.Parallelism(2, 2))),
+                                        new JobVertexResourceRequirements.Parallelism(1, 1))),
                 updated.get());
 
         // Baseline
+        appConfig.set(PipelineOptions.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "4"));
+        spec.setFlinkConfiguration(appConfig.toMap());
         testScaleConditionDep(
                 flinkDep, service, d -> {}, FlinkService.ScalingResult.SCALING_TRIGGERED);
         testScaleConditionLastSpec(
