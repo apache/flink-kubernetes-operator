@@ -200,9 +200,15 @@ public class NativeFlinkService extends AbstractFlinkService {
                 var overrideStr = newOverrides.get(jobId);
 
                 if (overrideStr != null) {
-                    // We have an override for the vertex
-                    int p = Integer.parseInt(overrideStr);
-                    var newParallelism = new JobVertexResourceRequirements.Parallelism(p, p);
+                    // We set the parallelism upper bound to the target parallelism, anything higher
+                    // would defeat the purpose of scaling down
+                    int upperBound = Integer.parseInt(overrideStr);
+                    // We only change the lower bound if the new parallelism went below it. As we
+                    // cannot guarantee that new resources can be acquired, increasing the lower
+                    // bound to the target could potentially cause job failure.
+                    int lowerBound = Math.min(upperBound, parallelism.getLowerBound());
+                    var newParallelism =
+                            new JobVertexResourceRequirements.Parallelism(lowerBound, upperBound);
                     // If the requirements changed we mark this as scaling triggered
                     if (!parallelism.equals(newParallelism)) {
                         entry.setValue(new JobVertexResourceRequirements(newParallelism));
