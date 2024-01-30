@@ -225,8 +225,6 @@ public class ScalingExecutorTest {
                                 ScalingMetric.GC_PRESSURE,
                                 EvaluatedScalingMetric.of(Double.NaN),
                                 ScalingMetric.HEAP_MAX_USAGE_RATIO,
-                                EvaluatedScalingMetric.of(Double.NaN),
-                                ScalingMetric.HEAP_MAX_SIZE,
                                 EvaluatedScalingMetric.of(Double.NaN)));
 
         // Would normally scale without resource usage check
@@ -264,6 +262,8 @@ public class ScalingExecutorTest {
         context = TestingAutoscalerUtils.createResourceAwareContext();
         context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
         context.getConfiguration().set(TaskManagerOptions.NUM_TASK_SLOTS, 5);
+        context.getConfiguration()
+                .set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.parse("30 gb"));
 
         var source = new JobVertexID();
         var sink = new JobVertexID();
@@ -275,8 +275,6 @@ public class ScalingExecutorTest {
                         EvaluatedScalingMetric.of(9),
                         ScalingMetric.HEAP_AVERAGE_SIZE,
                         EvaluatedScalingMetric.avg(MemorySize.parse("5 Gb").getBytes()),
-                        ScalingMetric.HEAP_MAX_SIZE,
-                        EvaluatedScalingMetric.of(MemorySize.parse("10 Gb").getBytes()),
                         ScalingMetric.HEAP_MAX_USAGE_RATIO,
                         EvaluatedScalingMetric.of(Double.NaN),
                         ScalingMetric.GC_PRESSURE,
@@ -289,7 +287,7 @@ public class ScalingExecutorTest {
                 scalingDecisionExecutor.scaleResource(
                         context, metrics, new HashMap<>(), new ScalingTracking(), now));
         assertEquals(
-                "2.133gb (2290649224 bytes)",
+                "5.000gb (5368709120 bytes)",
                 stateStore
                         .getConfigOverrides(context)
                         .get(TaskManagerOptions.TASK_HEAP_MEMORY)

@@ -118,15 +118,10 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return false;
         }
 
-        var tmHeapMemoryOpt =
-                MemoryTuningUtils.tuneTaskManagerHeapMemory(
-                        context, evaluatedMetrics, scalingSummaries);
-        var tmTotalMemory =
-                MemoryTuningUtils.adjustTotalTmMemory(
-                        context, tmHeapMemoryOpt.orElse(MemorySize.ZERO), evaluatedMetrics);
+        var tuningConfig = MemoryTuningUtils.tuneTaskManagerHeapMemory(context, evaluatedMetrics);
 
         if (scalingWouldExceedClusterResources(
-                tmTotalMemory, evaluatedMetrics, scalingSummaries, context)) {
+                tuningConfig, evaluatedMetrics, scalingSummaries, context)) {
             return false;
         }
 
@@ -141,11 +136,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 getVertexParallelismOverrides(
                         evaluatedMetrics.getVertexMetrics(), scalingSummaries));
 
-        if (tmHeapMemoryOpt.isPresent()) {
-            Configuration configOverrides = autoScalerStateStore.getConfigOverrides(context);
-            configOverrides.set(TaskManagerOptions.TASK_HEAP_MEMORY, tmHeapMemoryOpt.get());
-            autoScalerStateStore.storeConfigOverrides(context, configOverrides);
-        }
+        autoScalerStateStore.storeConfigOverrides(context, tuningConfig);
 
         return true;
     }
@@ -274,12 +265,13 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     }
 
     private boolean scalingWouldExceedClusterResources(
-            MemorySize taskManagerMemory,
+            Configuration tuningConfig,
             EvaluatedMetrics evaluatedMetrics,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             JobAutoScalerContext<?> ctx) {
 
         final double taskManagerCpu = ctx.getTaskManagerCpu().orElse(0.);
+        final MemorySize taskManagerMemory = MemoryTuningUtils.getTotalMemory(tuningConfig, ctx);
 
         if (taskManagerCpu <= 0 || taskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
             // We can't extract the requirements, we can't make any assumptions

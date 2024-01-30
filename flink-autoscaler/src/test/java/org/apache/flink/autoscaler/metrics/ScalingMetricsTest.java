@@ -494,9 +494,7 @@ public class ScalingMetricsTest {
                         ScalingMetric.GC_PRESSURE,
                         0.25,
                         ScalingMetric.HEAP_AVERAGE_SIZE,
-                        75.,
-                        ScalingMetric.HEAP_MAX_SIZE,
-                        200.),
+                        75.),
                 ScalingMetrics.computeGlobalMetrics(
                         Map.of(),
                         Map.of(

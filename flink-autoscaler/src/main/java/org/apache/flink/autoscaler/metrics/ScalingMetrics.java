@@ -193,7 +193,6 @@ public class ScalingMetrics {
         var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_USED);
         if (heapMax != null && heapUsed != null) {
             out.put(ScalingMetric.HEAP_AVERAGE_SIZE, heapUsed.getAvg());
-            out.put(ScalingMetric.HEAP_MAX_SIZE, heapMax.getMax());
             out.put(ScalingMetric.HEAP_MAX_USAGE_RATIO, heapUsed.getMax() / heapMax.getMax());
         }
 

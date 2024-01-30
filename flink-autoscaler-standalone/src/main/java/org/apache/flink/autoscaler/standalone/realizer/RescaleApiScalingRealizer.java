@@ -27,7 +27,6 @@ import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
-import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.jobgraph.JobResourceRequirements;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
@@ -127,12 +126,12 @@ public class RescaleApiScalingRealizer<KEY, Context extends JobAutoScalerContext
     }
 
     @Override
-    public void realizeMemoryOverrides(Context context, MemorySize taskManagerMemoryOverride) {
+    public void realizeMemoryOverrides(Context context, Configuration configOverrides) {
         // Not currently supported
         LOG.warn(
-                "{} does not support updating the TaskManager memory size ({})",
+                "{} does not support updating the TaskManager configuration ({})",
                 getClass().getSimpleName(),
-                taskManagerMemoryOverride);
+                configOverrides);
     }
 
     private Map<JobVertexID, JobVertexResourceRequirements> getVertexResources(

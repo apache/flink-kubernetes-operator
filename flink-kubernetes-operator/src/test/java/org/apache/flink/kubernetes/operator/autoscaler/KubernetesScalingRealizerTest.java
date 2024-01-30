@@ -17,7 +17,8 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
-import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 
@@ -66,7 +67,12 @@ public class KubernetesScalingRealizerTest {
         KubernetesJobAutoScalerContext ctx =
                 TestingKubernetesAutoscalerUtils.createContext("test", null);
 
-        new KubernetesScalingRealizer().realizeMemoryOverrides(ctx, new MemorySize(42));
+        var overrides = new Configuration();
+        overrides.setString(
+                AutoScalerOptions.AUTOSCALER_CONF_PREFIX
+                        + "memory.tuning.internal.desired-container-memory.bytes",
+                "42");
+        new KubernetesScalingRealizer().realizeMemoryOverrides(ctx, overrides);
 
         assertThat(ctx.getResource()).isInstanceOf(FlinkDeployment.class);
         assertThat(
@@ -75,7 +81,7 @@ public class KubernetesScalingRealizerTest {
                                 .getTaskManager()
                                 .getResource()
                                 .getMemory())
-                .isEqualTo("42 bytes");
+                .isEqualTo("42");
     }
 
     private void assertOverridesDoNotChange(

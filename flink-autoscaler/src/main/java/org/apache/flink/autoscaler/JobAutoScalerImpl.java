@@ -28,7 +28,6 @@ import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.PipelineOptions;
-import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.util.Preconditions;
 
 import org.slf4j.Logger;
@@ -108,8 +107,13 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         } catch (Throwable e) {
             onError(ctx, autoscalerMetrics, e);
         } finally {
-            applyParallelismOverrides(ctx);
-            applyConfigOverrides(ctx);
+            try {
+                applyParallelismOverrides(ctx);
+                applyConfigOverrides(ctx);
+            } catch (Exception e) {
+                LOG.error("Error applying overrides.", e);
+                onError(ctx, autoscalerMetrics, e);
+            }
         }
     }
 
@@ -160,12 +164,8 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
     @VisibleForTesting
     void applyConfigOverrides(Context ctx) throws Exception {
         Configuration configOverrides = stateStore.getConfigOverrides(ctx);
-        var tmHeapOverride = configOverrides.get(TaskManagerOptions.TASK_HEAP_MEMORY);
-
-        if (tmHeapOverride != null) {
-            LOG.info("Applying heap memory override: {}", tmHeapOverride);
-            scalingRealizer.realizeMemoryOverrides(ctx, tmHeapOverride);
-        }
+        LOG.info("Applying config overrides: {}", configOverrides);
+        scalingRealizer.realizeMemoryOverrides(ctx, configOverrides);
     }
 
     private void runScalingLogic(Context ctx, AutoscalerFlinkMetrics autoscalerMetrics)

@@ -18,10 +18,13 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
+import org.apache.flink.autoscaler.utils.MemoryTuningUtils;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.Resource;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
 
@@ -47,14 +50,20 @@ public class KubernetesScalingRealizer
 
     @Override
     public void realizeMemoryOverrides(
-            KubernetesJobAutoScalerContext context, MemorySize taskManagerMemoryOverride) {
+            KubernetesJobAutoScalerContext context, Configuration configOverrides) {
         if (context.getResource() instanceof FlinkDeployment) {
             var flinkDeployment = ((FlinkDeployment) context.getResource());
-            flinkDeployment
-                    .getSpec()
-                    .getTaskManager()
-                    .getResource()
-                    .setMemory(taskManagerMemoryOverride.toString());
+
+            flinkDeployment.getSpec().getFlinkConfiguration().putAll(configOverrides.toMap());
+
+            var totalMemoryOverride = MemoryTuningUtils.getTotalMemory(configOverrides, context);
+            if (totalMemoryOverride.compareTo(MemorySize.ZERO) > 0) {
+                Resource tmResource = flinkDeployment.getSpec().getTaskManager().getResource();
+                var currentMemory = MemorySize.parse(tmResource.getMemory());
+                if (!totalMemoryOverride.equals(currentMemory)) {
+                    tmResource.setMemory(String.valueOf(totalMemoryOverride.getBytes()));
+                }
+            }
         }
     }
 

@@ -43,10 +43,11 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.metrics.groups.GenericMetricGroup;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
-import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -57,6 +58,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
+import static java.util.Map.entry;
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
@@ -307,14 +309,15 @@ public class JobAutoScalerImplTest {
         stateStore.flush(context);
 
         autoscaler.applyConfigOverrides(context);
-        assertThat(getEvent().getMemoryOverride()).isEqualTo(new MemorySize(42));
+        assertThat(getEvent().getConfigOverrides().toMap())
+                .containsExactly(entry(TaskManagerOptions.TASK_HEAP_MEMORY.key(), "42 bytes"));
         assertThat(stateStore.getConfigOverrides(context)).isEqualTo(config);
 
         // Disabling autoscaler should clear overrides
         context.getConfiguration().setString(AUTOSCALER_ENABLED.key(), "false");
         autoscaler.scale(context);
         autoscaler.applyConfigOverrides(context);
-        assertThat(getEvent()).isNull();
+        assertThat(getEvent().getConfigOverrides().toMap()).isEmpty();
     }
 
     @Test
@@ -348,8 +351,11 @@ public class JobAutoScalerImplTest {
     }
 
     private void assertParallelismOverrides(Map<String, String> expectedOverrides) {
-        TestingScalingRealizer.Event<JobID, JobAutoScalerContext<JobID>> scalingEvent =
-                getEvent(expectedOverrides);
+        TestingScalingRealizer.Event<JobID, JobAutoScalerContext<JobID>> scalingEvent;
+        do {
+            scalingEvent = getEvent();
+        } while (scalingEvent != null && scalingEvent.getParallelismOverrides() == null);
+
         if (scalingEvent == null) {
             return;
         }

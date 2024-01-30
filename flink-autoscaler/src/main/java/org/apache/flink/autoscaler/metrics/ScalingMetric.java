@@ -77,12 +77,6 @@ public enum ScalingMetric {
      */
     GC_PRESSURE(false),
 
-    /**
-     * Max configured heap size. Could also be derived from config but there is a lot of logic which
-     * could influence this value, so better to check the actual heap size.
-     */
-    HEAP_MAX_SIZE(true),
-
     /** Average used heap size in bytes. */
     HEAP_AVERAGE_SIZE(true),
 
