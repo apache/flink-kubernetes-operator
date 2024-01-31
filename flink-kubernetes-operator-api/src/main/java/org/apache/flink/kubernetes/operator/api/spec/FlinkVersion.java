@@ -23,6 +23,8 @@ import org.apache.flink.annotation.Experimental;
 /** Enumeration for supported Flink versions. */
 @Experimental
 public enum FlinkVersion {
+    v1_13,
+    v1_14,
     v1_15,
     v1_16,
     v1_17,
