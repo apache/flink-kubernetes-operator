@@ -273,7 +273,7 @@ org.apache.flink.autoscaler.standalone.StandaloneAutoscalerEntrypoint \
 Updating the `autoscaler.standalone.fetcher.flink-cluster.host` and `autoscaler.standalone.fetcher.flink-cluster.port`
 based on your flink cluster. In general, the host and port are the same as Flink WebUI.
 
-### Using the JDBC Autoscaler State Store
+### Using the JDBC Autoscaler State Store & Event Handler
 
 A driver dependency is required to connect to a specified database. Here are drivers currently supported,
 please download JDBC driver and initialize database and table first.
@@ -286,16 +286,17 @@ please download JDBC driver and initialize database and table first.
 
 ```
 JDBC_DRIVER_JAR=./mysql-connector-java-8.0.30.jar
-# export the password of jdbc state store
-export STATE_STORE_JDBC_PWD=123456
+# export the password of jdbc state store & jdbc event handler
+export JDBC_PWD=123456
 
 java -cp flink-autoscaler-standalone-{{< version >}}.jar:${JDBC_DRIVER_JAR} \
 org.apache.flink.autoscaler.standalone.StandaloneAutoscalerEntrypoint \
 --autoscaler.standalone.fetcher.flink-cluster.host localhost \
 --autoscaler.standalone.fetcher.flink-cluster.port 8081 \
 --autoscaler.standalone.state-store.type jdbc \
---autoscaler.standalone.state-store.jdbc.url jdbc:mysql://localhost:3306/flink_autoscaler \
---autoscaler.standalone.state-store.jdbc.username root
+--autoscaler.standalone.event-handler.type jdbc \
+--autoscaler.standalone.jdbc.url jdbc:mysql://localhost:3306/flink_autoscaler \
+--autoscaler.standalone.jdbc.username root
 ```
 
 All supported options for autoscaler standalone can be viewed
