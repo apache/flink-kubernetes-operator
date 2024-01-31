@@ -28,3 +28,19 @@ CREATE TABLE t_flink_autoscaler_state_store
     PRIMARY KEY (id),
     UNIQUE (job_key, state_type)
 );
+
+CREATE TABLE t_flink_autoscaler_event_handler
+(
+    id BIGINT NOT NULL PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    create_time     TIMESTAMP       NOT NULL,
+    update_time     TIMESTAMP       NOT NULL,
+    job_key         VARCHAR(191)    NOT NULL,
+    reason          VARCHAR(500)    NOT NULL,
+    event_type      VARCHAR(100)    NOT NULL,
+    message         TEXT            NOT NULL,
+    event_count     INTEGER         NOT NULL,
+    event_key       VARCHAR(100)    NOT NULL
+);
+
+CREATE INDEX job_key_reason_event_key_idx ON t_flink_autoscaler_event_handler (job_key, reason, event_key);
+CREATE INDEX job_key_reason_create_time_idx ON t_flink_autoscaler_event_handler (job_key, reason, create_time);

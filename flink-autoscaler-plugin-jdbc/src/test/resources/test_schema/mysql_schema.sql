@@ -26,3 +26,18 @@ create table `t_flink_autoscaler_state_store`
     unique key `un_job_state_type_inx` (`job_key`,`state_type`) using btree
 ) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci;
 
+create table `t_flink_autoscaler_event_handler`
+(
+    `id`            bigint       not null auto_increment,
+    `create_time`   datetime     not null comment 'The create time',
+    `update_time`   datetime     not null comment 'The update time',
+    `job_key`       varchar(191) not null comment 'The job key',
+    `reason`        varchar(191) not null comment 'The event reason, such as: ScalingReport, IneffectiveScaling and AutoscalerError, etc.',
+    `event_type`    varchar(100) not null comment 'The event type, such as: Normal, Warning.',
+    `message`       longtext     not null comment 'The event message.',
+    `event_count`   int          not null comment 'The count of current event.',
+    `event_key`     varchar(100) not null comment 'The event key is used for event deduplication.',
+    primary key (`id`) using btree,
+    INDEX `job_key_reason_event_key_idx` (`job_key`, `reason`, `event_key`),
+    INDEX `job_key_reason_create_time_idx` (`job_key`, `reason`, `create_time`)
+) engine=innodb default charset=utf8mb4 collate=utf8mb4_general_ci;
