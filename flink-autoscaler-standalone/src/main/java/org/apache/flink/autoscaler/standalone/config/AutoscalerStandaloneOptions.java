@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler.standalone.config;
 
+import org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFactory.EventHandlerType;
 import org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
@@ -24,7 +25,6 @@ import org.apache.flink.configuration.description.Description;
 
 import java.time.Duration;
 
-import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.JDBC;
 import static org.apache.flink.configuration.description.TextElement.code;
 
 /** Config options related to the autoscaler standalone module. */
@@ -71,42 +71,54 @@ public class AutoscalerStandaloneOptions {
                     .defaultValue(StateStoreType.MEMORY)
                     .withDescription("The autoscaler state store type.");
 
-    public static final ConfigOption<String> STATE_STORE_JDBC_URL =
-            autoscalerStandaloneConfig("state-store.jdbc.url")
+    public static final ConfigOption<EventHandlerType> EVENT_HANDLER_TYPE =
+            autoscalerStandaloneConfig("event-handler.type")
+                    .enumType(EventHandlerType.class)
+                    .defaultValue(EventHandlerType.LOGGING)
+                    .withDescription("The autoscaler event handler type.");
+
+    public static final ConfigOption<String> JDBC_URL =
+            autoscalerStandaloneConfig("jdbc.url")
                     .stringType()
                     .noDefaultValue()
                     .withDescription(
                             Description.builder()
                                     .text(
-                                            "The jdbc url of jdbc state store when %s has been set to %s, such as: %s.",
+                                            "The jdbc url when %s or %s has been set to %s, such as: %s.",
                                             code(STATE_STORE_TYPE.key()),
-                                            code(JDBC.toString()),
+                                            code(EVENT_HANDLER_TYPE.key()),
+                                            code("JDBC"),
                                             code("jdbc:mysql://localhost:3306/flink_autoscaler"))
                                     .linebreak()
-                                    .text("This option is required when using JDBC state store.")
+                                    .text(
+                                            "This option is required when using JDBC state store or JDBC event handler.")
                                     .build());
 
-    public static final ConfigOption<String> STATE_STORE_JDBC_USERNAME =
-            autoscalerStandaloneConfig("state-store.jdbc.username")
+    public static final ConfigOption<String> JDBC_USERNAME =
+            autoscalerStandaloneConfig("jdbc.username")
                     .stringType()
                     .noDefaultValue()
                     .withDescription(
                             Description.builder()
                                     .text(
-                                            "The jdbc username of jdbc state store when %s has been set to %s.",
-                                            code(STATE_STORE_TYPE.key()), code(JDBC.toString()))
+                                            "The jdbc username when %s or %s has been set to %s.",
+                                            code(STATE_STORE_TYPE.key()),
+                                            code(EVENT_HANDLER_TYPE.key()),
+                                            code("JDBC"))
                                     .build());
 
-    public static final ConfigOption<String> STATE_STORE_JDBC_PASSWORD_ENV_VARIABLE =
-            autoscalerStandaloneConfig("state-store.jdbc.password-env-variable")
+    public static final ConfigOption<String> JDBC_PASSWORD_ENV_VARIABLE =
+            autoscalerStandaloneConfig("jdbc.password-env-variable")
                     .stringType()
-                    .defaultValue("STATE_STORE_JDBC_PWD")
+                    .defaultValue("JDBC_PWD")
                     .withDescription(
                             Description.builder()
                                     .text(
-                                            "The environment variable name of jdbc state store password when %s has been set to %s. "
+                                            "The environment variable name of jdbc password when %s or %s has been set to %s. "
                                                     + "In general, the environment variable name doesn't need to be changed. Users need to "
                                                     + "export the password using this environment variable.",
-                                            code(STATE_STORE_TYPE.key()), code(JDBC.toString()))
+                                            code(STATE_STORE_TYPE.key()),
+                                            code(EVENT_HANDLER_TYPE.key()),
+                                            code("JDBC"))
                                     .build());
 }
