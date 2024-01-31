@@ -17,8 +17,8 @@
 
 package org.apache.flink.autoscaler.standalone;
 
-import org.apache.flink.autoscaler.jdbc.state.JdbcAutoScalerStateStore;
-import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
+import org.apache.flink.autoscaler.event.LoggingEventHandler;
+import org.apache.flink.autoscaler.jdbc.event.JdbcAutoScalerEventHandler;
 import org.apache.flink.configuration.Configuration;
 
 import org.junit.jupiter.api.Test;
@@ -26,53 +26,54 @@ import org.junit.jupiter.api.Test;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
-import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.JDBC;
-import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.MEMORY;
+import static org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFactory.EventHandlerType.JDBC;
+import static org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFactory.EventHandlerType.LOGGING;
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.EVENT_HANDLER_TYPE;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_URL;
-import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.STATE_STORE_TYPE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class AutoscalerStateStoreFactoryTest {
+/** Test for {@link AutoscalerEventHandlerFactory}. */
+class AutoscalerEventHandlerFactoryTest {
 
     @Test
-    void testCreateDefaultStateStore() throws Exception {
-        // Test for memory state store is created by default.
-        var stateStore = AutoscalerStateStoreFactory.create(new Configuration());
-        assertThat(stateStore).isInstanceOf(InMemoryAutoScalerStateStore.class);
+    void testCreateDefaultEventHandler() throws Exception {
+        // Test for logging event handler is created by default.
+        var eventHandler = AutoscalerEventHandlerFactory.create(new Configuration());
+        assertThat(eventHandler).isInstanceOf(LoggingEventHandler.class);
     }
 
     @Test
-    void testCreateInMemoryStateStore() throws Exception {
-        // Test for memory state store is created explicitly.
+    void testCreateInMemoryEventHandler() throws Exception {
+        // Test for logging event handler is created explicitly.
         final var conf = new Configuration();
-        conf.set(STATE_STORE_TYPE, MEMORY);
-        var stateStore = AutoscalerStateStoreFactory.create(conf);
-        assertThat(stateStore).isInstanceOf(InMemoryAutoScalerStateStore.class);
+        conf.set(EVENT_HANDLER_TYPE, LOGGING);
+        var eventHandler = AutoscalerEventHandlerFactory.create(conf);
+        assertThat(eventHandler).isInstanceOf(LoggingEventHandler.class);
     }
 
     @Test
-    void testCreateJdbcStateStoreWithoutURL() {
+    void testCreateJdbcEventHandlerWithoutURL() {
         // Test for missing the jdbc url.
         final var conf = new Configuration();
-        conf.set(STATE_STORE_TYPE, JDBC);
-        assertThatThrownBy(() -> AutoscalerStateStoreFactory.create(conf))
+        conf.set(EVENT_HANDLER_TYPE, JDBC);
+        assertThatThrownBy(() -> AutoscalerEventHandlerFactory.create(conf))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("%s is required for jdbc state store.", JDBC_URL.key());
+                .hasMessage("%s is required for jdbc event handler.", JDBC_URL.key());
     }
 
     @Test
-    void testCreateJdbcStateStore() throws Exception {
+    void testCreateJdbcEventHandler() throws Exception {
         final var jdbcUrl = "jdbc:derby:memory:test";
         DriverManager.getConnection(String.format("%s;create=true", jdbcUrl)).close();
 
-        // Test for create JDBC State store.
+        // Test for create JDBC Event Handler.
         final var conf = new Configuration();
-        conf.set(STATE_STORE_TYPE, JDBC);
+        conf.set(EVENT_HANDLER_TYPE, JDBC);
         conf.set(JDBC_URL, jdbcUrl);
 
-        var stateStore = AutoscalerStateStoreFactory.create(conf);
-        assertThat(stateStore).isInstanceOf(JdbcAutoScalerStateStore.class);
+        var eventHandler = AutoscalerEventHandlerFactory.create(conf);
+        assertThat(eventHandler).isInstanceOf(JdbcAutoScalerEventHandler.class);
 
         try {
             DriverManager.getConnection(String.format("%s;shutdown=true", jdbcUrl)).close();

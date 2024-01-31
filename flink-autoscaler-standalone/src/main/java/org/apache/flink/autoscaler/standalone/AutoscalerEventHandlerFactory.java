@@ -18,39 +18,37 @@
 package org.apache.flink.autoscaler.standalone;
 
 import org.apache.flink.autoscaler.JobAutoScalerContext;
-import org.apache.flink.autoscaler.jdbc.state.JdbcAutoScalerStateStore;
-import org.apache.flink.autoscaler.jdbc.state.JdbcStateInteractor;
-import org.apache.flink.autoscaler.jdbc.state.JdbcStateStore;
-import org.apache.flink.autoscaler.state.AutoScalerStateStore;
-import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
+import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
+import org.apache.flink.autoscaler.event.LoggingEventHandler;
+import org.apache.flink.autoscaler.jdbc.event.JdbcAutoScalerEventHandler;
+import org.apache.flink.autoscaler.jdbc.event.JdbcEventInteractor;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DescribedEnum;
 import org.apache.flink.configuration.description.InlineElement;
 
 import java.sql.DriverManager;
 
-import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.JDBC;
-import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.MEMORY;
+import static org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFactory.EventHandlerType.JDBC;
+import static org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFactory.EventHandlerType.LOGGING;
+import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.EVENT_HANDLER_TYPE;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_PASSWORD_ENV_VARIABLE;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_URL;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_USERNAME;
-import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.STATE_STORE_TYPE;
 import static org.apache.flink.configuration.description.TextElement.text;
 import static org.apache.flink.util.Preconditions.checkArgument;
 
-/** The factory of {@link AutoScalerStateStore}. */
-public class AutoscalerStateStoreFactory {
+/** The factory of {@link AutoScalerEventHandler}. */
+public class AutoscalerEventHandlerFactory {
 
-    /** Out-of-box state store type. */
-    public enum StateStoreType implements DescribedEnum {
-        MEMORY(
-                "The state store based on the Java Heap, the state will be discarded after process restarts."),
+    /** Out-of-box event handler type. */
+    public enum EventHandlerType implements DescribedEnum {
+        LOGGING("The event handler based on logging."),
         JDBC(
-                "The state store which persists its state in JDBC related database. It's recommended in production.");
+                "The event handler which persists all events in JDBC related database. It's recommended in production.");
 
         private final InlineElement description;
 
-        StateStoreType(String description) {
+        EventHandlerType(String description) {
             this.description = text(description);
         }
 
@@ -61,30 +59,30 @@ public class AutoscalerStateStoreFactory {
     }
 
     public static <KEY, Context extends JobAutoScalerContext<KEY>>
-            AutoScalerStateStore<KEY, Context> create(Configuration conf) throws Exception {
-        var stateStoreType = conf.get(STATE_STORE_TYPE);
-        switch (stateStoreType) {
-            case MEMORY:
-                return new InMemoryAutoScalerStateStore<>();
+            AutoScalerEventHandler<KEY, Context> create(Configuration conf) throws Exception {
+        var eventHandlerType = conf.get(EVENT_HANDLER_TYPE);
+        switch (eventHandlerType) {
+            case LOGGING:
+                return new LoggingEventHandler<>();
             case JDBC:
-                return createJdbcStateStore(conf);
+                return createJdbcEventHandler(conf);
             default:
                 throw new IllegalArgumentException(
                         String.format(
-                                "Unknown state store type : %s. Optional state store types are: %s and %s.",
-                                stateStoreType, MEMORY, JDBC));
+                                "Unknown event handler type : %s. Optional event handlers are: %s and %s.",
+                                eventHandlerType, LOGGING, JDBC));
         }
     }
 
     private static <KEY, Context extends JobAutoScalerContext<KEY>>
-            AutoScalerStateStore<KEY, Context> createJdbcStateStore(Configuration conf)
+            AutoScalerEventHandler<KEY, Context> createJdbcEventHandler(Configuration conf)
                     throws Exception {
         final var jdbcUrl = conf.get(JDBC_URL);
-        checkArgument(jdbcUrl != null, "%s is required for jdbc state store.", JDBC_URL.key());
+        checkArgument(jdbcUrl != null, "%s is required for jdbc event handler.", JDBC_URL.key());
         var user = conf.get(JDBC_USERNAME);
         var password = System.getenv().get(conf.get(JDBC_PASSWORD_ENV_VARIABLE));
 
         var conn = DriverManager.getConnection(jdbcUrl, user, password);
-        return new JdbcAutoScalerStateStore<>(new JdbcStateStore(new JdbcStateInteractor(conn)));
+        return new JdbcAutoScalerEventHandler<>(new JdbcEventInteractor(conn));
     }
 }

@@ -21,6 +21,12 @@
             <td>The parallelism of autoscaler standalone control loop.</td>
         </tr>
         <tr>
+            <td><h5>autoscaler.standalone.event-handler.type</h5></td>
+            <td style="word-wrap: break-word;">LOGGING</td>
+            <td><p>Enum</p></td>
+            <td>The autoscaler event handler type.<br /><br />Possible values:<ul><li>"LOGGING": The event handler based on logging.</li><li>"JDBC": The event handler which persists all events in JDBC related database. It's recommended in production.</li></ul></td>
+        </tr>
+        <tr>
             <td><h5>autoscaler.standalone.fetcher.flink-cluster.host</h5></td>
             <td style="word-wrap: break-word;">"localhost"</td>
             <td>String</td>
@@ -33,22 +39,22 @@
             <td>The port of flink cluster when the flink-cluster fetcher is used.</td>
         </tr>
         <tr>
-            <td><h5>autoscaler.standalone.state-store.jdbc.password-env-variable</h5></td>
-            <td style="word-wrap: break-word;">"STATE_STORE_JDBC_PWD"</td>
+            <td><h5>autoscaler.standalone.jdbc.password-env-variable</h5></td>
+            <td style="word-wrap: break-word;">"JDBC_PWD"</td>
             <td>String</td>
-            <td>The environment variable name of jdbc state store password when <code class="highlighter-rouge">autoscaler.standalone.state-store.type</code> has been set to <code class="highlighter-rouge">JDBC</code>. In general, the environment variable name doesn't need to be changed. Users need to export the password using this environment variable.</td>
+            <td>The environment variable name of jdbc password when <code class="highlighter-rouge">autoscaler.standalone.state-store.type</code> or <code class="highlighter-rouge">autoscaler.standalone.event-handler.type</code> has been set to <code class="highlighter-rouge">JDBC</code>. In general, the environment variable name doesn't need to be changed. Users need to export the password using this environment variable.</td>
         </tr>
         <tr>
-            <td><h5>autoscaler.standalone.state-store.jdbc.url</h5></td>
+            <td><h5>autoscaler.standalone.jdbc.url</h5></td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>String</td>
-            <td>The jdbc url of jdbc state store when <code class="highlighter-rouge">autoscaler.standalone.state-store.type</code> has been set to <code class="highlighter-rouge">JDBC</code>, such as: <code class="highlighter-rouge">jdbc:mysql://localhost:3306/flink_autoscaler</code>.<br />This option is required when using JDBC state store.</td>
+            <td>The jdbc url when <code class="highlighter-rouge">autoscaler.standalone.state-store.type</code> or <code class="highlighter-rouge">autoscaler.standalone.event-handler.type</code> has been set to <code class="highlighter-rouge">JDBC</code>, such as: <code class="highlighter-rouge">jdbc:mysql://localhost:3306/flink_autoscaler</code>.<br />This option is required when using JDBC state store or JDBC event handler.</td>
         </tr>
         <tr>
-            <td><h5>autoscaler.standalone.state-store.jdbc.username</h5></td>
+            <td><h5>autoscaler.standalone.jdbc.username</h5></td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>String</td>
-            <td>The jdbc username of jdbc state store when <code class="highlighter-rouge">autoscaler.standalone.state-store.type</code> has been set to <code class="highlighter-rouge">JDBC</code>.</td>
+            <td>The jdbc username when <code class="highlighter-rouge">autoscaler.standalone.state-store.type</code> or <code class="highlighter-rouge">autoscaler.standalone.event-handler.type</code> has been set to <code class="highlighter-rouge">JDBC</code>.</td>
         </tr>
         <tr>
             <td><h5>autoscaler.standalone.state-store.type</h5></td>
