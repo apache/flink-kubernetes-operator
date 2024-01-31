@@ -71,11 +71,6 @@ public class TestingAutoscalerUtils {
             public Optional<MemorySize> getTaskManagerMemory() {
                 return Optional.of(MemorySize.parse("30 gb"));
             }
-
-            @Override
-            public Optional<MemorySize> getTaskManagerMemoryFromSpec() {
-                return Optional.of(MemorySize.parse("30 gb"));
-            }
         };
     }
 

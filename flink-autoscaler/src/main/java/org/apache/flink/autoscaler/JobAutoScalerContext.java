@@ -73,11 +73,6 @@ public class JobAutoScalerContext<KEY> {
         return Optional.empty();
     }
 
-    /* Get the max amount of memory for the deployment. */
-    public Optional<MemorySize> getTaskManagerMemoryFromSpec() {
-        return Optional.empty();
-    }
-
     public RestClusterClient<String> getRestClusterClient() throws Exception {
         return restClientSupplier.get();
     }

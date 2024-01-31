@@ -163,6 +163,10 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
     @VisibleForTesting
     void applyConfigOverrides(Context ctx) throws Exception {
+        if (!ctx.getConfiguration().get(AutoScalerOptions.MEMORY_TUNING_ENABLED)) {
+            return;
+        }
+
         Configuration configOverrides = stateStore.getConfigOverrides(ctx);
         LOG.info("Applying config overrides: {}", configOverrides);
         scalingRealizer.realizeMemoryOverrides(ctx, configOverrides);

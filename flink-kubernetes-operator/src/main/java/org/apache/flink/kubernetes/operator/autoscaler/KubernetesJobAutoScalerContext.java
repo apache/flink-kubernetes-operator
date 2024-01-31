@@ -72,19 +72,6 @@ public class KubernetesJobAutoScalerContext extends JobAutoScalerContext<Resourc
         return Optional.ofNullable(getConfiguration().get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
     }
 
-    @Override
-    public Optional<MemorySize> getTaskManagerMemoryFromSpec() {
-        return getJobDeployment()
-                .map(
-                        flinkDeployment ->
-                                MemorySize.parse(
-                                        flinkDeployment
-                                                .getSpec()
-                                                .getTaskManager()
-                                                .getResource()
-                                                .getMemory()));
-    }
-
     public AbstractFlinkResource<?, ?> getResource() {
         return resourceContext.getResource();
     }

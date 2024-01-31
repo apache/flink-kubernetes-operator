@@ -26,7 +26,10 @@ import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
 
+import io.fabric8.kubernetes.api.model.Quantity;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
@@ -35,6 +38,8 @@ import java.util.Map;
 /** The Kubernetes implementation for applying parallelism overrides. */
 public class KubernetesScalingRealizer
         implements ScalingRealizer<ResourceID, KubernetesJobAutoScalerContext> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(KubernetesScalingRealizer.class);
 
     @Override
     public void realizeParallelismOverrides(
@@ -51,6 +56,7 @@ public class KubernetesScalingRealizer
     @Override
     public void realizeMemoryOverrides(
             KubernetesJobAutoScalerContext context, Configuration configOverrides) {
+
         if (context.getResource() instanceof FlinkDeployment) {
             var flinkDeployment = ((FlinkDeployment) context.getResource());
 
@@ -59,8 +65,14 @@ public class KubernetesScalingRealizer
             var totalMemoryOverride = MemoryTuningUtils.getTotalMemory(configOverrides, context);
             if (totalMemoryOverride.compareTo(MemorySize.ZERO) > 0) {
                 Resource tmResource = flinkDeployment.getSpec().getTaskManager().getResource();
-                var currentMemory = MemorySize.parse(tmResource.getMemory());
+                // Make sure to support the Kubernetes syntax here, which supports more formats than
+                // Flink's classes.
+                var currentMemory =
+                        new MemorySize(
+                                (Quantity.parse(tmResource.getMemory()).getNumericalAmount())
+                                        .longValue());
                 if (!totalMemoryOverride.equals(currentMemory)) {
+                    // Adjust the resource memory to change the total TM memory
                     tmResource.setMemory(String.valueOf(totalMemoryOverride.getBytes()));
                 }
             }

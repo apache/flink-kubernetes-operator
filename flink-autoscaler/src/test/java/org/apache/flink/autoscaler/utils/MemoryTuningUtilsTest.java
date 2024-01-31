@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -40,7 +41,8 @@ public class MemoryTuningUtilsTest {
         var config = context.getConfiguration();
         config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
         config.set(TaskManagerOptions.NUM_TASK_SLOTS, 5);
-        config.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, MemorySize.parse("30 gb"));
+        MemorySize totalMemory = MemorySize.parse("30 gb");
+        config.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, totalMemory);
 
         var jobVertex1 = new JobVertexID();
         var jobVertex2 = new JobVertexID();
@@ -70,18 +72,40 @@ public class MemoryTuningUtilsTest {
 
         Map<String, String> overrides =
                 MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics).toMap();
+        // Test reducing overall memory
         Assertions.assertThat(overrides)
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.TASK_HEAP_MEMORY.key(),
                                 "5096 mb",
+                                TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
+                                "0 bytes",
                                 TaskManagerOptions.MANAGED_MEMORY_SIZE.key(),
                                 "12348031160 bytes",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.475",
+                                "0.048",
                                 TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.096",
-                                MemoryTuningUtils.TOTAL_MEMORY_CONFIG_NAME,
-                                "22389194982"));
+                                "0.148",
+                                TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
+                                "22254977254 bytes"));
+
+        // Test giving back memory to RocksDB
+        config.set(StateBackendOptions.STATE_BACKEND, "rocksdb");
+        overrides = MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics).toMap();
+        Assertions.assertThat(overrides)
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of(
+                                TaskManagerOptions.TASK_HEAP_MEMORY.key(),
+                                "5096 mb",
+                                TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
+                                "0 bytes",
+                                TaskManagerOptions.MANAGED_MEMORY_SIZE.key(),
+                                "22305308626 bytes",
+                                TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
+                                "0.033",
+                                TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
+                                "0.148",
+                                TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
+                                totalMemory.toString()));
     }
 }

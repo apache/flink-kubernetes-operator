@@ -296,6 +296,7 @@ public class JobAutoScalerImplTest {
 
     @Test
     void testApplyConfigOverrides() throws Exception {
+        context.getConfiguration().set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
         var autoscaler =
                 new JobAutoScalerImpl<>(
                         null, null, null, eventCollector, scalingRealizer, stateStore);
