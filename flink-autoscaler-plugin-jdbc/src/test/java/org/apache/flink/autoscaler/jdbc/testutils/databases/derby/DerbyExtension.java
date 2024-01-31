@@ -30,7 +30,8 @@ import java.util.List;
 /** The extension of Derby. */
 public class DerbyExtension implements BeforeAllCallback, AfterAllCallback, AfterEachCallback {
 
-    private static final List<String> TABLES = List.of("t_flink_autoscaler_state_store");
+    private static final List<String> TABLES =
+            List.of("t_flink_autoscaler_state_store", "t_flink_autoscaler_event_handler");
     private static final String JDBC_URL = "jdbc:derby:memory:test";
 
     public Connection getConnection() throws Exception {
@@ -52,12 +53,36 @@ public class DerbyExtension implements BeforeAllCallback, AfterAllCallback, Afte
                         + "    PRIMARY KEY (id)\n"
                         + ")\n";
 
-        var createIndex =
+        var createStateStoreIndex =
                 "CREATE UNIQUE INDEX un_job_state_type_inx ON t_flink_autoscaler_state_store (job_key, state_type)";
+
+        var eventHandlerDDL =
+                "CREATE TABLE t_flink_autoscaler_event_handler\n"
+                        + "(\n"
+                        + "    id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),\n"
+                        + "    create_time TIMESTAMP NOT NULL,\n"
+                        + "    update_time TIMESTAMP NOT NULL,\n"
+                        + "    job_key VARCHAR(191) NOT NULL,\n"
+                        + "    reason VARCHAR(500) NOT NULL,\n"
+                        + "    event_type VARCHAR(100) NOT NULL,\n"
+                        + "    message CLOB NOT NULL,\n"
+                        + "    event_count INTEGER NOT NULL,\n"
+                        + "    event_key VARCHAR(100) NOT NULL,\n"
+                        + "    PRIMARY KEY (id)\n"
+                        + ")\n";
+
+        var eventKeyIndex =
+                "CREATE INDEX job_key_reason_event_key_idx ON t_flink_autoscaler_event_handler (job_key, reason, event_key)";
+        var jobKeyReasonCreateTimeIndex =
+                "CREATE INDEX job_key_reason_create_time_idx ON t_flink_autoscaler_event_handler (job_key, reason, create_time)";
+
         try (var conn = getConnection();
                 var st = conn.createStatement()) {
             st.execute(stateStoreDDL);
-            st.execute(createIndex);
+            st.execute(createStateStoreIndex);
+            st.execute(eventHandlerDDL);
+            st.execute(eventKeyIndex);
+            st.execute(jobKeyReasonCreateTimeIndex);
         }
     }
 
