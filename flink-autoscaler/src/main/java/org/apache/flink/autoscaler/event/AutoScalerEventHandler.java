@@ -26,6 +26,7 @@ import javax.annotation.Nullable;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
@@ -98,6 +99,22 @@ public interface AutoScalerEventHandler<KEY, Context extends JobAutoScalerContex
                                         s.getMetrics().get(EXPECTED_PROCESSING_RATE).getCurrent(),
                                         s.getMetrics().get(TARGET_DATA_RATE).getAverage())));
         return sb.toString();
+    }
+
+    static String getParallelismHashCode(Map<JobVertexID, ScalingSummary> scalingSummaryHashMap) {
+        return Integer.toString(
+                scalingSummaryHashMap.entrySet().stream()
+                                .collect(
+                                        Collectors.toMap(
+                                                e -> e.getKey().toString(),
+                                                e ->
+                                                        String.format(
+                                                                "Parallelism %d -> %d",
+                                                                e.getValue()
+                                                                        .getCurrentParallelism(),
+                                                                e.getValue().getNewParallelism())))
+                                .hashCode()
+                        & 0x7FFFFFFF);
     }
 
     /** The type of the events. */

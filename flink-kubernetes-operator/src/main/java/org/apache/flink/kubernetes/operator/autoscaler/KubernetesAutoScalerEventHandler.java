@@ -30,7 +30,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 /** An event handler which posts events to the Kubernetes events API. */
 public class KubernetesAutoScalerEventHandler
@@ -73,7 +72,10 @@ public class KubernetesAutoScalerEventHandler
                     context, scalingSummaries, message, null);
         } else {
             var scalingReport = AutoScalerEventHandler.scalingReport(scalingSummaries, message);
-            var labels = Map.of(PARALLELISM_MAP_KEY, getParallelismHashCode(scalingSummaries));
+            var labels =
+                    Map.of(
+                            PARALLELISM_MAP_KEY,
+                            AutoScalerEventHandler.getParallelismHashCode(scalingSummaries));
 
             @Nullable
             Predicate<Map<String, String>> dedupePredicate =
@@ -83,7 +85,8 @@ public class KubernetesAutoScalerEventHandler
                             return stringStringMap != null
                                     && Objects.equals(
                                             stringStringMap.get(PARALLELISM_MAP_KEY),
-                                            getParallelismHashCode(scalingSummaries));
+                                            AutoScalerEventHandler.getParallelismHashCode(
+                                                    scalingSummaries));
                         }
                     };
 
@@ -99,22 +102,5 @@ public class KubernetesAutoScalerEventHandler
                     dedupePredicate,
                     labels);
         }
-    }
-
-    private static String getParallelismHashCode(
-            Map<JobVertexID, ScalingSummary> scalingSummaryHashMap) {
-        return Integer.toString(
-                scalingSummaryHashMap.entrySet().stream()
-                                .collect(
-                                        Collectors.toMap(
-                                                e -> e.getKey().toString(),
-                                                e ->
-                                                        String.format(
-                                                                "Parallelism %d -> %d",
-                                                                e.getValue()
-                                                                        .getCurrentParallelism(),
-                                                                e.getValue().getNewParallelism())))
-                                .hashCode()
-                        & 0x7FFFFFFF);
     }
 }
