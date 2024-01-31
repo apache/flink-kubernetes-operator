@@ -807,7 +807,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                             job.getAllowNonRestoredState(),
                             savepoint,
                             RestoreMode.DEFAULT,
-                            conf.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_16)
+                            conf.get(FLINK_VERSION).isEqualOrNewer(FlinkVersion.v1_17)
                                     ? conf.toMap()
                                     : null);
             LOG.info("Submitting job: {} to session cluster.", jobID);

@@ -353,7 +353,7 @@ public class SnapshotUtils {
     public static boolean isSnapshotTriggeringSupported(Configuration conf) {
         // Flink REST API supports triggering checkpoints externally starting with 1.17
         return conf.get(FLINK_VERSION) != null
-                && conf.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_16);
+                && conf.get(FLINK_VERSION).isEqualOrNewer(FlinkVersion.v1_17);
     }
 
     public static boolean gracePeriodEnded(Duration gracePeriod, SnapshotInfo snapshotInfo) {

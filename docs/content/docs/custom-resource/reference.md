@@ -78,8 +78,6 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Value | Docs |
 | ----- | ---- |
-| v1_13 |  |
-| v1_14 |  |
 | v1_15 |  |
 | v1_16 |  |
 | v1_17 |  |
