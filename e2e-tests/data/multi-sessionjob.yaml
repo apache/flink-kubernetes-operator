@@ -85,10 +85,6 @@ spec:
     state.savepoints.dir: file:///opt/flink/volume/flink-sp
   serviceAccount: flink
   podTemplate:
-    apiVersion: v1
-    kind: Pod
-    metadata:
-      name: pod-template
     spec:
       containers:
         # Do not change the main container name

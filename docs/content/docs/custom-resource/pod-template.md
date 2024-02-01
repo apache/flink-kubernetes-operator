@@ -55,10 +55,6 @@ spec:
     taskmanager.numberOfTaskSlots: "2"
   serviceAccount: flink
   podTemplate:
-    apiVersion: v1
-    kind: Pod
-    metadata:
-      name: pod-template
     spec:
       containers:
         # Do not change the main container name
@@ -85,10 +81,6 @@ spec:
       memory: "2048m"
       cpu: 1
     podTemplate:
-      apiVersion: v1
-      kind: Pod
-      metadata:
-        name: task-manager-pod-template
       spec:
         initContainers:
           # Sample sidecar container

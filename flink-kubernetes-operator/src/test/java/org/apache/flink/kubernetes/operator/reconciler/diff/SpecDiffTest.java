@@ -34,7 +34,11 @@ import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.fabric8.kubernetes.api.model.HostAlias;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import lombok.Value;
 import org.junit.jupiter.api.Test;
 
@@ -66,7 +70,7 @@ public class SpecDiffTest {
         assertEquals(0, diff.getNumDiffs());
 
         left = BaseTestUtils.buildApplicationCluster().getSpec();
-        left.setPodTemplate(BaseTestUtils.getTestPod("localhost", "v1", List.of()));
+        left.setPodTemplate(BaseTestUtils.getTestPodTemplate("localhost", List.of()));
         left.setIngress(IngressSpec.builder().template("template").build());
 
         right = SpecUtils.clone(left);
@@ -120,7 +124,7 @@ public class SpecDiffTest {
 
         right.getJobManager().getResource().setMemory("999m");
         right.getTaskManager().setReplicas(999);
-        right.getPodTemplate().setApiVersion("v2");
+        right.getPodTemplate().setMetadata(new ObjectMeta());
         right.getIngress().setTemplate("none");
 
         diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
@@ -226,9 +230,9 @@ public class SpecDiffTest {
     }
 
     @Test
-    public void testPodTemplateChanges() {
+    public void testPodTemplateChanges() throws JsonProcessingException {
         var left = BaseTestUtils.buildApplicationCluster().getSpec();
-        left.setPodTemplate(BaseTestUtils.getTestPod("localhost1", "v1", List.of()));
+        left.setPodTemplate(BaseTestUtils.getTestPodTemplate("localhost1", List.of()));
         left.getPodTemplate()
                 .getSpec()
                 .getHostAliases()
@@ -238,7 +242,7 @@ public class SpecDiffTest {
         ingressSpec.setTemplate("temp");
         left.setIngress(ingressSpec);
         var right = BaseTestUtils.buildApplicationCluster().getSpec();
-        right.setPodTemplate(BaseTestUtils.getTestPod("localhost2", "v2", List.of()));
+        right.setPodTemplate(BaseTestUtils.getTestPodTemplate("localhost2", List.of()));
         right.getPodTemplate()
                 .getSpec()
                 .getHostAliases()
@@ -252,11 +256,34 @@ public class SpecDiffTest {
         assertEquals(
                 "Diff: FlinkDeploymentSpec[image : img1 -> img2, "
                         + "ingress : {..} -> null, "
-                        + "podTemplate.apiVersion : v1 -> v2, "
                         + "podTemplate.spec.hostAliases.0.hostnames.1 : host2 -> null, "
                         + "podTemplate.spec.hostname : localhost1 -> localhost2, "
                         + "restartNonce : null -> 1]",
                 diff.toString());
+
+        // Make sure removed fields dont trigger upgrade
+        String oldTemplate =
+                "{\"apiVersion\": \"v1\", \"metadata\": {\"labels\" : {\"l1\": \"v1\"}}, \"spec\": {\"hostname\": \"h\"}}";
+
+        String newTemplate =
+                "{\"metadata\": {\"labels\" : {\"l1\": \"v1\"}}, \"spec\": {\"hostname\": \"h\"}}";
+
+        var om = new ObjectMapper();
+        left = BaseTestUtils.buildApplicationCluster().getSpec();
+        left.setPodTemplate(om.readValue(oldTemplate, PodTemplateSpec.class));
+        right = BaseTestUtils.buildApplicationCluster().getSpec();
+        right.setPodTemplate(om.readValue(newTemplate, PodTemplateSpec.class));
+
+        diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
+        assertEquals(DiffType.IGNORE, diff.getType());
+
+        left = BaseTestUtils.buildApplicationCluster().getSpec();
+        left.getJobManager().setPodTemplate(om.readValue(oldTemplate, PodTemplateSpec.class));
+        right = BaseTestUtils.buildApplicationCluster().getSpec();
+        right.getJobManager().setPodTemplate(om.readValue(newTemplate, PodTemplateSpec.class));
+
+        diff = new ReflectiveDiffBuilder<>(KubernetesDeploymentMode.NATIVE, left, right).build();
+        assertEquals(DiffType.IGNORE, diff.getType());
     }
 
     @Test

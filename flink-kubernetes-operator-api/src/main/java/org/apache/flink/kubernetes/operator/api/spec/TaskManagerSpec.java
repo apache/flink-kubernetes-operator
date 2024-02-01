@@ -23,7 +23,9 @@ import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.fabric8.crd.generator.annotation.SchemaFrom;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import io.fabric8.kubernetes.model.annotation.SpecReplicas;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -47,5 +49,6 @@ public class TaskManagerSpec implements Diffable<TaskManagerSpec> {
     private Integer replicas;
 
     /** TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
-    private Pod podTemplate;
+    @SchemaFrom(type = Pod.class)
+    private PodTemplateSpec podTemplate;
 }

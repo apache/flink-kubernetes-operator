@@ -33,7 +33,7 @@ import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 
-import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -135,7 +135,7 @@ public class FlinkConfigManagerTest {
 
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getSpec().setLogConfiguration(Map.of(Constants.CONFIG_FILE_LOG4J_NAME, "test"));
-        deployment.getSpec().setPodTemplate(new Pod());
+        deployment.getSpec().setPodTemplate(new PodTemplateSpec());
 
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, config);
         Configuration deployConfig = configManager.getObserveConfig(deployment);

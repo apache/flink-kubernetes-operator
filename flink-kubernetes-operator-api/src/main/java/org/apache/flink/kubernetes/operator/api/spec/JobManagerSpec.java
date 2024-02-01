@@ -20,7 +20,9 @@ package org.apache.flink.kubernetes.operator.api.spec;
 import org.apache.flink.annotation.Experimental;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.fabric8.crd.generator.annotation.SchemaFrom;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -41,5 +43,6 @@ public class JobManagerSpec {
     private int replicas = 1;
 
     /** JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. */
-    private Pod podTemplate;
+    @SchemaFrom(type = Pod.class)
+    private PodTemplateSpec podTemplate;
 }

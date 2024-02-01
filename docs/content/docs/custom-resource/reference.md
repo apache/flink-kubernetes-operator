@@ -53,7 +53,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | serviceAccount | java.lang.String | Kubernetes service used by the Flink deployment. |
 | flinkVersion | org.apache.flink.kubernetes.operator.api.spec.FlinkVersion | Flink image version. |
 | ingress | org.apache.flink.kubernetes.operator.api.spec.IngressSpec | Ingress specs. |
-| podTemplate | io.fabric8.kubernetes.api.model.Pod | Base pod template for job and task manager pods. Can be overridden by the jobManager and taskManager pod templates. |
+| podTemplate | io.fabric8.kubernetes.api.model.PodTemplateSpec | Base pod template for job and task manager pods. Can be overridden by the jobManager and taskManager pod templates. |
 | jobManager | org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec | JobManager specs. |
 | taskManager | org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec | TaskManager specs. |
 | logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the Flink deployment. Format logConfigFileName -> configContent. |
@@ -108,7 +108,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | resource | org.apache.flink.kubernetes.operator.api.spec.Resource | Resource specification for the JobManager pods. |
 | replicas | int | Number of JobManager replicas. Must be 1 for non-HA deployments. |
-| podTemplate | io.fabric8.kubernetes.api.model.Pod | JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. |
+| podTemplate | io.fabric8.kubernetes.api.model.PodTemplateSpec | JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. |
 
 ### JobSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.JobSpec
@@ -169,7 +169,7 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | resource | org.apache.flink.kubernetes.operator.api.spec.Resource | Resource specification for the TaskManager pods. |
 | replicas | java.lang.Integer | Number of TaskManager replicas. If defined, takes precedence over parallelism |
-| podTemplate | io.fabric8.kubernetes.api.model.Pod | TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. |
+| podTemplate | io.fabric8.kubernetes.api.model.PodTemplateSpec | TaskManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. |
 
 ### UpgradeMode
 **Class**: org.apache.flink.kubernetes.operator.api.spec.UpgradeMode

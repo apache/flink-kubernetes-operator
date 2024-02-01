@@ -52,8 +52,8 @@ import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.StringUtils;
 
 import io.fabric8.kubernetes.api.model.Container;
-import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodSpec;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.ResourceRequirements;
 import io.fabric8.kubernetes.client.utils.Serialization;
@@ -189,11 +189,11 @@ public class FlinkConfigBuilder {
     }
 
     protected FlinkConfigBuilder applyPodTemplate() throws IOException {
-        Pod commonPodTemplate = spec.getPodTemplate();
+        PodTemplateSpec commonPodTemplate = spec.getPodTemplate();
         boolean mergeByName =
                 effectiveConfig.get(KubernetesOperatorConfigOptions.POD_TEMPLATE_MERGE_BY_NAME);
 
-        Pod jmPodTemplate;
+        PodTemplateSpec jmPodTemplate;
         if (spec.getJobManager() != null) {
             jmPodTemplate =
                     mergePodTemplates(
@@ -208,7 +208,7 @@ public class FlinkConfigBuilder {
         if (effectiveConfig.get(
                 KubernetesOperatorConfigOptions.OPERATOR_JM_STARTUP_PROBE_ENABLED)) {
             if (jmPodTemplate == null) {
-                jmPodTemplate = new Pod();
+                jmPodTemplate = new PodTemplateSpec();
             }
             FlinkUtils.addStartupProbe(jmPodTemplate);
         }
@@ -219,7 +219,7 @@ public class FlinkConfigBuilder {
             effectiveConfig.set(KubernetesConfigOptions.JOB_MANAGER_POD_TEMPLATE, jmTemplateFile);
         }
 
-        Pod tmPodTemplate;
+        PodTemplateSpec tmPodTemplate;
         if (spec.getTaskManager() != null) {
             tmPodTemplate =
                     mergePodTemplates(
@@ -488,14 +488,15 @@ public class FlinkConfigBuilder {
     }
 
     @VisibleForTesting
-    protected static Pod applyResourceToPodTemplate(Pod podTemplate, Resource resource) {
+    protected static PodTemplateSpec applyResourceToPodTemplate(
+            PodTemplateSpec podTemplate, Resource resource) {
         if (resource == null
                 || StringUtils.isNullOrWhitespaceOnly(resource.getEphemeralStorage())) {
             return podTemplate;
         }
 
         if (podTemplate == null) {
-            Pod newPodTemplate = new Pod();
+            var newPodTemplate = new PodTemplateSpec();
             newPodTemplate.setSpec(createPodSpecWithResource(resource));
             return newPodTemplate;
         } else if (podTemplate.getSpec() == null) {
@@ -568,7 +569,7 @@ public class FlinkConfigBuilder {
         return tmpDir.getAbsolutePath();
     }
 
-    private static String createTempFile(Pod podTemplate) throws IOException {
+    private static String createTempFile(PodTemplateSpec podTemplate) throws IOException {
         final File tmp = File.createTempFile(GENERATED_FILE_PREFIX + "podTemplate_", ".yaml");
         Files.write(tmp.toPath(), Serialization.asYaml(podTemplate).getBytes());
         tmp.deleteOnExit();

@@ -41,8 +41,8 @@ import io.fabric8.kubernetes.api.model.ConfigMapList;
 import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.HTTPGetAction;
 import io.fabric8.kubernetes.api.model.IntOrString;
-import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodSpec;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import io.fabric8.kubernetes.api.model.Probe;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentCondition;
@@ -69,7 +69,8 @@ public class FlinkUtils {
 
     public static final String CR_GENERATION_LABEL = "flinkdeployment.flink.apache.org/generation";
 
-    public static Pod mergePodTemplates(Pod toPod, Pod fromPod, boolean mergeArraysByName) {
+    public static PodTemplateSpec mergePodTemplates(
+            PodTemplateSpec toPod, PodTemplateSpec fromPod, boolean mergeArraysByName) {
         if (fromPod == null) {
             return ReconciliationUtils.clone(toPod);
         } else if (toPod == null) {
@@ -79,7 +80,7 @@ public class FlinkUtils {
         JsonNode node2 = MAPPER.valueToTree(fromPod);
         mergeInto(node1, node2, mergeArraysByName);
         try {
-            return MAPPER.treeToValue(node1, Pod.class);
+            return MAPPER.treeToValue(node1, PodTemplateSpec.class);
         } catch (Exception ex) {
             throw new RuntimeException(ex);
         }
@@ -152,7 +153,7 @@ public class FlinkUtils {
         return out;
     }
 
-    public static void addStartupProbe(Pod pod) {
+    public static void addStartupProbe(PodTemplateSpec pod) {
         var spec = pod.getSpec();
         if (spec == null) {
             spec = new PodSpec();
