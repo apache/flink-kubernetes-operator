@@ -23,10 +23,10 @@ import org.apache.flink.annotation.Experimental;
 /** Enumeration for supported Flink versions. */
 @Experimental
 public enum FlinkVersion {
-    // No longer supported since release 1.7
+    /** No longer supported since 1.7 operator release. */
     @Deprecated
     v1_13,
-    // No longer supported since release 1.7
+    /** No longer supported since 1.7 operator release. */
     @Deprecated
     v1_14,
     v1_15,
