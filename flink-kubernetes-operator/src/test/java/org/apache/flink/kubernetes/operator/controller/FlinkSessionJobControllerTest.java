@@ -535,7 +535,7 @@ class FlinkSessionJobControllerTest {
                         Map.of(), kubernetesClient, version);
         var updateControl = testController.reconcile(TestUtils.buildSessionJob(), context);
         var lastEvent = testController.events().poll();
-        if (!version.isNewerVersionThan(FlinkVersion.v1_14)) {
+        if (!version.isEqualOrNewer(FlinkVersion.v1_15)) {
             assertTrue(updateControl.getScheduleDelay().isEmpty());
             assertEquals(
                     EventRecorder.Reason.UnsupportedFlinkVersion.name(), lastEvent.getReason());

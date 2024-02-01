@@ -118,7 +118,7 @@ public class FlinkConfigBuilder {
     protected FlinkConfigBuilder applyImage() {
         if (!StringUtils.isNullOrWhitespaceOnly(spec.getImage())) {
             String configKey;
-            if (spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_16)) {
+            if (spec.getFlinkVersion().isEqualOrNewer(FlinkVersion.v1_17)) {
                 configKey = KubernetesConfigOptions.CONTAINER_IMAGE.key();
             } else {
                 configKey = "kubernetes.container.image";
@@ -469,7 +469,7 @@ public class FlinkConfigBuilder {
             return;
         }
 
-        boolean newConfKeys = spec.getFlinkVersion().isNewerVersionThan(FlinkVersion.v1_16);
+        boolean newConfKeys = spec.getFlinkVersion().isEqualOrNewer(FlinkVersion.v1_17);
         String configKey;
         if (isJM) {
             if (newConfKeys) {

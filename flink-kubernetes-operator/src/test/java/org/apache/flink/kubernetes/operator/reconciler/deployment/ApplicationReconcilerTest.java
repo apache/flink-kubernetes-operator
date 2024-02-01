@@ -946,7 +946,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         }
         statusRecorder.updateStatusFromCache(deployment);
 
-        if (!flinkVersion.isNewerVersionThan(FlinkVersion.v1_15)) {
+        if (!flinkVersion.isEqualOrNewer(FlinkVersion.v1_16)) {
             assertFalse(StringUtils.isBlank(getJobStatus(deployment).getJobId()));
         }
     }

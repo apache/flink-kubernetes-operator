@@ -202,7 +202,7 @@ public class AbstractFlinkServiceTest {
                 job.getMetadata(), job.getSpec(), JobID.generate(), deployConf, null);
 
         // Make sure that deploy conf was passed to jar run
-        if (flinkVersion.isNewerVersionThan(FlinkVersion.v1_16)) {
+        if (flinkVersion.isEqualOrNewer(FlinkVersion.v1_17)) {
             assertEquals(deployConf.toMap(), jarRuns.get(0).getFlinkConfiguration().toMap());
         } else {
             assertTrue(jarRuns.get(0).getFlinkConfiguration().toMap().isEmpty());

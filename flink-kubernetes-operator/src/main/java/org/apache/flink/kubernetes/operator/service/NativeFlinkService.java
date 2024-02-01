@@ -250,7 +250,7 @@ public class NativeFlinkService extends AbstractFlinkService {
             return false;
         }
 
-        if (!observeConfig.get(FLINK_VERSION).isNewerVersionThan(FlinkVersion.v1_17)) {
+        if (!observeConfig.get(FLINK_VERSION).isEqualOrNewer(FlinkVersion.v1_18)) {
             LOG.debug("In-place rescaling is only available starting from Flink 1.18");
             return false;
         }
