@@ -19,6 +19,10 @@ package org.apache.flink.autoscaler.event;
 
 import org.apache.flink.annotation.Experimental;
 
+import lombok.SneakyThrows;
+
+import java.text.NumberFormat;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -60,10 +64,22 @@ public class AutoscalerEventUtils {
             vertexScalingReport.setVertexId(m.group(1));
             vertexScalingReport.setCurrentParallelism(Integer.parseInt(m.group(2)));
             vertexScalingReport.setNewParallelism(Integer.parseInt(m.group(3)));
-            vertexScalingReport.setCurrentProcessCapacity(Double.parseDouble(m.group(4)));
-            vertexScalingReport.setExpectedProcessCapacity(Double.parseDouble(m.group(5)));
-            vertexScalingReport.setTargetDataRate(Double.parseDouble(m.group(6)));
+            vertexScalingReport.setCurrentProcessCapacity(convertStringToDouble(m.group(4)));
+            vertexScalingReport.setExpectedProcessCapacity(convertStringToDouble(m.group(5)));
+            vertexScalingReport.setTargetDataRate(convertStringToDouble(m.group(6)));
         }
         return vertexScalingReport;
+    }
+
+    @SneakyThrows
+    private static double convertStringToDouble(String str) {
+        try {
+            // Using the NumberFormat to support Locale format because
+            // the event is formatted in String.format, it uses the Locale by default.
+            return NumberFormat.getInstance().parse(str).doubleValue();
+        } catch (ParseException e) {
+            // NumberFormat doesn't support Infinity and NaN.
+            return Double.parseDouble(str);
+        }
     }
 }
