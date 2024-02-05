@@ -325,9 +325,9 @@ public class ScalingMetricEvaluator {
                         getAverageGlobalMetric(HEAP_MAX_USAGE_RATIO, metricHistory)));
 
         var latestObservation = latest.getOrDefault(HEAP_AVERAGE_SIZE, Double.NaN);
-        double averageGlobalMetric = getAverageGlobalMetric(HEAP_AVERAGE_SIZE, metricHistory);
-        LOG.info("Latest: {}, Avg: {}", latestObservation, averageGlobalMetric);
-        out.put(HEAP_AVERAGE_SIZE, EvaluatedScalingMetric.avg(averageGlobalMetric));
+        double heapSizeAverage = getAverageGlobalMetric(HEAP_AVERAGE_SIZE, metricHistory);
+        LOG.debug("Latest: {}, Avg: {}", latestObservation, heapSizeAverage);
+        out.put(HEAP_AVERAGE_SIZE, new EvaluatedScalingMetric(latestObservation, heapSizeAverage));
 
         out.put(
                 NUM_TASK_SLOTS_USED,

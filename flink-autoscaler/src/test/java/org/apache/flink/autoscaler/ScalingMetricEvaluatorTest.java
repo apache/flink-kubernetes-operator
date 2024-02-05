@@ -605,7 +605,7 @@ public class ScalingMetricEvaluatorTest {
                         ScalingMetric.GC_PRESSURE,
                         EvaluatedScalingMetric.of(0.6),
                         ScalingMetric.HEAP_AVERAGE_SIZE,
-                        EvaluatedScalingMetric.avg(512),
+                        new EvaluatedScalingMetric(512, 512),
                         ScalingMetric.NUM_TASK_SLOTS_USED,
                         EvaluatedScalingMetric.of(Double.NaN)),
                 ScalingMetricEvaluator.evaluateGlobalMetrics(globalMetrics));
@@ -631,7 +631,7 @@ public class ScalingMetricEvaluatorTest {
                         ScalingMetric.GC_PRESSURE,
                         EvaluatedScalingMetric.of(0.8),
                         ScalingMetric.HEAP_AVERAGE_SIZE,
-                        EvaluatedScalingMetric.avg(768),
+                        new EvaluatedScalingMetric(1024., 768.),
                         ScalingMetric.NUM_TASK_SLOTS_USED,
                         EvaluatedScalingMetric.of(42.)),
                 ScalingMetricEvaluator.evaluateGlobalMetrics(globalMetrics));
