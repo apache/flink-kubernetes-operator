@@ -109,4 +109,13 @@ public class MemoryTuningUtilsTest {
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
                                 totalMemory.toString()));
     }
+
+    @Test
+    void testTuningDisabled() {
+        var context = TestingAutoscalerUtils.createResourceAwareContext();
+        Assertions.assertThat(
+                        MemoryTuningUtils.tuneTaskManagerHeapMemory(context, new EvaluatedMetrics())
+                                .toMap())
+                .isEmpty();
+    }
 }

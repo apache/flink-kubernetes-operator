@@ -53,12 +53,12 @@ public class MemoryTuningUtils {
     public static Configuration tuneTaskManagerHeapMemory(
             JobAutoScalerContext<?> context, EvaluatedMetrics evaluatedMetrics) {
 
+        if (!context.getConfiguration().get(AutoScalerOptions.MEMORY_TUNING_ENABLED)) {
+            return new Configuration();
+        }
         // Please note that this config is the original configuration created from the user spec.
         // It does not contain any already applied overrides.
         var config = new UnmodifiableConfiguration(context.getConfiguration());
-        if (!context.getConfiguration().get(AutoScalerOptions.MEMORY_TUNING_ENABLED)) {
-            return config;
-        }
 
         var globalMetrics = evaluatedMetrics.getGlobalMetrics();
         MemorySize avgHeapSize =
