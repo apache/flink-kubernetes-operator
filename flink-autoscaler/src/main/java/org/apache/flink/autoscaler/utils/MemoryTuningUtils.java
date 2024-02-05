@@ -37,8 +37,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 
-import static org.apache.commons.lang3.math.Fraction.getFraction;
-
 /** Tunes the TaskManager memory. */
 public class MemoryTuningUtils {
 
@@ -195,9 +193,5 @@ public class MemoryTuningUtils {
         return (float)
                 (Math.round(enumerator.getBytes() / (double) denominator.getBytes() * 1000)
                         / 1000.);
-    }
-
-    private static boolean leftGreaterThanRight(MemorySize greater, MemorySize smaller) {
-        return greater.compareTo(smaller) > 0;
     }
 }
