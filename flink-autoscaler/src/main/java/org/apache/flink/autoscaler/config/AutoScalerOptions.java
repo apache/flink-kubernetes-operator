@@ -267,6 +267,15 @@ public class AutoScalerOptions {
                     .withDescription(
                             "The minimum amount of TaskManager memory, if memory tuning is enabled.");
 
+    public static final ConfigOption<Boolean> MEMORY_TUNING_TRANSFER_HEAP_TO_MANAGED =
+            autoScalerConfig("memory.tuning.heap.transfer-to-managed")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("memory.tuning.heap.transfer-to-managed"))
+                    .withDescription(
+                            "If enabled, any reduction of heap memory will increase the managed memory for RocksDB. RocksDB needs to be enabled.");
+
     public static final ConfigOption<Integer> VERTEX_SCALING_HISTORY_COUNT =
             autoScalerConfig("history.max.count")
                     .intType()

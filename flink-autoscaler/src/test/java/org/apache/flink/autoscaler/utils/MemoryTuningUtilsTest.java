@@ -90,6 +90,7 @@ public class MemoryTuningUtilsTest {
                                 "22254977254 bytes"));
 
         // Test giving back memory to RocksDB
+        config.set(AutoScalerOptions.MEMORY_TUNING_TRANSFER_HEAP_TO_MANAGED, true);
         config.set(StateBackendOptions.STATE_BACKEND, "rocksdb");
         overrides = MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics).toMap();
         Assertions.assertThat(overrides)

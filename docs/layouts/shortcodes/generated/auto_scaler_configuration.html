@@ -75,6 +75,12 @@
             <td>The minimum amount of TaskManager memory, if memory tuning is enabled.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.memory.tuning.heap.transfer-to-managed</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>If enabled, any reduction of heap memory will increase the managed memory for RocksDB. RocksDB needs to be enabled.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.metrics.busy-time.aggregator</h5></td>
             <td style="word-wrap: break-word;">MAX</td>
             <td><p>Enum</p></td>

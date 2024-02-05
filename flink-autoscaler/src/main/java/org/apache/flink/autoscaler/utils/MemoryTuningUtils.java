@@ -134,7 +134,8 @@ public class MemoryTuningUtils {
 
     private static boolean shouldTransferHeapToManagedMemory(
             Configuration config, long heapDiffBytes) {
-        return heapDiffBytes < 0
+        return config.get(AutoScalerOptions.MEMORY_TUNING_TRANSFER_HEAP_TO_MANAGED)
+                && heapDiffBytes < 0
                 && "rocksdb".equalsIgnoreCase(config.get(StateBackendOptions.STATE_BACKEND));
     }
 
