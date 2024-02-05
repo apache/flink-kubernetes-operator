@@ -67,7 +67,7 @@ public class JobAutoScalerContext<KEY> {
         return Optional.empty();
     }
 
-    /** Retrieve the currently tuned TaskManager memory for this context. */
+    /** Retrieve the currently configured TaskManager memory for this context. */
     public Optional<MemorySize> getTaskManagerMemory() {
         // Not supported by default
         return Optional.empty();
