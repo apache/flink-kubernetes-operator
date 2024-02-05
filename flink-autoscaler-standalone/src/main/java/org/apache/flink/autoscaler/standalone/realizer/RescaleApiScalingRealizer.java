@@ -126,7 +126,7 @@ public class RescaleApiScalingRealizer<KEY, Context extends JobAutoScalerContext
     }
 
     @Override
-    public void realizeMemoryOverrides(Context context, Configuration configOverrides) {
+    public void realizeConfigOverrides(Context context, Configuration configOverrides) {
         // Not currently supported
         LOG.warn(
                 "{} does not support updating the TaskManager configuration ({})",

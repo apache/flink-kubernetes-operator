@@ -71,7 +71,7 @@ public class KubernetesScalingRealizerTest {
         var overrides = new Configuration();
         MemorySize memoryOverride = MemorySize.ofMebiBytes(4096);
         overrides.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, memoryOverride);
-        new KubernetesScalingRealizer().realizeMemoryOverrides(ctx, overrides);
+        new KubernetesScalingRealizer().realizeConfigOverrides(ctx, overrides);
 
         assertThat(ctx.getResource()).isInstanceOf(FlinkDeployment.class);
         assertThat(

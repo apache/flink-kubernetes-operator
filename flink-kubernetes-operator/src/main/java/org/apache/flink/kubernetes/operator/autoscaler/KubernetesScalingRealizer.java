@@ -25,10 +25,9 @@ import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.Resource;
-
-import io.fabric8.kubernetes.api.model.Quantity;
-import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
+
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,26 +54,30 @@ public class KubernetesScalingRealizer
     }
 
     @Override
-    public void realizeMemoryOverrides(
+    public void realizeConfigOverrides(
             KubernetesJobAutoScalerContext context, Configuration configOverrides) {
+        if (!(context.getResource() instanceof FlinkDeployment)) {
+            // We can't adjust the configuration of non-job deployments.
+            return;
+        }
+        FlinkDeployment flinkDeployment = ((FlinkDeployment) context.getResource());
+        // Apply config overrides
+        flinkDeployment.getSpec().getFlinkConfiguration().putAll(configOverrides.toMap());
 
-        if (context.getResource() instanceof FlinkDeployment) {
-            var flinkDeployment = ((FlinkDeployment) context.getResource());
-
-            flinkDeployment.getSpec().getFlinkConfiguration().putAll(configOverrides.toMap());
-
-            var totalMemoryOverride = MemoryTuningUtils.getTotalMemory(configOverrides, context);
-            if (totalMemoryOverride.compareTo(MemorySize.ZERO) > 0) {
-                Resource tmResource = flinkDeployment.getSpec().getTaskManager().getResource();
-                // Make sure to parse in the same way as the original deploy code path.
-                var currentMemory =
-                        MemorySize.parse(
-                                FlinkConfigBuilder.parseResourceMemoryString(tmResource.getMemory()));
-                // Adjust the resource memory to change the total TM memory
-                if (!totalMemoryOverride.equals(currentMemory)) {
-                    tmResource.setMemory(String.valueOf(totalMemoryOverride.getBytes()));
-                }
-            }
+        // Update total memory in spec
+        var totalMemoryOverride = MemoryTuningUtils.getTotalMemory(configOverrides, context);
+        if (totalMemoryOverride.compareTo(MemorySize.ZERO) <= 0) {
+            LOG.warn("Memory override {} is not valid", totalMemoryOverride);
+            return;
+        }
+        Resource tmResource = flinkDeployment.getSpec().getTaskManager().getResource();
+        // Make sure to parse in the same way as the original deploy code path.
+        var currentMemory =
+                MemorySize.parse(
+                        FlinkConfigBuilder.parseResourceMemoryString(tmResource.getMemory()));
+        if (!totalMemoryOverride.equals(currentMemory)) {
+            // Adjust the resource memory to change the total TM memory
+            tmResource.setMemory(String.valueOf(totalMemoryOverride.getBytes()));
         }
     }
 

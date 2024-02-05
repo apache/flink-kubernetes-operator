@@ -37,5 +37,5 @@ public interface ScalingRealizer<KEY, Context extends JobAutoScalerContext<KEY>>
     void realizeParallelismOverrides(Context context, Map<String, String> parallelismOverrides);
 
     /** Updates the TaskManager memory configuration. */
-    void realizeMemoryOverrides(Context context, Configuration configOverrides);
+    void realizeConfigOverrides(Context context, Configuration configOverrides);
 }

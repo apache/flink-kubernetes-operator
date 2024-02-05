@@ -169,7 +169,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
         Configuration configOverrides = stateStore.getConfigOverrides(ctx);
         LOG.info("Applying config overrides: {}", configOverrides);
-        scalingRealizer.realizeMemoryOverrides(ctx, configOverrides);
+        scalingRealizer.realizeConfigOverrides(ctx, configOverrides);
     }
 
     private void runScalingLogic(Context ctx, AutoscalerFlinkMetrics autoscalerMetrics)

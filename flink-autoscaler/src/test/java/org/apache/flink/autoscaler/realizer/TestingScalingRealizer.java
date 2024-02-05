@@ -38,7 +38,7 @@ public class TestingScalingRealizer<KEY, Context extends JobAutoScalerContext<KE
     }
 
     @Override
-    public void realizeMemoryOverrides(Context context, Configuration configOverrides) {
+    public void realizeConfigOverrides(Context context, Configuration configOverrides) {
         events.add(new Event<>(context, configOverrides));
     }
 
