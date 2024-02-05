@@ -28,6 +28,7 @@ import org.apache.flink.kubernetes.operator.api.spec.Resource;
 
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,14 +66,12 @@ public class KubernetesScalingRealizer
             var totalMemoryOverride = MemoryTuningUtils.getTotalMemory(configOverrides, context);
             if (totalMemoryOverride.compareTo(MemorySize.ZERO) > 0) {
                 Resource tmResource = flinkDeployment.getSpec().getTaskManager().getResource();
-                // Make sure to support the Kubernetes syntax here, which supports more formats than
-                // Flink's classes.
+                // Make sure to parse in the same way as the original deploy code path.
                 var currentMemory =
-                        new MemorySize(
-                                (Quantity.parse(tmResource.getMemory()).getNumericalAmount())
-                                        .longValue());
+                        MemorySize.parse(
+                                FlinkConfigBuilder.parseResourceMemoryString(tmResource.getMemory()));
+                // Adjust the resource memory to change the total TM memory
                 if (!totalMemoryOverride.equals(currentMemory)) {
-                    // Adjust the resource memory to change the total TM memory
                     tmResource.setMemory(String.valueOf(totalMemoryOverride.getBytes()));
                 }
             }
