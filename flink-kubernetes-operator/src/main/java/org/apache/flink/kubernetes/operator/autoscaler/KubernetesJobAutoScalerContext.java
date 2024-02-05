@@ -26,7 +26,6 @@ import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
-import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.function.SupplierWithException;
@@ -78,13 +77,5 @@ public class KubernetesJobAutoScalerContext extends JobAutoScalerContext<Resourc
 
     public KubernetesClient getKubernetesClient() {
         return resourceContext.getKubernetesClient();
-    }
-
-    private Optional<FlinkDeployment> getJobDeployment() {
-        AbstractFlinkResource<?, ?> resource = resourceContext.getResource();
-        if (resource instanceof FlinkDeployment) {
-            return Optional.of((FlinkDeployment) resource);
-        }
-        return Optional.empty();
     }
 }

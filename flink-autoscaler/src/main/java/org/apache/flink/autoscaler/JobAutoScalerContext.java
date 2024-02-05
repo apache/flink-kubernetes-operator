@@ -54,6 +54,7 @@ public class JobAutoScalerContext<KEY> {
 
     @Nullable @Getter private final JobStatus jobStatus;
 
+    /** The configuration derived from the current spec. */
     @Getter private final Configuration configuration;
 
     @Getter private final MetricGroup metricGroup;
@@ -61,13 +62,13 @@ public class JobAutoScalerContext<KEY> {
     @ToString.Exclude
     private final SupplierWithException<RestClusterClient<String>, Exception> restClientSupplier;
 
-    /** Retrieve the currently configured TaskManager CPU for this context. */
+    /** Retrieve the currently configured TaskManager CPU. */
     public Optional<Double> getTaskManagerCpu() {
         // Not supported by default
         return Optional.empty();
     }
 
-    /** Retrieve the currently configured TaskManager memory for this context. */
+    /** Retrieve the currently configured TaskManager memory. */
     public Optional<MemorySize> getTaskManagerMemory() {
         // Not supported by default
         return Optional.empty();

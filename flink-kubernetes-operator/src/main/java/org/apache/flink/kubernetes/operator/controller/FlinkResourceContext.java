@@ -65,7 +65,7 @@ public abstract class FlinkResourceContext<CR extends AbstractFlinkResource<?, ?
     }
 
     private KubernetesJobAutoScalerContext createJobAutoScalerContext() {
-        Configuration conf = new Configuration(getObserveConfig());
+        Configuration conf = new Configuration(getDeployConfig(resource.getSpec()));
         conf.set(
                 AutoScalerOptions.FLINK_CLIENT_TIMEOUT,
                 getOperatorConfig().getFlinkClientTimeout());

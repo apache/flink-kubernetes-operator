@@ -151,7 +151,7 @@ public class MemoryTuningUtils {
 
         var specTaskManagerMemory = ctx.getTaskManagerMemory().orElse(MemorySize.ZERO);
         if (specTaskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
-            LOG.warn("Spec TaskManager memory could not be determined.");
+            LOG.warn("Spec TaskManager memory size could not be determined.");
             return MemorySize.ZERO;
         }
 
@@ -160,13 +160,7 @@ public class MemoryTuningUtils {
             return specTaskManagerMemory;
         }
 
-        var totalTaskManagerMemory = ctx.getTaskManagerMemory().orElse(MemorySize.ZERO);
-        if (totalTaskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
-            LOG.warn("Current TaskManager memory size could not be determined.");
-            return MemorySize.ZERO;
-        }
-
-        long newTotalMemBytes = totalTaskManagerMemory.getBytes() + heapDiffBytes;
+        long newTotalMemBytes = specTaskManagerMemory.getBytes() + heapDiffBytes;
         // TM container memory can never grow beyond the user-specified max memory
         newTotalMemBytes = Math.min(newTotalMemBytes, specTaskManagerMemory.getBytes());
 
