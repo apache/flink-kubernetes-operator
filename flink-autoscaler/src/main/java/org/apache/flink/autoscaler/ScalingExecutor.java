@@ -27,6 +27,7 @@ import org.apache.flink.autoscaler.resources.NoopResourceCheck;
 import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.utils.CalendarUtils;
+import org.apache.flink.autoscaler.utils.ResourceCheckUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -278,38 +279,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return true;
         }
 
-        var vertexMetrics = evaluatedMetrics.getVertexMetrics();
-
-        int oldParallelismSum =
-                vertexMetrics.values().stream()
-                        .map(map -> (int) map.get(ScalingMetric.PARALLELISM).getCurrent())
-                        .reduce(0, Integer::sum);
-
-        Map<JobVertexID, Integer> newParallelisms = new HashMap<>();
-        for (Map.Entry<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> entry :
-                vertexMetrics.entrySet()) {
-            JobVertexID jobVertexID = entry.getKey();
-            ScalingSummary scalingSummary = scalingSummaries.get(jobVertexID);
-            if (scalingSummary != null) {
-                newParallelisms.put(jobVertexID, scalingSummary.getNewParallelism());
-            } else {
-                newParallelisms.put(
-                        jobVertexID,
-                        (int) entry.getValue().get(ScalingMetric.PARALLELISM).getCurrent());
-            }
-        }
-
-        double numTaskSlotsUsed = globalMetrics.get(ScalingMetric.NUM_TASK_SLOTS_USED).getCurrent();
-
-        final int numTaskSlotsAfterRescale;
-        if (oldParallelismSum >= numTaskSlotsUsed) {
-            // Slot sharing is (partially) deactivated,
-            // assuming no slot sharing in absence of additional data.
-            numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::sum);
-        } else {
-            // Slot sharing is activated
-            numTaskSlotsAfterRescale = newParallelisms.values().stream().reduce(0, Integer::max);
-        }
+        int numTaskSlotsUsed =
+                (int) globalMetrics.get(ScalingMetric.NUM_TASK_SLOTS_USED).getCurrent();
+        final int numTaskSlotsAfterRescale =
+                ResourceCheckUtils.estimateNumTaskSlotsAfterRescale(
+                        evaluatedMetrics.getVertexMetrics(), scalingSummaries, numTaskSlotsUsed);
 
         int taskSlotsPerTm = ctx.getConfiguration().get(TaskManagerOptions.NUM_TASK_SLOTS);
 
