@@ -21,6 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -76,18 +78,20 @@ public class JdbcStateInteractor {
             String jobKey, List<StateType> createdStateTypes, Map<StateType, String> data)
             throws Exception {
         var query =
-                "INSERT INTO t_flink_autoscaler_state_store (job_key, state_type, state_value) values (?, ?, ?)";
+                "INSERT INTO t_flink_autoscaler_state_store (update_time, job_key, state_type, state_value) values (?, ?, ?, ?)";
+        var updateTime = Timestamp.from(Instant.now());
         try (var pstmt = conn.prepareStatement(query)) {
             for (var stateType : createdStateTypes) {
-                pstmt.setString(1, jobKey);
-                pstmt.setString(2, stateType.getIdentifier());
+                pstmt.setTimestamp(1, updateTime);
+                pstmt.setString(2, jobKey);
+                pstmt.setString(3, stateType.getIdentifier());
 
                 String stateValue = data.get(stateType);
                 checkState(
                         stateValue != null,
                         "The state value shouldn't be null during inserting. "
                                 + "It may be a bug, please raise a JIRA to Flink Community.");
-                pstmt.setString(3, stateValue);
+                pstmt.setString(4, stateValue);
                 pstmt.addBatch();
             }
             pstmt.executeBatch();
@@ -99,18 +103,21 @@ public class JdbcStateInteractor {
             String jobKey, List<StateType> updatedStateTypes, Map<StateType, String> data)
             throws Exception {
         var query =
-                "UPDATE t_flink_autoscaler_state_store set state_value = ? where job_key = ? and state_type = ?";
+                "UPDATE t_flink_autoscaler_state_store set update_time = ?, state_value = ? where job_key = ? and state_type = ?";
 
+        var updateTime = Timestamp.from(Instant.now());
         try (var pstmt = conn.prepareStatement(query)) {
             for (var stateType : updatedStateTypes) {
+                pstmt.setTimestamp(1, updateTime);
+
                 String stateValue = data.get(stateType);
                 checkState(
                         stateValue != null,
                         "The state value shouldn't be null during inserting. "
                                 + "It may be a bug, please raise a JIRA to Flink Community.");
-                pstmt.setString(1, stateValue);
-                pstmt.setString(2, jobKey);
-                pstmt.setString(3, stateType.getIdentifier());
+                pstmt.setString(2, stateValue);
+                pstmt.setString(3, jobKey);
+                pstmt.setString(4, stateType.getIdentifier());
                 pstmt.addBatch();
             }
             pstmt.executeBatch();

@@ -22,7 +22,7 @@ use `flink_autoscaler`;
 create table `t_flink_autoscaler_state_store`
 (
     `id`            bigint       not null auto_increment,
-    `update_time`   datetime     not null default current_timestamp on update current_timestamp comment 'update time',
+    `update_time`   datetime     not null comment 'The update time',
     `job_key`       varchar(191) not null comment 'The job key',
     `state_type`    varchar(100) not null comment 'The state type',
     `state_value`   longtext     not null comment 'The real state',
