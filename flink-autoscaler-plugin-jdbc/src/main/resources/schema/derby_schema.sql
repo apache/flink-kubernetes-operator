@@ -17,8 +17,8 @@
 
 CREATE TABLE t_flink_autoscaler_state_store
 (
-    id            BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),
-    update_time   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id            BIGINT       NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),
+    update_time   TIMESTAMP    NOT NULL,
     job_key       VARCHAR(191) NOT NULL,
     state_type    VARCHAR(100) NOT NULL,
     state_value   CLOB NOT NULL,

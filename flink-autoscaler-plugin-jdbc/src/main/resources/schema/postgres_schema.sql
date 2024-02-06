@@ -21,24 +21,10 @@ CREATE DATABASE flink_autoscaler;
 CREATE TABLE t_flink_autoscaler_state_store
 (
     id            BIGSERIAL     NOT NULL,
-    update_time   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time   TIMESTAMP     NOT NULL,
     job_key       TEXT          NOT NULL,
     state_type    TEXT          NOT NULL,
     state_value   TEXT          NOT NULL,
     PRIMARY KEY (id),
     UNIQUE (job_key, state_type)
 );
-
-CREATE OR REPLACE FUNCTION update_flink_autoscaler_update_time_column()
-RETURNS TRIGGER AS $$
-BEGIN
-   NEW.update_time = CURRENT_TIMESTAMP;
-RETURN NEW;
-END;
-$$ language 'plpgsql';
-
-CREATE TRIGGER update_t_flink_autoscaler_state_store_modtime
-    BEFORE UPDATE ON t_flink_autoscaler_state_store
-    FOR EACH ROW
-    EXECUTE FUNCTION update_flink_autoscaler_update_time_column();
-

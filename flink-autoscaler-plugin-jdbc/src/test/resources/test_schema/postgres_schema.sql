@@ -18,7 +18,7 @@
 CREATE TABLE t_flink_autoscaler_state_store
 (
     id            BIGSERIAL     NOT NULL,
-    update_time   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time   TIMESTAMP     NOT NULL,
     job_key       TEXT          NOT NULL,
     state_type    TEXT          NOT NULL,
     state_value   TEXT          NOT NULL,
