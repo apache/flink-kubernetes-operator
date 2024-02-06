@@ -20,7 +20,9 @@ package org.apache.flink.kubernetes.operator.api.spec;
 import org.apache.flink.annotation.Experimental;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import io.fabric8.crd.generator.annotation.SchemaFrom;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -59,7 +61,8 @@ public class FlinkDeploymentSpec extends AbstractFlinkSpec {
      * Base pod template for job and task manager pods. Can be overridden by the jobManager and
      * taskManager pod templates.
      */
-    private Pod podTemplate;
+    @SchemaFrom(type = Pod.class)
+    private PodTemplateSpec podTemplate;
 
     /** JobManager specs. */
     private JobManagerSpec jobManager;

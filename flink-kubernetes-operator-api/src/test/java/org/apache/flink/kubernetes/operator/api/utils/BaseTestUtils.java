@@ -39,6 +39,7 @@ import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodSpec;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -185,13 +186,21 @@ public class BaseTestUtils {
                 .build();
     }
 
-    public static Pod getTestPod(String hostname, String apiVersion, List<Container> containers) {
+    public static PodTemplateSpec getTestPodTemplate(String hostname, List<Container> containers) {
         final PodSpec podSpec = new PodSpec();
         podSpec.setHostname(hostname);
         podSpec.setContainers(containers);
-        final Pod pod = new Pod();
-        pod.setApiVersion(apiVersion);
+        var pod = new PodTemplateSpec();
         pod.setSpec(podSpec);
+        return pod;
+    }
+
+    public static Pod getTestPod(String hostname, String apiVersion, List<Container> containers) {
+        var pod = new Pod();
+        var podTemplate = getTestPodTemplate(hostname, containers);
+        pod.setApiVersion(apiVersion);
+        pod.setSpec(podTemplate.getSpec());
+        pod.setMetadata(podTemplate.getMetadata());
         return pod;
     }
 }

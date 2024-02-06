@@ -40,7 +40,7 @@ import io.fabric8.kubernetes.api.model.EphemeralVolumeSource;
 import io.fabric8.kubernetes.api.model.HTTPGetAction;
 import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import io.fabric8.kubernetes.api.model.Probe;
 import io.fabric8.kubernetes.api.model.Volume;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -77,21 +77,17 @@ public class FlinkUtilsTest {
         Container container2 = new Container();
         container2.setName("container2");
 
-        Pod pod1 = TestUtils.getTestPod("pod1 hostname", "pod1 api version", List.of());
+        var pod1 = TestUtils.getTestPodTemplate("pod1 hostname", List.of());
 
-        Pod pod2 =
-                TestUtils.getTestPod(
-                        "pod2 hostname", "pod2 api version", List.of(container1, container2));
+        var pod2 = TestUtils.getTestPodTemplate("pod2 hostname", List.of(container1, container2));
 
-        Pod mergedPod = FlinkUtils.mergePodTemplates(pod1, pod2, false);
-
-        assertEquals(pod2.getApiVersion(), mergedPod.getApiVersion());
+        var mergedPod = FlinkUtils.mergePodTemplates(pod1, pod2, false);
         assertEquals(pod2.getSpec().getContainers(), mergedPod.getSpec().getContainers());
     }
 
     @Test
     public void testAddStartupProbe() {
-        Pod pod = new Pod();
+        var pod = new PodTemplateSpec();
         FlinkUtils.addStartupProbe(pod);
 
         Probe expectedProbe = new Probe();
@@ -332,24 +328,19 @@ public class FlinkUtilsTest {
         Volume volume3 = new Volume();
         volume3.setName("v3");
 
-        Pod pod1 =
-                TestUtils.getTestPod(
-                        "pod1 hostname", "pod1 api version", List.of(container1, container2));
+        var pod1 = TestUtils.getTestPodTemplate("pod1 hostname", List.of(container1, container2));
         pod1.getSpec().setVolumes(List.of(volume1));
 
-        Pod pod2 =
-                TestUtils.getTestPod(
-                        "pod2 hostname", "pod2 api version", List.of(container1, container3));
+        var pod2 = TestUtils.getTestPodTemplate("pod2 hostname", List.of(container1, container3));
         pod2.getSpec().setVolumes(List.of(volume12, volume2, volume3));
 
-        Pod mergedPod = FlinkUtils.mergePodTemplates(pod1, pod2, true);
+        var mergedPod = FlinkUtils.mergePodTemplates(pod1, pod2, true);
 
         Volume v1merged = new Volume();
         v1merged.setName("v1");
         v1merged.setEphemeral(new EphemeralVolumeSource());
         v1merged.setEmptyDir(new EmptyDirVolumeSource());
 
-        assertEquals(pod2.getApiVersion(), mergedPod.getApiVersion());
         assertEquals(
                 List.of(container1, container2, container3), mergedPod.getSpec().getContainers());
         assertEquals(List.of(v1merged, volume2, volume3), mergedPod.getSpec().getVolumes());

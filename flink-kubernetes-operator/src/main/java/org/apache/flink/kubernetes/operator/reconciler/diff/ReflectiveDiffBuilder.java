@@ -21,8 +21,10 @@ import org.apache.flink.annotation.Experimental;
 import org.apache.flink.kubernetes.operator.api.diff.DiffType;
 import org.apache.flink.kubernetes.operator.api.diff.Diffable;
 import org.apache.flink.kubernetes.operator.api.diff.SpecDiff;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 
+import io.fabric8.kubernetes.api.model.PodTemplateSpec;
 import lombok.NonNull;
 import org.apache.commons.lang3.ClassUtils;
 import org.apache.commons.lang3.ObjectUtils;
@@ -61,6 +63,8 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
         this.before = before;
         this.after = after;
         diffBuilder = new DiffBuilder<>(before, after);
+        clearIgnoredFields(before);
+        clearIgnoredFields(after);
     }
 
     @Override
@@ -79,6 +83,7 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
                 try {
                     var leftField = readField(field, before, true);
                     var rightField = readField(field, after, true);
+
                     if (field.isAnnotationPresent(SpecDiff.Config.class)
                             && Map.class.isAssignableFrom(field.getType())) {
                         diffBuilder.append(
@@ -112,11 +117,7 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
                                         .build());
 
                     } else {
-                        diffBuilder.append(
-                                field.getName(),
-                                readField(field, before, true),
-                                readField(field, after, true),
-                                UPGRADE);
+                        diffBuilder.append(field.getName(), leftField, rightField, UPGRADE);
                     }
 
                 } catch (final IllegalAccessException ex) {
@@ -171,5 +172,40 @@ public class ReflectiveDiffBuilder<T> implements Builder<DiffResult<T>> {
             }
         }
         return diffType;
+    }
+
+    /**
+     * This method is responsible for clearing / nulling out deprecated fields that should be
+     * ignored during spec diff comparison. These fields may still be present in the
+     * lastReconciledSpec.
+     *
+     * @param o Object to be cleaned.
+     */
+    private static void clearIgnoredFields(Object o) {
+        if (o == null) {
+            return;
+        }
+        if (o instanceof FlinkDeploymentSpec) {
+            var spec = (FlinkDeploymentSpec) o;
+            clearPodTemplateAdditionalProps(spec.getPodTemplate());
+            if (spec.getJobManager() != null) {
+                clearPodTemplateAdditionalProps(spec.getJobManager().getPodTemplate());
+            }
+            if (spec.getTaskManager() != null) {
+                clearPodTemplateAdditionalProps(spec.getTaskManager().getPodTemplate());
+            }
+        }
+    }
+
+    /**
+     * Remove additional props from deserialized PodTemplateSpec which could still be there when we
+     * moved Pod -> PodTemplateSpec.
+     *
+     * @param o Object to be cleaned.
+     */
+    private static void clearPodTemplateAdditionalProps(Object o) {
+        if (o != null && o instanceof PodTemplateSpec) {
+            ((PodTemplateSpec) o).setAdditionalProperties(null);
+        }
     }
 }
