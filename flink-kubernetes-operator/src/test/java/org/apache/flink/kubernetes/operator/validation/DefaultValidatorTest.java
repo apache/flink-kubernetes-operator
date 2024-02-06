@@ -745,6 +745,23 @@ public class DefaultValidatorTest {
                 },
                 flinkDeployment -> {},
                 "The deploymentName can't be changed");
+
+        testSessionJobValidateWithModifier(
+                sessionJob -> {
+                    sessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
+                    sessionJob
+                            .getSpec()
+                            .setFlinkConfiguration(
+                                    Map.of(
+                                            CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
+                                                    "test-savepoint-dir",
+                                            CheckpointingOptions.CHECKPOINTS_DIRECTORY.key(),
+                                                    "test-checkpoint-dir"));
+                },
+                flinkDeployment -> {
+                    flinkDeployment.getSpec().setFlinkConfiguration(Map.of());
+                },
+                null);
     }
 
     private void testSessionJobValidateWithModifier(

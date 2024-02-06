@@ -497,6 +497,10 @@ public class DefaultValidator implements FlinkResourceValidator {
             effectiveConfig.putAll(sessionCluster.getSpec().getFlinkConfiguration());
         }
 
+        if (sessionJob.getSpec().getFlinkConfiguration() != null) {
+            effectiveConfig.putAll(sessionJob.getSpec().getFlinkConfiguration());
+        }
+
         return firstPresent(
                 validateNotApplicationCluster(sessionCluster),
                 validateSessionClusterId(sessionJob, sessionCluster),
