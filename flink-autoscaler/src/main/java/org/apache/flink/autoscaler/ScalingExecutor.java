@@ -118,7 +118,9 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return false;
         }
 
-        var tuningConfig = MemoryTuningUtils.tuneTaskManagerHeapMemory(context, evaluatedMetrics);
+        var tuningConfig =
+                MemoryTuningUtils.tuneTaskManagerHeapMemory(
+                        context, evaluatedMetrics, autoScalerEventHandler);
 
         if (scalingWouldExceedClusterResources(
                 tuningConfig, evaluatedMetrics, scalingSummaries, context)) {

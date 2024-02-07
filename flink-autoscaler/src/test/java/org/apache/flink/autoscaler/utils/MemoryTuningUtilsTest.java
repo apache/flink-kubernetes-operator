@@ -17,8 +17,11 @@
 
 package org.apache.flink.autoscaler.utils;
 
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.TestingAutoscalerUtils;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
@@ -27,13 +30,17 @@ import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
+
 /** Tests for {@link MemoryTuningUtils}. */
 public class MemoryTuningUtilsTest {
+
+    TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventHandler =
+            new TestingEventCollector<>();
 
     @Test
     void testMemoryTuning() {
@@ -71,9 +78,9 @@ public class MemoryTuningUtilsTest {
         var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
 
         Map<String, String> overrides =
-                MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics).toMap();
+                MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics, eventHandler).toMap();
         // Test reducing overall memory
-        Assertions.assertThat(overrides)
+        assertThat(overrides)
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.TASK_HEAP_MEMORY.key(),
@@ -89,11 +96,16 @@ public class MemoryTuningUtilsTest {
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
                                 "22254977254 bytes"));
 
+        assertThat(eventHandler.events.poll().getMessage())
+                .startsWith(
+                        "Memory tuning recommends the following configuration (automatic tuning is enabled):");
+
         // Test giving back memory to RocksDB
         config.set(AutoScalerOptions.MEMORY_TUNING_TRANSFER_HEAP_TO_MANAGED, true);
         config.set(StateBackendOptions.STATE_BACKEND, "rocksdb");
-        overrides = MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics).toMap();
-        Assertions.assertThat(overrides)
+        overrides =
+                MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics, eventHandler).toMap();
+        assertThat(overrides)
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.TASK_HEAP_MEMORY.key(),
@@ -108,14 +120,20 @@ public class MemoryTuningUtilsTest {
                                 "0.148",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
                                 totalMemory.toString()));
-    }
 
-    @Test
-    void testTuningDisabled() {
-        var context = TestingAutoscalerUtils.createResourceAwareContext();
-        Assertions.assertThat(
-                        MemoryTuningUtils.tuneTaskManagerHeapMemory(context, new EvaluatedMetrics())
+        assertThat(eventHandler.events.poll().getMessage())
+                .startsWith(
+                        "Memory tuning recommends the following configuration (automatic tuning is enabled):");
+
+        // Test tuning disabled
+        config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, false);
+        assertThat(
+                        MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics, eventHandler)
                                 .toMap())
                 .isEmpty();
+
+        assertThat(eventHandler.events.poll().getMessage())
+                .startsWith(
+                        "Memory tuning recommends the following configuration (automatic tuning is disabled):");
     }
 }

@@ -19,13 +19,16 @@ package org.apache.flink.autoscaler.utils;
 
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.configuration.UnmodifiableConfiguration;
+import org.apache.flink.runtime.util.config.memory.CommonProcessMemorySpec;
 import org.apache.flink.runtime.util.config.memory.JvmMetaspaceAndOverheadOptions;
 import org.apache.flink.runtime.util.config.memory.ProcessMemoryOptions;
 import org.apache.flink.runtime.util.config.memory.ProcessMemoryUtils;
@@ -36,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
+import java.util.Map;
 
 /** Tunes the TaskManager memory. */
 public class MemoryTuningUtils {
@@ -44,6 +48,8 @@ public class MemoryTuningUtils {
     public static final ProcessMemoryUtils<TaskExecutorFlinkMemory> FLINK_MEMORY_UTILS =
             new ProcessMemoryUtils<>(getMemoryOptions(), new TaskExecutorFlinkMemoryUtils());
 
+    private static final Configuration EMPTY_CONFIG = new Configuration();
+
     /**
      * Emits a Configuration which contains overrides for the current configuration. We are not
      * modifying the config directly, but we are emitting a new configuration which contains any
@@ -51,25 +57,27 @@ public class MemoryTuningUtils {
      * clear any applied overrides if auto-tuning is disabled.
      */
     public static Configuration tuneTaskManagerHeapMemory(
-            JobAutoScalerContext<?> context, EvaluatedMetrics evaluatedMetrics) {
+            JobAutoScalerContext<?> context,
+            EvaluatedMetrics evaluatedMetrics,
+            AutoScalerEventHandler eventHandler) {
 
-        if (!context.getConfiguration().get(AutoScalerOptions.MEMORY_TUNING_ENABLED)) {
-            return new Configuration();
-        }
         // Please note that this config is the original configuration created from the user spec.
         // It does not contain any already applied overrides.
         var config = new UnmodifiableConfiguration(context.getConfiguration());
 
-        var globalMetrics = evaluatedMetrics.getGlobalMetrics();
-        MemorySize avgHeapSize =
-                new MemorySize(
-                        (long) globalMetrics.get(ScalingMetric.HEAP_AVERAGE_SIZE).getAverage());
-        LOG.info("Average TM used heap size: {}", avgHeapSize);
-
         // Gather original memory configuration from the user spec
-        var memSpecs = FLINK_MEMORY_UTILS.memoryProcessSpecFromConfig(config);
+        CommonProcessMemorySpec<TaskExecutorFlinkMemory> memSpecs;
+        try {
+            memSpecs = FLINK_MEMORY_UTILS.memoryProcessSpecFromConfig(config);
+        } catch (IllegalConfigurationException e) {
+            LOG.warn("Current memory configuration is not valid. Aborting memory tuning.");
+            return EMPTY_CONFIG;
+        }
+
         var maxHeapSize = memSpecs.getFlinkMemory().getJvmHeapMemorySize();
         LOG.info("Current configured heap size: {}", maxHeapSize);
+
+        MemorySize avgHeapSize = getAverageMemorySize(evaluatedMetrics);
 
         // Apply min/max heap size limits
         MemorySize newHeapSize =
@@ -89,7 +97,7 @@ public class MemoryTuningUtils {
 
         final MemorySize totalMemory = adjustTotalTmMemory(context, heapDiffBytes);
         if (totalMemory.equals(MemorySize.ZERO)) {
-            return config;
+            return EMPTY_CONFIG;
         }
 
         // Prepare the tuning config for new configuration values
@@ -129,7 +137,33 @@ public class MemoryTuningUtils {
                 TaskManagerOptions.JVM_OVERHEAD_FRACTION,
                 getFraction(memSpecs.getJvmOverheadSize(), totalMemory));
 
+        eventHandler.handleEvent(
+                context,
+                AutoScalerEventHandler.Type.Normal,
+                "Configuration recommendation",
+                String.format(
+                        "Memory tuning recommends the following configuration (automatic tuning is %s):\n%s",
+                        config.get(AutoScalerOptions.MEMORY_TUNING_ENABLED)
+                                ? "enabled"
+                                : "disabled",
+                        formatConfig(tuningConfig)),
+                "MemoryTuning",
+                null);
+
+        if (!context.getConfiguration().get(AutoScalerOptions.MEMORY_TUNING_ENABLED)) {
+            return EMPTY_CONFIG;
+        }
+
         return tuningConfig;
+    }
+
+    private static MemorySize getAverageMemorySize(EvaluatedMetrics evaluatedMetrics) {
+        var globalMetrics = evaluatedMetrics.getGlobalMetrics();
+        MemorySize avgHeapSize =
+                new MemorySize(
+                        (long) globalMetrics.get(ScalingMetric.HEAP_AVERAGE_SIZE).getAverage());
+        LOG.info("Average TM used heap size: {}", avgHeapSize);
+        return avgHeapSize;
     }
 
     private static boolean shouldTransferHeapToManagedMemory(
@@ -188,5 +222,17 @@ public class MemoryTuningUtils {
         return (float)
                 (Math.round(enumerator.getBytes() / (double) denominator.getBytes() * 1000)
                         / 1000.);
+    }
+
+    /** Format config such that it can be directly used as a Flink configuration. */
+    private static String formatConfig(Configuration config) {
+        var sb = new StringBuilder();
+        for (Map.Entry<String, String> entry : config.toMap().entrySet()) {
+            sb.append(entry.getKey())
+                    .append(": ")
+                    .append(entry.getValue())
+                    .append(System.lineSeparator());
+        }
+        return sb.toString();
     }
 }
