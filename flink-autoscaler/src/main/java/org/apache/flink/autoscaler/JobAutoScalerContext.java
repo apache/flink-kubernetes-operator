@@ -23,6 +23,7 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.function.SupplierWithException;
 
@@ -70,8 +71,7 @@ public class JobAutoScalerContext<KEY> {
 
     /** Retrieve the currently configured TaskManager memory. */
     public Optional<MemorySize> getTaskManagerMemory() {
-        // Not supported by default
-        return Optional.empty();
+        return Optional.ofNullable(getConfiguration().get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
     }
 
     public RestClusterClient<String> getRestClusterClient() throws Exception {
