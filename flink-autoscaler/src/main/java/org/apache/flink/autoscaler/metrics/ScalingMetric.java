@@ -39,12 +39,6 @@ public enum ScalingMetric {
     /** Current processing rate. */
     CURRENT_PROCESSING_RATE(true),
 
-    /**
-     * Incoming data rate to the source, e.g. rate of records written to the Kafka topic
-     * (records/sec).
-     */
-    SOURCE_DATA_RATE(true),
-
     /** Target processing rate of operators as derived from source inputs (records/sec). */
     TARGET_DATA_RATE(true),
 
@@ -70,6 +64,12 @@ public enum ScalingMetric {
 
     /** Expected true processing rate after scale up. */
     EXPECTED_PROCESSING_RATE(false),
+
+    NUM_RECORDS_IN(false),
+
+    NUM_RECORDS_OUT(false),
+
+    ACCUMULATED_BUSY_TIME(false),
 
     /**
      * Maximum GC pressure across taskmanagers. Percentage of time spent garbage collecting between

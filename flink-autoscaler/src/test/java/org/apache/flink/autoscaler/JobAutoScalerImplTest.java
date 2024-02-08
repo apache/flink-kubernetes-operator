@@ -23,8 +23,8 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.exceptions.NotReadyException;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.TestMetrics;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
@@ -41,7 +41,6 @@ import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.mock.Whitebox;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.metrics.groups.GenericMetricGroup;
-import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -91,15 +90,17 @@ public class JobAutoScalerImplTest {
         JobVertexID jobVertexID = new JobVertexID();
         JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Set.of(), 1, 10));
 
-        TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>> metricsCollector =
-                new TestingMetricsCollector<>(jobTopology);
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        jobVertexID,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("load", 0., 420., 0., 0.))));
-        metricsCollector.setJobUpdateTs(Instant.ofEpochMilli(0));
+        var metricsCollector =
+                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(jobTopology);
+        metricsCollector.updateMetrics(
+                jobVertexID,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsOut(0)
+                        .numRecordsInPerSec(500.)
+                        .maxBusyTimePerSec(420)
+                        .pendingRecords(0L)
+                        .build());
 
         ScalingMetricEvaluator evaluator = new ScalingMetricEvaluator();
         ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingExecutor =
@@ -116,12 +117,15 @@ public class JobAutoScalerImplTest {
 
         autoscaler.scale(context);
 
+        metricsCollector.updateMetrics(jobVertexID, m -> m.setNumRecordsIn(100));
+        autoscaler.scale(context);
+
         MetricGroup metricGroup = autoscaler.flinkMetrics.get(context.getJobKey()).getMetricGroup();
         assertEquals(
                 0.42,
                 getGaugeValue(
                         metricGroup,
-                        AutoscalerFlinkMetrics.CURRENT,
+                        AutoscalerFlinkMetrics.AVERAGE,
                         AutoscalerFlinkMetrics.JOB_VERTEX_ID,
                         jobVertexID.toHexString(),
                         ScalingMetric.LOAD.name()),

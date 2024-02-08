@@ -26,12 +26,13 @@ import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.MetricNotFoundException;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.TestMetrics;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
+import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
-import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
@@ -88,10 +89,11 @@ public class MetricsCollectionAndEvaluationTest {
 
         topology =
                 new JobTopology(
-                        new VertexInfo(source1, Set.of(), 2, 720),
-                        new VertexInfo(source2, Set.of(), 2, 720),
-                        new VertexInfo(map, Set.of(source1, source2), 12, 720),
-                        new VertexInfo(sink, Set.of(map), 8, 24));
+                        new VertexInfo(source1, Set.of(), 2, 720, new IOMetrics(0, 0, 0)),
+                        new VertexInfo(source2, Set.of(), 2, 720, new IOMetrics(0, 0, 0)),
+                        new VertexInfo(
+                                map, Set.of(source1, source2), 12, 720, new IOMetrics(0, 0, 0)),
+                        new VertexInfo(sink, Set.of(map), 8, 24, new IOMetrics(0, 0, 0)));
 
         metricsCollector = new TestingMetricsCollector<>(topology);
 
@@ -135,6 +137,7 @@ public class MetricsCollectionAndEvaluationTest {
         // => no metrics should be reported but metrics should still get collected.
         clock = Clock.offset(clock, Duration.ofSeconds(1));
         metricsCollector.setClock(clock);
+
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
         assertEquals(3, collectedMetrics.getMetricHistory().size());
         assertFalse(collectedMetrics.isFullyCollected());
@@ -148,6 +151,7 @@ public class MetricsCollectionAndEvaluationTest {
                         ZoneId.systemDefault());
         metricsCollector.setClock(clock);
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+
         assertEquals(3, collectedMetrics.getMetricHistory().size());
         assertTrue(collectedMetrics.isFullyCollected());
 
@@ -156,6 +160,14 @@ public class MetricsCollectionAndEvaluationTest {
         metricsCollector.setJobUpdateTs(startTime);
         metricsCollector.setClock(clock);
         setDefaultMetrics(metricsCollector);
+
+        metricsCollector.updateMetrics(source1, tm -> tm.setNumRecordsIn(1000));
+        metricsCollector.updateMetrics(source1, tm -> tm.setPendingRecords(10000L));
+        metricsCollector.updateMetrics(source2, tm -> tm.setNumRecordsIn(1000));
+        metricsCollector.updateMetrics(source2, tm -> tm.setPendingRecords(10000L));
+        metricsCollector.updateMetrics(map, tm -> tm.setNumRecordsIn(2000));
+        metricsCollector.updateMetrics(sink, tm -> tm.setNumRecordsIn(4000));
+
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
         assertEquals(3, collectedMetrics.getMetricHistory().size());
         assertTrue(collectedMetrics.isFullyCollected());
@@ -166,25 +178,6 @@ public class MetricsCollectionAndEvaluationTest {
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.size());
-
-        assertEquals(2, scaledParallelism.get(source1));
-        assertEquals(2, scaledParallelism.get(source2));
-        assertEquals(6, scaledParallelism.get(map));
-        assertEquals(4, scaledParallelism.get(sink));
-
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.5);
-        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.);
-
-        evaluation = evaluator.evaluate(conf, collectedMetrics, restartTime);
-        scalingExecutor.scaleResource(
-                context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
-
-        scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
-        assertEquals(4, scaledParallelism.get(source1));
-        assertEquals(4, scaledParallelism.get(source2));
-        assertEquals(12, scaledParallelism.get(map));
-        assertEquals(8, scaledParallelism.get(sink));
-
         assertNotNull(metricsCollector.getHistories().get(context.getJobKey()));
 
         // Make sure all reported vertex metrics are evaluated, we expect complete metrics when a
@@ -201,44 +194,28 @@ public class MetricsCollectionAndEvaluationTest {
 
     private void setDefaultMetrics(
             TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>> metricsCollector) {
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.)),
-                        source2,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.)),
-                        map,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 500., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 2000.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 1000.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 500., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 2000.))));
+        metricsCollector.updateMetrics(
+                source1,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsOut(0)
+                        .numRecordsInPerSec(500.)
+                        .maxBusyTimePerSec(1000)
+                        .pendingRecords(0L)
+                        .build());
+        metricsCollector.updateMetrics(
+                source2,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsOut(0)
+                        .numRecordsInPerSec(500.)
+                        .maxBusyTimePerSec(1000)
+                        .pendingRecords(0L)
+                        .build());
+        metricsCollector.updateMetrics(
+                map, TestMetrics.builder().numRecordsIn(0).maxBusyTimePerSec(500).build());
+        metricsCollector.updateMetrics(
+                sink, TestMetrics.builder().numRecordsIn(0).maxBusyTimePerSec(500).build());
     }
 
     @Test
@@ -251,8 +228,8 @@ public class MetricsCollectionAndEvaluationTest {
 
         var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
 
-        assertEquals(720, collectedMetrics.getJobTopology().getMaxParallelisms().get(source1));
-        assertEquals(720, collectedMetrics.getJobTopology().getMaxParallelisms().get(source2));
+        assertEquals(720, collectedMetrics.getJobTopology().get(source1).getMaxParallelism());
+        assertEquals(720, collectedMetrics.getJobTopology().get(source2).getMaxParallelism());
 
         clock = Clock.fixed(Instant.now().plus(Duration.ofSeconds(3)), ZoneId.systemDefault());
         metricsCollector.setClock(clock);
@@ -269,8 +246,8 @@ public class MetricsCollectionAndEvaluationTest {
                                 "1.Source__Kafka_Source_(testTopic).KafkaSourceReader.topic.testTopic.partition.3.currentOffset")));
 
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
-        assertEquals(5, collectedMetrics.getJobTopology().getMaxParallelisms().get(source1));
-        assertEquals(720, collectedMetrics.getJobTopology().getMaxParallelisms().get(source2));
+        assertEquals(5, collectedMetrics.getJobTopology().get(source1).getMaxParallelism());
+        assertEquals(720, collectedMetrics.getJobTopology().get(source2).getMaxParallelism());
     }
 
     @Test
@@ -357,20 +334,27 @@ public class MetricsCollectionAndEvaluationTest {
 
         metricsCollector = new TestingMetricsCollector(topology);
         metricsCollector.setJobUpdateTs(startTime);
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        // Set source1 metrics without the PENDING_RECORDS metric
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 100., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
 
-        var collectedMetrics = collectMetrics();
+        metricsCollector.updateMetrics(
+                source1,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsInPerSec(0.)
+                        .maxBusyTimePerSec(100)
+                        .build());
+
+        var conf = context.getConfiguration();
+        conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
+        conf.set(AutoScalerOptions.METRICS_WINDOW, Duration.ofSeconds(2));
+
+        metricsCollector.setClock(clock);
+
+        metricsCollector.updateMetrics(context, stateStore);
+        metricsCollector.setClock(Clock.offset(clock, Duration.ofSeconds(2)));
+
+        metricsCollector.updateMetrics(source1, tm -> tm.setNumRecordsIn(1000));
+        var collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+
         var evaluation =
                 evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
         assertEquals(
@@ -379,14 +363,14 @@ public class MetricsCollectionAndEvaluationTest {
                         .getVertexMetrics()
                         .get(source1)
                         .get(ScalingMetric.TARGET_DATA_RATE)
-                        .getCurrent());
+                        .getAverage());
         assertEquals(
                 5000.,
                 evaluation
                         .getVertexMetrics()
                         .get(source1)
                         .get(ScalingMetric.TRUE_PROCESSING_RATE)
-                        .getCurrent());
+                        .getAverage());
         assertEquals(
                 1250.,
                 evaluation
@@ -415,22 +399,18 @@ public class MetricsCollectionAndEvaluationTest {
         var topology =
                 new JobTopology(
                         new VertexInfo(s1, Set.of(), 10, 720),
-                        new VertexInfo(finished, Set.of(), 10, 720, true));
+                        new VertexInfo(
+                                finished, Set.of(), 10, 720, true, IOMetrics.FINISHED_METRICS));
 
         metricsCollector = new TestingMetricsCollector(topology);
         metricsCollector.setJobUpdateTs(startTime);
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        // Set source1 metrics without the PENDING_RECORDS metric
-                        s1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 0.1, Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1000.),
-                                FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
+        metricsCollector.updateMetrics(
+                s1,
+                TestMetrics.builder()
+                        .numRecordsInPerSec(500.)
+                        .accumulatedBusyTime(0)
+                        .maxBusyTimePerSec(100)
+                        .build());
 
         var collectedMetrics = collectMetrics().getMetricHistory();
         var finishedMetrics =
@@ -441,12 +421,14 @@ public class MetricsCollectionAndEvaluationTest {
                         0.,
                         ScalingMetric.CURRENT_PROCESSING_RATE,
                         0.,
-                        ScalingMetric.SOURCE_DATA_RATE,
-                        0.,
-                        ScalingMetric.TRUE_PROCESSING_RATE,
-                        Double.POSITIVE_INFINITY,
                         ScalingMetric.OBSERVED_TPR,
                         Double.POSITIVE_INFINITY,
+                        ScalingMetric.NUM_RECORDS_IN,
+                        0.,
+                        ScalingMetric.NUM_RECORDS_OUT,
+                        0.,
+                        ScalingMetric.ACCUMULATED_BUSY_TIME,
+                        0.,
                         ScalingMetric.LOAD,
                         0.),
                 finishedMetrics);
@@ -456,30 +438,18 @@ public class MetricsCollectionAndEvaluationTest {
     public void testObservedTprCollection() throws Exception {
         var source = new JobVertexID();
         var topology = new JobTopology(new VertexInfo(source, Set.of(), 10, 720));
-        Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> metrics =
-                Map.of(
-                        source,
-                        new HashMap<>(
-                                Map.of(
-                                        FlinkMetric.PENDING_RECORDS,
-                                        new AggregatedMetric(
-                                                "", Double.NaN, Double.NaN, Double.NaN, 1000000.),
-                                        FlinkMetric.BACKPRESSURE_TIME_PER_SEC,
-                                        new AggregatedMetric(
-                                                "", Double.NaN, Double.NaN, 600., Double.NaN),
-                                        FlinkMetric.BUSY_TIME_PER_SEC,
-                                        new AggregatedMetric(
-                                                "", Double.NaN, 200., Double.NaN, Double.NaN),
-                                        FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                        new AggregatedMetric(
-                                                "", Double.NaN, Double.NaN, Double.NaN, 1000.),
-                                        FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
-                                        new AggregatedMetric(
-                                                "", Double.NaN, Double.NaN, Double.NaN, 500.))));
 
         metricsCollector = new TestingMetricsCollector(topology);
         metricsCollector.setJobUpdateTs(startTime);
-        metricsCollector.setCurrentMetrics(metrics);
+        metricsCollector.updateMetrics(
+                source,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsInPerSec(500.)
+                        .maxBusyTimePerSec(200)
+                        .avgBackpressureTimePerSec(600)
+                        .pendingRecords(1000000L)
+                        .build());
 
         context.getConfiguration().set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(100), ZoneId.systemDefault()));
@@ -491,16 +461,11 @@ public class MetricsCollectionAndEvaluationTest {
                         .getVertexMetrics()
                         .get(source);
 
-        // Make sure both busy time and observed tpr is collected
-        assertEquals(2500., collectedMetrics.get(ScalingMetric.TRUE_PROCESSING_RATE));
         assertEquals(500. / 0.4, collectedMetrics.get(ScalingMetric.OBSERVED_TPR));
 
         // Make sure that average observed tpr is picked up only if 2 valid observations
         // We set no lag so observed cannot be computed and expect nan
-        metrics.get(source)
-                .put(
-                        FlinkMetric.PENDING_RECORDS,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.));
+        metricsCollector.updateMetrics(source, tm -> tm.setPendingRecords(0L));
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(200), ZoneId.systemDefault()));
         collectedMetrics =
                 metricsCollector
@@ -514,14 +479,10 @@ public class MetricsCollectionAndEvaluationTest {
         assertEquals(Double.NaN, collectedMetrics.get(ScalingMetric.OBSERVED_TPR));
 
         // Add another valid observed computation
-        metrics.get(source)
-                .put(
-                        FlinkMetric.PENDING_RECORDS,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 100000.));
-        metrics.get(source)
-                .put(
-                        FlinkMetric.BACKPRESSURE_TIME_PER_SEC,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, 500., Double.NaN));
+        metricsCollector.updateMetrics(
+                source,
+                tm -> tm.setPendingRecords(100000L),
+                tm -> tm.setAvgBackpressureTimePerSec(500));
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(300), ZoneId.systemDefault()));
         collectedMetrics =
                 metricsCollector
@@ -533,10 +494,7 @@ public class MetricsCollectionAndEvaluationTest {
 
         assertEquals(500. / 0.5, collectedMetrics.get(ScalingMetric.OBSERVED_TPR));
         // Make sure avg is picked correctly another valid observed computation
-        metrics.get(source)
-                .put(
-                        FlinkMetric.PENDING_RECORDS,
-                        new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.));
+        metricsCollector.updateMetrics(source, tm -> tm.setPendingRecords(0L));
 
         metricsCollector.setClock(Clock.fixed(Instant.ofEpochMilli(400), ZoneId.systemDefault()));
         collectedMetrics =
@@ -556,30 +514,18 @@ public class MetricsCollectionAndEvaluationTest {
     public void testMetricCollectionDuringStabilization() throws Exception {
         var source = new JobVertexID();
         var topology = new JobTopology(new VertexInfo(source, Set.of(), 10, 720));
-        Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> metrics =
-                Map.of(
-                        source,
-                        new HashMap<>(
-                                Map.of(
-                                        FlinkMetric.PENDING_RECORDS,
-                                        new AggregatedMetric(
-                                                "", Double.NaN, Double.NaN, Double.NaN, 1000000.),
-                                        FlinkMetric.BACKPRESSURE_TIME_PER_SEC,
-                                        new AggregatedMetric(
-                                                "", Double.NaN, Double.NaN, 600., Double.NaN),
-                                        FlinkMetric.BUSY_TIME_PER_SEC,
-                                        new AggregatedMetric(
-                                                "", Double.NaN, 200., Double.NaN, Double.NaN),
-                                        FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                        new AggregatedMetric(
-                                                "", Double.NaN, Double.NaN, Double.NaN, 1000.),
-                                        FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
-                                        new AggregatedMetric(
-                                                "", Double.NaN, Double.NaN, Double.NaN, 500.))));
 
         metricsCollector = new TestingMetricsCollector(topology);
         metricsCollector.setJobUpdateTs(startTime);
-        metricsCollector.setCurrentMetrics(metrics);
+        metricsCollector.updateMetrics(
+                source,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsInPerSec(500.)
+                        .maxBusyTimePerSec(200)
+                        .avgBackpressureTimePerSec(600)
+                        .pendingRecords(1000000L)
+                        .build());
 
         context.getConfiguration()
                 .set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ofMillis(100));
@@ -646,17 +592,14 @@ public class MetricsCollectionAndEvaluationTest {
 
         metricsCollector = new TestingMetricsCollector<>(topology);
         metricsCollector.setJobUpdateTs(startTime);
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        // Set source1 metrics without the PENDING_RECORDS metric
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 0.1, Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.),
-                                FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.))));
+
+        metricsCollector.updateMetrics(
+                source1,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsInPerSec(0.)
+                        .maxBusyTimePerSec(100)
+                        .build());
 
         var collectedMetrics = collectMetrics();
 
@@ -668,7 +611,7 @@ public class MetricsCollectionAndEvaluationTest {
                         .getVertexMetrics()
                         .get(source1)
                         .get(ScalingMetric.TARGET_DATA_RATE)
-                        .getCurrent());
+                        .getAverage());
         assertEquals(
                 Double.POSITIVE_INFINITY,
                 evaluation
@@ -701,14 +644,10 @@ public class MetricsCollectionAndEvaluationTest {
         var newMetrics = new HashMap<>(lastCollected.getVertexMetrics());
         newMetrics.get(source1).put(ScalingMetric.TRUE_PROCESSING_RATE, 3.);
         newMetrics.get(source1).put(ScalingMetric.OBSERVED_TPR, 3.);
-        newMetrics.get(source1).put(ScalingMetric.SOURCE_DATA_RATE, 2.);
 
         collectedMetrics
                 .getMetricHistory()
-                .put(
-                        Instant.ofEpochSecond(1234),
-                        new CollectedMetrics(
-                                newMetrics, lastCollected.getOutputRatios(), Map.of()));
+                .put(Instant.ofEpochSecond(1234), new CollectedMetrics(newMetrics, Map.of()));
 
         evaluation = evaluator.evaluate(context.getConfiguration(), collectedMetrics, restartTime);
         assertEquals(

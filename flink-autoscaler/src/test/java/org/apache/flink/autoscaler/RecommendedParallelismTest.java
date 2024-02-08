@@ -21,16 +21,14 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
-import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.autoscaler.metrics.FlinkMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.metrics.TestMetrics;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,9 +37,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.Map;
 import java.util.Set;
-import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.getRestClusterClientSupplier;
@@ -119,31 +115,31 @@ public class RecommendedParallelismTest {
         setClocksTo(now);
         running(now);
 
-        metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(2));
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 2000.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
+        metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(3));
+        metricsCollector.updateMetrics(
+                source,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsOut(0)
+                        .numRecordsInPerSec(500.)
+                        .maxBusyTimePerSec(850)
+                        .pendingRecords(2000L)
+                        .build());
+        metricsCollector.updateMetrics(
+                sink, TestMetrics.builder().numRecordsIn(0).maxBusyTimePerSec(850).build());
 
         // the recommended parallelism values are empty initially
         autoscaler.scale(context);
-        assertEvaluatedMetricsSize(1);
+        assertCollectedMetricsSize(1);
+
+        now = now.plus(Duration.ofSeconds(1));
+        setClocksTo(now);
+        metricsCollector.updateMetrics(
+                source, m -> m.setNumRecordsIn(500), m -> m.setNumRecordsOut(500));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(500));
+
+        autoscaler.scale(context);
+        assertCollectedMetricsSize(2);
         assertNull(getCurrentMetricValue(source, RECOMMENDED_PARALLELISM));
         assertNull(getCurrentMetricValue(sink, RECOMMENDED_PARALLELISM));
         assertEquals(1., getCurrentMetricValue(source, PARALLELISM));
@@ -153,10 +149,13 @@ public class RecommendedParallelismTest {
 
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
+        metricsCollector.updateMetrics(
+                source, m -> m.setNumRecordsIn(1000), m -> m.setNumRecordsOut(1000));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(1000));
 
         // it stays empty until the metric window is full
         autoscaler.scale(context);
-        assertEvaluatedMetricsSize(2);
+        assertCollectedMetricsSize(3);
         assertNull(getCurrentMetricValue(source, RECOMMENDED_PARALLELISM));
         assertNull(getCurrentMetricValue(sink, RECOMMENDED_PARALLELISM));
         assertEquals(1., getCurrentMetricValue(source, PARALLELISM));
@@ -165,10 +164,16 @@ public class RecommendedParallelismTest {
 
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
+        metricsCollector.updateMetrics(
+                source,
+                m -> m.setNumRecordsIn(1500),
+                m -> m.setNumRecordsOut(1500),
+                m -> m.setPendingRecords(1900L));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(1500));
 
         // then the recommended parallelism can change according to the evaluated metrics
         autoscaler.scale(context);
-        assertEvaluatedMetricsSize(3);
+        assertCollectedMetricsSize(4);
         assertEquals(1., getCurrentMetricValue(source, PARALLELISM));
         assertEquals(1., getCurrentMetricValue(sink, PARALLELISM));
         assertEquals(4., getCurrentMetricValue(source, RECOMMENDED_PARALLELISM));
@@ -183,7 +188,7 @@ public class RecommendedParallelismTest {
 
         // the scaled parallelism will pick up the recommended parallelism values
         autoscaler.scale(context);
-        assertEvaluatedMetricsSize(3);
+        assertCollectedMetricsSize(4);
         assertEquals(4., getCurrentMetricValue(source, RECOMMENDED_PARALLELISM));
         assertEquals(4., getCurrentMetricValue(sink, RECOMMENDED_PARALLELISM));
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
@@ -202,7 +207,7 @@ public class RecommendedParallelismTest {
 
         // after restart while the job is not running the evaluated metrics are gone
         autoscaler.scale(context);
-        assertEquals(3, stateStore.getCollectedMetrics(context).size());
+        assertCollectedMetricsSize(4);
         assertNull(autoscaler.lastEvaluatedMetrics.get(context.getJobKey()));
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.get(source));
@@ -215,7 +220,13 @@ public class RecommendedParallelismTest {
         // once the job is running we got back the evaluated metric except the recommended
         // parallelisms (until the metric window is full again)
         autoscaler.scale(context);
-        assertEvaluatedMetricsSize(1);
+        assertCollectedMetricsSize(1);
+
+        // Need at least 2 collected metrics to trigger evaluation
+        now = now.plus(Duration.ofSeconds(1));
+        setClocksTo(now);
+        autoscaler.scale(context);
+        assertCollectedMetricsSize(2);
         assertEquals(4., getCurrentMetricValue(source, PARALLELISM));
         assertEquals(4., getCurrentMetricValue(sink, PARALLELISM));
         assertNull(getCurrentMetricValue(source, RECOMMENDED_PARALLELISM));
@@ -225,10 +236,8 @@ public class RecommendedParallelismTest {
         assertEquals(4, scaledParallelism.get(sink));
     }
 
-    private void assertEvaluatedMetricsSize(int expectedSize) throws Exception {
-        SortedMap<Instant, CollectedMetrics> evaluatedMetrics =
-                stateStore.getCollectedMetrics(context);
-        assertThat(evaluatedMetrics).hasSize(expectedSize);
+    private void assertCollectedMetricsSize(int expectedSize) throws Exception {
+        assertThat(stateStore.getCollectedMetrics(context)).hasSize(expectedSize);
     }
 
     private Double getCurrentMetricValue(JobVertexID jobVertexID, ScalingMetric scalingMetric) {

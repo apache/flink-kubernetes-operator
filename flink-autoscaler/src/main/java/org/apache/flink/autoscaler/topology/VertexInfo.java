@@ -17,30 +17,68 @@
 
 package org.apache.flink.autoscaler.topology;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import lombok.RequiredArgsConstructor;
-import lombok.Value;
+import lombok.Data;
+
+import javax.annotation.Nullable;
 
 import java.util.Set;
 
 /** Job vertex information. */
-@Value
-@RequiredArgsConstructor
+@Data
 public class VertexInfo {
 
-    JobVertexID id;
+    private final JobVertexID id;
 
-    Set<JobVertexID> inputs;
+    private final Set<JobVertexID> inputs;
 
-    int parallelism;
+    private @Nullable Set<JobVertexID> outputs;
 
-    int maxParallelism;
+    private final int parallelism;
 
-    boolean finished;
+    private int maxParallelism;
+
+    private final int originalMaxParallelism;
+
+    private final boolean finished;
+
+    private IOMetrics ioMetrics;
 
     public VertexInfo(
+            JobVertexID id,
+            Set<JobVertexID> inputs,
+            int parallelism,
+            int maxParallelism,
+            boolean finished,
+            IOMetrics ioMetrics) {
+        this.id = id;
+        this.inputs = inputs;
+        this.parallelism = parallelism;
+        this.maxParallelism = maxParallelism;
+        this.originalMaxParallelism = maxParallelism;
+        this.finished = finished;
+        this.ioMetrics = ioMetrics;
+    }
+
+    @VisibleForTesting
+    public VertexInfo(
+            JobVertexID id,
+            Set<JobVertexID> inputs,
+            int parallelism,
+            int maxParallelism,
+            IOMetrics ioMetrics) {
+        this(id, inputs, parallelism, maxParallelism, false, ioMetrics);
+    }
+
+    @VisibleForTesting
+    public VertexInfo(
             JobVertexID id, Set<JobVertexID> inputs, int parallelism, int maxParallelism) {
-        this(id, inputs, parallelism, maxParallelism, false);
+        this(id, inputs, parallelism, maxParallelism, null);
+    }
+
+    public void updateMaxParallelism(int maxParallelism) {
+        setMaxParallelism(Math.min(originalMaxParallelism, maxParallelism));
     }
 }

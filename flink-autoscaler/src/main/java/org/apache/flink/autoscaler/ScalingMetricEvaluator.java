@@ -21,16 +21,15 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetricHistory;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.autoscaler.metrics.Edge;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
+import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
-import org.apache.commons.math3.stat.StatUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,7 +59,6 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.OBSERVED_TPR;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.SOURCE_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
@@ -135,11 +133,18 @@ public class ScalingMetricEvaluator {
         var latestVertexMetrics =
                 metricsHistory.get(metricsHistory.lastKey()).getVertexMetrics().get(vertex);
 
+        var vertexInfo = topology.get(vertex);
+
+        double busyTimeAvg =
+                computeBusyTimeAvg(conf, metricsHistory, vertex, vertexInfo.getParallelism());
+        double inputRateAvg = getRate(ScalingMetric.NUM_RECORDS_IN, vertex, metricsHistory);
+
         var evaluatedMetrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
         computeTargetDataRate(
                 topology,
                 vertex,
                 conf,
+                inputRateAvg,
                 scalingOutput,
                 metricsHistory,
                 latestVertexMetrics,
@@ -147,33 +152,79 @@ public class ScalingMetricEvaluator {
 
         evaluatedMetrics.put(
                 TRUE_PROCESSING_RATE,
-                evaluateTpr(metricsHistory, vertex, latestVertexMetrics, conf));
+                EvaluatedScalingMetric.avg(
+                        computeTrueProcessingRate(
+                                busyTimeAvg, inputRateAvg, metricsHistory, vertex, conf)));
 
-        evaluatedMetrics.put(
-                LOAD,
-                new EvaluatedScalingMetric(
-                        latestVertexMetrics.get(LOAD), getAverage(LOAD, vertex, metricsHistory)));
+        evaluatedMetrics.put(LOAD, EvaluatedScalingMetric.avg(busyTimeAvg / 1000.));
 
         Optional.ofNullable(latestVertexMetrics.get(LAG))
                 .ifPresent(l -> evaluatedMetrics.put(LAG, EvaluatedScalingMetric.of(l)));
 
-        evaluatedMetrics.put(
-                PARALLELISM, EvaluatedScalingMetric.of(topology.getParallelisms().get(vertex)));
+        evaluatedMetrics.put(PARALLELISM, EvaluatedScalingMetric.of(vertexInfo.getParallelism()));
 
         evaluatedMetrics.put(
-                MAX_PARALLELISM,
-                EvaluatedScalingMetric.of(topology.getMaxParallelisms().get(vertex)));
+                MAX_PARALLELISM, EvaluatedScalingMetric.of(vertexInfo.getMaxParallelism()));
         computeProcessingRateThresholds(evaluatedMetrics, conf, processingBacklog, restartTime);
         return evaluatedMetrics;
     }
 
-    private static EvaluatedScalingMetric evaluateTpr(
+    /**
+     * Compute the average busy time for the given vertex for the current metric window. Depending
+     * on the {@link MetricAggregator} chosen we use two different mechanisms:
+     *
+     * <ol>
+     *   <li>For AVG aggregator we compute from accumulated busy time to get the most precise metric
+     *   <li>or MAX/MIN aggregators we have to average over the point-in-time MAX/MIN values
+     *       collected over the metric windows. These are stored in the LOAD metric.
+     * </ol>
+     *
+     * @param conf
+     * @param metricsHistory
+     * @param vertex
+     * @param parallelism
+     * @return Average busy time in the current metric window
+     */
+    @VisibleForTesting
+    protected static double computeBusyTimeAvg(
+            Configuration conf,
             SortedMap<Instant, CollectedMetrics> metricsHistory,
             JobVertexID vertex,
-            Map<ScalingMetric, Double> latestVertexMetrics,
+            int parallelism) {
+        double busyTimeAvg;
+        if (conf.get(AutoScalerOptions.BUSY_TIME_AGGREGATOR) == MetricAggregator.AVG) {
+            busyTimeAvg =
+                    getRate(ScalingMetric.ACCUMULATED_BUSY_TIME, vertex, metricsHistory)
+                            / parallelism;
+        } else {
+            busyTimeAvg = getAverage(LOAD, vertex, metricsHistory) * 1000;
+            if (Double.isNaN(busyTimeAvg)) {
+                busyTimeAvg = Double.POSITIVE_INFINITY;
+            }
+        }
+        return busyTimeAvg;
+    }
+
+    /**
+     * Compute the true processing rate for the given vertex for the current metric window. The
+     * computation takes into account both observed (during catchup) and busy time based processing
+     * rate and selects the right metric depending on the config.
+     *
+     * @param busyTimeAvg
+     * @param inputRateAvg
+     * @param metricsHistory
+     * @param vertex
+     * @param conf
+     * @return Average true processing rate over metric window.
+     */
+    protected static double computeTrueProcessingRate(
+            double busyTimeAvg,
+            double inputRateAvg,
+            SortedMap<Instant, CollectedMetrics> metricsHistory,
+            JobVertexID vertex,
             Configuration conf) {
 
-        var busyTimeTprAvg = getAverage(TRUE_PROCESSING_RATE, vertex, metricsHistory);
+        var busyTimeTpr = computeTprFromBusyTime(busyTimeAvg, inputRateAvg, conf);
         var observedTprAvg =
                 getAverage(
                         OBSERVED_TPR,
@@ -181,10 +232,22 @@ public class ScalingMetricEvaluator {
                         metricsHistory,
                         conf.get(AutoScalerOptions.OBSERVED_TRUE_PROCESSING_RATE_MIN_OBSERVATIONS));
 
-        var tprMetric = selectTprMetric(vertex, conf, busyTimeTprAvg, observedTprAvg);
-        return new EvaluatedScalingMetric(
-                latestVertexMetrics.getOrDefault(tprMetric, Double.NaN),
-                tprMetric == OBSERVED_TPR ? observedTprAvg : busyTimeTprAvg);
+        var tprMetric = selectTprMetric(vertex, conf, busyTimeTpr, observedTprAvg);
+        return tprMetric == OBSERVED_TPR ? observedTprAvg : busyTimeTpr;
+    }
+
+    private static double computeTprFromBusyTime(
+            double busyTimeMsPerSecond, double rate, Configuration conf) {
+        if (rate == 0) {
+            // Nothing is coming in, we assume infinite processing power
+            // until we can sample the true processing rate (i.e. data flows).
+            return Double.POSITIVE_INFINITY;
+        }
+        // Pretend that the load is balanced because we don't know any better
+        if (Double.isNaN(busyTimeMsPerSecond)) {
+            busyTimeMsPerSecond = conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
+        }
+        return rate / (busyTimeMsPerSecond / 1000);
     }
 
     private static ScalingMetric selectTprMetric(
@@ -257,6 +320,7 @@ public class ScalingMetricEvaluator {
             JobTopology topology,
             JobVertexID vertex,
             Configuration conf,
+            double inputRate,
             HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> alreadyEvaluated,
             SortedMap<Instant, CollectedMetrics> metricsHistory,
             Map<ScalingMetric, Double> latestVertexMetrics,
@@ -265,16 +329,14 @@ public class ScalingMetricEvaluator {
         if (topology.isSource(vertex)) {
             double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
 
-            if (!latestVertexMetrics.containsKey(SOURCE_DATA_RATE)) {
+            double lagRate = getRate(LAG, vertex, metricsHistory);
+            double ingestionDataRate = Math.max(0, inputRate + lagRate);
+            if (Double.isNaN(ingestionDataRate)) {
                 throw new RuntimeException(
-                        "Cannot evaluate metrics without source target rate information");
+                        "Cannot evaluate metrics without ingestion rate information");
             }
 
-            out.put(
-                    TARGET_DATA_RATE,
-                    new EvaluatedScalingMetric(
-                            latestVertexMetrics.get(SOURCE_DATA_RATE),
-                            getAverage(SOURCE_DATA_RATE, vertex, metricsHistory)));
+            out.put(TARGET_DATA_RATE, EvaluatedScalingMetric.avg(ingestionDataRate));
 
             double lag = latestVertexMetrics.getOrDefault(LAG, 0.);
             double catchUpInputRate = catchUpTargetSec == 0 ? 0 : lag / catchUpTargetSec;
@@ -286,24 +348,25 @@ public class ScalingMetricEvaluator {
             }
             out.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchUpInputRate));
         } else {
-            var inputs = topology.getInputs().get(vertex);
-            double sumCurrentTargetRate = 0;
+            var inputs = topology.get(vertex).getInputs();
             double sumAvgTargetRate = 0;
             double sumCatchUpDataRate = 0;
             for (var inputVertex : inputs) {
                 var inputEvaluatedMetrics = alreadyEvaluated.get(inputVertex);
                 var inputTargetRate = inputEvaluatedMetrics.get(TARGET_DATA_RATE);
                 var outputRateMultiplier =
-                        getAverageOutputRatio(new Edge(inputVertex, vertex), metricsHistory);
-                sumCurrentTargetRate += inputTargetRate.getCurrent() * outputRateMultiplier;
+                        computeOutputRatio(inputVertex, vertex, topology, metricsHistory);
+                LOG.debug(
+                        "Computed output ratio for edge ({} -> {}) : {}",
+                        inputVertex,
+                        vertex,
+                        outputRateMultiplier);
                 sumAvgTargetRate += inputTargetRate.getAverage() * outputRateMultiplier;
                 sumCatchUpDataRate +=
                         inputEvaluatedMetrics.get(CATCH_UP_DATA_RATE).getCurrent()
                                 * outputRateMultiplier;
             }
-            out.put(
-                    TARGET_DATA_RATE,
-                    new EvaluatedScalingMetric(sumCurrentTargetRate, sumAvgTargetRate));
+            out.put(TARGET_DATA_RATE, EvaluatedScalingMetric.avg(sumAvgTargetRate));
             out.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(sumCatchUpDataRate));
         }
     }
@@ -347,6 +410,48 @@ public class ScalingMetricEvaluator {
         return getAverage(metric, jobVertexId, metricsHistory, 1);
     }
 
+    /**
+     * Compute per second rate for the given accumulated metric over the metric window.
+     *
+     * @param metric
+     * @param jobVertexId
+     * @param metricsHistory
+     * @return Per second rate or Double.NaN if we don't have at least 2 observations.
+     */
+    public static double getRate(
+            ScalingMetric metric,
+            @Nullable JobVertexID jobVertexId,
+            SortedMap<Instant, CollectedMetrics> metricsHistory) {
+
+        Instant firstTs = null;
+        double first = Double.NaN;
+
+        Instant lastTs = null;
+        double last = Double.NaN;
+
+        for (var entry : metricsHistory.entrySet()) {
+            double value =
+                    entry.getValue()
+                            .getVertexMetrics()
+                            .get(jobVertexId)
+                            .getOrDefault(metric, Double.NaN);
+            if (!Double.isNaN(value)) {
+                if (Double.isNaN(first)) {
+                    first = value;
+                    firstTs = entry.getKey();
+                } else {
+                    last = value;
+                    lastTs = entry.getKey();
+                }
+            }
+        }
+        if (Double.isNaN(last)) {
+            return Double.NaN;
+        }
+
+        return 1000 * (last - first) / Duration.between(firstTs, lastTs).toMillis();
+    }
+
     public static double getAverage(
             ScalingMetric metric,
             @Nullable JobVertexID jobVertexId,
@@ -379,22 +484,75 @@ public class ScalingMetricEvaluator {
         return n < minElements ? Double.NaN : sum / n;
     }
 
-    private static double getAverageOutputRatio(
-            Edge edge, SortedMap<Instant, CollectedMetrics> metricsHistory) {
-        double[] metricValues =
-                metricsHistory.values().stream()
-                        .map(CollectedMetrics::getOutputRatios)
-                        .filter(m -> m.containsKey(edge))
-                        .mapToDouble(m -> m.get(edge))
-                        .filter(d -> !Double.isNaN(d))
-                        .toArray();
-        for (double metricValue : metricValues) {
-            if (Double.isInfinite(metricValue)) {
-                // As long as infinite values are present, we can't properly average. We need to
-                // wait until they are evicted.
-                return metricValue;
+    @VisibleForTesting
+    protected static double computeOutputRatio(
+            JobVertexID from,
+            JobVertexID to,
+            JobTopology topology,
+            SortedMap<Instant, CollectedMetrics> metricsHistory) {
+
+        double numRecordsIn = getRate(ScalingMetric.NUM_RECORDS_IN, from, metricsHistory);
+
+        double outputRatio = 0;
+        // If the input rate is zero, we also need to flatten the output rate.
+        // Otherwise, the OUTPUT_RATIO would be outrageously large, leading to
+        // a rapid scale up.
+        if (numRecordsIn > 0) {
+            double numRecordsOut = computeEdgeRecordsOut(topology, metricsHistory, from, to);
+            if (numRecordsOut > 0) {
+                outputRatio = numRecordsOut / numRecordsIn;
             }
         }
-        return StatUtils.mean(metricValues);
+        return outputRatio;
+    }
+
+    @VisibleForTesting
+    protected static double computeEdgeRecordsOut(
+            JobTopology topology,
+            SortedMap<Instant, CollectedMetrics> metricsHistory,
+            JobVertexID from,
+            JobVertexID to) {
+
+        var toVertexInputs = topology.get(to).getInputs();
+        // Case 1: Downstream vertex has single input (from) so we can use the most reliable num
+        // records in
+        if (toVertexInputs.size() == 1) {
+            LOG.debug(
+                    "Computing edge ({}, {}) data rate for single input downstream task", from, to);
+            return getRate(ScalingMetric.NUM_RECORDS_IN, to, metricsHistory);
+        }
+
+        // Case 2: Downstream vertex has only inputs from upstream vertices which don't have other
+        // outputs
+        double numRecordsOutFromUpstreamInputs = 0;
+        for (JobVertexID input : toVertexInputs) {
+            if (input.equals(from)) {
+                // Exclude source edge because we only want to consider other input edges
+                continue;
+            }
+            if (topology.get(input).getOutputs().size() == 1) {
+                numRecordsOutFromUpstreamInputs +=
+                        getRate(ScalingMetric.NUM_RECORDS_OUT, input, metricsHistory);
+            } else {
+                // Output vertex has multiple outputs, cannot use this information...
+                numRecordsOutFromUpstreamInputs = Double.NaN;
+                break;
+            }
+        }
+        if (!Double.isNaN(numRecordsOutFromUpstreamInputs)) {
+            LOG.debug(
+                    "Computing edge ({}, {}) data rate by subtracting upstream input rates",
+                    from,
+                    to);
+            return getRate(ScalingMetric.NUM_RECORDS_IN, to, metricsHistory)
+                    - numRecordsOutFromUpstreamInputs;
+        }
+
+        // Case 3: We fall back simply to num records out, this is the least reliable
+        LOG.debug(
+                "Computing edge ({}, {}) data rate by falling back to from num records out",
+                from,
+                to);
+        return getRate(ScalingMetric.NUM_RECORDS_OUT, from, metricsHistory);
     }
 }

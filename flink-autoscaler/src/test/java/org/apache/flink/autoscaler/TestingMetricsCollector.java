@@ -19,6 +19,7 @@ package org.apache.flink.autoscaler;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.metrics.FlinkMetric;
+import org.apache.flink.autoscaler.metrics.TestMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
@@ -35,6 +36,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /** Testing {@link ScalingMetricCollector} implementation. */
 public class TestingMetricsCollector<KEY, Context extends JobAutoScalerContext<KEY>>
@@ -44,10 +46,21 @@ public class TestingMetricsCollector<KEY, Context extends JobAutoScalerContext<K
 
     @Setter private Duration testMetricWindowSize;
 
-    @Setter private Instant jobUpdateTs;
+    @Setter private Instant jobUpdateTs = Instant.ofEpochMilli(0);
 
-    @Setter
-    private Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> currentMetrics = new HashMap<>();
+    private Map<JobVertexID, TestMetrics> metrics = new HashMap<>();
+
+    @Setter private Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> currentMetrics;
+
+    public void updateMetrics(JobVertexID v, TestMetrics tm) {
+        metrics.put(v, tm);
+    }
+
+    public void updateMetrics(JobVertexID v, Consumer<TestMetrics>... consumers) {
+        for (Consumer<TestMetrics> consumer : consumers) {
+            consumer.accept(metrics.get(v));
+        }
+    }
 
     @Setter private Map<JobVertexID, Collection<String>> metricNames = new HashMap<>();
 
@@ -63,7 +76,18 @@ public class TestingMetricsCollector<KEY, Context extends JobAutoScalerContext<K
     @Override
     protected Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> queryAllAggregatedMetrics(
             Context ctx, Map<JobVertexID, Map<String, FlinkMetric>> filteredVertexMetricNames) {
-        return currentMetrics;
+
+        if (currentMetrics != null) {
+            return currentMetrics;
+        }
+
+        var out = new HashMap<JobVertexID, Map<FlinkMetric, AggregatedMetric>>();
+        metrics.forEach(
+                (v, m) -> {
+                    jobTopology.get(v).setIoMetrics(m.toIoMetrics());
+                    out.put(v, m.toFlinkMetrics());
+                });
+        return out;
     }
 
     @Override

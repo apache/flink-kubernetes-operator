@@ -33,11 +33,12 @@ import java.util.stream.Collectors;
 public enum FlinkMetric {
     BUSY_TIME_PER_SEC(s -> s.equals("busyTimeMsPerSecond")),
     NUM_RECORDS_IN_PER_SEC(s -> s.equals("numRecordsInPerSecond")),
-    NUM_RECORDS_OUT_PER_SEC(s -> s.equals("numRecordsOutPerSecond")),
-    SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC(
-            s -> s.startsWith("Source__") && s.endsWith(".numRecordsOutPerSecond")),
     SOURCE_TASK_NUM_RECORDS_IN_PER_SEC(
             s -> s.startsWith("Source__") && s.endsWith(".numRecordsInPerSecond")),
+    SOURCE_TASK_NUM_RECORDS_OUT(s -> s.startsWith("Source__") && s.endsWith(".numRecordsOut")),
+    SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC(
+            s -> s.startsWith("Source__") && s.endsWith(".numRecordsOutPerSecond")),
+    SOURCE_TASK_NUM_RECORDS_IN(s -> s.startsWith("Source__") && s.endsWith(".numRecordsIn")),
     PENDING_RECORDS(s -> s.endsWith(".pendingRecords")),
     BACKPRESSURE_TIME_PER_SEC(s -> s.equals("backPressuredTimeMsPerSecond")),
 
@@ -52,9 +53,9 @@ public enum FlinkMetric {
                     FlinkMetric.BUSY_TIME_PER_SEC, zero(),
                     FlinkMetric.PENDING_RECORDS, zero(),
                     FlinkMetric.NUM_RECORDS_IN_PER_SEC, zero(),
-                    FlinkMetric.NUM_RECORDS_OUT_PER_SEC, zero(),
                     FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC, zero(),
-                    FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT_PER_SEC, zero());
+                    FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN, zero(),
+                    FlinkMetric.SOURCE_TASK_NUM_RECORDS_OUT, zero());
 
     public final Predicate<String> predicate;
 

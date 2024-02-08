@@ -23,14 +23,14 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.autoscaler.metrics.FlinkMetric;
+import org.apache.flink.autoscaler.metrics.TestMetrics;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
+import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
-import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,7 +40,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 
@@ -48,7 +47,6 @@ import static org.apache.flink.autoscaler.JobAutoScalerImpl.AUTOSCALER_ERROR;
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for scaling metrics collection logic. */
@@ -80,8 +78,9 @@ public class BacklogBasedScalingTest {
         metricsCollector =
                 new TestingMetricsCollector<>(
                         new JobTopology(
-                                new VertexInfo(source1, Set.of(), 1, 720),
-                                new VertexInfo(sink, Set.of(source1), 1, 720)));
+                                new VertexInfo(source1, Set.of(), 1, 720, new IOMetrics(0, 0, 0)),
+                                new VertexInfo(
+                                        sink, Set.of(source1), 1, 720, new IOMetrics(0, 0, 0))));
 
         var defaultConf = context.getConfiguration();
         defaultConf.set(AutoScalerOptions.AUTOSCALER_ENABLED, true);
@@ -94,6 +93,7 @@ public class BacklogBasedScalingTest {
         defaultConf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.8);
         defaultConf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.1);
         defaultConf.set(AutoScalerOptions.SCALE_UP_GRACE_PERIOD, Duration.ZERO);
+        defaultConf.set(AutoScalerOptions.BACKLOG_PROCESSING_LAG_THRESHOLD, Duration.ofSeconds(1));
 
         autoscaler =
                 new JobAutoScalerImpl<>(
@@ -116,35 +116,31 @@ public class BacklogBasedScalingTest {
         metricsCollector.setJobUpdateTs(now);
         // Adjust metric window size, so we can fill the metric window with two metrics
         metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(1));
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 2000.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
+        metricsCollector.updateMetrics(
+                source1,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsOut(0)
+                        .numRecordsInPerSec(500.)
+                        .maxBusyTimePerSec(850)
+                        .pendingRecords(2000L)
+                        .build());
+        metricsCollector.updateMetrics(
+                sink, TestMetrics.builder().numRecordsIn(0).maxBusyTimePerSec(850).build());
 
         autoscaler.scale(context);
-        assertEvaluatedMetricsSize(1);
+        assertCollectedMetricsSize(1);
         assertFlinkMetricsCount(0, 0);
 
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
+
+        metricsCollector.updateMetrics(
+                source1, m -> m.setNumRecordsIn(500), m -> m.setNumRecordsOut(500));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(500));
+
         autoscaler.scale(context);
-        assertEvaluatedMetricsSize(2);
+        assertCollectedMetricsSize(2);
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.get(source1));
@@ -158,26 +154,19 @@ public class BacklogBasedScalingTest {
                 new JobTopology(
                         new VertexInfo(source1, Set.of(), 4, 24),
                         new VertexInfo(sink, Set.of(source1), 4, 720)));
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1800.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1800.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 2500.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 1800.))));
+
+        metricsCollector.updateMetrics(
+                source1,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsOut(0)
+                        .numRecordsInPerSec(1800.)
+                        .maxBusyTimePerSec(1000)
+                        .pendingRecords(6000L)
+                        .build());
+        metricsCollector.updateMetrics(
+                sink, TestMetrics.builder().numRecordsIn(0).maxBusyTimePerSec(1000).build());
+
         now = now.plusSeconds(1);
         setClocksTo(now);
         // Redeploying which erases metric history
@@ -186,69 +175,57 @@ public class BacklogBasedScalingTest {
         metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(2));
 
         autoscaler.scale(context);
+
         assertFlinkMetricsCount(1, 0);
-        assertEvaluatedMetricsSize(1);
+        assertCollectedMetricsSize(1);
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.get(source1));
         assertEquals(4, scaledParallelism.get(sink));
 
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1800.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 1800.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 1200.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 1800.))));
+        metricsCollector.updateMetrics(
+                source1,
+                m -> m.setNumRecordsIn(1800),
+                m -> m.setNumRecordsOut(1800),
+                m -> m.setPendingRecords(3600L));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(1800));
 
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(context);
-        assertFlinkMetricsCount(1, 0);
-        assertEvaluatedMetricsSize(2);
+
+        metricsCollector.updateMetrics(
+                source1,
+                m -> m.setNumRecordsIn(3600),
+                m -> m.setNumRecordsOut(3600),
+                m -> m.setPendingRecords(2000L));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(3600));
+
+        now = now.plus(Duration.ofSeconds(1));
+        setClocksTo(now);
+        autoscaler.scale(context);
+
+        assertFlinkMetricsCount(1, 1);
+        assertCollectedMetricsSize(3);
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.get(source1));
         assertEquals(4, scaledParallelism.get(sink));
 
         /* Test scaling down. */
 
-        // We have finally caught up to our original lag, time to scale down
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 600., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 800.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 800.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 600., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 800.))));
+        // We have finally caught up, time to scale down
+
+        metricsCollector.updateMetrics(
+                source1,
+                m -> m.setNumRecordsIn(5400),
+                m -> m.setNumRecordsIn(5400),
+                m -> m.setPendingRecords(400L));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(5400));
+
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(context);
-        assertFlinkMetricsCount(2, 0);
-        assertEvaluatedMetricsSize(3);
+        assertFlinkMetricsCount(2, 1);
+        assertCollectedMetricsSize(3);
 
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(2, scaledParallelism.get(source1));
@@ -262,84 +239,65 @@ public class BacklogBasedScalingTest {
 
         /* Test stability while processing backlog. */
 
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 900.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 900.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 900.))));
+        metricsCollector.updateMetrics(
+                source1,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsOut(0)
+                        .numRecordsInPerSec(900.)
+                        .maxBusyTimePerSec(1000)
+                        .pendingRecords(2000L)
+                        .build());
+        metricsCollector.updateMetrics(
+                sink, TestMetrics.builder().numRecordsIn(0).maxBusyTimePerSec(1000).build());
+
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(context);
-        assertFlinkMetricsCount(2, 0);
-        scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
-        assertEquals(2, scaledParallelism.get(source1));
-        assertEquals(2, scaledParallelism.get(sink));
 
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 900.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 900.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 100.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 1000., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 900.))));
+        metricsCollector.updateMetrics(
+                source1,
+                m -> m.setNumRecordsIn(900),
+                m -> m.setNumRecordsIn(900),
+                m -> m.setPendingRecords(1400L));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(900));
+
         now = now.plus(Duration.ofSeconds(1));
         setClocksTo(now);
         autoscaler.scale(context);
-        assertFlinkMetricsCount(2, 0);
 
-        scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
-        assertEquals(2, scaledParallelism.get(source1));
-        assertEquals(2, scaledParallelism.get(sink));
-
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 500., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 0.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 500., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
-        now = now.plus(Duration.ofSeconds(1));
-        setClocksTo(now);
-        autoscaler.scale(context);
         assertFlinkMetricsCount(2, 1);
+        scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
+        assertEquals(2, scaledParallelism.get(source1));
+        assertEquals(2, scaledParallelism.get(sink));
+
+        metricsCollector.updateMetrics(
+                source1,
+                m -> m.setNumRecordsIn(1800),
+                m -> m.setNumRecordsIn(1800),
+                m -> m.setPendingRecords(800L));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(1800));
+
+        now = now.plus(Duration.ofSeconds(1));
+        setClocksTo(now);
+        autoscaler.scale(context);
+        assertFlinkMetricsCount(2, 2);
+
+        scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
+        assertEquals(2, scaledParallelism.get(source1));
+        assertEquals(2, scaledParallelism.get(sink));
+
+        metricsCollector.updateMetrics(
+                source1,
+                m -> m.setNumRecordsIn(2700),
+                m -> m.setNumRecordsIn(2700),
+                m -> m.setPendingRecords(300L));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(2700));
+
+        now = now.plus(Duration.ofSeconds(1));
+        setClocksTo(now);
+        autoscaler.scale(context);
+        assertFlinkMetricsCount(2, 3);
         scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(2, scaledParallelism.get(source1));
         assertEquals(2, scaledParallelism.get(sink));
@@ -351,27 +309,29 @@ public class BacklogBasedScalingTest {
         setClocksTo(now);
         metricsCollector.setJobUpdateTs(now);
         metricsCollector.setTestMetricWindowSize(Duration.ofSeconds(1));
-        // Set metrics that cause upscaling
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.PENDING_RECORDS,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 2000.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
+        // Trigger scaling up
+        metricsCollector.updateMetrics(
+                source1,
+                TestMetrics.builder()
+                        .numRecordsIn(0)
+                        .numRecordsOut(0)
+                        .numRecordsInPerSec(500.)
+                        .maxBusyTimePerSec(850)
+                        .pendingRecords(2000L)
+                        .build());
+        metricsCollector.updateMetrics(
+                sink, TestMetrics.builder().numRecordsIn(0).maxBusyTimePerSec(850).build());
+
+        autoscaler.scale(context);
+        assertCollectedMetricsSize(1);
+        assertFlinkMetricsCount(0, 0);
+
+        now = now.plus(Duration.ofSeconds(1));
+        setClocksTo(now);
+
+        metricsCollector.updateMetrics(
+                source1, m -> m.setNumRecordsIn(500), m -> m.setNumRecordsOut(500));
+        metricsCollector.updateMetrics(sink, m -> m.setNumRecordsIn(100));
 
         autoscaler.scale(context);
         now = now.plus(Duration.ofSeconds(1));
@@ -419,33 +379,6 @@ public class BacklogBasedScalingTest {
     }
 
     @Test
-    public void testMetricsPersistedAfterRedeploy() throws Exception {
-        var now = Instant.ofEpochMilli(0);
-        setClocksTo(now);
-        metricsCollector.setJobUpdateTs(now);
-        metricsCollector.setCurrentMetrics(
-                Map.of(
-                        source1,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_OUT_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, Double.NaN, Double.NaN, 500.)),
-                        sink,
-                        Map.of(
-                                FlinkMetric.BUSY_TIME_PER_SEC,
-                                new AggregatedMetric("", Double.NaN, 850., Double.NaN, Double.NaN),
-                                FlinkMetric.NUM_RECORDS_IN_PER_SEC,
-                                new AggregatedMetric(
-                                        "", Double.NaN, Double.NaN, Double.NaN, 500.))));
-
-        autoscaler.scale(context);
-        assertFalse(stateStore.getCollectedMetrics(context).isEmpty());
-    }
-
-    @Test
     public void testEventOnError() throws Exception {
         // Invalid config
         context.getConfiguration().setString(AutoScalerOptions.AUTOSCALER_ENABLED.key(), "3");
@@ -470,7 +403,7 @@ public class BacklogBasedScalingTest {
         assertTrue(eventCollector.events.isEmpty());
     }
 
-    private void assertEvaluatedMetricsSize(int expectedSize) throws Exception {
+    private void assertCollectedMetricsSize(int expectedSize) throws Exception {
         SortedMap<Instant, CollectedMetrics> evaluatedMetrics =
                 stateStore.getCollectedMetrics(context);
         assertThat(evaluatedMetrics).hasSize(expectedSize);
