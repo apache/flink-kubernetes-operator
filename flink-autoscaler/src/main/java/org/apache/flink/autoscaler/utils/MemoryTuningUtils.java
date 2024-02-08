@@ -75,7 +75,7 @@ public class MemoryTuningUtils {
         }
 
         var maxHeapSize = memSpecs.getFlinkMemory().getJvmHeapMemorySize();
-        LOG.info("Current configured heap size: {}", maxHeapSize);
+        LOG.debug("Current configured heap size: {}", maxHeapSize);
 
         MemorySize avgHeapSize = getAverageMemorySize(evaluatedMetrics);
 

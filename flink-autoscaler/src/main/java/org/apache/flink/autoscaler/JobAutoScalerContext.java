@@ -55,7 +55,10 @@ public class JobAutoScalerContext<KEY> {
 
     @Nullable @Getter private final JobStatus jobStatus;
 
-    /** The configuration derived from the current spec. */
+    /**
+     * The configuration based on the latest user-provided spec. This is not the already deployed /
+     * observed configuration.
+     */
     @Getter private final Configuration configuration;
 
     @Getter private final MetricGroup metricGroup;

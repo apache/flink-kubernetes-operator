@@ -326,7 +326,6 @@ public class ScalingMetricEvaluator {
 
         var latestObservation = latest.getOrDefault(HEAP_AVERAGE_SIZE, Double.NaN);
         double heapSizeAverage = getAverageGlobalMetric(HEAP_AVERAGE_SIZE, metricHistory);
-        LOG.debug("Latest: {}, Avg: {}", latestObservation, heapSizeAverage);
         out.put(HEAP_AVERAGE_SIZE, new EvaluatedScalingMetric(latestObservation, heapSizeAverage));
 
         out.put(

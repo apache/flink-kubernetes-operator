@@ -67,7 +67,7 @@ public class KubernetesScalingRealizer
         // Update total memory in spec
         var totalMemoryOverride = MemoryTuningUtils.getTotalMemory(configOverrides, context);
         if (totalMemoryOverride.compareTo(MemorySize.ZERO) <= 0) {
-            LOG.warn("Memory override {} is not valid", totalMemoryOverride);
+            LOG.warn("Total memory override {} is not valid", totalMemoryOverride);
             return;
         }
         Resource tmResource = flinkDeployment.getSpec().getTaskManager().getResource();

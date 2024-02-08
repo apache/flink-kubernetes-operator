@@ -274,7 +274,7 @@ public class AutoScalerOptions {
                     .withFallbackKeys(
                             oldOperatorConfigKey("memory.tuning.heap.transfer-to-managed"))
                     .withDescription(
-                            "If enabled, any reduction of heap memory will increase the managed memory for RocksDB. RocksDB needs to be enabled.");
+                            "If enabled, any reduction of heap memory will increase the managed memory used by RocksDB.");
 
     public static final ConfigOption<Integer> VERTEX_SCALING_HISTORY_COUNT =
             autoScalerConfig("history.max.count")

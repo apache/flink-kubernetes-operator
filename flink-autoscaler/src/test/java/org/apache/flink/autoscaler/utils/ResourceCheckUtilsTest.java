@@ -32,7 +32,7 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 class ResourceCheckUtilsTest {
 
     @Test
-    void estimateNumTaskSlotsAfterRescale() {
+    void testEstimateNumTaskSlotsAfterRescale() {
         var source = new JobVertexID();
         var sink = new JobVertexID();
         int sourceParallelism = 2;
