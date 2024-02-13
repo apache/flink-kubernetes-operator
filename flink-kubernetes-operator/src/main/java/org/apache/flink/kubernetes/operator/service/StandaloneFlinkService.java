@@ -47,6 +47,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -102,6 +103,13 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                 .inNamespace(namespace)
                 .withLabels(StandaloneKubernetesUtils.getTaskManagerSelectors(clusterId))
                 .list();
+    }
+
+    @Override
+    protected List<String> getDeploymentNames(String namespace, String clusterId) {
+        return List.of(
+                StandaloneKubernetesUtils.getJobManagerDeploymentName(clusterId),
+                StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId));
     }
 
     @VisibleForTesting

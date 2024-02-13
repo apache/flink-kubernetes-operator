@@ -62,6 +62,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -130,6 +131,11 @@ public class NativeFlinkService extends AbstractFlinkService {
     protected PodList getTmPodList(String namespace, String clusterId) {
         // Native mode does not manage TaskManager
         return new PodList();
+    }
+
+    @Override
+    protected List<String> getDeploymentNames(String namespace, String clusterId) {
+        return List.of(KubernetesUtils.getDeploymentName(clusterId));
     }
 
     protected void submitClusterInternal(Configuration conf) throws Exception {

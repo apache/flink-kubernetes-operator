@@ -628,4 +628,9 @@ public class TestingFlinkService extends AbstractFlinkService {
     public JobDetailsInfo getJobDetailsInfo(JobID jobID, Configuration conf) {
         return NativeFlinkServiceTest.createJobDetailsFor(List.of());
     }
+
+    @Override
+    protected List<String> getDeploymentNames(String namespace, String clusterId) {
+        return List.of(clusterId + "-deployment");
+    }
 }

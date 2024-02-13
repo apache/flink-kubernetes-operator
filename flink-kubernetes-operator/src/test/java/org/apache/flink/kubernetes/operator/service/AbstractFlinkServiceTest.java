@@ -95,10 +95,17 @@ import org.apache.flink.util.function.TriFunction;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
+import io.fabric8.kubernetes.api.model.ListMeta;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.WatchEvent;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
+import io.fabric8.kubernetes.api.model.apps.DeploymentList;
+import io.fabric8.kubernetes.api.model.apps.DeploymentListBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -108,6 +115,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -144,6 +152,7 @@ public class AbstractFlinkServiceTest {
     File testJar;
 
     private KubernetesClient client;
+    private KubernetesMockServer mockServer;
     private final Configuration configuration = new Configuration();
 
     private final FlinkConfigManager configManager = new FlinkConfigManager(configuration);
@@ -1046,6 +1055,59 @@ public class AbstractFlinkServiceTest {
                 });
     }
 
+    @Test
+    public void testWaitForClusterShutdown() {
+        String deploymentName = "test-cluster";
+        String namespace = "test-namespace";
+        String getUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?fieldSelector=metadata.name%%3D%s",
+                        namespace, deploymentName);
+        String watchUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?fieldSelector=metadata.name%%3D%s&timeoutSeconds=600&allowWatchBookmarks=true&watch=true",
+                        namespace, deploymentName);
+
+        var flinkService = new TestingService(null);
+
+        Deployment deployment =
+                new DeploymentBuilder()
+                        .withNewMetadata()
+                        .withName(deploymentName)
+                        .withNamespace(namespace)
+                        .endMetadata()
+                        .build();
+
+        DeploymentList deploymentList =
+                new DeploymentListBuilder()
+                        .withMetadata(new ListMeta())
+                        .withItems(deployment)
+                        .build();
+
+        mockServer
+                .expect()
+                .get()
+                .withPath(getUrl)
+                .andReturn(HttpURLConnection.HTTP_OK, deploymentList)
+                .once();
+        mockServer
+                .expect()
+                .get()
+                .withPath(watchUrl)
+                .andUpgradeToWebSocket()
+                .open()
+                .waitFor(10)
+                .andEmit(new WatchEvent(deployment, "DELETED"))
+                .done()
+                .always();
+
+        boolean result =
+                flinkService.waitForDeploymentToBeRemoved(namespace, deploymentName, 10000);
+
+        assertTrue(result);
+        assertEquals(2, mockServer.getRequestCount());
+    }
+
     class TestingService extends AbstractFlinkService {
 
         RestClusterClient<String> clusterClient;
@@ -1087,6 +1149,11 @@ public class AbstractFlinkServiceTest {
         @Override
         protected PodList getTmPodList(String namespace, String clusterId) {
             return tmPods.getOrDefault(Tuple2.of(namespace, clusterId), new PodList());
+        }
+
+        @Override
+        protected List<String> getDeploymentNames(String namespace, String clusterId) {
+            return List.of(clusterId);
         }
 
         @Override

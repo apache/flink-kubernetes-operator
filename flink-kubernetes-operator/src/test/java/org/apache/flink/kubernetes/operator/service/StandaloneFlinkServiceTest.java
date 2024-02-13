@@ -33,8 +33,6 @@ import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.util.concurrent.Executors;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
-import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentSpec;
 import io.fabric8.kubernetes.client.NamespacedKubernetesClient;
@@ -121,7 +119,8 @@ public class StandaloneFlinkServiceTest {
                 new Configuration(),
                 true);
 
-        assertEquals(2, service.nbCall);
+        // How many times were getDeploymentNames() called
+        assertEquals(1, service.nbCall);
 
         deployments = kubernetesClient.apps().deployments().list().getItems();
 
@@ -290,14 +289,9 @@ public class StandaloneFlinkServiceTest {
         }
 
         @Override
-        protected PodList getTmPodList(String namespace, String clusterId) {
+        protected List<String> getDeploymentNames(String namespace, String clusterId) {
             nbCall++;
-            PodList podList = new PodList();
-            if (nbCall == 1) {
-                Pod pod = new Pod();
-                podList.setItems(List.of(pod));
-            }
-            return podList;
+            return List.of(clusterId);
         }
     }
 

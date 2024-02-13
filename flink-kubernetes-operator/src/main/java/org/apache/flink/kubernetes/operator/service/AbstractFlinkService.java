@@ -101,8 +101,8 @@ import org.apache.flink.util.Preconditions;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
-import io.fabric8.kubernetes.api.model.Service;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientTimeoutException;
 import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -125,9 +125,12 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.jar.JarOutputStream;
@@ -898,58 +901,54 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
+    /** Returns a list of Kubernetes Deployment names for given cluster. */
+    protected abstract List<String> getDeploymentNames(String namespace, String clusterId);
+
     /** Wait until the FLink cluster has completely shut down. */
-    @VisibleForTesting
-    void waitForClusterShutdown(String namespace, String clusterId, long shutdownTimeout) {
-        LOG.info("Waiting for cluster shutdown...");
+    protected void waitForClusterShutdown(
+            String namespace, String clusterId, long shutdownTimeout) {
+        long timeoutAt = System.currentTimeMillis() + shutdownTimeout * 1000;
+        LOG.info("Waiting {} seconds for cluster shutdown...", shutdownTimeout);
 
-        boolean jobManagerRunning = true;
-        boolean taskManagerRunning = true;
-        boolean serviceRunning = true;
+        for (var deploymentName : getDeploymentNames(namespace, clusterId)) {
+            long deploymentTimeout = timeoutAt - System.currentTimeMillis();
 
-        for (int i = 0; i < shutdownTimeout; i++) {
-            if (jobManagerRunning) {
-                PodList jmPodList = getJmPodList(namespace, clusterId);
-
-                if (jmPodList == null || jmPodList.getItems().isEmpty()) {
-                    jobManagerRunning = false;
-                }
-            }
-            if (taskManagerRunning) {
-                PodList tmPodList = getTmPodList(namespace, clusterId);
-
-                if (tmPodList.getItems().isEmpty()) {
-                    taskManagerRunning = false;
-                }
-            }
-
-            if (serviceRunning) {
-                Service service =
-                        kubernetesClient
-                                .services()
-                                .inNamespace(namespace)
-                                .withName(
-                                        ExternalServiceDecorator.getExternalServiceName(clusterId))
-                                .get();
-                if (service == null) {
-                    serviceRunning = false;
-                }
-            }
-
-            if (!jobManagerRunning && !serviceRunning && !taskManagerRunning) {
-                break;
-            }
-            // log a message waiting to shutdown Flink cluster every 5 seconds.
-            if ((i + 1) % 5 == 0) {
-                LOG.info("Waiting for cluster shutdown... ({}s)", i + 1);
-            }
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+            if (!waitForDeploymentToBeRemoved(namespace, deploymentName, deploymentTimeout)) {
+                LOG.error(
+                        "Failed to shut down cluster {} (deployment {}) in {} seconds, proceeding...",
+                        clusterId,
+                        deploymentName,
+                        shutdownTimeout);
+                return;
             }
         }
-        LOG.info("Cluster shutdown completed.");
+    }
+
+    /** Wait until Deployment is removed, return false if timed out, otherwise return true. */
+    @VisibleForTesting
+    boolean waitForDeploymentToBeRemoved(String namespace, String deploymentName, long timeout) {
+        ScheduledExecutorService logger = Executors.newSingleThreadScheduledExecutor();
+        logger.scheduleWithFixedDelay(
+                () -> LOG.info("Waiting for Deployment {} to shut down...", deploymentName),
+                5,
+                5,
+                TimeUnit.SECONDS);
+
+        try {
+            kubernetesClient
+                    .apps()
+                    .deployments()
+                    .inNamespace(namespace)
+                    .withName(deploymentName)
+                    .waitUntilCondition(Objects::isNull, timeout, TimeUnit.MILLISECONDS);
+
+            LOG.info("Deployment {} successfully shut down", deploymentName);
+        } catch (KubernetesClientTimeoutException e) {
+            return false;
+        } finally {
+            logger.shutdown();
+        }
+        return true;
     }
 
     private static List<JobStatusMessage> toJobStatusMessage(
