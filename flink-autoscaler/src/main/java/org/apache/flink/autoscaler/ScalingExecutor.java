@@ -27,7 +27,7 @@ import org.apache.flink.autoscaler.resources.NoopResourceCheck;
 import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.utils.CalendarUtils;
-import org.apache.flink.autoscaler.utils.MemoryTuningUtils;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.autoscaler.utils.ResourceCheckUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
@@ -119,7 +119,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         var tuningConfig =
-                MemoryTuningUtils.tuneTaskManagerHeapMemory(
+                MemoryTuning.tuneTaskManagerHeapMemory(
                         context, evaluatedMetrics, autoScalerEventHandler);
 
         if (scalingWouldExceedClusterResources(
@@ -273,7 +273,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             JobAutoScalerContext<?> ctx) {
 
         final double taskManagerCpu = ctx.getTaskManagerCpu().orElse(0.);
-        final MemorySize taskManagerMemory = MemoryTuningUtils.getTotalMemory(tuningConfig, ctx);
+        final MemorySize taskManagerMemory = MemoryTuning.getTotalMemory(tuningConfig, ctx);
 
         if (taskManagerCpu <= 0 || taskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
             // We can't extract the requirements, we can't make any assumptions

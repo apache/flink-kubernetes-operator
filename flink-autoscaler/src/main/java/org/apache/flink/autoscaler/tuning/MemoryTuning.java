@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.autoscaler.utils;
+package org.apache.flink.autoscaler.tuning;
 
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
@@ -42,9 +42,9 @@ import java.util.Arrays;
 import java.util.Map;
 
 /** Tunes the TaskManager memory. */
-public class MemoryTuningUtils {
+public class MemoryTuning {
 
-    private static final Logger LOG = LoggerFactory.getLogger(MemoryTuningUtils.class);
+    private static final Logger LOG = LoggerFactory.getLogger(MemoryTuning.class);
     public static final ProcessMemoryUtils<TaskExecutorFlinkMemory> FLINK_MEMORY_UTILS =
             new ProcessMemoryUtils<>(getMemoryOptions(), new TaskExecutorFlinkMemoryUtils());
 

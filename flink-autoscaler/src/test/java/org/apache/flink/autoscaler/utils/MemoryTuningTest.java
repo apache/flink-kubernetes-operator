@@ -25,6 +25,7 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -36,8 +37,8 @@ import java.util.Map;
 
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
-/** Tests for {@link MemoryTuningUtils}. */
-public class MemoryTuningUtilsTest {
+/** Tests for {@link MemoryTuning}. */
+public class MemoryTuningTest {
 
     TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventHandler =
             new TestingEventCollector<>();
@@ -78,7 +79,7 @@ public class MemoryTuningUtilsTest {
         var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
 
         Map<String, String> overrides =
-                MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics, eventHandler).toMap();
+                MemoryTuning.tuneTaskManagerHeapMemory(context, metrics, eventHandler).toMap();
         // Test reducing overall memory
         assertThat(overrides)
                 .containsExactlyInAnyOrderEntriesOf(
@@ -104,7 +105,7 @@ public class MemoryTuningUtilsTest {
         config.set(AutoScalerOptions.MEMORY_TUNING_TRANSFER_HEAP_TO_MANAGED, true);
         config.set(StateBackendOptions.STATE_BACKEND, "rocksdb");
         overrides =
-                MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics, eventHandler).toMap();
+                MemoryTuning.tuneTaskManagerHeapMemory(context, metrics, eventHandler).toMap();
         assertThat(overrides)
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
@@ -128,7 +129,7 @@ public class MemoryTuningUtilsTest {
         // Test tuning disabled
         config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, false);
         assertThat(
-                        MemoryTuningUtils.tuneTaskManagerHeapMemory(context, metrics, eventHandler)
+                        MemoryTuning.tuneTaskManagerHeapMemory(context, metrics, eventHandler)
                                 .toMap())
                 .isEmpty();
 

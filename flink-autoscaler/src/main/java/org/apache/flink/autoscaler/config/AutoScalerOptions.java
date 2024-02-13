@@ -18,7 +18,7 @@
 package org.apache.flink.autoscaler.config;
 
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
-import org.apache.flink.autoscaler.utils.MemoryTuningUtils;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.MemorySize;
@@ -260,11 +260,11 @@ public class AutoScalerOptions {
                     .withDescription(
                             "If enabled, the initial amount of memory specified for TaskManagers will be reduced according to the observed needs.");
 
-    public static final ConfigOption<MemoryTuningUtils.HEAP_TUNING_TARGET>
+    public static final ConfigOption<MemoryTuning.HEAP_TUNING_TARGET>
             MEMORY_TUNING_HEAP_TARGET =
                     autoScalerConfig("memory.tuning.heap.target-usage")
-                            .enumType(MemoryTuningUtils.HEAP_TUNING_TARGET.class)
-                            .defaultValue(MemoryTuningUtils.HEAP_TUNING_TARGET.AVG)
+                            .enumType(MemoryTuning.HEAP_TUNING_TARGET.class)
+                            .defaultValue(MemoryTuning.HEAP_TUNING_TARGET.AVG)
                             .withFallbackKeys(
                                     oldOperatorConfigKey("memory.tuning.heap.target-usage"))
                             .withDescription(

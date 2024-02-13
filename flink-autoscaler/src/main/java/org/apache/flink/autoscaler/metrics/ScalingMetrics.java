@@ -19,8 +19,8 @@ package org.apache.flink.autoscaler.metrics;
 
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
-import org.apache.flink.autoscaler.utils.MemoryTuningUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
@@ -194,7 +194,7 @@ public class ScalingMetrics {
         var heapMax = collectedTmMetrics.get(FlinkMetric.HEAP_MAX);
         var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_USED);
         if (heapMax != null && heapUsed != null) {
-            MemoryTuningUtils.HEAP_TUNING_TARGET heapTarget =
+            MemoryTuning.HEAP_TUNING_TARGET heapTarget =
                     conf.get(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET);
             switch (heapTarget) {
                 case AVG:

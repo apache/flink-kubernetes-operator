@@ -18,7 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
-import org.apache.flink.autoscaler.utils.MemoryTuningUtils;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.configuration.MemorySize;
@@ -65,7 +65,7 @@ public class KubernetesScalingRealizer
         flinkDeployment.getSpec().getFlinkConfiguration().putAll(configOverrides.toMap());
 
         // Update total memory in spec
-        var totalMemoryOverride = MemoryTuningUtils.getTotalMemory(configOverrides, context);
+        var totalMemoryOverride = MemoryTuning.getTotalMemory(configOverrides, context);
         if (totalMemoryOverride.compareTo(MemorySize.ZERO) <= 0) {
             LOG.warn("Total memory override {} is not valid", totalMemoryOverride);
             return;
