@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler.metrics;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
@@ -505,6 +506,18 @@ public class ScalingMetricsTest {
                                 aggMax(200.),
                                 FlinkMetric.TOTAL_GC_TIME_PER_SEC,
                                 aggMax(250.)),
+                        conf));
+
+        conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapTuningTarget.MAX);
+        assertEquals(
+                Map.of(ScalingMetric.HEAP_MAX_USAGE_RATIO, 0.5, ScalingMetric.HEAP_USED, 100.),
+                ScalingMetrics.computeGlobalMetrics(
+                        Map.of(),
+                        Map.of(
+                                FlinkMetric.HEAP_USED,
+                                aggAvgMax(75, 100),
+                                FlinkMetric.HEAP_MAX,
+                                aggMax(200.)),
                         conf));
     }
 
