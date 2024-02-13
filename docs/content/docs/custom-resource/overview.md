@@ -216,6 +216,38 @@ Alternatively, if you use helm to install flink-kubernetes-operator, it allows y
 
 - Last-state upgradeMode is currently not supported for FlinkSessionJobs
 
+## Flink SQL Jobs
+Another common way to deploy Flink jobs is by writing SQL scripts. We have put together [a Flink Java application](https://github.com/apache/flink-kubernetes-operator/tree/main/examples/flink-sql-runner-example#flink-kubernetes-operator-sql-example) that can read Flink SQL scripts and submit the queries using the table API. The user needs to package the job into a JAR and provide the SQL script's path as an argument to the job.
+
+You can clone the [flink-kubernetes-operator](https://github.com/apache/flink-kubernetes-operator.git) repo and follow these steps to deploy a Flink application that can run Flink SQL scripts. These steps assume that you have the Flink Kubernetes Operator installed and running in your environment.
+
+**Step 1**: Build Sql Runner maven project
+```bash
+cd examples/flink-sql-runner-example
+mvn clean package
+```
+
+**Step 2**: Add your SQL script files under the `sql-scripts` directory
+
+**Step 3**: Build docker image
+```bash
+# Uncomment when building for local minikube env:
+# eval $(minikube docker-env)
+
+DOCKER_BUILDKIT=1 docker build . -t flink-sql-runner-example:latest
+```
+This step will create an image based on an official Flink base image including the SQL runner jar and your user scripts.
+
+**Step 4**: Create FlinkDeployment Yaml and Submit
+
+Edit the included `sql-example.yaml` so that the `job.args` section points to the SQL script that you wish to execute, then submit it.
+
+```bash
+kubectl apply -f sql-example.yaml
+```
+
+***Note:*** *While the included SqlRunner should work for most simple cases, it is not expected to be very robust or battle tested. Please test with your SQL scripts to make sure the queries are parsed and executed correctly. If you find any bugs or limitations, feel free to open Jira tickets and bugfix PRs.*
+
 ## Further information
 
  - [Job Management and Stateful upgrades]({{< ref "docs/custom-resource/job-management" >}})
