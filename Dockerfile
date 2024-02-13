@@ -48,19 +48,15 @@ WORKDIR /flink-kubernetes-operator
 RUN groupadd --system --gid=9999 flink && \
     useradd --system --home-dir $FLINK_HOME --uid=9999 --gid=flink flink
 
-COPY --from=build /app/flink-kubernetes-operator/target/$OPERATOR_JAR .
-COPY --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR .
-COPY --from=build /app/flink-kubernetes-standalone/target/$KUBERNETES_STANDALONE_JAR .
-COPY --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
-COPY --from=build /app/tools/license/licenses-output/NOTICE .
-COPY --from=build /app/tools/license/licenses-output/licenses ./licenses
-COPY docker-entrypoint.sh /
+RUN chown -R flink:flink $FLINK_HOME
 
-RUN chown -R flink:flink $FLINK_HOME && \
-    chown flink:flink $OPERATOR_JAR && \
-    chown flink:flink $WEBHOOK_JAR && \
-    chown flink:flink $KUBERNETES_STANDALONE_JAR && \
-    chown flink:flink /docker-entrypoint.sh
+COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/$OPERATOR_JAR .
+COPY --chown=flink:flink --from=build /app/flink-kubernetes-webhook/target/$WEBHOOK_JAR .
+COPY --chown=flink:flink --from=build /app/flink-kubernetes-standalone/target/$KUBERNETES_STANDALONE_JAR .
+COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
+COPY --chown=flink:flink --from=build /app/tools/license/licenses-output/NOTICE .
+COPY --chown=flink:flink --from=build /app/tools/license/licenses-output/licenses ./licenses
+COPY --chown=flink:flink docker-entrypoint.sh /
 
 ARG SKIP_OS_UPDATE=true
 
