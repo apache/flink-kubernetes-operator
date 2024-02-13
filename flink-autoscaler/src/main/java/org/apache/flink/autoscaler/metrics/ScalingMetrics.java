@@ -194,7 +194,7 @@ public class ScalingMetrics {
         var heapMax = collectedTmMetrics.get(FlinkMetric.HEAP_MAX);
         var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_USED);
         if (heapMax != null && heapUsed != null) {
-            MemoryTuning.HEAP_TUNING_TARGET heapTarget =
+            MemoryTuning.HeapTuningTarget heapTarget =
                     conf.get(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET);
             switch (heapTarget) {
                 case AVG:

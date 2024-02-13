@@ -50,7 +50,8 @@ public class MemoryTuning {
 
     private static final Configuration EMPTY_CONFIG = new Configuration();
 
-    public enum HEAP_TUNING_TARGET {
+    /** What memory usage to target. */
+    public enum HeapTuningTarget {
         AVG,
         MAX
     }

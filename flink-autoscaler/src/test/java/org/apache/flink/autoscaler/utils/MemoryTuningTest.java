@@ -104,8 +104,7 @@ public class MemoryTuningTest {
         // Test giving back memory to RocksDB
         config.set(AutoScalerOptions.MEMORY_TUNING_TRANSFER_HEAP_TO_MANAGED, true);
         config.set(StateBackendOptions.STATE_BACKEND, "rocksdb");
-        overrides =
-                MemoryTuning.tuneTaskManagerHeapMemory(context, metrics, eventHandler).toMap();
+        overrides = MemoryTuning.tuneTaskManagerHeapMemory(context, metrics, eventHandler).toMap();
         assertThat(overrides)
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
@@ -128,9 +127,7 @@ public class MemoryTuningTest {
 
         // Test tuning disabled
         config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, false);
-        assertThat(
-                        MemoryTuning.tuneTaskManagerHeapMemory(context, metrics, eventHandler)
-                                .toMap())
+        assertThat(MemoryTuning.tuneTaskManagerHeapMemory(context, metrics, eventHandler).toMap())
                 .isEmpty();
 
         assertThat(eventHandler.events.poll().getMessage())
