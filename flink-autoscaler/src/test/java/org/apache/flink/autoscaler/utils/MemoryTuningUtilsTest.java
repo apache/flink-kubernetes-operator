@@ -72,7 +72,7 @@ public class MemoryTuningUtilsTest {
 
         var globalMetrics =
                 Map.of(
-                        ScalingMetric.HEAP_AVERAGE_SIZE,
+                        ScalingMetric.HEAP_USED,
                         EvaluatedScalingMetric.avg(MemorySize.ofMebiBytes(5096).getBytes()));
 
         var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);

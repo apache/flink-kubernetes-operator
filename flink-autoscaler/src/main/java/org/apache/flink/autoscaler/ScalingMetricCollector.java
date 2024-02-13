@@ -324,7 +324,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
         LOG.debug("Output ratios: {}", outputRatios);
 
         var globalMetrics =
-                ScalingMetrics.computeGlobalMetrics(collectedJmMetrics, collectedTmMetrics);
+                ScalingMetrics.computeGlobalMetrics(collectedJmMetrics, collectedTmMetrics, conf);
         LOG.debug("Global metrics: {}", globalMetrics);
 
         return new CollectedMetrics(out, outputRatios, globalMetrics);

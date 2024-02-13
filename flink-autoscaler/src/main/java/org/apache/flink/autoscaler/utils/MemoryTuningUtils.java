@@ -50,6 +50,11 @@ public class MemoryTuningUtils {
 
     private static final Configuration EMPTY_CONFIG = new Configuration();
 
+    public enum HEAP_TUNING_TARGET {
+        AVG,
+        MAX
+    }
+
     /**
      * Emits a Configuration which contains overrides for the current configuration. We are not
      * modifying the config directly, but we are emitting a new configuration which contains any
@@ -77,7 +82,7 @@ public class MemoryTuningUtils {
         var maxHeapSize = memSpecs.getFlinkMemory().getJvmHeapMemorySize();
         LOG.debug("Current configured heap size: {}", maxHeapSize);
 
-        MemorySize avgHeapSize = getAverageMemorySize(evaluatedMetrics);
+        MemorySize avgHeapSize = getHeapUsed(evaluatedMetrics);
 
         // Apply min/max heap size limits
         MemorySize newHeapSize =
@@ -157,13 +162,12 @@ public class MemoryTuningUtils {
         return tuningConfig;
     }
 
-    private static MemorySize getAverageMemorySize(EvaluatedMetrics evaluatedMetrics) {
+    private static MemorySize getHeapUsed(EvaluatedMetrics evaluatedMetrics) {
         var globalMetrics = evaluatedMetrics.getGlobalMetrics();
-        MemorySize avgHeapSize =
-                new MemorySize(
-                        (long) globalMetrics.get(ScalingMetric.HEAP_AVERAGE_SIZE).getAverage());
-        LOG.info("Average TM used heap size: {}", avgHeapSize);
-        return avgHeapSize;
+        MemorySize heapUsed =
+                new MemorySize((long) globalMetrics.get(ScalingMetric.HEAP_USED).getAverage());
+        LOG.info("Average TM used heap size: {}", heapUsed);
+        return heapUsed;
     }
 
     private static boolean shouldTransferHeapToManagedMemory(
