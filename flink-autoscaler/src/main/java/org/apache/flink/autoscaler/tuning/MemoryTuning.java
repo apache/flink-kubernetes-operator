@@ -51,7 +51,7 @@ public class MemoryTuning {
     private static final Configuration EMPTY_CONFIG = new Configuration();
 
     /** What memory usage to target. */
-    public enum HeapTuningTarget {
+    public enum HeapUsageTarget {
         AVG,
         MAX
     }
@@ -83,19 +83,7 @@ public class MemoryTuning {
         var maxHeapSize = memSpecs.getFlinkMemory().getJvmHeapMemorySize();
         LOG.debug("Current configured heap size: {}", maxHeapSize);
 
-        MemorySize avgHeapSize = getHeapUsed(evaluatedMetrics);
-
-        // Apply min/max heap size limits
-        MemorySize newHeapSize =
-                new MemorySize(
-                        Math.min(
-                                // Upper limit is the original max heap size in the spec
-                                maxHeapSize.getBytes(),
-                                Math.max(
-                                        // Lower limit is the minimum configured heap size
-                                        config.get(AutoScalerOptions.MEMORY_TUNING_MIN_HEAP)
-                                                .getBytes(),
-                                        avgHeapSize.getBytes())));
+        MemorySize newHeapSize = determineNewHeapSize(evaluatedMetrics, config, maxHeapSize);
         LOG.info("New TM heap memory {}", newHeapSize.toHumanReadableString());
 
         // Diff can be negative (memory shrinks) or positive (memory grows)
@@ -163,11 +151,31 @@ public class MemoryTuning {
         return tuningConfig;
     }
 
+    private static MemorySize determineNewHeapSize(
+            EvaluatedMetrics evaluatedMetrics, Configuration config, MemorySize maxHeapSize) {
+
+        double overheadFactor = 1 + config.get(AutoScalerOptions.MEMORY_TUNING_HEAP_OVERHEAD);
+        long heapTargetSizeBytes =
+                (long) (getHeapUsed(evaluatedMetrics).getBytes() * overheadFactor);
+
+        // Apply min/max heap size limits
+        heapTargetSizeBytes =
+                Math.min(
+                        Math.max(
+                                // Lower limit is the minimum configured heap size
+                                config.get(AutoScalerOptions.MEMORY_TUNING_MIN_HEAP).getBytes(),
+                                heapTargetSizeBytes),
+                        // Upper limit is the original max heap size in the spec
+                        maxHeapSize.getBytes());
+
+        return new MemorySize(heapTargetSizeBytes);
+    }
+
     private static MemorySize getHeapUsed(EvaluatedMetrics evaluatedMetrics) {
         var globalMetrics = evaluatedMetrics.getGlobalMetrics();
         MemorySize heapUsed =
                 new MemorySize((long) globalMetrics.get(ScalingMetric.HEAP_USED).getAverage());
-        LOG.info("Average TM used heap size: {}", heapUsed);
+        LOG.info("TM heap used size: {}", heapUsed);
         return heapUsed;
     }
 

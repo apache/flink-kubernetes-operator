@@ -75,8 +75,14 @@
             <td>The minimum amount of TaskManager memory, if memory tuning is enabled.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.memory.tuning.heap.overhead</h5></td>
+            <td style="word-wrap: break-word;">0.2</td>
+            <td>Double</td>
+            <td>Overhead to add to heap tuning decisions (0-1). This ensures spare capacity and allows the memory to grow beyond the dynamically computed limits, but never beyond the original memory limits.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.memory.tuning.heap.target-usage</h5></td>
-            <td style="word-wrap: break-word;">AVG</td>
+            <td style="word-wrap: break-word;">MAX</td>
             <td><p>Enum</p></td>
             <td>The heap size to target. Average usage (AVG) will yield better savings. Max usage will yield more conservative savings.<br /><br />Possible values:<ul><li>"AVG"</li><li>"MAX"</li></ul></td>
         </tr>

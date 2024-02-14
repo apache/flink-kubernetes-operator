@@ -260,13 +260,21 @@ public class AutoScalerOptions {
                     .withDescription(
                             "If enabled, the initial amount of memory specified for TaskManagers will be reduced according to the observed needs.");
 
-    public static final ConfigOption<MemoryTuning.HeapTuningTarget> MEMORY_TUNING_HEAP_TARGET =
+    public static final ConfigOption<MemoryTuning.HeapUsageTarget> MEMORY_TUNING_HEAP_TARGET =
             autoScalerConfig("memory.tuning.heap.target-usage")
-                    .enumType(MemoryTuning.HeapTuningTarget.class)
-                    .defaultValue(MemoryTuning.HeapTuningTarget.AVG)
+                    .enumType(MemoryTuning.HeapUsageTarget.class)
+                    .defaultValue(MemoryTuning.HeapUsageTarget.MAX)
                     .withFallbackKeys(oldOperatorConfigKey("memory.tuning.heap.target-usage"))
                     .withDescription(
                             "The heap size to target. Average usage (AVG) will yield better savings. Max usage will yield more conservative savings.");
+
+    public static final ConfigOption<Double> MEMORY_TUNING_HEAP_OVERHEAD =
+            autoScalerConfig("memory.tuning.heap.overhead")
+                    .doubleType()
+                    .defaultValue(0.2)
+                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.heap.overhead"))
+                    .withDescription(
+                            "Overhead to add to heap tuning decisions (0-1). This ensures spare capacity and allows the memory to grow beyond the dynamically computed limits, but never beyond the original memory limits.");
 
     public static final ConfigOption<MemorySize> MEMORY_TUNING_MIN_HEAP =
             autoScalerConfig("memory.tuning.heap.min")

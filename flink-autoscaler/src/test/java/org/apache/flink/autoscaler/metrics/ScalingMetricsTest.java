@@ -484,6 +484,7 @@ public class ScalingMetricsTest {
     @Test
     public void testGlobalMetrics() {
         Configuration conf = new Configuration();
+        conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapUsageTarget.AVG);
         assertEquals(Map.of(), ScalingMetrics.computeGlobalMetrics(Map.of(), Map.of(), conf));
         assertEquals(
                 Map.of(),
@@ -508,7 +509,7 @@ public class ScalingMetricsTest {
                                 aggMax(250.)),
                         conf));
 
-        conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapTuningTarget.MAX);
+        conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapUsageTarget.MAX);
         assertEquals(
                 Map.of(ScalingMetric.HEAP_MAX_USAGE_RATIO, 0.5, ScalingMetric.HEAP_USED, 100.),
                 ScalingMetrics.computeGlobalMetrics(

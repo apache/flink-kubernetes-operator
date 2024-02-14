@@ -85,17 +85,17 @@ public class MemoryTuningTest {
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.TASK_HEAP_MEMORY.key(),
-                                "5096 mb",
+                                "6412251955 bytes",
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.MANAGED_MEMORY_SIZE.key(),
                                 "12348031160 bytes",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.048",
+                                "0.046",
                                 TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.148",
+                                "0.14",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "22254977254 bytes"));
+                                "23323685913 bytes"));
 
         assertThat(eventHandler.events.poll().getMessage())
                 .startsWith(
@@ -109,15 +109,15 @@ public class MemoryTuningTest {
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.TASK_HEAP_MEMORY.key(),
-                                "5096 mb",
+                                "6412251955 bytes",
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.MANAGED_MEMORY_SIZE.key(),
-                                "22305308626 bytes",
+                                "21236599967 bytes",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
                                 "0.033",
                                 TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.148",
+                                "0.14",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
                                 totalMemory.toString()));
 

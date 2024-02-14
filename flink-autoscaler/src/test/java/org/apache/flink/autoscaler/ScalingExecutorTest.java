@@ -287,7 +287,7 @@ public class ScalingExecutorTest {
                 scalingDecisionExecutor.scaleResource(
                         context, metrics, new HashMap<>(), new ScalingTracking(), now));
         assertEquals(
-                "5.000gb (5368709120 bytes)",
+                "6.000gb (6442450944 bytes)",
                 stateStore
                         .getConfigOverrides(context)
                         .get(TaskManagerOptions.TASK_HEAP_MEMORY)
