@@ -129,8 +129,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.jar.JarOutputStream;
@@ -927,12 +925,10 @@ public abstract class AbstractFlinkService implements FlinkService {
     /** Wait until Deployment is removed, return false if timed out, otherwise return true. */
     @VisibleForTesting
     boolean waitForDeploymentToBeRemoved(String namespace, String deploymentName, long timeout) {
-        ScheduledExecutorService logger = Executors.newSingleThreadScheduledExecutor();
-        logger.scheduleWithFixedDelay(
-                () -> LOG.info("Waiting for Deployment {} to shut down...", deploymentName),
-                5,
-                5,
-                TimeUnit.SECONDS);
+        LOG.info(
+                "Waiting for Deployment {} to shut down with {} ms timeout...",
+                deploymentName,
+                timeout);
 
         try {
             kubernetesClient
@@ -945,8 +941,6 @@ public abstract class AbstractFlinkService implements FlinkService {
             LOG.info("Deployment {} successfully shut down", deploymentName);
         } catch (KubernetesClientTimeoutException e) {
             return false;
-        } finally {
-            logger.shutdown();
         }
         return true;
     }
