@@ -127,7 +127,7 @@ public class KubernetesOperatorConfigOptions {
     public static final ConfigOption<Duration> OPERATOR_RESOURCE_CLEANUP_TIMEOUT =
             operatorConfig("resource.cleanup.timeout")
                     .durationType()
-                    .defaultValue(Duration.ofSeconds(60))
+                    .defaultValue(Duration.ofMinutes(5))
                     .withDeprecatedKeys(
                             operatorConfigKey("reconciler.flink.cluster.shutdown.timeout"))
                     .withDescription(
