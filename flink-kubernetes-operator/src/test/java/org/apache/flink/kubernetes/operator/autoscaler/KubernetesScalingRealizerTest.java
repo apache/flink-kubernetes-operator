@@ -17,7 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
+import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 
 import org.junit.jupiter.api.Test;
@@ -35,7 +38,8 @@ public class KubernetesScalingRealizerTest {
         KubernetesJobAutoScalerContext ctx =
                 TestingKubernetesAutoscalerUtils.createContext("test", null);
 
-        new KubernetesScalingRealizer().realize(ctx, Map.of("a", "1", "b", "2"));
+        new KubernetesScalingRealizer()
+                .realizeParallelismOverrides(ctx, Map.of("a", "1", "b", "2"));
 
         assertThat(
                         ctx.getResource()
@@ -59,6 +63,26 @@ public class KubernetesScalingRealizerTest {
         assertOverridesDoNotChange("b:2,a:1", newOverrides);
     }
 
+    @Test
+    public void testApplyMemoryOverrides() {
+        KubernetesJobAutoScalerContext ctx =
+                TestingKubernetesAutoscalerUtils.createContext("test", null);
+
+        var overrides = new Configuration();
+        MemorySize memoryOverride = MemorySize.ofMebiBytes(4096);
+        overrides.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, memoryOverride);
+        new KubernetesScalingRealizer().realizeConfigOverrides(ctx, overrides);
+
+        assertThat(ctx.getResource()).isInstanceOf(FlinkDeployment.class);
+        assertThat(
+                        ((FlinkDeployment) ctx.getResource())
+                                .getSpec()
+                                .getTaskManager()
+                                .getResource()
+                                .getMemory())
+                .isEqualTo(String.valueOf(memoryOverride.getBytes()));
+    }
+
     private void assertOverridesDoNotChange(
             String currentOverrides, LinkedHashMap<String, String> newOverrides) {
 
@@ -77,7 +101,7 @@ public class KubernetesScalingRealizerTest {
                 .getFlinkConfiguration()
                 .remove(PipelineOptions.PARALLELISM_OVERRIDES.key());
 
-        new KubernetesScalingRealizer().realize(ctx, newOverrides);
+        new KubernetesScalingRealizer().realizeParallelismOverrides(ctx, newOverrides);
 
         assertThat(
                         ctx.getResource()

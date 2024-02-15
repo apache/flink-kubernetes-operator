@@ -26,6 +26,7 @@ import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.util.Preconditions;
 
@@ -106,7 +107,13 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         } catch (Throwable e) {
             onError(ctx, autoscalerMetrics, e);
         } finally {
-            applyParallelismOverrides(ctx);
+            try {
+                applyParallelismOverrides(ctx);
+                applyConfigOverrides(ctx);
+            } catch (Exception e) {
+                LOG.error("Error applying overrides.", e);
+                onError(ctx, autoscalerMetrics, e);
+            }
         }
     }
 
@@ -151,7 +158,18 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
                         userOverrides.put(k, v);
                     }
                 });
-        scalingRealizer.realize(ctx, userOverrides);
+        scalingRealizer.realizeParallelismOverrides(ctx, userOverrides);
+    }
+
+    @VisibleForTesting
+    void applyConfigOverrides(Context ctx) throws Exception {
+        if (!ctx.getConfiguration().get(AutoScalerOptions.MEMORY_TUNING_ENABLED)) {
+            return;
+        }
+
+        Configuration configOverrides = stateStore.getConfigOverrides(ctx);
+        LOG.info("Applying config overrides: {}", configOverrides);
+        scalingRealizer.realizeConfigOverrides(ctx, configOverrides);
     }
 
     private void runScalingLogic(Context ctx, AutoscalerFlinkMetrics autoscalerMetrics)

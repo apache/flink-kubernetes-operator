@@ -26,6 +26,7 @@ import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.resources.NoopResourceCheck;
 import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.autoscaler.utils.CalendarUtils;
 import org.apache.flink.autoscaler.utils.ResourceCheckUtils;
 import org.apache.flink.configuration.Configuration;
@@ -117,7 +118,12 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return false;
         }
 
-        if (scalingWouldExceedClusterResources(evaluatedMetrics, scalingSummaries, context)) {
+        var tuningConfig =
+                MemoryTuning.tuneTaskManagerHeapMemory(
+                        context, evaluatedMetrics, autoScalerEventHandler);
+
+        if (scalingWouldExceedClusterResources(
+                tuningConfig, evaluatedMetrics, scalingSummaries, context)) {
             return false;
         }
 
@@ -131,6 +137,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 context,
                 getVertexParallelismOverrides(
                         evaluatedMetrics.getVertexMetrics(), scalingSummaries));
+
+        autoScalerStateStore.storeConfigOverrides(context, tuningConfig);
 
         return true;
     }
@@ -243,7 +251,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return true;
         }
 
-        var heapUsage = evaluatedMetrics.get(ScalingMetric.HEAP_USAGE).getAverage();
+        var heapUsage = evaluatedMetrics.get(ScalingMetric.HEAP_MAX_USAGE_RATIO).getAverage();
         if (heapUsage > conf.get(AutoScalerOptions.HEAP_USAGE_THRESHOLD)) {
             autoScalerEventHandler.handleEvent(
                     ctx,
@@ -259,16 +267,15 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     }
 
     private boolean scalingWouldExceedClusterResources(
+            Configuration tuningConfig,
             EvaluatedMetrics evaluatedMetrics,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             JobAutoScalerContext<?> ctx) {
 
-        final double taskManagerCpu = ctx.getTaskManagerCpu();
-        final MemorySize taskManagerMemory = ctx.getTaskManagerMemory();
+        final double taskManagerCpu = ctx.getTaskManagerCpu().orElse(0.);
+        final MemorySize taskManagerMemory = MemoryTuning.getTotalMemory(tuningConfig, ctx);
 
-        if (taskManagerCpu <= 0
-                || taskManagerMemory == null
-                || taskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
+        if (taskManagerCpu <= 0 || taskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
             // We can't extract the requirements, we can't make any assumptions
             return false;
         }

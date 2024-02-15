@@ -22,7 +22,6 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.standalone.JobListFetcher;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
@@ -83,8 +82,6 @@ public class FlinkClusterJobListFetcher
                 jobStatusMessage.getJobState(),
                 conf,
                 new UnregisteredMetricsGroup(),
-                0,
-                MemorySize.ZERO,
                 () -> restClientGetter.apply(conf));
     }
 

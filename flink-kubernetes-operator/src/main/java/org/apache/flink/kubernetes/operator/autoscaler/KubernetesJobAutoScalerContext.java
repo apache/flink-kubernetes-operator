@@ -22,8 +22,6 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.MemorySize;
-import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -56,12 +54,14 @@ public class KubernetesJobAutoScalerContext extends JobAutoScalerContext<Resourc
                 jobStatus,
                 configuration,
                 metricGroup,
-                Optional.ofNullable(configuration.get(KubernetesConfigOptions.TASK_MANAGER_CPU))
-                        .orElse(0.),
-                Optional.ofNullable(configuration.get(TaskManagerOptions.TOTAL_PROCESS_MEMORY))
-                        .orElse(MemorySize.ZERO),
                 restClientSupplier);
         this.resourceContext = resourceContext;
+    }
+
+    @Override
+    public Optional<Double> getTaskManagerCpu() {
+        return Optional.ofNullable(
+                getConfiguration().get(KubernetesConfigOptions.TASK_MANAGER_CPU));
     }
 
     public AbstractFlinkResource<?, ?> getResource() {

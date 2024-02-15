@@ -23,6 +23,7 @@ import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.metrics.MetricGroup;
 import org.apache.flink.util.function.SupplierWithException;
 
@@ -32,6 +33,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 
 import javax.annotation.Nullable;
+
+import java.util.Optional;
 
 /**
  * The job autoscaler context, it includes all details related to the current job.
@@ -52,18 +55,27 @@ public class JobAutoScalerContext<KEY> {
 
     @Nullable @Getter private final JobStatus jobStatus;
 
+    /**
+     * The configuration based on the latest user-provided spec. This is not the already deployed /
+     * observed configuration.
+     */
     @Getter private final Configuration configuration;
 
     @Getter private final MetricGroup metricGroup;
 
-    /** Task manager CPU as a fraction (if available). */
-    @Getter private final double taskManagerCpu;
-
-    /** Task manager memory size (if available). */
-    @Getter @Nullable private final MemorySize taskManagerMemory;
-
     @ToString.Exclude
     private final SupplierWithException<RestClusterClient<String>, Exception> restClientSupplier;
+
+    /** Retrieve the currently configured TaskManager CPU. */
+    public Optional<Double> getTaskManagerCpu() {
+        // Not supported by default
+        return Optional.empty();
+    }
+
+    /** Retrieve the currently configured TaskManager memory. */
+    public Optional<MemorySize> getTaskManagerMemory() {
+        return Optional.ofNullable(getConfiguration().get(TaskManagerOptions.TOTAL_PROCESS_MEMORY));
+    }
 
     public RestClusterClient<String> getRestClusterClient() throws Exception {
         return restClientSupplier.get();

@@ -18,10 +18,18 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.spec.Resource;
+import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
@@ -31,8 +39,10 @@ import java.util.Map;
 public class KubernetesScalingRealizer
         implements ScalingRealizer<ResourceID, KubernetesJobAutoScalerContext> {
 
+    private static final Logger LOG = LoggerFactory.getLogger(KubernetesScalingRealizer.class);
+
     @Override
-    public void realize(
+    public void realizeParallelismOverrides(
             KubernetesJobAutoScalerContext context, Map<String, String> parallelismOverrides) {
 
         context.getResource()
@@ -41,6 +51,34 @@ public class KubernetesScalingRealizer
                 .put(
                         PipelineOptions.PARALLELISM_OVERRIDES.key(),
                         getOverrideString(context, parallelismOverrides));
+    }
+
+    @Override
+    public void realizeConfigOverrides(
+            KubernetesJobAutoScalerContext context, Configuration configOverrides) {
+        if (!(context.getResource() instanceof FlinkDeployment)) {
+            // We can't adjust the configuration of non-job deployments.
+            return;
+        }
+        FlinkDeployment flinkDeployment = ((FlinkDeployment) context.getResource());
+        // Apply config overrides
+        flinkDeployment.getSpec().getFlinkConfiguration().putAll(configOverrides.toMap());
+
+        // Update total memory in spec
+        var totalMemoryOverride = MemoryTuning.getTotalMemory(configOverrides, context);
+        if (totalMemoryOverride.compareTo(MemorySize.ZERO) <= 0) {
+            LOG.warn("Total memory override {} is not valid", totalMemoryOverride);
+            return;
+        }
+        Resource tmResource = flinkDeployment.getSpec().getTaskManager().getResource();
+        // Make sure to parse in the same way as the original deploy code path.
+        var currentMemory =
+                MemorySize.parse(
+                        FlinkConfigBuilder.parseResourceMemoryString(tmResource.getMemory()));
+        if (!totalMemoryOverride.equals(currentMemory)) {
+            // Adjust the resource memory to change the total TM memory
+            tmResource.setMemory(String.valueOf(totalMemoryOverride.getBytes()));
+        }
     }
 
     @Nullable

@@ -24,7 +24,6 @@ import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
-import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.JobResourceRequirements;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -92,7 +91,7 @@ class RescaleApiScalingRealizerTest {
 
         assertThat(updatedRequirements).isNotDone();
         assertThat(closeFuture).isNotDone();
-        scalingRealizer.realize(jobContext, newResourceRequirements);
+        scalingRealizer.realizeParallelismOverrides(jobContext, newResourceRequirements);
 
         // The ResourceRequirements should be updated when the newResourceRequirements is changed.
         if (resourceIsChanged) {
@@ -128,7 +127,7 @@ class RescaleApiScalingRealizerTest {
         RescaleApiScalingRealizer<JobID, JobAutoScalerContext<JobID>> scalingRealizer =
                 new RescaleApiScalingRealizer<>(eventCollector);
 
-        scalingRealizer.realize(jobContext, resourceRequirements);
+        scalingRealizer.realizeParallelismOverrides(jobContext, resourceRequirements);
         assertThat(eventCollector.events).isEmpty();
     }
 
@@ -149,8 +148,6 @@ class RescaleApiScalingRealizerTest {
                         JobStatus.CANCELLING,
                         conf,
                         null,
-                        0,
-                        MemorySize.ZERO,
                         () ->
                                 fail(
                                         "The rest client shouldn't be created if the job isn't running."));
@@ -159,7 +156,7 @@ class RescaleApiScalingRealizerTest {
         RescaleApiScalingRealizer<JobID, JobAutoScalerContext<JobID>> scalingRealizer =
                 new RescaleApiScalingRealizer<>(eventCollector);
 
-        scalingRealizer.realize(jobContext, resourceRequirements);
+        scalingRealizer.realizeParallelismOverrides(jobContext, resourceRequirements);
         assertThat(eventCollector.events).isEmpty();
     }
 
@@ -167,14 +164,7 @@ class RescaleApiScalingRealizerTest {
             JobID jobID,
             SupplierWithException<RestClusterClient<String>, Exception> restClientSupplier) {
         return new JobAutoScalerContext<>(
-                jobID,
-                jobID,
-                JobStatus.RUNNING,
-                new Configuration(),
-                null,
-                0,
-                MemorySize.ZERO,
-                restClientSupplier);
+                jobID, jobID, JobStatus.RUNNING, new Configuration(), null, restClientSupplier);
     }
 
     private JobResourceRequirements createResourceRequirements(

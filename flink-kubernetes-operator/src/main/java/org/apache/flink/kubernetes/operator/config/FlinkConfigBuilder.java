@@ -443,7 +443,6 @@ public class FlinkConfigBuilder {
         }
     }
 
-    // Using the K8s units specification for the JM and TM memory settings
     public static String parseResourceMemoryString(String memory) {
         try {
             return MemorySize.parse(memory).toString();

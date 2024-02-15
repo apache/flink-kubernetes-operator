@@ -64,7 +64,8 @@ public class RescaleApiScalingRealizer<KEY, Context extends JobAutoScalerContext
     }
 
     @Override
-    public void realize(Context context, Map<String, String> parallelismOverrides) {
+    public void realizeParallelismOverrides(
+            Context context, Map<String, String> parallelismOverrides) {
         Configuration conf = context.getConfiguration();
         if (!conf.get(JobManagerOptions.SCHEDULER)
                 .equals(JobManagerOptions.SchedulerType.Adaptive)) {
@@ -122,6 +123,15 @@ public class RescaleApiScalingRealizer<KEY, Context extends JobAutoScalerContext
         } catch (Exception e) {
             LOG.warn("Failed to apply parallelism overrides.", e);
         }
+    }
+
+    @Override
+    public void realizeConfigOverrides(Context context, Configuration configOverrides) {
+        // Not currently supported
+        LOG.warn(
+                "{} does not support updating the TaskManager configuration ({})",
+                getClass().getSimpleName(),
+                configOverrides);
     }
 
     private Map<JobVertexID, JobVertexResourceRequirements> getVertexResources(

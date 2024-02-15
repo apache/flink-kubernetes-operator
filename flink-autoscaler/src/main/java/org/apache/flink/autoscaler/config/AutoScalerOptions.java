@@ -18,8 +18,10 @@
 package org.apache.flink.autoscaler.config;
 
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.MemorySize;
 
 import java.time.Duration;
 import java.util.List;
@@ -249,6 +251,47 @@ public class AutoScalerOptions {
                     .withFallbackKeys(oldOperatorConfigKey("memory.heap-usage.threshold"))
                     .withDescription(
                             "Max allowed percentage of heap usage during scaling operations. Autoscaling will be paused if the heap usage exceeds this threshold.");
+
+    public static final ConfigOption<Boolean> MEMORY_TUNING_ENABLED =
+            autoScalerConfig("memory.tuning.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.enabled"))
+                    .withDescription(
+                            "If enabled, the initial amount of memory specified for TaskManagers will be reduced according to the observed needs.");
+
+    public static final ConfigOption<MemoryTuning.HeapUsageTarget> MEMORY_TUNING_HEAP_TARGET =
+            autoScalerConfig("memory.tuning.heap.target-usage")
+                    .enumType(MemoryTuning.HeapUsageTarget.class)
+                    .defaultValue(MemoryTuning.HeapUsageTarget.MAX)
+                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.heap.target-usage"))
+                    .withDescription(
+                            "The heap size to target. Average usage (AVG) will yield better savings. Max usage will yield more conservative savings.");
+
+    public static final ConfigOption<Double> MEMORY_TUNING_HEAP_OVERHEAD =
+            autoScalerConfig("memory.tuning.heap.overhead")
+                    .doubleType()
+                    .defaultValue(0.2)
+                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.heap.overhead"))
+                    .withDescription(
+                            "Overhead to add to heap tuning decisions (0-1). This ensures spare capacity and allows the memory to grow beyond the dynamically computed limits, but never beyond the original memory limits.");
+
+    public static final ConfigOption<MemorySize> MEMORY_TUNING_MIN_HEAP =
+            autoScalerConfig("memory.tuning.heap.min")
+                    .memoryType()
+                    .defaultValue(MemorySize.ofMebiBytes(512L))
+                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.heap.min"))
+                    .withDescription(
+                            "The minimum amount of TaskManager heap memory, if memory tuning is enabled.");
+
+    public static final ConfigOption<Boolean> MEMORY_TUNING_TRANSFER_HEAP_TO_MANAGED =
+            autoScalerConfig("memory.tuning.heap.transfer-to-managed")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("memory.tuning.heap.transfer-to-managed"))
+                    .withDescription(
+                            "If enabled, any reduction of heap memory will increase the managed memory used by RocksDB.");
 
     public static final ConfigOption<Integer> VERTEX_SCALING_HISTORY_COUNT =
             autoScalerConfig("history.max.count")

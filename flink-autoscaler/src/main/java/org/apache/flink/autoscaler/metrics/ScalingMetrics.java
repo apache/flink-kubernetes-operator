@@ -19,6 +19,7 @@ package org.apache.flink.autoscaler.metrics;
 
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -163,7 +164,8 @@ public class ScalingMetrics {
 
     public static Map<ScalingMetric, Double> computeGlobalMetrics(
             Map<FlinkMetric, Metric> collectedJmMetrics,
-            Map<FlinkMetric, AggregatedMetric> collectedTmMetrics) {
+            Map<FlinkMetric, AggregatedMetric> collectedTmMetrics,
+            Configuration conf) {
         if (collectedTmMetrics == null) {
             return null;
         }
@@ -192,7 +194,19 @@ public class ScalingMetrics {
         var heapMax = collectedTmMetrics.get(FlinkMetric.HEAP_MAX);
         var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_USED);
         if (heapMax != null && heapUsed != null) {
-            out.put(ScalingMetric.HEAP_USAGE, heapUsed.getMax() / heapMax.getMax());
+            MemoryTuning.HeapUsageTarget heapTarget =
+                    conf.get(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET);
+            switch (heapTarget) {
+                case AVG:
+                    out.put(ScalingMetric.HEAP_USED, heapUsed.getAvg());
+                    break;
+                case MAX:
+                    out.put(ScalingMetric.HEAP_USED, heapUsed.getMax());
+                    break;
+                default:
+                    LOG.warn("Unknown value {} for heap target", heapTarget);
+            }
+            out.put(ScalingMetric.HEAP_MAX_USAGE_RATIO, heapUsed.getMax() / heapMax.getMax());
         }
 
         return out;
@@ -209,6 +223,7 @@ public class ScalingMetrics {
         }
     }
 
+    // TODO: FLINK-34213: Consider using accumulated busy time instead of busyMsPerSecond
     private static double getBusyTimeMsPerSecond(
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             Configuration conf,

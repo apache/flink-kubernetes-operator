@@ -187,7 +187,11 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
 
         MetricsAggregationParameter aggregationParameter =
                 (MetricsAggregationParameter) queryParamIt.next();
-        aggregationParameter.resolve(List.of(MetricsAggregationParameter.AggregationMode.MAX));
+        aggregationParameter.resolve(
+                List.of(
+                        MetricsAggregationParameter.AggregationMode.MIN,
+                        MetricsAggregationParameter.AggregationMode.MAX,
+                        MetricsAggregationParameter.AggregationMode.AVG));
 
         var responseBody =
                 restClient

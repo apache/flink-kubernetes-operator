@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler.metrics;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
+import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
@@ -482,22 +483,43 @@ public class ScalingMetricsTest {
 
     @Test
     public void testGlobalMetrics() {
-        assertEquals(Map.of(), ScalingMetrics.computeGlobalMetrics(Map.of(), Map.of()));
+        Configuration conf = new Configuration();
+        conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapUsageTarget.AVG);
+        assertEquals(Map.of(), ScalingMetrics.computeGlobalMetrics(Map.of(), Map.of(), conf));
         assertEquals(
                 Map.of(),
                 ScalingMetrics.computeGlobalMetrics(
-                        Map.of(), Map.of(FlinkMetric.HEAP_USED, aggMax(100))));
+                        Map.of(), Map.of(FlinkMetric.HEAP_USED, aggMax(100)), conf));
         assertEquals(
-                Map.of(ScalingMetric.HEAP_USAGE, 0.5, ScalingMetric.GC_PRESSURE, 0.25),
+                Map.of(
+                        ScalingMetric.HEAP_MAX_USAGE_RATIO,
+                        0.5,
+                        ScalingMetric.GC_PRESSURE,
+                        0.25,
+                        ScalingMetric.HEAP_USED,
+                        75.),
                 ScalingMetrics.computeGlobalMetrics(
                         Map.of(),
                         Map.of(
                                 FlinkMetric.HEAP_USED,
-                                aggMax(100),
+                                aggAvgMax(75, 100),
                                 FlinkMetric.HEAP_MAX,
                                 aggMax(200.),
                                 FlinkMetric.TOTAL_GC_TIME_PER_SEC,
-                                aggMax(250.))));
+                                aggMax(250.)),
+                        conf));
+
+        conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapUsageTarget.MAX);
+        assertEquals(
+                Map.of(ScalingMetric.HEAP_MAX_USAGE_RATIO, 0.5, ScalingMetric.HEAP_USED, 100.),
+                ScalingMetrics.computeGlobalMetrics(
+                        Map.of(),
+                        Map.of(
+                                FlinkMetric.HEAP_USED,
+                                aggAvgMax(75, 100),
+                                FlinkMetric.HEAP_MAX,
+                                aggMax(200.)),
+                        conf));
     }
 
     private static AggregatedMetric aggSum(double sum) {
@@ -506,5 +528,9 @@ public class ScalingMetricsTest {
 
     private static AggregatedMetric aggMax(double max) {
         return new AggregatedMetric("", Double.NaN, max, Double.NaN, Double.NaN);
+    }
+
+    private static AggregatedMetric aggAvgMax(double avg, double max) {
+        return new AggregatedMetric("", Double.NaN, max, avg, Double.NaN);
     }
 }

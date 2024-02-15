@@ -33,7 +33,11 @@ public class EvaluatedScalingMetric {
         this.average = ScalingMetrics.roundMetric(average);
     }
 
-    public static EvaluatedScalingMetric of(double value) {
-        return new EvaluatedScalingMetric(value, Double.NaN);
+    public static EvaluatedScalingMetric of(double current) {
+        return new EvaluatedScalingMetric(current, Double.NaN);
+    }
+
+    public static EvaluatedScalingMetric avg(double average) {
+        return new EvaluatedScalingMetric(Double.NaN, average);
     }
 }
