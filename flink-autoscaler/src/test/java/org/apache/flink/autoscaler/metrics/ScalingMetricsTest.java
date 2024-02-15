@@ -489,21 +489,21 @@ public class ScalingMetricsTest {
         assertEquals(
                 Map.of(),
                 ScalingMetrics.computeGlobalMetrics(
-                        Map.of(), Map.of(FlinkMetric.HEAP_USED, aggMax(100)), conf));
+                        Map.of(), Map.of(FlinkMetric.HEAP_MEMORY_USED, aggMax(100)), conf));
         assertEquals(
                 Map.of(
                         ScalingMetric.HEAP_MAX_USAGE_RATIO,
                         0.5,
                         ScalingMetric.GC_PRESSURE,
                         0.25,
-                        ScalingMetric.HEAP_USED,
+                        ScalingMetric.HEAP_MEMORY_USED,
                         75.),
                 ScalingMetrics.computeGlobalMetrics(
                         Map.of(),
                         Map.of(
-                                FlinkMetric.HEAP_USED,
+                                FlinkMetric.HEAP_MEMORY_USED,
                                 aggAvgMax(75, 100),
-                                FlinkMetric.HEAP_MAX,
+                                FlinkMetric.HEAP_MEMORY_MAX,
                                 aggMax(200.),
                                 FlinkMetric.TOTAL_GC_TIME_PER_SEC,
                                 aggMax(250.)),
@@ -511,13 +511,17 @@ public class ScalingMetricsTest {
 
         conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapUsageTarget.MAX);
         assertEquals(
-                Map.of(ScalingMetric.HEAP_MAX_USAGE_RATIO, 0.5, ScalingMetric.HEAP_USED, 100.),
+                Map.of(
+                        ScalingMetric.HEAP_MAX_USAGE_RATIO,
+                        0.5,
+                        ScalingMetric.HEAP_MEMORY_USED,
+                        100.),
                 ScalingMetrics.computeGlobalMetrics(
                         Map.of(),
                         Map.of(
-                                FlinkMetric.HEAP_USED,
+                                FlinkMetric.HEAP_MEMORY_USED,
                                 aggAvgMax(75, 100),
-                                FlinkMetric.HEAP_MAX,
+                                FlinkMetric.HEAP_MEMORY_MAX,
                                 aggMax(200.)),
                         conf));
     }

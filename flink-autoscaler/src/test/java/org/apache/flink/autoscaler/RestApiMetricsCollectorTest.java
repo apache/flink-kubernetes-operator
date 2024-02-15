@@ -237,7 +237,11 @@ public class RestApiMetricsCollectorTest {
         metricValues.put(HEAP_USED_NAME, heapUsed);
 
         assertMetricsEquals(
-                Map.of(FlinkMetric.HEAP_MAX, heapMax, FlinkMetric.HEAP_USED, heapUsed),
+                Map.of(
+                        FlinkMetric.HEAP_MEMORY_MAX,
+                        heapMax,
+                        FlinkMetric.HEAP_MEMORY_USED,
+                        heapUsed),
                 collector.queryTmMetrics(context));
         collector.cleanup(context.getJobKey());
 
@@ -247,9 +251,9 @@ public class RestApiMetricsCollectorTest {
 
         assertMetricsEquals(
                 Map.of(
-                        FlinkMetric.HEAP_MAX,
+                        FlinkMetric.HEAP_MEMORY_MAX,
                         heapMax,
-                        FlinkMetric.HEAP_USED,
+                        FlinkMetric.HEAP_MEMORY_USED,
                         heapUsed,
                         FlinkMetric.TOTAL_GC_TIME_PER_SEC,
                         gcTime),

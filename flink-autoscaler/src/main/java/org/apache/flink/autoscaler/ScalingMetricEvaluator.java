@@ -51,7 +51,7 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RA
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CURRENT_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.GC_PRESSURE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MAX_USAGE_RATIO;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_USED;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.LAG;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.LOAD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
@@ -324,9 +324,9 @@ public class ScalingMetricEvaluator {
                         lastHeapUsage,
                         getAverageGlobalMetric(HEAP_MAX_USAGE_RATIO, metricHistory)));
 
-        var latestObservation = latest.getOrDefault(HEAP_USED, Double.NaN);
-        double heapSizeAverage = getAverageGlobalMetric(HEAP_USED, metricHistory);
-        out.put(HEAP_USED, new EvaluatedScalingMetric(latestObservation, heapSizeAverage));
+        var latestObservation = latest.getOrDefault(HEAP_MEMORY_USED, Double.NaN);
+        double heapSizeAverage = getAverageGlobalMetric(HEAP_MEMORY_USED, metricHistory);
+        out.put(HEAP_MEMORY_USED, new EvaluatedScalingMetric(latestObservation, heapSizeAverage));
 
         out.put(
                 NUM_TASK_SLOTS_USED,

@@ -191,17 +191,17 @@ public class ScalingMetrics {
             out.put(ScalingMetric.GC_PRESSURE, gcTime.getMax() / 1000);
         }
 
-        var heapMax = collectedTmMetrics.get(FlinkMetric.HEAP_MAX);
-        var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_USED);
+        var heapMax = collectedTmMetrics.get(FlinkMetric.HEAP_MEMORY_MAX);
+        var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_MEMORY_USED);
         if (heapMax != null && heapUsed != null) {
             MemoryTuning.HeapUsageTarget heapTarget =
                     conf.get(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET);
             switch (heapTarget) {
                 case AVG:
-                    out.put(ScalingMetric.HEAP_USED, heapUsed.getAvg());
+                    out.put(ScalingMetric.HEAP_MEMORY_USED, heapUsed.getAvg());
                     break;
                 case MAX:
-                    out.put(ScalingMetric.HEAP_USED, heapUsed.getMax());
+                    out.put(ScalingMetric.HEAP_MEMORY_USED, heapUsed.getMax());
                     break;
                 default:
                     LOG.warn("Unknown value {} for heap target", heapTarget);

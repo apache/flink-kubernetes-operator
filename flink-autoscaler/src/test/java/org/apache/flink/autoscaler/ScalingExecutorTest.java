@@ -273,7 +273,7 @@ public class ScalingExecutorTest {
                 Map.of(
                         ScalingMetric.NUM_TASK_SLOTS_USED,
                         EvaluatedScalingMetric.of(9),
-                        ScalingMetric.HEAP_USED,
+                        ScalingMetric.HEAP_MEMORY_USED,
                         EvaluatedScalingMetric.avg(MemorySize.parse("5 Gb").getBytes()),
                         ScalingMetric.HEAP_MAX_USAGE_RATIO,
                         EvaluatedScalingMetric.of(Double.NaN),

@@ -78,7 +78,7 @@ public enum ScalingMetric {
     GC_PRESSURE(false),
 
     /** Measured used heap size in bytes. */
-    HEAP_USED(true),
+    HEAP_MEMORY_USED(true),
 
     /** Percentage of max heap used (between 0 and 1). */
     HEAP_MAX_USAGE_RATIO(true),

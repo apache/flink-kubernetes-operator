@@ -44,8 +44,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.apache.flink.autoscaler.metrics.FlinkMetric.HEAP_MAX;
-import static org.apache.flink.autoscaler.metrics.FlinkMetric.HEAP_USED;
+import static org.apache.flink.autoscaler.metrics.FlinkMetric.HEAP_MEMORY_MAX;
+import static org.apache.flink.autoscaler.metrics.FlinkMetric.HEAP_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.FlinkMetric.TOTAL_GC_TIME_PER_SEC;
 
 /** Metric collector using flink rest api. */
@@ -55,12 +55,12 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
 
     private static final Map<String, FlinkMetric> COMMON_TM_METRIC_NAMES =
             Map.of(
-                    "Status.JVM.Memory.Heap.Max", HEAP_MAX,
-                    "Status.JVM.Memory.Heap.Used", HEAP_USED);
+                    "Status.JVM.Memory.Heap.Max", HEAP_MEMORY_MAX,
+                    "Status.JVM.Memory.Heap.Used", HEAP_MEMORY_USED);
     private static final Map<String, FlinkMetric> TM_METRIC_NAMES_WITH_GC =
             Map.of(
-                    "Status.JVM.Memory.Heap.Max", HEAP_MAX,
-                    "Status.JVM.Memory.Heap.Used", HEAP_USED,
+                    "Status.JVM.Memory.Heap.Max", HEAP_MEMORY_MAX,
+                    "Status.JVM.Memory.Heap.Used", HEAP_MEMORY_USED,
                     "Status.JVM.GarbageCollector.All.TimeMsPerSecond", TOTAL_GC_TIME_PER_SEC);
 
     @Override

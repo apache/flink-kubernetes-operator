@@ -174,7 +174,8 @@ public class MemoryTuning {
     private static MemorySize getHeapUsed(EvaluatedMetrics evaluatedMetrics) {
         var globalMetrics = evaluatedMetrics.getGlobalMetrics();
         MemorySize heapUsed =
-                new MemorySize((long) globalMetrics.get(ScalingMetric.HEAP_USED).getAverage());
+                new MemorySize(
+                        (long) globalMetrics.get(ScalingMetric.HEAP_MEMORY_USED).getAverage());
         LOG.info("TM heap used size: {}", heapUsed);
         return heapUsed;
     }
