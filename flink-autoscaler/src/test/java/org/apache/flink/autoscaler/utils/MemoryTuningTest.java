@@ -33,6 +33,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.Map;
 
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
@@ -49,6 +50,7 @@ public class MemoryTuningTest {
         var config = context.getConfiguration();
         config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
         config.set(TaskManagerOptions.NUM_TASK_SLOTS, 5);
+        config.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, Duration.ZERO);
         MemorySize totalMemory = MemorySize.parse("30 gb");
         config.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, totalMemory);
 
