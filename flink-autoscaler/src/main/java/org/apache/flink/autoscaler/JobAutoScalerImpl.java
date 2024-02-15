@@ -168,7 +168,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         }
 
         Configuration configOverrides = stateStore.getConfigOverrides(ctx);
-        LOG.info("Applying config overrides: {}", configOverrides);
+        LOG.debug("Applying config overrides: {}", configOverrides);
         scalingRealizer.realizeConfigOverrides(ctx, configOverrides);
     }
 
