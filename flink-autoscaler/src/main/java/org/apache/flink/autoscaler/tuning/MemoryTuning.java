@@ -142,7 +142,7 @@ public class MemoryTuning {
                                 : "disabled",
                         formatConfig(tuningConfig)),
                 "MemoryTuning",
-                null);
+                config.get(AutoScalerOptions.SCALING_EVENT_INTERVAL));
 
         if (!context.getConfiguration().get(AutoScalerOptions.MEMORY_TUNING_ENABLED)) {
             return EMPTY_CONFIG;

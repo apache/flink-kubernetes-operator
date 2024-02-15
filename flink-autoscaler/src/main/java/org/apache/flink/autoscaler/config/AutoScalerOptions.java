@@ -282,7 +282,7 @@ public class AutoScalerOptions {
                     .defaultValue(MemorySize.ofMebiBytes(512L))
                     .withFallbackKeys(oldOperatorConfigKey("memory.tuning.heap.min"))
                     .withDescription(
-                            "The minimum amount of TaskManager memory, if memory tuning is enabled.");
+                            "The minimum amount of TaskManager heap memory, if memory tuning is enabled.");
 
     public static final ConfigOption<Boolean> MEMORY_TUNING_TRANSFER_HEAP_TO_MANAGED =
             autoScalerConfig("memory.tuning.heap.transfer-to-managed")

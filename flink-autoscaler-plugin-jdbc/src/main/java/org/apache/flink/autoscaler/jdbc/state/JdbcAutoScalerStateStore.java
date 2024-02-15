@@ -196,7 +196,7 @@ public class JdbcAutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
         jdbcStateStore.putSerializedState(
                 getSerializeKey(jobContext),
                 CONFIG_OVERRIDES,
-                serializeParallelismOverrides(configOverrides.toMap()));
+                serializeConfigOverrides(configOverrides));
     }
 
     @Nonnull
