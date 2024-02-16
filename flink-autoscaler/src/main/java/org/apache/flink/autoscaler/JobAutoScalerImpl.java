@@ -26,7 +26,7 @@ import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.util.Preconditions;
 
@@ -167,9 +167,9 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             return;
         }
 
-        Configuration configOverrides = stateStore.getConfigOverrides(ctx);
-        LOG.debug("Applying config overrides: {}", configOverrides);
-        scalingRealizer.realizeConfigOverrides(ctx, configOverrides);
+        ConfigChanges configChanges = stateStore.getConfigChanges(ctx);
+        LOG.debug("Applying config overrides: {}", configChanges);
+        scalingRealizer.realizeConfigOverrides(ctx, configChanges);
     }
 
     private void runScalingLogic(Context ctx, AutoscalerFlinkMetrics autoscalerMetrics)

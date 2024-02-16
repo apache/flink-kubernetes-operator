@@ -60,6 +60,9 @@ public class RestApiMetricsCollectorTest {
     private static final String GC_METRIC_NAME = "Status.JVM.GarbageCollector.All.TimeMsPerSecond";
     private static final String HEAP_MAX_NAME = "Status.JVM.Memory.Heap.Max";
     private static final String HEAP_USED_NAME = "Status.JVM.Memory.Heap.Used";
+    private static final String MANAGED_MEMORY_NAME = "Status.Flink.Memory.Managed.Used";
+    private static final String NETWORK_MEMORY_NAME = "Status.Shuffle.Netty.UsedMemory";
+    private static final String METASPACE_MEMORY_NAME = "Status.JVM.Memory.Metaspace.Used";
 
     @Test
     public void testAggregateMultiplePendingRecordsMetricsPerSource() throws Exception {
@@ -233,15 +236,27 @@ public class RestApiMetricsCollectorTest {
         // Test only heap metrics available
         var heapMax = new AggregatedMetric(HEAP_MAX_NAME, null, 100., null, null);
         var heapUsed = new AggregatedMetric(HEAP_USED_NAME, null, 50., null, null);
+        var managedUsed = new AggregatedMetric(MANAGED_MEMORY_NAME, null, 42., null, null);
+        var networkUsed = new AggregatedMetric(NETWORK_MEMORY_NAME, null, 23., null, null);
+        var metaspaceUsed = new AggregatedMetric(METASPACE_MEMORY_NAME, null, 11., null, null);
         metricValues.put(HEAP_MAX_NAME, heapMax);
         metricValues.put(HEAP_USED_NAME, heapUsed);
+        metricValues.put(MANAGED_MEMORY_NAME, managedUsed);
+        metricValues.put(NETWORK_MEMORY_NAME, networkUsed);
+        metricValues.put(METASPACE_MEMORY_NAME, metaspaceUsed);
 
         assertMetricsEquals(
                 Map.of(
                         FlinkMetric.HEAP_MEMORY_MAX,
                         heapMax,
                         FlinkMetric.HEAP_MEMORY_USED,
-                        heapUsed),
+                        heapUsed,
+                        FlinkMetric.MANAGED_MEMORY_USED,
+                        managedUsed,
+                        FlinkMetric.METASPACE_MEMORY_USED,
+                        metaspaceUsed,
+                        FlinkMetric.NETWORK_MEMORY_USED,
+                        networkUsed),
                 collector.queryTmMetrics(context));
         collector.cleanup(context.getJobKey());
 
@@ -255,6 +270,12 @@ public class RestApiMetricsCollectorTest {
                         heapMax,
                         FlinkMetric.HEAP_MEMORY_USED,
                         heapUsed,
+                        FlinkMetric.MANAGED_MEMORY_USED,
+                        managedUsed,
+                        FlinkMetric.NETWORK_MEMORY_USED,
+                        networkUsed,
+                        FlinkMetric.METASPACE_MEMORY_USED,
+                        metaspaceUsed,
                         FlinkMetric.TOTAL_GC_TIME_PER_SEC,
                         gcTime),
                 collector.queryTmMetrics(context));

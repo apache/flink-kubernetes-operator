@@ -69,28 +69,22 @@
             <td>If enabled, the initial amount of memory specified for TaskManagers will be reduced according to the observed needs.</td>
         </tr>
         <tr>
-            <td><h5>job.autoscaler.memory.tuning.heap.min</h5></td>
-            <td style="word-wrap: break-word;">512 mb</td>
+            <td><h5>job.autoscaler.memory.tuning.min</h5></td>
+            <td style="word-wrap: break-word;">256 mb</td>
             <td>MemorySize</td>
-            <td>The minimum amount of TaskManager heap memory, if memory tuning is enabled.</td>
+            <td>If memory tuning is enabled, the minimum amount of TaskManager memory for each memory component (heap, managed, network).</td>
         </tr>
         <tr>
-            <td><h5>job.autoscaler.memory.tuning.heap.overhead</h5></td>
+            <td><h5>job.autoscaler.memory.tuning.overhead</h5></td>
             <td style="word-wrap: break-word;">0.2</td>
             <td>Double</td>
-            <td>Overhead to add to heap tuning decisions (0-1). This ensures spare capacity and allows the memory to grow beyond the dynamically computed limits, but never beyond the original memory limits.</td>
+            <td>Overhead to add to tuning decisions (0-1). This ensures spare capacity and allows the memory to grow beyond the dynamically computed limits, but never beyond the original memory limits.</td>
         </tr>
         <tr>
-            <td><h5>job.autoscaler.memory.tuning.heap.target-usage</h5></td>
+            <td><h5>job.autoscaler.memory.tuning.target-usage</h5></td>
             <td style="word-wrap: break-word;">MAX</td>
             <td><p>Enum</p></td>
-            <td>The heap size to target. Average usage (AVG) will yield better savings. Max usage will yield more conservative savings.<br /><br />Possible values:<ul><li>"AVG"</li><li>"MAX"</li></ul></td>
-        </tr>
-        <tr>
-            <td><h5>job.autoscaler.memory.tuning.heap.transfer-to-managed</h5></td>
-            <td style="word-wrap: break-word;">false</td>
-            <td>Boolean</td>
-            <td>If enabled, any reduction of heap memory will increase the managed memory used by RocksDB.</td>
+            <td>The memory usage to target. Average usage (AVG) will yield better savings. Max usage will yield more conservative savings.<br /><br />Possible values:<ul><li>"AVG"</li><li>"MAX"</li></ul></td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.metrics.busy-time.aggregator</h5></td>

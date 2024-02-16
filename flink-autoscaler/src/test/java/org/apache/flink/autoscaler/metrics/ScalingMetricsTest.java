@@ -484,7 +484,7 @@ public class ScalingMetricsTest {
     @Test
     public void testGlobalMetrics() {
         Configuration conf = new Configuration();
-        conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapUsageTarget.AVG);
+        conf.set(AutoScalerOptions.MEMORY_TUNING_TARGET, MemoryTuning.UsageTarget.AVG);
         assertEquals(Map.of(), ScalingMetrics.computeGlobalMetrics(Map.of(), Map.of(), conf));
         assertEquals(
                 Map.of(),
@@ -497,30 +497,54 @@ public class ScalingMetricsTest {
                         ScalingMetric.GC_PRESSURE,
                         0.25,
                         ScalingMetric.HEAP_MEMORY_USED,
-                        75.),
+                        75.,
+                        ScalingMetric.MANAGED_MEMORY_USED,
+                        128.,
+                        ScalingMetric.NETWORK_MEMORY_USED,
+                        42.,
+                        ScalingMetric.METASPACE_MEMORY_USED,
+                        11.),
                 ScalingMetrics.computeGlobalMetrics(
                         Map.of(),
                         Map.of(
                                 FlinkMetric.HEAP_MEMORY_USED,
                                 aggAvgMax(75, 100),
+                                FlinkMetric.MANAGED_MEMORY_USED,
+                                aggAvgMax(128, 133),
+                                FlinkMetric.NETWORK_MEMORY_USED,
+                                aggAvgMax(42, 48),
+                                FlinkMetric.METASPACE_MEMORY_USED,
+                                aggAvgMax(11, 22),
                                 FlinkMetric.HEAP_MEMORY_MAX,
                                 aggMax(200.),
                                 FlinkMetric.TOTAL_GC_TIME_PER_SEC,
                                 aggMax(250.)),
                         conf));
 
-        conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapUsageTarget.MAX);
+        conf.set(AutoScalerOptions.MEMORY_TUNING_TARGET, MemoryTuning.UsageTarget.MAX);
         assertEquals(
                 Map.of(
                         ScalingMetric.HEAP_MAX_USAGE_RATIO,
                         0.5,
                         ScalingMetric.HEAP_MEMORY_USED,
-                        100.),
+                        100.,
+                        ScalingMetric.MANAGED_MEMORY_USED,
+                        133.,
+                        ScalingMetric.NETWORK_MEMORY_USED,
+                        48.,
+                        ScalingMetric.METASPACE_MEMORY_USED,
+                        22.),
                 ScalingMetrics.computeGlobalMetrics(
                         Map.of(),
                         Map.of(
                                 FlinkMetric.HEAP_MEMORY_USED,
                                 aggAvgMax(75, 100),
+                                FlinkMetric.MANAGED_MEMORY_USED,
+                                aggAvgMax(128, 133),
+                                FlinkMetric.NETWORK_MEMORY_USED,
+                                aggAvgMax(42, 48),
+                                FlinkMetric.METASPACE_MEMORY_USED,
+                                aggAvgMax(11, 22),
                                 FlinkMetric.HEAP_MEMORY_MAX,
                                 aggMax(200.)),
                         conf));

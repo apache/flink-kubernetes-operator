@@ -80,6 +80,12 @@ public enum ScalingMetric {
     /** Measured used heap size in bytes. */
     HEAP_MEMORY_USED(true),
 
+    MANAGED_MEMORY_USED(true),
+
+    NETWORK_MEMORY_USED(true),
+
+    METASPACE_MEMORY_USED(true),
+
     /** Percentage of max heap used (between 0 and 1). */
     HEAP_MAX_USAGE_RATIO(true),
 

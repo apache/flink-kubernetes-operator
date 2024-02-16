@@ -191,25 +191,47 @@ public class ScalingMetrics {
             out.put(ScalingMetric.GC_PRESSURE, gcTime.getMax() / 1000);
         }
 
+        MemoryTuning.UsageTarget usageTarget = conf.get(AutoScalerOptions.MEMORY_TUNING_TARGET);
+
         var heapMax = collectedTmMetrics.get(FlinkMetric.HEAP_MEMORY_MAX);
         var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_MEMORY_USED);
+
         if (heapMax != null && heapUsed != null) {
-            MemoryTuning.HeapUsageTarget heapTarget =
-                    conf.get(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET);
-            switch (heapTarget) {
-                case AVG:
-                    out.put(ScalingMetric.HEAP_MEMORY_USED, heapUsed.getAvg());
-                    break;
-                case MAX:
-                    out.put(ScalingMetric.HEAP_MEMORY_USED, heapUsed.getMax());
-                    break;
-                default:
-                    LOG.warn("Unknown value {} for heap target", heapTarget);
-            }
+            out.put(ScalingMetric.HEAP_MEMORY_USED, extractUsage(heapUsed, usageTarget));
             out.put(ScalingMetric.HEAP_MAX_USAGE_RATIO, heapUsed.getMax() / heapMax.getMax());
         }
 
+        var managedMemory = collectedTmMetrics.get(FlinkMetric.MANAGED_MEMORY_USED);
+        if (managedMemory != null) {
+            out.put(ScalingMetric.MANAGED_MEMORY_USED, extractUsage(managedMemory, usageTarget));
+        }
+
+        var networkMemory = collectedTmMetrics.get(FlinkMetric.NETWORK_MEMORY_USED);
+        if (networkMemory != null) {
+            out.put(ScalingMetric.NETWORK_MEMORY_USED, extractUsage(networkMemory, usageTarget));
+        }
+
+        var metaspaceMemory = collectedTmMetrics.get(FlinkMetric.METASPACE_MEMORY_USED);
+        if (metaspaceMemory != null) {
+            out.put(
+                    ScalingMetric.METASPACE_MEMORY_USED,
+                    extractUsage(metaspaceMemory, usageTarget));
+        }
+
         return out;
+    }
+
+    private static double extractUsage(
+            AggregatedMetric metric, MemoryTuning.UsageTarget usageTarget) {
+        switch (usageTarget) {
+            case AVG:
+                return metric.getAvg();
+            case MAX:
+                return metric.getMax();
+            default:
+                LOG.warn("Unknown value {} for usage target", usageTarget);
+                return Double.NaN;
+        }
     }
 
     public static void computeLagMetrics(

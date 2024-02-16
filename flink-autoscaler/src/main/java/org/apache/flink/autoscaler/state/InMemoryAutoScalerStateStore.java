@@ -21,7 +21,7 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.ScalingTracking;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nonnull;
@@ -50,7 +50,7 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
 
     private final Map<KEY, Map<String, String>> parallelismOverridesStore;
 
-    private final Map<KEY, Configuration> tmConfigOverrides;
+    private final Map<KEY, ConfigChanges> tmConfigOverrides;
 
     private final Map<KEY, ScalingTracking> scalingTrackingStore;
 
@@ -59,7 +59,7 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
         collectedMetricsStore = new ConcurrentHashMap<>();
         parallelismOverridesStore = new ConcurrentHashMap<>();
         scalingTrackingStore = new ConcurrentHashMap<>();
-        tmConfigOverrides = new ConcurrentHashMap<>();
+        tmConfigOverrides = new ConcurrentHashMap<KEY, ConfigChanges>();
     }
 
     @Override
@@ -122,20 +122,19 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     }
 
     @Override
-    public void storeConfigOverrides(Context jobContext, Configuration configOverrides)
-            throws Exception {
-        tmConfigOverrides.put(jobContext.getJobKey(), configOverrides);
+    public void storeConfigChanges(Context jobContext, ConfigChanges configChanges) {
+        tmConfigOverrides.put(jobContext.getJobKey(), configChanges);
     }
 
     @Nonnull
     @Override
-    public Configuration getConfigOverrides(Context jobContext) {
+    public ConfigChanges getConfigChanges(Context jobContext) {
         return Optional.ofNullable(tmConfigOverrides.get(jobContext.getJobKey()))
-                .orElse(new Configuration());
+                .orElse(new ConfigChanges());
     }
 
     @Override
-    public void removeConfigOverrides(Context jobContext) {
+    public void removeConfigChanges(Context jobContext) {
         tmConfigOverrides.remove(jobContext.getJobKey());
     }
 

@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
@@ -55,17 +56,22 @@ public class KubernetesScalingRealizer
 
     @Override
     public void realizeConfigOverrides(
-            KubernetesJobAutoScalerContext context, Configuration configOverrides) {
+            KubernetesJobAutoScalerContext context, ConfigChanges configChanges) {
         if (!(context.getResource() instanceof FlinkDeployment)) {
             // We can't adjust the configuration of non-job deployments.
             return;
         }
         FlinkDeployment flinkDeployment = ((FlinkDeployment) context.getResource());
         // Apply config overrides
-        flinkDeployment.getSpec().getFlinkConfiguration().putAll(configOverrides.toMap());
+        Map<String, String> flinkConf = flinkDeployment.getSpec().getFlinkConfiguration();
+        for (String keyToRemove : configChanges.getRemovals()) {
+            flinkConf.remove(keyToRemove);
+        }
+        flinkConf.putAll(configChanges.getOverrides());
 
         // Update total memory in spec
-        var totalMemoryOverride = MemoryTuning.getTotalMemory(configOverrides, context);
+        var totalMemoryOverride =
+                MemoryTuning.getTotalMemory(Configuration.fromMap(flinkConf), context);
         if (totalMemoryOverride.compareTo(MemorySize.ZERO) <= 0) {
             LOG.warn("Total memory override {} is not valid", totalMemoryOverride);
             return;

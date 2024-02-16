@@ -582,6 +582,12 @@ public class ScalingMetricEvaluatorTest {
                         EvaluatedScalingMetric.of(Double.NaN),
                         ScalingMetric.HEAP_MEMORY_USED,
                         EvaluatedScalingMetric.of(Double.NaN),
+                        ScalingMetric.MANAGED_MEMORY_USED,
+                        EvaluatedScalingMetric.of(Double.NaN),
+                        ScalingMetric.NETWORK_MEMORY_USED,
+                        EvaluatedScalingMetric.of(Double.NaN),
+                        ScalingMetric.METASPACE_MEMORY_USED,
+                        EvaluatedScalingMetric.of(Double.NaN),
                         ScalingMetric.NUM_TASK_SLOTS_USED,
                         EvaluatedScalingMetric.of(Double.NaN)),
                 ScalingMetricEvaluator.evaluateGlobalMetrics(globalMetrics));
@@ -597,7 +603,13 @@ public class ScalingMetricEvaluatorTest {
                                 ScalingMetric.GC_PRESSURE,
                                 0.6,
                                 ScalingMetric.HEAP_MEMORY_USED,
-                                512.)));
+                                512.,
+                                ScalingMetric.MANAGED_MEMORY_USED,
+                                420.,
+                                ScalingMetric.NETWORK_MEMORY_USED,
+                                230.,
+                                ScalingMetric.METASPACE_MEMORY_USED,
+                                110.)));
         assertEquals(
                 Map.of(
                         ScalingMetric.HEAP_MAX_USAGE_RATIO,
@@ -606,6 +618,12 @@ public class ScalingMetricEvaluatorTest {
                         EvaluatedScalingMetric.of(0.6),
                         ScalingMetric.HEAP_MEMORY_USED,
                         new EvaluatedScalingMetric(512, 512),
+                        ScalingMetric.MANAGED_MEMORY_USED,
+                        new EvaluatedScalingMetric(420, 420),
+                        ScalingMetric.NETWORK_MEMORY_USED,
+                        new EvaluatedScalingMetric(230, 230),
+                        ScalingMetric.METASPACE_MEMORY_USED,
+                        new EvaluatedScalingMetric(110, 110),
                         ScalingMetric.NUM_TASK_SLOTS_USED,
                         EvaluatedScalingMetric.of(Double.NaN)),
                 ScalingMetricEvaluator.evaluateGlobalMetrics(globalMetrics));
@@ -622,6 +640,12 @@ public class ScalingMetricEvaluatorTest {
                                 0.8,
                                 ScalingMetric.HEAP_MEMORY_USED,
                                 1024.,
+                                ScalingMetric.MANAGED_MEMORY_USED,
+                                840.,
+                                ScalingMetric.NETWORK_MEMORY_USED,
+                                460.,
+                                ScalingMetric.METASPACE_MEMORY_USED,
+                                220.,
                                 ScalingMetric.NUM_TASK_SLOTS_USED,
                                 42.)));
         assertEquals(
@@ -632,6 +656,12 @@ public class ScalingMetricEvaluatorTest {
                         EvaluatedScalingMetric.of(0.8),
                         ScalingMetric.HEAP_MEMORY_USED,
                         new EvaluatedScalingMetric(1024., 768.),
+                        ScalingMetric.MANAGED_MEMORY_USED,
+                        new EvaluatedScalingMetric(840., 630.),
+                        ScalingMetric.NETWORK_MEMORY_USED,
+                        new EvaluatedScalingMetric(460., 345.),
+                        ScalingMetric.METASPACE_MEMORY_USED,
+                        new EvaluatedScalingMetric(220., 165.),
                         ScalingMetric.NUM_TASK_SLOTS_USED,
                         EvaluatedScalingMetric.of(42.)),
                 ScalingMetricEvaluator.evaluateGlobalMetrics(globalMetrics));

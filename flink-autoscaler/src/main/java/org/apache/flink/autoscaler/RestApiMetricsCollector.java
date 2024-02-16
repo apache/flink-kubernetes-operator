@@ -35,6 +35,8 @@ import org.apache.flink.runtime.rest.messages.job.metrics.Metric;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricsAggregationParameter;
 import org.apache.flink.runtime.rest.messages.job.metrics.MetricsFilterParameter;
 
+import org.apache.flink.shaded.guava31.com.google.common.collect.ImmutableMap;
+
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -46,6 +48,9 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.metrics.FlinkMetric.HEAP_MEMORY_MAX;
 import static org.apache.flink.autoscaler.metrics.FlinkMetric.HEAP_MEMORY_USED;
+import static org.apache.flink.autoscaler.metrics.FlinkMetric.MANAGED_MEMORY_USED;
+import static org.apache.flink.autoscaler.metrics.FlinkMetric.METASPACE_MEMORY_USED;
+import static org.apache.flink.autoscaler.metrics.FlinkMetric.NETWORK_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.FlinkMetric.TOTAL_GC_TIME_PER_SEC;
 
 /** Metric collector using flink rest api. */
@@ -56,12 +61,15 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
     private static final Map<String, FlinkMetric> COMMON_TM_METRIC_NAMES =
             Map.of(
                     "Status.JVM.Memory.Heap.Max", HEAP_MEMORY_MAX,
-                    "Status.JVM.Memory.Heap.Used", HEAP_MEMORY_USED);
-    private static final Map<String, FlinkMetric> TM_METRIC_NAMES_WITH_GC =
-            Map.of(
-                    "Status.JVM.Memory.Heap.Max", HEAP_MEMORY_MAX,
                     "Status.JVM.Memory.Heap.Used", HEAP_MEMORY_USED,
-                    "Status.JVM.GarbageCollector.All.TimeMsPerSecond", TOTAL_GC_TIME_PER_SEC);
+                    "Status.Flink.Memory.Managed.Used", MANAGED_MEMORY_USED,
+                    "Status.Shuffle.Netty.UsedMemory", NETWORK_MEMORY_USED,
+                    "Status.JVM.Memory.Metaspace.Used", METASPACE_MEMORY_USED);
+    private static final Map<String, FlinkMetric> TM_METRIC_NAMES_WITH_GC =
+            ImmutableMap.<String, FlinkMetric>builder()
+                    .putAll(COMMON_TM_METRIC_NAMES)
+                    .put("Status.JVM.GarbageCollector.All.TimeMsPerSecond", TOTAL_GC_TIME_PER_SEC)
+                    .build();
 
     @Override
     protected Map<JobVertexID, Map<FlinkMetric, AggregatedMetric>> queryAllAggregatedMetrics(

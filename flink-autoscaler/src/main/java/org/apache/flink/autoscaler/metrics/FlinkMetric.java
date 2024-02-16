@@ -43,6 +43,9 @@ public enum FlinkMetric {
 
     HEAP_MEMORY_MAX(s -> s.equals("Status.JVM.Memory.Heap.Max")),
     HEAP_MEMORY_USED(s -> s.equals("Status.JVM.Memory.Heap.Used")),
+    MANAGED_MEMORY_USED(s -> s.equals("Status.Flink.Memory.Managed.Used")),
+    NETWORK_MEMORY_USED(s -> s.equals("Status.Shuffle.Netty.UsedMemory")),
+    METASPACE_MEMORY_USED(s -> s.equals("Status.JVM.Memory.Metaspace.Used")),
 
     TOTAL_GC_TIME_PER_SEC(s -> s.equals("Status.JVM.GarbageCollector.All.TimeMsPerSecond")),
 

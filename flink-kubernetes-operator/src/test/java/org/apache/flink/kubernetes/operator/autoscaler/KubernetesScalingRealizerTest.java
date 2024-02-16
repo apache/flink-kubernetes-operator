@@ -17,7 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.autoscaler;
 
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -68,9 +68,9 @@ public class KubernetesScalingRealizerTest {
         KubernetesJobAutoScalerContext ctx =
                 TestingKubernetesAutoscalerUtils.createContext("test", null);
 
-        var overrides = new Configuration();
+        ConfigChanges overrides = new ConfigChanges();
         MemorySize memoryOverride = MemorySize.ofMebiBytes(4096);
-        overrides.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, memoryOverride);
+        overrides.addOverride(TaskManagerOptions.TOTAL_PROCESS_MEMORY, memoryOverride);
         new KubernetesScalingRealizer().realizeConfigOverrides(ctx, overrides);
 
         assertThat(ctx.getResource()).isInstanceOf(FlinkDeployment.class);

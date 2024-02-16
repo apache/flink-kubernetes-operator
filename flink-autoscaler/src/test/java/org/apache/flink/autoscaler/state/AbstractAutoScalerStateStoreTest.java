@@ -21,7 +21,7 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import org.junit.jupiter.api.Assertions;
@@ -184,26 +184,26 @@ public abstract class AbstractAutoScalerStateStoreTest<
                         new JobVertexID(),
                         new TreeMap<>(Map.of(Instant.now(), new ScalingSummary()))));
         stateStore.storeParallelismOverrides(ctx, Map.of(new JobVertexID().toHexString(), "23"));
-        stateStore.storeConfigOverrides(
-                ctx, Configuration.fromMap(Map.of("config.value", "value")));
+        stateStore.storeConfigChanges(
+                ctx, new ConfigChanges().addOverride("config.value", "value"));
 
         assertThat(stateStore.getCollectedMetrics(ctx)).isNotEmpty();
         assertThat(stateStore.getScalingHistory(ctx)).isNotEmpty();
         assertThat(stateStore.getParallelismOverrides(ctx)).isNotEmpty();
-        assertThat(stateStore.getConfigOverrides(ctx).toMap()).isNotEmpty();
+        assertThat(stateStore.getConfigChanges(ctx).getOverrides()).isNotEmpty();
 
         stateStore.flush(ctx);
 
         assertThat(stateStore.getCollectedMetrics(ctx)).isNotEmpty();
         assertThat(stateStore.getScalingHistory(ctx)).isNotEmpty();
         assertThat(stateStore.getParallelismOverrides(ctx)).isNotEmpty();
-        assertThat(stateStore.getConfigOverrides(ctx).toMap()).isNotEmpty();
+        assertThat(stateStore.getConfigChanges(ctx).getOverrides()).isNotEmpty();
 
         stateStore.clearAll(ctx);
 
         assertThat(stateStore.getCollectedMetrics(ctx)).isEmpty();
         assertThat(stateStore.getScalingHistory(ctx)).isEmpty();
         assertThat(stateStore.getParallelismOverrides(ctx)).isEmpty();
-        assertThat(stateStore.getConfigOverrides(ctx).toMap()).isEmpty();
+        assertThat(stateStore.getConfigChanges(ctx).getOverrides()).isEmpty();
     }
 }

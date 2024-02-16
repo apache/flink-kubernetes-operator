@@ -18,7 +18,7 @@
 package org.apache.flink.autoscaler.realizer;
 
 import org.apache.flink.autoscaler.JobAutoScalerContext;
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 
 import lombok.Getter;
 
@@ -38,8 +38,8 @@ public class TestingScalingRealizer<KEY, Context extends JobAutoScalerContext<KE
     }
 
     @Override
-    public void realizeConfigOverrides(Context context, Configuration configOverrides) {
-        events.add(new Event<>(context, configOverrides));
+    public void realizeConfigOverrides(Context context, ConfigChanges configChanges) {
+        events.add(new Event<>(context, configChanges));
     }
 
     /** The collected event. */
@@ -49,16 +49,16 @@ public class TestingScalingRealizer<KEY, Context extends JobAutoScalerContext<KE
 
         @Getter private Map<String, String> parallelismOverrides;
 
-        @Getter private Configuration configOverrides;
+        @Getter private ConfigChanges configChanges;
 
         public Event(Context context, Map<String, String> parallelismOverrides) {
             this.context = context;
             this.parallelismOverrides = parallelismOverrides;
         }
 
-        public Event(Context context, Configuration configOverrides) {
+        public Event(Context context, ConfigChanges configChanges) {
             this.context = context;
-            this.configOverrides = configOverrides;
+            this.configChanges = configChanges;
         }
 
         @Override
@@ -69,7 +69,7 @@ public class TestingScalingRealizer<KEY, Context extends JobAutoScalerContext<KE
                     + ", parallelismOverrides="
                     + parallelismOverrides
                     + ", configOverrides="
-                    + configOverrides
+                    + configChanges
                     + '}';
         }
     }
