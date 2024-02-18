@@ -87,7 +87,7 @@ public class ScalingMetrics {
         double numRecordsInPerSecond =
                 getNumRecordsInPerSecond(flinkMetrics, ioMetrics, jobVertexID, isSource);
         double numRecordsIn =
-                getNumRecordsAccumulated(flinkMetrics, ioMetrics, jobVertexID, isSource);
+                getNumRecordsInAccumulated(flinkMetrics, ioMetrics, jobVertexID, isSource);
 
         scalingMetrics.put(ScalingMetric.NUM_RECORDS_IN, numRecordsIn);
         scalingMetrics.put(ScalingMetric.NUM_RECORDS_OUT, (double) ioMetrics.getNumRecordsOut());
@@ -208,18 +208,18 @@ public class ScalingMetrics {
             IOMetrics ioMetrics,
             JobVertexID jobVertexID,
             boolean isSource) {
-        return getNumRecordsInternal(flinkMetrics, ioMetrics, jobVertexID, isSource, true);
+        return getNumRecordsInInternal(flinkMetrics, ioMetrics, jobVertexID, isSource, true);
     }
 
-    private static double getNumRecordsAccumulated(
+    private static double getNumRecordsInAccumulated(
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             IOMetrics ioMetrics,
             JobVertexID jobVertexID,
             boolean isSource) {
-        return getNumRecordsInternal(flinkMetrics, ioMetrics, jobVertexID, isSource, false);
+        return getNumRecordsInInternal(flinkMetrics, ioMetrics, jobVertexID, isSource, false);
     }
 
-    private static double getNumRecordsInternal(
+    private static double getNumRecordsInInternal(
             Map<FlinkMetric, AggregatedMetric> flinkMetrics,
             IOMetrics ioMetrics,
             JobVertexID jobVertexID,

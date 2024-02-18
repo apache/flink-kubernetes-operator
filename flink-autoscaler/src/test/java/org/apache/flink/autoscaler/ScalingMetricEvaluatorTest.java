@@ -664,13 +664,15 @@ public class ScalingMetricEvaluatorTest {
 
         assertEquals(
                 2.,
-                ScalingMetricEvaluator.computeOutputRatio(source1, op1, topology, metricHistory));
+                ScalingMetricEvaluator.computeEdgeOutputRatio(
+                        source1, op1, topology, metricHistory));
         assertEquals(
                 0.5,
-                ScalingMetricEvaluator.computeOutputRatio(source2, op1, topology, metricHistory));
+                ScalingMetricEvaluator.computeEdgeOutputRatio(
+                        source2, op1, topology, metricHistory));
         assertEquals(
                 0.2,
-                ScalingMetricEvaluator.computeOutputRatio(op1, sink1, topology, metricHistory));
+                ScalingMetricEvaluator.computeEdgeOutputRatio(op1, sink1, topology, metricHistory));
     }
 
     @Test
@@ -720,16 +722,20 @@ public class ScalingMetricEvaluatorTest {
 
         assertEquals(
                 2.,
-                ScalingMetricEvaluator.computeOutputRatio(source1, op1, topology, metricHistory));
+                ScalingMetricEvaluator.computeEdgeOutputRatio(
+                        source1, op1, topology, metricHistory));
         assertEquals(
                 0.5,
-                ScalingMetricEvaluator.computeOutputRatio(source2, op1, topology, metricHistory));
+                ScalingMetricEvaluator.computeEdgeOutputRatio(
+                        source2, op1, topology, metricHistory));
         assertEquals(
                 2.,
-                ScalingMetricEvaluator.computeOutputRatio(source1, op2, topology, metricHistory));
+                ScalingMetricEvaluator.computeEdgeOutputRatio(
+                        source1, op2, topology, metricHistory));
         assertEquals(
                 0.5,
-                ScalingMetricEvaluator.computeOutputRatio(source2, op2, topology, metricHistory));
+                ScalingMetricEvaluator.computeEdgeOutputRatio(
+                        source2, op2, topology, metricHistory));
     }
 
     @Test

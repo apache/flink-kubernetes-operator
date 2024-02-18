@@ -354,17 +354,16 @@ public class ScalingMetricEvaluator {
             for (var inputVertex : inputs) {
                 var inputEvaluatedMetrics = alreadyEvaluated.get(inputVertex);
                 var inputTargetRate = inputEvaluatedMetrics.get(TARGET_DATA_RATE);
-                var outputRateMultiplier =
-                        computeOutputRatio(inputVertex, vertex, topology, metricsHistory);
+                var outputRatio =
+                        computeEdgeOutputRatio(inputVertex, vertex, topology, metricsHistory);
                 LOG.debug(
                         "Computed output ratio for edge ({} -> {}) : {}",
                         inputVertex,
                         vertex,
-                        outputRateMultiplier);
-                sumAvgTargetRate += inputTargetRate.getAverage() * outputRateMultiplier;
+                        outputRatio);
+                sumAvgTargetRate += inputTargetRate.getAverage() * outputRatio;
                 sumCatchUpDataRate +=
-                        inputEvaluatedMetrics.get(CATCH_UP_DATA_RATE).getCurrent()
-                                * outputRateMultiplier;
+                        inputEvaluatedMetrics.get(CATCH_UP_DATA_RATE).getCurrent() * outputRatio;
             }
             out.put(TARGET_DATA_RATE, EvaluatedScalingMetric.avg(sumAvgTargetRate));
             out.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(sumCatchUpDataRate));
@@ -484,30 +483,53 @@ public class ScalingMetricEvaluator {
         return n < minElements ? Double.NaN : sum / n;
     }
 
+    /**
+     * Compute the In/Out ratio between the (from, to) vertices. The rate estimates the number of
+     * output records produced to the downstream vertex for every input received for the upstream
+     * vertex. For example output ratio 2.0 means that we produce approximately 2 outputs to the
+     * "to" vertex for every 1 input received in the "from" vertex.
+     *
+     * @param from Upstream vertex
+     * @param to Downstream vertex
+     * @param topology
+     * @param metricsHistory
+     * @return Output ratio
+     */
     @VisibleForTesting
-    protected static double computeOutputRatio(
+    protected static double computeEdgeOutputRatio(
             JobVertexID from,
             JobVertexID to,
             JobTopology topology,
             SortedMap<Instant, CollectedMetrics> metricsHistory) {
 
-        double numRecordsIn = getRate(ScalingMetric.NUM_RECORDS_IN, from, metricsHistory);
+        double inputRate = getRate(ScalingMetric.NUM_RECORDS_IN, from, metricsHistory);
 
         double outputRatio = 0;
         // If the input rate is zero, we also need to flatten the output rate.
         // Otherwise, the OUTPUT_RATIO would be outrageously large, leading to
         // a rapid scale up.
-        if (numRecordsIn > 0) {
-            double numRecordsOut = computeEdgeRecordsOut(topology, metricsHistory, from, to);
-            if (numRecordsOut > 0) {
-                outputRatio = numRecordsOut / numRecordsIn;
+        if (inputRate > 0) {
+            double outputRate = computeEdgeDataRate(topology, metricsHistory, from, to);
+            if (outputRate > 0) {
+                outputRatio = outputRate / inputRate;
             }
         }
         return outputRatio;
     }
 
+    /**
+     * Compute how many records flow between two job vertices in the pipeline. Since Flink does not
+     * expose any output / data rate metric on an edge level we have to compute this from the vertex
+     * level input/output metrics.
+     *
+     * @param topology
+     * @param metricsHistory
+     * @param from Upstream vertex
+     * @param to Downstream vertex
+     * @return Records per second data rate between the two vertices
+     */
     @VisibleForTesting
-    protected static double computeEdgeRecordsOut(
+    protected static double computeEdgeDataRate(
             JobTopology topology,
             SortedMap<Instant, CollectedMetrics> metricsHistory,
             JobVertexID from,
@@ -524,28 +546,28 @@ public class ScalingMetricEvaluator {
 
         // Case 2: Downstream vertex has only inputs from upstream vertices which don't have other
         // outputs
-        double numRecordsOutFromUpstreamInputs = 0;
+        double inputRateFromOtherVertices = 0;
         for (JobVertexID input : toVertexInputs) {
             if (input.equals(from)) {
                 // Exclude source edge because we only want to consider other input edges
                 continue;
             }
             if (topology.get(input).getOutputs().size() == 1) {
-                numRecordsOutFromUpstreamInputs +=
+                inputRateFromOtherVertices +=
                         getRate(ScalingMetric.NUM_RECORDS_OUT, input, metricsHistory);
             } else {
                 // Output vertex has multiple outputs, cannot use this information...
-                numRecordsOutFromUpstreamInputs = Double.NaN;
+                inputRateFromOtherVertices = Double.NaN;
                 break;
             }
         }
-        if (!Double.isNaN(numRecordsOutFromUpstreamInputs)) {
+        if (!Double.isNaN(inputRateFromOtherVertices)) {
             LOG.debug(
                     "Computing edge ({}, {}) data rate by subtracting upstream input rates",
                     from,
                     to);
             return getRate(ScalingMetric.NUM_RECORDS_IN, to, metricsHistory)
-                    - numRecordsOutFromUpstreamInputs;
+                    - inputRateFromOtherVertices;
         }
 
         // Case 3: We fall back simply to num records out, this is the least reliable

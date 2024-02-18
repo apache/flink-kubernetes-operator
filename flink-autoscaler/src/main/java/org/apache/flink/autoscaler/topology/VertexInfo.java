@@ -22,8 +22,6 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import lombok.Data;
 
-import javax.annotation.Nullable;
-
 import java.util.Set;
 
 /** Job vertex information. */
@@ -34,7 +32,7 @@ public class VertexInfo {
 
     private final Set<JobVertexID> inputs;
 
-    private @Nullable Set<JobVertexID> outputs;
+    private Set<JobVertexID> outputs;
 
     private final int parallelism;
 
