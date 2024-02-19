@@ -473,6 +473,25 @@ public class ScalingMetricEvaluatorTest {
     }
 
     @Test
+    public void testMissingBusyTimeTpr() {
+        var source = new JobVertexID();
+
+        var metricHistory = new TreeMap<Instant, CollectedMetrics>();
+        metricHistory.put(
+                Instant.ofEpochMilli(1000),
+                new CollectedMetrics(
+                        Map.of(source, Map.of(ScalingMetric.OBSERVED_TPR, 200.)), Map.of()));
+        metricHistory.put(
+                Instant.ofEpochMilli(2000),
+                new CollectedMetrics(
+                        Map.of(source, Map.of(ScalingMetric.OBSERVED_TPR, 400.)), Map.of()));
+        assertEquals(
+                300.,
+                ScalingMetricEvaluator.computeTrueProcessingRate(
+                        Double.NaN, 1., metricHistory, source, new Configuration()));
+    }
+
+    @Test
     public void testGlobalMetricEvaluation() {
         var globalMetrics = new TreeMap<Instant, CollectedMetrics>();
         globalMetrics.put(Instant.now(), new CollectedMetrics(Map.of(), Map.of()));
@@ -543,9 +562,10 @@ public class ScalingMetricEvaluatorTest {
         assertInfiniteTpr(0, 0);
         assertInfiniteTpr(0, 1);
         assertInfiniteTpr(1, 0);
+        assertInfiniteTpr(Double.NaN, 0);
     }
 
-    private static void assertInfiniteTpr(long busyTime, long inputRate) {
+    private static void assertInfiniteTpr(double busyTime, long inputRate) {
         assertEquals(
                 Double.POSITIVE_INFINITY,
                 ScalingMetricEvaluator.computeTrueProcessingRate(

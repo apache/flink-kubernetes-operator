@@ -135,8 +135,6 @@ public class ScalingMetricEvaluator {
 
         var vertexInfo = topology.get(vertex);
 
-        double busyTimeAvg =
-                computeBusyTimeAvg(conf, metricsHistory, vertex, vertexInfo.getParallelism());
         double inputRateAvg = getRate(ScalingMetric.NUM_RECORDS_IN, vertex, metricsHistory);
 
         var evaluatedMetrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
@@ -150,6 +148,8 @@ public class ScalingMetricEvaluator {
                 latestVertexMetrics,
                 evaluatedMetrics);
 
+        double busyTimeAvg =
+                computeBusyTimeAvg(conf, metricsHistory, vertex, vertexInfo.getParallelism());
         evaluatedMetrics.put(
                 TRUE_PROCESSING_RATE,
                 EvaluatedScalingMetric.avg(
@@ -191,18 +191,12 @@ public class ScalingMetricEvaluator {
             SortedMap<Instant, CollectedMetrics> metricsHistory,
             JobVertexID vertex,
             int parallelism) {
-        double busyTimeAvg;
         if (conf.get(AutoScalerOptions.BUSY_TIME_AGGREGATOR) == MetricAggregator.AVG) {
-            busyTimeAvg =
-                    getRate(ScalingMetric.ACCUMULATED_BUSY_TIME, vertex, metricsHistory)
-                            / parallelism;
+            return getRate(ScalingMetric.ACCUMULATED_BUSY_TIME, vertex, metricsHistory)
+                    / parallelism;
         } else {
-            busyTimeAvg = getAverage(LOAD, vertex, metricsHistory) * 1000;
-            if (Double.isNaN(busyTimeAvg)) {
-                busyTimeAvg = Double.POSITIVE_INFINITY;
-            }
+            return getAverage(LOAD, vertex, metricsHistory) * 1000;
         }
-        return busyTimeAvg;
     }
 
     /**
@@ -224,7 +218,7 @@ public class ScalingMetricEvaluator {
             JobVertexID vertex,
             Configuration conf) {
 
-        var busyTimeTpr = computeTprFromBusyTime(busyTimeAvg, inputRateAvg, conf);
+        var busyTimeTpr = computeTprFromBusyTime(busyTimeAvg, inputRateAvg);
         var observedTprAvg =
                 getAverage(
                         OBSERVED_TPR,
@@ -236,18 +230,13 @@ public class ScalingMetricEvaluator {
         return tprMetric == OBSERVED_TPR ? observedTprAvg : busyTimeTpr;
     }
 
-    private static double computeTprFromBusyTime(
-            double busyTimeMsPerSecond, double rate, Configuration conf) {
+    private static double computeTprFromBusyTime(double busyMsPerSecond, double rate) {
         if (rate == 0) {
             // Nothing is coming in, we assume infinite processing power
             // until we can sample the true processing rate (i.e. data flows).
             return Double.POSITIVE_INFINITY;
         }
-        // Pretend that the load is balanced because we don't know any better
-        if (Double.isNaN(busyTimeMsPerSecond)) {
-            busyTimeMsPerSecond = conf.get(AutoScalerOptions.TARGET_UTILIZATION) * 1000;
-        }
-        return rate / (busyTimeMsPerSecond / 1000);
+        return rate / (busyMsPerSecond / 1000);
     }
 
     private static ScalingMetric selectTprMetric(
