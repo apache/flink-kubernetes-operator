@@ -62,7 +62,7 @@ public class ScalingMetricsTest {
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
                         new AggregatedMetric("", Double.NaN, 900., Double.NaN, Double.NaN),
-                        FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                        FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC,
                         aggSum(1000.)),
                 scalingMetrics,
                 topology,
@@ -76,9 +76,7 @@ public class ScalingMetricsTest {
                         ScalingMetric.NUM_RECORDS_OUT,
                         2.,
                         ScalingMetric.OBSERVED_TPR,
-                        PREV_TPR,
-                        ScalingMetric.CURRENT_PROCESSING_RATE,
-                        1000.),
+                        PREV_TPR),
                 scalingMetrics);
 
         scalingMetrics.clear();
@@ -87,7 +85,7 @@ public class ScalingMetricsTest {
                 Map.of(
                         FlinkMetric.BUSY_TIME_PER_SEC,
                         new AggregatedMetric("", Double.NaN, 100., Double.NaN, Double.NaN),
-                        FlinkMetric.NUM_RECORDS_IN_PER_SEC,
+                        FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC,
                         aggSum(1000.)),
                 scalingMetrics,
                 topology,
@@ -95,13 +93,7 @@ public class ScalingMetricsTest {
                 () -> 0.);
 
         assertEquals(
-                Map.of(
-                        ScalingMetric.NUM_RECORDS_IN,
-                        1.,
-                        ScalingMetric.NUM_RECORDS_OUT,
-                        2.,
-                        ScalingMetric.CURRENT_PROCESSING_RATE,
-                        1000.),
+                Map.of(ScalingMetric.NUM_RECORDS_IN, 1., ScalingMetric.NUM_RECORDS_OUT, 2.),
                 scalingMetrics);
     }
 

@@ -331,37 +331,38 @@ public class ScalingMetricEvaluatorTest {
 
         // 0 lag
         metricHistory.put(
-                Instant.now(),
+                Instant.ofEpochMilli(0),
                 new CollectedMetrics(
                         Map.of(
                                 source,
-                                Map.of(
-                                        ScalingMetric.LAG,
-                                        0.,
-                                        ScalingMetric.CURRENT_PROCESSING_RATE,
-                                        100.),
+                                Map.of(ScalingMetric.LAG, 0., ScalingMetric.NUM_RECORDS_IN, 0.),
                                 sink,
-                                Map.of(ScalingMetric.TRUE_PROCESSING_RATE, 2000.)),
+                                Map.of()),
+                        Map.of()));
+
+        metricHistory.put(
+                Instant.ofEpochMilli(1000),
+                new CollectedMetrics(
+                        Map.of(
+                                source,
+                                Map.of(ScalingMetric.LAG, 0., ScalingMetric.NUM_RECORDS_IN, 100.),
+                                sink,
+                                Map.of()),
                         Map.of()));
         assertFalse(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
 
         // Missing lag
-        metricHistory.clear();
         metricHistory.put(
-                Instant.now(),
+                Instant.ofEpochMilli(1000),
                 new CollectedMetrics(
-                        Map.of(
-                                source,
-                                Map.of(ScalingMetric.CURRENT_PROCESSING_RATE, 100.),
-                                sink,
-                                Map.of(ScalingMetric.TRUE_PROCESSING_RATE, 2000.)),
+                        Map.of(source, Map.of(ScalingMetric.NUM_RECORDS_IN, 100.), sink, Map.of()),
                         Map.of()));
 
         assertFalse(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
 
         // Catch up time is more than a minute at avg proc rate (200)
         metricHistory.put(
-                Instant.now(),
+                Instant.ofEpochMilli(1000),
                 new CollectedMetrics(
                         Map.of(
                                 source,
@@ -372,17 +373,17 @@ public class ScalingMetricEvaluatorTest {
                                                                 AutoScalerOptions
                                                                         .BACKLOG_PROCESSING_LAG_THRESHOLD)
                                                         .toSeconds(),
-                                        ScalingMetric.CURRENT_PROCESSING_RATE,
-                                        300.),
+                                        ScalingMetric.NUM_RECORDS_IN,
+                                        200.),
                                 sink,
-                                Map.of(ScalingMetric.TRUE_PROCESSING_RATE, 2000.)),
+                                Map.of()),
                         Map.of()));
 
         assertTrue(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
 
         // Catch up time is less than a minute at avg proc rate (200)
         metricHistory.put(
-                Instant.now(),
+                Instant.ofEpochMilli(1000),
                 new CollectedMetrics(
                         Map.of(
                                 source,
@@ -393,10 +394,10 @@ public class ScalingMetricEvaluatorTest {
                                                                 AutoScalerOptions
                                                                         .BACKLOG_PROCESSING_LAG_THRESHOLD)
                                                         .toSeconds(),
-                                        ScalingMetric.CURRENT_PROCESSING_RATE,
+                                        ScalingMetric.NUM_RECORDS_IN,
                                         200.),
                                 sink,
-                                Map.of(ScalingMetric.TRUE_PROCESSING_RATE, 2000.)),
+                                Map.of()),
                         Map.of()));
         assertFalse(ScalingMetricEvaluator.isProcessingBacklog(topology, metricHistory, conf));
     }

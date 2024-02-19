@@ -84,17 +84,16 @@ public class ScalingMetrics {
         var isSource = topology.isSource(jobVertexID);
         var ioMetrics = topology.get(jobVertexID).getIoMetrics();
 
-        double numRecordsInPerSecond =
-                getNumRecordsInPerSecond(flinkMetrics, ioMetrics, jobVertexID, isSource);
         double numRecordsIn =
                 getNumRecordsInAccumulated(flinkMetrics, ioMetrics, jobVertexID, isSource);
 
         scalingMetrics.put(ScalingMetric.NUM_RECORDS_IN, numRecordsIn);
         scalingMetrics.put(ScalingMetric.NUM_RECORDS_OUT, (double) ioMetrics.getNumRecordsOut());
-        scalingMetrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, numRecordsInPerSecond);
 
-        if (!Double.isNaN(numRecordsInPerSecond)) {
-            if (isSource) {
+        if (isSource) {
+            double numRecordsInPerSecond =
+                    getSourceNumRecordsInPerSecond(flinkMetrics, jobVertexID);
+            if (!Double.isNaN(numRecordsInPerSecond)) {
                 var observedTprOpt =
                         getObservedTpr(flinkMetrics, scalingMetrics, numRecordsInPerSecond, conf)
                                 .orElseGet(observedTprAvg);
@@ -203,12 +202,9 @@ public class ScalingMetrics {
         }
     }
 
-    private static double getNumRecordsInPerSecond(
-            Map<FlinkMetric, AggregatedMetric> flinkMetrics,
-            IOMetrics ioMetrics,
-            JobVertexID jobVertexID,
-            boolean isSource) {
-        return getNumRecordsInInternal(flinkMetrics, ioMetrics, jobVertexID, isSource, true);
+    private static double getSourceNumRecordsInPerSecond(
+            Map<FlinkMetric, AggregatedMetric> flinkMetrics, JobVertexID jobVertexID) {
+        return getNumRecordsInInternal(flinkMetrics, null, jobVertexID, true, true);
     }
 
     private static double getNumRecordsInAccumulated(
@@ -229,13 +225,14 @@ public class ScalingMetrics {
         // 1. If available, directly use the NUM_RECORDS_IN_PER_SEC task metric.
         var numRecords =
                 perSecond
-                        ? flinkMetrics.get(FlinkMetric.NUM_RECORDS_IN_PER_SEC)
+                        ? null // Per second only available for sources
                         : new AggregatedMetric(
                                 "n",
                                 Double.NaN,
                                 Double.NaN,
                                 Double.NaN,
                                 (double) ioMetrics.getNumRecordsIn());
+
         // 2. If the former is unavailable and the vertex contains a source operator, use the
         // corresponding source operator metric.
         if (isSource && (numRecords == null || numRecords.getSum() == 0)) {

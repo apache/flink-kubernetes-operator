@@ -395,7 +395,7 @@ public class ScalingMetricCollectorTest {
     }
 
     private List<String> getRequiredMetrics() {
-        return List.of("busyTimeMsPerSecond", "numRecordsInPerSecond");
+        return List.of("busyTimeMsPerSecond");
     }
 
     @Test

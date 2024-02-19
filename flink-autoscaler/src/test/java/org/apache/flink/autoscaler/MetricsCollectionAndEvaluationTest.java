@@ -419,8 +419,6 @@ public class MetricsCollectionAndEvaluationTest {
                 Map.of(
                         ScalingMetric.LAG,
                         0.,
-                        ScalingMetric.CURRENT_PROCESSING_RATE,
-                        0.,
                         ScalingMetric.OBSERVED_TPR,
                         Double.POSITIVE_INFINITY,
                         ScalingMetric.NUM_RECORDS_IN,

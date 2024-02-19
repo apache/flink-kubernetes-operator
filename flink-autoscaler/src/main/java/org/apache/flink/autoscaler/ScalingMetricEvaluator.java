@@ -47,7 +47,6 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.BACKLOG_PROCE
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.CURRENT_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.GC_PRESSURE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MAX_USAGE_RATIO;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_USED;
@@ -104,12 +103,12 @@ public class ScalingMetricEvaluator {
                 .anyMatch(
                         vertex -> {
                             double lag = lastMetrics.get(vertex).getOrDefault(LAG, 0.0);
-                            double avgProcRate =
-                                    getAverage(CURRENT_PROCESSING_RATE, vertex, metricsHistory);
-                            if (Double.isNaN(avgProcRate)) {
+                            double inputRateAvg =
+                                    getRate(ScalingMetric.NUM_RECORDS_IN, vertex, metricsHistory);
+                            if (Double.isNaN(inputRateAvg)) {
                                 return false;
                             }
-                            double lagSeconds = lag / avgProcRate;
+                            double lagSeconds = lag / inputRateAvg;
                             if (lagSeconds
                                     > conf.get(BACKLOG_PROCESSING_LAG_THRESHOLD).toSeconds()) {
                                 LOG.info("Currently processing backlog at source {}", vertex);

@@ -36,9 +36,6 @@ public enum ScalingMetric {
     /** Observed true processing rate for sources. */
     OBSERVED_TPR(true),
 
-    /** Current processing rate. */
-    CURRENT_PROCESSING_RATE(true),
-
     /** Target processing rate of operators as derived from source inputs (records/sec). */
     TARGET_DATA_RATE(true),
 

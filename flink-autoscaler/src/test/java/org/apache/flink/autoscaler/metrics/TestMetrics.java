@@ -45,7 +45,7 @@ public class TestMetrics {
             fm.put(FlinkMetric.PENDING_RECORDS, sum(pendingRecords));
         }
         if (numRecordsInPerSec != null) {
-            fm.put(FlinkMetric.NUM_RECORDS_IN_PER_SEC, sum(numRecordsInPerSec));
+            fm.put(FlinkMetric.SOURCE_TASK_NUM_RECORDS_IN_PER_SEC, sum(numRecordsInPerSec));
         }
         fm.put(FlinkMetric.BUSY_TIME_PER_SEC, max(maxBusyTimePerSec));
         fm.put(FlinkMetric.BACKPRESSURE_TIME_PER_SEC, avg(avgBackpressureTimePerSec));
