@@ -280,7 +280,7 @@ public class ScalingExecutorTest {
                         ScalingMetric.GC_PRESSURE,
                         EvaluatedScalingMetric.of(Double.NaN));
         var vertexMetrics =
-                Map.of(source, evaluated(10, 50, 100, 50, 0), sink, evaluated(10, 50, 100, 50, 0));
+                Map.of(source, evaluated(10, 100, 50, 0), sink, evaluated(10, 100, 50, 0));
         var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
 
         assertTrue(
@@ -443,11 +443,10 @@ public class ScalingExecutorTest {
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
-            int parallelism, double current, double target, double procRate, double catchupRate) {
+            int parallelism, double target, double procRate, double catchupRate) {
         var metrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
         metrics.put(ScalingMetric.PARALLELISM, EvaluatedScalingMetric.of(parallelism));
         metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(720));
-        metrics.put(ScalingMetric.CURRENT_PROCESSING_RATE, EvaluatedScalingMetric.avg(current));
         metrics.put(ScalingMetric.TARGET_DATA_RATE, new EvaluatedScalingMetric(target, target));
         metrics.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchupRate));
         metrics.put(
@@ -457,11 +456,6 @@ public class ScalingExecutorTest {
         ScalingMetricEvaluator.computeProcessingRateThresholds(
                 metrics, context.getConfiguration(), false, restartTime);
         return metrics;
-    }
-
-    private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
-            int parallelism, double target, double procRate, double catchupRate) {
-        return evaluated(parallelism, Double.NaN, target, procRate, catchupRate);
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(

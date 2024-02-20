@@ -32,11 +32,13 @@ import lombok.Getter;
 import lombok.ToString;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Structure representing information about the jobgraph that is relevant for scaling. */
 @ToString
@@ -45,14 +47,13 @@ public class JobTopology {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Getter private final ImmutableMap<JobVertexID, Set<JobVertexID>> inputs;
-    @Getter private final ImmutableMap<JobVertexID, Set<JobVertexID>> outputs;
-    @Getter private final ImmutableMap<JobVertexID, Integer> parallelisms;
-    private final ImmutableMap<JobVertexID, Integer> originalMaxParallelism;
-    @Getter private final Map<JobVertexID, Integer> maxParallelisms;
+    @Getter private final Map<JobVertexID, VertexInfo> vertexInfos;
     @Getter private final Set<JobVertexID> finishedVertices;
-
     @Getter private final List<JobVertexID> verticesInTopologicalOrder;
+
+    public JobTopology(Collection<VertexInfo> vertexInfo) {
+        this(new HashSet<>(vertexInfo));
+    }
 
     public JobTopology(VertexInfo... vertexInfo) {
         this(Set.of(vertexInfo));
@@ -61,18 +62,16 @@ public class JobTopology {
     public JobTopology(Set<VertexInfo> vertexInfo) {
 
         Map<JobVertexID, Set<JobVertexID>> vertexOutputs = new HashMap<>();
-        Map<JobVertexID, Set<JobVertexID>> vertexInputs = new HashMap<>();
-        Map<JobVertexID, Integer> vertexParallelism = new HashMap<>();
-        maxParallelisms = new HashMap<>();
+        vertexInfos =
+                ImmutableMap.copyOf(
+                        vertexInfo.stream().collect(Collectors.toMap(VertexInfo::getId, v -> v)));
 
         var finishedVertices = ImmutableSet.<JobVertexID>builder();
+
         vertexInfo.forEach(
                 info -> {
                     var vertexId = info.getId();
-                    vertexParallelism.put(vertexId, info.getParallelism());
-                    maxParallelisms.put(vertexId, info.getMaxParallelism());
 
-                    vertexInputs.put(vertexId, info.getInputs());
                     vertexOutputs.computeIfAbsent(vertexId, id -> new HashSet<>());
                     info.getInputs()
                             .forEach(
@@ -84,36 +83,29 @@ public class JobTopology {
                         finishedVertices.add(vertexId);
                     }
                 });
+        vertexOutputs.forEach((v, outputs) -> vertexInfos.get(v).setOutputs(outputs));
 
-        var outputBuilder = ImmutableMap.<JobVertexID, Set<JobVertexID>>builder();
-        vertexOutputs.forEach((id, l) -> outputBuilder.put(id, ImmutableSet.copyOf(l)));
-        outputs = outputBuilder.build();
-
-        var inputBuilder = ImmutableMap.<JobVertexID, Set<JobVertexID>>builder();
-        vertexInputs.forEach((id, l) -> inputBuilder.put(id, ImmutableSet.copyOf(l)));
-        this.inputs = inputBuilder.build();
-
-        this.parallelisms = ImmutableMap.copyOf(vertexParallelism);
-        this.originalMaxParallelism = ImmutableMap.copyOf(maxParallelisms);
         this.finishedVertices = finishedVertices.build();
-
         this.verticesInTopologicalOrder = returnVerticesInTopologicalOrder();
     }
 
+    public VertexInfo get(JobVertexID jvi) {
+        return vertexInfos.get(jvi);
+    }
+
     public boolean isSource(JobVertexID jobVertexID) {
-        return getInputs().get(jobVertexID).isEmpty();
+        return get(jobVertexID).getInputs().isEmpty();
     }
 
     public void updateMaxParallelism(JobVertexID vertexID, int maxParallelism) {
-        maxParallelisms.put(
-                vertexID, Math.min(originalMaxParallelism.get(vertexID), maxParallelism));
+        get(vertexID).updateMaxParallelism(maxParallelism);
     }
 
     private List<JobVertexID> returnVerticesInTopologicalOrder() {
-        List<JobVertexID> sorted = new ArrayList<>(inputs.size());
+        List<JobVertexID> sorted = new ArrayList<>(vertexInfos.size());
 
-        Map<JobVertexID, List<JobVertexID>> remainingInputs = new HashMap<>(inputs.size());
-        inputs.forEach((v, l) -> remainingInputs.put(v, new ArrayList<>(l)));
+        Map<JobVertexID, List<JobVertexID>> remainingInputs = new HashMap<>(vertexInfos.size());
+        vertexInfos.forEach((id, v) -> remainingInputs.put(id, new ArrayList<>(v.getInputs())));
 
         while (!remainingInputs.isEmpty()) {
             List<JobVertexID> verticesWithZeroIndegree = new ArrayList<>();
@@ -127,7 +119,10 @@ public class JobTopology {
             verticesWithZeroIndegree.forEach(
                     v -> {
                         remainingInputs.remove(v);
-                        outputs.get(v).forEach(o -> remainingInputs.get(o).remove(v));
+                        vertexInfos
+                                .get(v)
+                                .getOutputs()
+                                .forEach(o -> remainingInputs.get(o).remove(v));
                     });
 
             sorted.addAll(verticesWithZeroIndegree);
@@ -136,7 +131,10 @@ public class JobTopology {
     }
 
     public static JobTopology fromJsonPlan(
-            String jsonPlan, Map<JobVertexID, Integer> maxParallelismMap, Set<JobVertexID> finished)
+            String jsonPlan,
+            Map<JobVertexID, Integer> maxParallelismMap,
+            Map<JobVertexID, IOMetrics> metrics,
+            Set<JobVertexID> finishedVertices)
             throws JsonProcessingException {
         ObjectNode plan = objectMapper.readValue(jsonPlan, ObjectNode.class);
         ArrayNode nodes = (ArrayNode) plan.get("nodes");
@@ -146,13 +144,16 @@ public class JobTopology {
         for (JsonNode node : nodes) {
             var vertexId = JobVertexID.fromHexString(node.get("id").asText());
             var inputList = new HashSet<JobVertexID>();
+            var ioMetrics = metrics.get(vertexId);
+            var finished = finishedVertices.contains(vertexId);
             vertexInfo.add(
                     new VertexInfo(
                             vertexId,
                             inputList,
                             node.get("parallelism").asInt(),
                             maxParallelismMap.get(vertexId),
-                            finished.contains(vertexId)));
+                            finished,
+                            finished ? IOMetrics.FINISHED_METRICS : ioMetrics));
             if (node.has("inputs")) {
                 for (JsonNode input : node.get("inputs")) {
                     inputList.add(JobVertexID.fromHexString(input.get("id").asText()));

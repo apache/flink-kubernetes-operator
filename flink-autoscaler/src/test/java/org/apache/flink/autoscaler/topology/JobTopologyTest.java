@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -74,28 +75,29 @@ public class JobTopologyTest {
         }
 
         JobTopology jobTopology =
-                JobTopology.fromJsonPlan(jsonPlan, maxParallelism, Collections.emptySet());
+                JobTopology.fromJsonPlan(
+                        jsonPlan, maxParallelism, Map.of(), Collections.emptySet());
 
-        assertTrue(jobTopology.getOutputs().get(vertices.get("Sink: sink1")).isEmpty());
-        assertTrue(jobTopology.getOutputs().get(vertices.get("Sink: sink2")).isEmpty());
-        assertTrue(jobTopology.getOutputs().get(vertices.get("Sink: sink3")).isEmpty());
+        assertTrue(jobTopology.get(vertices.get("Sink: sink1")).getOutputs().isEmpty());
+        assertTrue(jobTopology.get(vertices.get("Sink: sink2")).getOutputs().isEmpty());
+        assertTrue(jobTopology.get(vertices.get("Sink: sink3")).getOutputs().isEmpty());
 
         assertEquals(
                 Set.of(vertices.get("map1")),
-                jobTopology.getOutputs().get(vertices.get("Source: s1")));
+                jobTopology.get(vertices.get("Source: s1")).getOutputs());
         assertEquals(
                 Set.of(vertices.get("map1")),
-                jobTopology.getOutputs().get(vertices.get("Source: s2")));
+                jobTopology.get(vertices.get("Source: s2")).getOutputs());
         assertEquals(
                 Set.of(vertices.get("map2")),
-                jobTopology.getOutputs().get(vertices.get("Source: s3")));
+                jobTopology.get(vertices.get("Source: s3")).getOutputs());
 
         assertEquals(
                 Set.of(vertices.get("Sink: sink2"), vertices.get("Sink: sink3")),
-                jobTopology.getOutputs().get(vertices.get("map2")));
+                jobTopology.get(vertices.get("map2")).getOutputs());
 
-        assertEquals(2, jobTopology.getParallelisms().get(vertices.get("map1")));
-        assertEquals(4, jobTopology.getParallelisms().get(vertices.get("map2")));
-        jobTopology.getMaxParallelisms().forEach((v, p) -> assertEquals(128, p));
+        assertEquals(2, jobTopology.get(vertices.get("map1")).getParallelism());
+        assertEquals(4, jobTopology.get(vertices.get("map2")).getParallelism());
+        jobTopology.getVertexInfos().forEach((v, p) -> assertEquals(128, p.getMaxParallelism()));
     }
 }

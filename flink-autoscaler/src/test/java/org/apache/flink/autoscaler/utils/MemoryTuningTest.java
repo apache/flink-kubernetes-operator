@@ -60,15 +60,11 @@ public class MemoryTuningTest {
                 Map.of(
                         jobVertex1,
                         Map.of(
-                                ScalingMetric.CURRENT_PROCESSING_RATE,
-                                        EvaluatedScalingMetric.avg(100),
                                 ScalingMetric.EXPECTED_PROCESSING_RATE,
                                         EvaluatedScalingMetric.of(50),
                                 ScalingMetric.PARALLELISM, EvaluatedScalingMetric.of(50)),
                         jobVertex2,
                         Map.of(
-                                ScalingMetric.CURRENT_PROCESSING_RATE,
-                                        EvaluatedScalingMetric.avg(100),
                                 ScalingMetric.EXPECTED_PROCESSING_RATE,
                                         EvaluatedScalingMetric.of(50),
                                 ScalingMetric.PARALLELISM, EvaluatedScalingMetric.of(50)));

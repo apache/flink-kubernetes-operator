@@ -15,21 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.flink.autoscaler.metrics;
+package org.apache.flink.autoscaler.topology;
 
-import org.apache.flink.runtime.jobgraph.JobVertexID;
+import org.apache.flink.runtime.rest.messages.job.metrics.IOMetricsInfo;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.Value;
 
-import java.util.Map;
+/** Vertex io metrics. */
+@Value
+public class IOMetrics {
 
-/** Collected scaling metrics. */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class CollectedMetrics {
-    private Map<JobVertexID, Map<ScalingMetric, Double>> vertexMetrics;
-    private Map<ScalingMetric, Double> globalMetrics;
+    public static final IOMetrics FINISHED_METRICS = new IOMetrics(0, 0, 0);
+
+    long numRecordsIn;
+    long numRecordsOut;
+    double accumulatedBusyTime;
+
+    public static IOMetrics from(IOMetricsInfo metricsInfo) {
+        return new IOMetrics(
+                metricsInfo.getRecordsRead(),
+                metricsInfo.getRecordsWritten(),
+                metricsInfo.getAccumulatedBusy());
+    }
 }

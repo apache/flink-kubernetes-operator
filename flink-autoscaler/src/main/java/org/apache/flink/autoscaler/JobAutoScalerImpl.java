@@ -189,7 +189,9 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             stateStore.storeScalingTracking(ctx, scalingTracking);
         }
 
-        if (collectedMetrics.getMetricHistory().isEmpty()) {
+        // We require at least 2 metric collections for evaluation as required by rate computations
+        // from accumulated metrics
+        if (collectedMetrics.getMetricHistory().size() < 2) {
             return;
         }
         LOG.debug("Collected metrics: {}", collectedMetrics);

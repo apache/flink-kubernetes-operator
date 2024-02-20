@@ -42,8 +42,8 @@ The autoscaler relies on the metrics exposed by the Flink metric system for the 
 Collected metrics:
  - Backlog information at each source
  - Incoming data rate at the sources (e.g. records/sec written into the Kafka topic)
- - Number of records processed per second in each job vertex
- - Busy time per second of each job vertex (current utilization)
+ - Record processing rate at each job vertex
+ - Busy and backpressured time at each job vertex
 
 {{< hint info >}}
 Please note that we are not using any container memory / CPU utilization metrics directly here. High utilization will be reflected in the processing rate and busy time metrics of the individual job vertexes.
@@ -260,7 +260,7 @@ job.autoscaler.metrics.window : 3m
 > `ScalingReport` will show the recommended parallelism for each vertex.
 
 After the flink job starts, please start the StandaloneAutoscaler process by the
-following command. Please download released autoscaler-standalone jar from 
+following command. Please download released autoscaler-standalone jar from
 [here](https://repo.maven.apache.org/maven2/org/apache/flink/flink-autoscaler-standalone/) first.
 
 ```
@@ -270,12 +270,12 @@ org.apache.flink.autoscaler.standalone.StandaloneAutoscalerEntrypoint \
 --autoscaler.standalone.fetcher.flink-cluster.port 8081
 ```
 
-Updating the `autoscaler.standalone.fetcher.flink-cluster.host` and `autoscaler.standalone.fetcher.flink-cluster.port` 
+Updating the `autoscaler.standalone.fetcher.flink-cluster.host` and `autoscaler.standalone.fetcher.flink-cluster.port`
 based on your flink cluster. In general, the host and port are the same as Flink WebUI.
 
 ### Using the JDBC Autoscaler State Store
 
-A driver dependency is required to connect to a specified database. Here are drivers currently supported, 
+A driver dependency is required to connect to a specified database. Here are drivers currently supported,
 please download JDBC driver and initialize database and table first.
 
 | Driver     | Group Id                   | Artifact Id            | JAR                                                                             | Schema                  |
@@ -298,7 +298,7 @@ org.apache.flink.autoscaler.standalone.StandaloneAutoscalerEntrypoint \
 --autoscaler.standalone.state-store.jdbc.username root
 ```
 
-All supported options for autoscaler standalone can be viewed 
+All supported options for autoscaler standalone can be viewed
 [here]({{< ref "docs/operations/configuration#autoscaler-standalone-configuration" >}}).
 
 ### Extensibility of autoscaler standalone
