@@ -19,6 +19,7 @@ package org.apache.flink.autoscaler.tuning;
 
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.configuration.FallbackKey;
 
 import lombok.Getter;
@@ -37,14 +38,8 @@ public class ConfigChanges {
     /** Removals which will be removed from the existing config. */
     @Getter private final Set<String> removals = new HashSet<>();
 
-    private final transient Configuration confObject = new Configuration();
-
     public <T> ConfigChanges addOverride(ConfigOption<T> configOption, T value) {
-        // Slightly awkward but safe way to work with the limited API of the Configuration class.
-        // We want to avoid using the serialization code of Configuration and use Strings instead.
-        confObject.set(configOption, value);
-        overrides.putAll(confObject.toMap());
-        confObject.removeKey(configOption.key());
+        overrides.put(configOption.key(), ConfigurationUtils.convertValue(value, String.class));
         return this;
     }
 
