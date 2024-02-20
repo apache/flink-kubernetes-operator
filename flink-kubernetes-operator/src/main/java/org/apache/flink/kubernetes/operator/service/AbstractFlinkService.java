@@ -926,9 +926,9 @@ public abstract class AbstractFlinkService implements FlinkService {
     @VisibleForTesting
     boolean waitForDeploymentToBeRemoved(String namespace, String deploymentName, long timeout) {
         LOG.info(
-                "Waiting for Deployment {} to shut down with {} ms timeout...",
+                "Waiting for Deployment {} to shut down with {} seconds timeout...",
                 deploymentName,
-                timeout);
+                timeout / 1000);
 
         try {
             kubernetesClient
