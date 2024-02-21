@@ -235,23 +235,6 @@ public class MemoryTuning {
         return ctx.getTaskManagerMemory().orElse(MemorySize.ZERO);
     }
 
-    private static MemorySize adjustTotalTmMemory(
-            JobAutoScalerContext<?> ctx, long totalDiffBytes) {
-        var specTaskManagerMemory = ctx.getTaskManagerMemory().orElse(MemorySize.ZERO);
-        if (specTaskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
-            LOG.warn("Spec TaskManager memory size could not be determined.");
-            return MemorySize.ZERO;
-        }
-
-        long newTotalMemBytes = specTaskManagerMemory.getBytes() + totalDiffBytes;
-        // TM container memory can never grow beyond the user-specified max memory
-        newTotalMemBytes = Math.min(newTotalMemBytes, specTaskManagerMemory.getBytes());
-
-        MemorySize totalMemory = new MemorySize(newTotalMemBytes);
-        LOG.info("Setting new total TaskManager memory to {}", totalMemory);
-        return totalMemory;
-    }
-
     private static ProcessMemoryOptions getMemoryOptions() {
         return new ProcessMemoryOptions(
                 Arrays.asList(
