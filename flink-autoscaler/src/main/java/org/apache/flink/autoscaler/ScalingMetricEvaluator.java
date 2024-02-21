@@ -57,7 +57,6 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.LOAD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MANAGED_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.METASPACE_MEMORY_USED;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.NETWORK_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_TASK_SLOTS_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.OBSERVED_TPR;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
@@ -323,7 +322,6 @@ public class ScalingMetricEvaluator {
         populateMetric(HEAP_MAX_USAGE_RATIO, metricHistory, out);
         populateMetric(HEAP_MEMORY_USED, metricHistory, out);
         populateMetric(MANAGED_MEMORY_USED, metricHistory, out);
-        populateMetric(NETWORK_MEMORY_USED, metricHistory, out);
         populateMetric(METASPACE_MEMORY_USED, metricHistory, out);
 
         out.put(

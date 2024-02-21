@@ -50,7 +50,6 @@ import static org.apache.flink.autoscaler.metrics.FlinkMetric.HEAP_MEMORY_MAX;
 import static org.apache.flink.autoscaler.metrics.FlinkMetric.HEAP_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.FlinkMetric.MANAGED_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.FlinkMetric.METASPACE_MEMORY_USED;
-import static org.apache.flink.autoscaler.metrics.FlinkMetric.NETWORK_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.FlinkMetric.TOTAL_GC_TIME_PER_SEC;
 
 /** Metric collector using flink rest api. */
@@ -63,7 +62,6 @@ public class RestApiMetricsCollector<KEY, Context extends JobAutoScalerContext<K
                     "Status.JVM.Memory.Heap.Max", HEAP_MEMORY_MAX,
                     "Status.JVM.Memory.Heap.Used", HEAP_MEMORY_USED,
                     "Status.Flink.Memory.Managed.Used", MANAGED_MEMORY_USED,
-                    "Status.Shuffle.Netty.UsedMemory", NETWORK_MEMORY_USED,
                     "Status.JVM.Memory.Metaspace.Used", METASPACE_MEMORY_USED);
     private static final Map<String, FlinkMetric> TM_METRIC_NAMES_WITH_GC =
             ImmutableMap.<String, FlinkMetric>builder()

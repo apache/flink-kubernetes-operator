@@ -44,7 +44,6 @@ import java.util.Map;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MANAGED_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.METASPACE_MEMORY_USED;
-import static org.apache.flink.autoscaler.metrics.ScalingMetric.NETWORK_MEMORY_USED;
 
 /** Tunes the TaskManager memory. */
 public class MemoryTuning {
@@ -104,12 +103,11 @@ public class MemoryTuning {
         var globalMetrics = evaluatedMetrics.getGlobalMetrics();
         // The order matters in case the memory usage is higher than the maximum available memory.
         // Managed memory comes last because it can grow arbitrary for RocksDB jobs.
+        MemorySize newNetworkSize = adjustNetworkMemory(specNetworkSize, memBudget);
         MemorySize newHeapSize =
                 determineNewSize(getUsage(HEAP_MEMORY_USED, globalMetrics), config, memBudget);
         MemorySize newMetaspaceSize =
                 determineNewSize(getUsage(METASPACE_MEMORY_USED, globalMetrics), config, memBudget);
-        MemorySize newNetworkSize =
-                determineNewSize(getUsage(NETWORK_MEMORY_USED, globalMetrics), config, memBudget);
         MemorySize newManagedSize =
                 adjustManagedMemory(
                         getUsage(MANAGED_MEMORY_USED, globalMetrics),
@@ -218,6 +216,13 @@ public class MemoryTuning {
         } else {
             return managedMemoryConfigured;
         }
+    }
+
+    private static MemorySize adjustNetworkMemory(MemorySize usage, MemoryBudget memBudget) {
+        // TODO mxm: Follow-up to tune network memory via
+        // https://issues.apache.org/jira/browse/FLINK-34471
+        long networkBytes = memBudget.budget(usage.getBytes());
+        return new MemorySize(networkBytes);
     }
 
     private static MemorySize getUsage(

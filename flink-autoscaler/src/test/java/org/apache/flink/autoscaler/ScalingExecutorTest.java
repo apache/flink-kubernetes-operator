@@ -277,8 +277,6 @@ public class ScalingExecutorTest {
                         EvaluatedScalingMetric.avg(MemorySize.parse("5 Gb").getBytes()),
                         ScalingMetric.MANAGED_MEMORY_USED,
                         EvaluatedScalingMetric.avg(MemorySize.parse("2 Gb").getBytes()),
-                        ScalingMetric.NETWORK_MEMORY_USED,
-                        EvaluatedScalingMetric.avg(MemorySize.parse("512 mb").getBytes()),
                         ScalingMetric.METASPACE_MEMORY_USED,
                         EvaluatedScalingMetric.avg(MemorySize.parse("300 mb").getBytes()),
                         ScalingMetric.HEAP_MAX_USAGE_RATIO,
@@ -296,17 +294,17 @@ public class ScalingExecutorTest {
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
-                                "0.631",
+                                "0.561",
                                 TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.033",
+                                "0.14",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "360 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.124",
+                                "0.097",
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "8672142950 bytes"));
+                                "11114905646 bytes"));
     }
 
     @ParameterizedTest

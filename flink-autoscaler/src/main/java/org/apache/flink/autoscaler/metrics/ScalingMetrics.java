@@ -203,11 +203,6 @@ public class ScalingMetrics {
             out.put(ScalingMetric.MANAGED_MEMORY_USED, managedMemory.getMax());
         }
 
-        var networkMemory = collectedTmMetrics.get(FlinkMetric.NETWORK_MEMORY_USED);
-        if (networkMemory != null) {
-            out.put(ScalingMetric.NETWORK_MEMORY_USED, networkMemory.getMax());
-        }
-
         var metaspaceMemory = collectedTmMetrics.get(FlinkMetric.METASPACE_MEMORY_USED);
         if (metaspaceMemory != null) {
             out.put(ScalingMetric.METASPACE_MEMORY_USED, metaspaceMemory.getMax());

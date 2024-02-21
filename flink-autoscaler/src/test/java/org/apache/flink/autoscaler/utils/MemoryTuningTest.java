@@ -80,8 +80,6 @@ public class MemoryTuningTest {
                         EvaluatedScalingMetric.avg(MemorySize.ofMebiBytes(5096).getBytes()),
                         ScalingMetric.MANAGED_MEMORY_USED,
                         EvaluatedScalingMetric.avg(MemorySize.ofMebiBytes(10000).getBytes()),
-                        ScalingMetric.NETWORK_MEMORY_USED,
-                        EvaluatedScalingMetric.avg(MemorySize.ofMebiBytes(300).getBytes()),
                         ScalingMetric.METASPACE_MEMORY_USED,
                         EvaluatedScalingMetric.avg(MemorySize.ofMebiBytes(100).getBytes()));
 
@@ -94,17 +92,17 @@ public class MemoryTuningTest {
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
-                                "0.641",
+                                "0.562",
                                 TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.02",
+                                "0.14",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "120 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.132",
+                                "0.099",
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "8123527987 bytes"));
+                                "10833048417 bytes"));
 
         assertThat(configChanges.getRemovals())
                 .containsExactlyInAnyOrder(
@@ -127,9 +125,9 @@ public class MemoryTuningTest {
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
-                                "0.777",
+                                "0.689",
                                 TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.012",
+                                "0.1",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "120 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
@@ -150,15 +148,15 @@ public class MemoryTuningTest {
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
                                 "0.0",
                                 TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.055",
+                                "0.32",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "120 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.132",
+                                "0.099",
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "8123527987 bytes"));
+                                "10833048417 bytes"));
 
         // Test tuning disabled
         config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, false);

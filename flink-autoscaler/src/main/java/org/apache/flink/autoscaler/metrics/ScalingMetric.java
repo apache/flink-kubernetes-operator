@@ -83,9 +83,6 @@ public enum ScalingMetric {
     /** Measured max managed memory size in bytes. */
     MANAGED_MEMORY_USED(true),
 
-    /** Measured max network memory size in bytes. */
-    NETWORK_MEMORY_USED(true),
-
     /** Measured max metaspace memory size in bytes. */
     METASPACE_MEMORY_USED(true),
 

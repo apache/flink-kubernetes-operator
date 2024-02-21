@@ -497,8 +497,6 @@ public class ScalingMetricsTest {
                         100.,
                         ScalingMetric.MANAGED_MEMORY_USED,
                         133.,
-                        ScalingMetric.NETWORK_MEMORY_USED,
-                        48.,
                         ScalingMetric.METASPACE_MEMORY_USED,
                         22.),
                 ScalingMetrics.computeGlobalMetrics(
@@ -508,8 +506,6 @@ public class ScalingMetricsTest {
                                 aggAvgMax(75, 100),
                                 FlinkMetric.MANAGED_MEMORY_USED,
                                 aggAvgMax(128, 133),
-                                FlinkMetric.NETWORK_MEMORY_USED,
-                                aggAvgMax(42, 48),
                                 FlinkMetric.METASPACE_MEMORY_USED,
                                 aggAvgMax(11, 22),
                                 FlinkMetric.HEAP_MEMORY_MAX,
