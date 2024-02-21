@@ -20,7 +20,6 @@ package org.apache.flink.autoscaler.config;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
-import org.apache.flink.configuration.MemorySize;
 
 import java.time.Duration;
 import java.util.List;
@@ -266,14 +265,6 @@ public class AutoScalerOptions {
                     .withFallbackKeys(oldOperatorConfigKey("memory.tuning.overhead"))
                     .withDescription(
                             "Overhead to add to tuning decisions (0-1). This ensures spare capacity and allows the memory to grow beyond the dynamically computed limits, but never beyond the original memory limits.");
-
-    public static final ConfigOption<MemorySize> MEMORY_TUNING_MIN =
-            autoScalerConfig("memory.tuning.min")
-                    .memoryType()
-                    .defaultValue(MemorySize.ofMebiBytes(256))
-                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.min"))
-                    .withDescription(
-                            "If memory tuning is enabled, the minimum amount of TaskManager memory for each memory component (heap, managed, network).");
 
     public static final ConfigOption<Boolean> MEMORY_TUNING_MAXIMIZE_MANAGED_MEMORY =
             autoScalerConfig("memory.tuning.maximize-managed-memory")

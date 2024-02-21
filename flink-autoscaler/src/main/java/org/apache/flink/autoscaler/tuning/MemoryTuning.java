@@ -197,12 +197,6 @@ public class MemoryTuning {
         double overheadFactor = 1 + config.get(AutoScalerOptions.MEMORY_TUNING_OVERHEAD);
         long targetSizeBytes = (long) (usage.getBytes() * overheadFactor);
 
-        // Lower limit is the minimum configured memory size
-        targetSizeBytes =
-                Math.max(
-                        config.get(AutoScalerOptions.MEMORY_TUNING_MIN).getBytes(),
-                        targetSizeBytes);
-
         // Upper limit is the available memory budget
         targetSizeBytes = memoryBudget.budget(targetSizeBytes);
 
