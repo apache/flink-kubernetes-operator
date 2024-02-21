@@ -134,7 +134,8 @@ public class MemoryTuning {
         // Update total memory according to memory diffs
         final MemorySize totalMemory =
                 new MemorySize(maxMemoryBySpec.getBytes() - memBudget.getRemaining());
-        if (totalMemory.equals(MemorySize.ZERO)) {
+        if (totalMemory.compareTo(MemorySize.ZERO) <= 0) {
+            LOG.warn("Invalid total memory configuration: {}", totalMemory);
             return EMPTY_CONFIG;
         }
 

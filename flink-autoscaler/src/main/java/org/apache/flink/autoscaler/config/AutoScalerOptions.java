@@ -258,7 +258,8 @@ public class AutoScalerOptions {
                     .defaultValue(false)
                     .withFallbackKeys(oldOperatorConfigKey("memory.tuning.enabled"))
                     .withDescription(
-                            "If enabled, the initial amount of memory specified for TaskManagers will be reduced according to the observed needs.");
+                            "If enabled, the initial amount of memory specified for TaskManagers will be reduced/increased according to the observed needs.");
+
 
     public static final ConfigOption<MemoryTuning.UsageTarget> MEMORY_TUNING_TARGET =
             autoScalerConfig("memory.tuning.target-usage")
