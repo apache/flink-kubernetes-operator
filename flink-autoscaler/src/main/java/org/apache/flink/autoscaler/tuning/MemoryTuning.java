@@ -55,12 +55,6 @@ public class MemoryTuning {
 
     private static final ConfigChanges EMPTY_CONFIG = new ConfigChanges();
 
-    /** What memory usage to target. */
-    public enum UsageTarget {
-        AVG,
-        MAX
-    }
-
     /**
      * Emits a Configuration which contains overrides for the current configuration. We are not
      * modifying the config directly, but we are emitting a new configuration which contains any

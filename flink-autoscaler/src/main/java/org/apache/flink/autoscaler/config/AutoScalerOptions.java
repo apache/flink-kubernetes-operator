@@ -18,7 +18,6 @@
 package org.apache.flink.autoscaler.config;
 
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
-import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
 import org.apache.flink.configuration.MemorySize;
@@ -259,15 +258,6 @@ public class AutoScalerOptions {
                     .withFallbackKeys(oldOperatorConfigKey("memory.tuning.enabled"))
                     .withDescription(
                             "If enabled, the initial amount of memory specified for TaskManagers will be reduced/increased according to the observed needs.");
-
-
-    public static final ConfigOption<MemoryTuning.UsageTarget> MEMORY_TUNING_TARGET =
-            autoScalerConfig("memory.tuning.target-usage")
-                    .enumType(MemoryTuning.UsageTarget.class)
-                    .defaultValue(MemoryTuning.UsageTarget.MAX)
-                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.target-usage"))
-                    .withDescription(
-                            "The memory usage to target. Average usage (AVG) will yield better savings. Max usage will yield more conservative savings.");
 
     public static final ConfigOption<Double> MEMORY_TUNING_OVERHEAD =
             autoScalerConfig("memory.tuning.overhead")
