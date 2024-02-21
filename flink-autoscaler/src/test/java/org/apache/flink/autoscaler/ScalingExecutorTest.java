@@ -296,17 +296,17 @@ public class ScalingExecutorTest {
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
-                                "0.263",
+                                "0.631",
                                 TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.066",
+                                "0.033",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "360 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.095",
+                                "0.124",
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "11249123327 bytes"));
+                                "8672142950 bytes"));
     }
 
     @ParameterizedTest

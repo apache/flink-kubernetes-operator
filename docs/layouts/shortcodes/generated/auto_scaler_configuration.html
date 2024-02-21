@@ -66,7 +66,13 @@
             <td><h5>job.autoscaler.memory.tuning.enabled</h5></td>
             <td style="word-wrap: break-word;">false</td>
             <td>Boolean</td>
-            <td>If enabled, the initial amount of memory specified for TaskManagers will be reduced according to the observed needs.</td>
+            <td>If enabled, the initial amount of memory specified for TaskManagers will be reduced/increased according to the observed needs.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.memory.tuning.maximize-managed-memory</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>If enabled and managed memory is used (e.g. RocksDB turned on), any reduction of heap, network, or metaspace memory will increase the managed memory.</td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.memory.tuning.min</h5></td>

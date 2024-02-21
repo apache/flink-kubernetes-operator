@@ -275,6 +275,14 @@ public class AutoScalerOptions {
                     .withDescription(
                             "If memory tuning is enabled, the minimum amount of TaskManager memory for each memory component (heap, managed, network).");
 
+    public static final ConfigOption<Boolean> MEMORY_TUNING_MAXIMIZE_MANAGED_MEMORY =
+            autoScalerConfig("memory.tuning.maximize-managed-memory")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.maximize-managed-memory"))
+                    .withDescription(
+                            "If enabled and managed memory is used (e.g. RocksDB turned on), any reduction of heap, network, or metaspace memory will increase the managed memory.");
+
     public static final ConfigOption<Integer> VERTEX_SCALING_HISTORY_COUNT =
             autoScalerConfig("history.max.count")
                     .intType()

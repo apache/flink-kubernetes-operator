@@ -105,13 +105,17 @@ public class MemoryTuning {
         // The order matters in case the memory usage is higher than the maximum available memory.
         // Managed memory comes last because it can grow arbitrary for RocksDB jobs.
         MemorySize newHeapSize =
-                determineNewSize(HEAP_MEMORY_USED, globalMetrics, config, memBudget);
+                determineNewSize(getUsage(HEAP_MEMORY_USED, globalMetrics), config, memBudget);
         MemorySize newMetaspaceSize =
-                determineNewSize(METASPACE_MEMORY_USED, globalMetrics, config, memBudget);
+                determineNewSize(getUsage(METASPACE_MEMORY_USED, globalMetrics), config, memBudget);
         MemorySize newNetworkSize =
-                determineNewSize(NETWORK_MEMORY_USED, globalMetrics, config, memBudget);
+                determineNewSize(getUsage(NETWORK_MEMORY_USED, globalMetrics), config, memBudget);
         MemorySize newManagedSize =
-                determineNewSize(MANAGED_MEMORY_USED, globalMetrics, config, memBudget);
+                adjustManagedMemory(
+                        getUsage(MANAGED_MEMORY_USED, globalMetrics),
+                        specManagedSize,
+                        config,
+                        memBudget);
         LOG.info(
                 "Optimized memory sizes: heap: {} managed: {}, network: {}, meta: {}",
                 newHeapSize.toHumanReadableString(),
@@ -188,14 +192,10 @@ public class MemoryTuning {
     }
 
     private static MemorySize determineNewSize(
-            ScalingMetric scalingMetric,
-            Map<ScalingMetric, EvaluatedScalingMetric> globalMetrics,
-            Configuration config,
-            MemoryBudget memoryBudget) {
+            MemorySize usage, Configuration config, MemoryBudget memoryBudget) {
 
         double overheadFactor = 1 + config.get(AutoScalerOptions.MEMORY_TUNING_OVERHEAD);
-        long targetSizeBytes =
-                (long) (getMemorySize(scalingMetric, globalMetrics).getBytes() * overheadFactor);
+        long targetSizeBytes = (long) (usage.getBytes() * overheadFactor);
 
         // Lower limit is the minimum configured memory size
         targetSizeBytes =
@@ -209,10 +209,27 @@ public class MemoryTuning {
         return new MemorySize(targetSizeBytes);
     }
 
-    private static MemorySize getMemorySize(
+    private static MemorySize adjustManagedMemory(
+            MemorySize managedMemoryUsage,
+            MemorySize managedMemoryConfigured,
+            Configuration config,
+            MemoryBudget memBudget) {
+        // Managed memory usage can't accurately be measured yet.
+        // It is either zero (no usage) or an opaque amount of memory (RocksDB).
+        if (managedMemoryUsage.compareTo(MemorySize.ZERO) <= 0) {
+            return MemorySize.ZERO;
+        } else if (config.get(AutoScalerOptions.MEMORY_TUNING_MAXIMIZE_MANAGED_MEMORY)) {
+            long maxManagedMemorySize = memBudget.budget(Long.MAX_VALUE);
+            return new MemorySize(maxManagedMemorySize);
+        } else {
+            return managedMemoryConfigured;
+        }
+    }
+
+    private static MemorySize getUsage(
             ScalingMetric scalingMetric, Map<ScalingMetric, EvaluatedScalingMetric> globalMetrics) {
         MemorySize heapUsed = new MemorySize((long) globalMetrics.get(scalingMetric).getAverage());
-        LOG.info("{}: {}", scalingMetric, heapUsed);
+        LOG.debug("{}: {}", scalingMetric, heapUsed);
         return heapUsed;
     }
 

@@ -34,6 +34,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
@@ -93,17 +94,17 @@ public class MemoryTuningTest {
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
-                                "0.645",
+                                "0.641",
                                 TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.019",
+                                "0.02",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 config.get(AutoScalerOptions.MEMORY_TUNING_MIN).toString(),
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.052",
+                                "0.13",
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "20849046323 bytes"));
+                                "8266134323 bytes"));
 
         assertThat(configChanges.getRemovals())
                 .containsExactlyInAnyOrder(
@@ -118,6 +119,46 @@ public class MemoryTuningTest {
         assertThat(eventHandler.events.poll().getMessage())
                 .startsWith(
                         "Memory tuning recommends the following configuration (automatic tuning is enabled):");
+
+        // Test maximize managed memory
+        config.set(AutoScalerOptions.MEMORY_TUNING_MAXIMIZE_MANAGED_MEMORY, true);
+        configChanges = MemoryTuning.tuneTaskManagerHeapMemory(context, metrics, eventHandler);
+        assertThat(configChanges.getOverrides())
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of(
+                                TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
+                                "0.776",
+                                TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
+                                "0.012",
+                                TaskManagerOptions.JVM_METASPACE.key(),
+                                config.get(AutoScalerOptions.MEMORY_TUNING_MIN).toString(),
+                                TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
+                                "0.033",
+                                TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
+                                "0 bytes",
+                                TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
+                                totalMemory.toString()));
+
+        // Test managed memory is zero
+        metrics = new EvaluatedMetrics(vertexMetrics, new HashMap<>(globalMetrics));
+        metrics.getGlobalMetrics()
+                .put(ScalingMetric.MANAGED_MEMORY_USED, EvaluatedScalingMetric.avg(0));
+        configChanges = MemoryTuning.tuneTaskManagerHeapMemory(context, metrics, eventHandler);
+        assertThat(configChanges.getOverrides())
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of(
+                                TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
+                                "0.0",
+                                TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
+                                "0.055",
+                                TaskManagerOptions.JVM_METASPACE.key(),
+                                config.get(AutoScalerOptions.MEMORY_TUNING_MIN).toString(),
+                                TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
+                                "0.13",
+                                TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
+                                "0 bytes",
+                                TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
+                                "8266134323 bytes"));
 
         // Test tuning disabled
         config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, false);
