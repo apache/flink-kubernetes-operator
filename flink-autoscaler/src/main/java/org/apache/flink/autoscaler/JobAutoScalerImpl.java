@@ -26,7 +26,6 @@ import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
-import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.util.Preconditions;
@@ -217,12 +216,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
         var parallelismChanged =
                 scalingExecutor.scaleResource(
-                        ctx,
-                        evaluatedMetrics,
-                        scalingHistory,
-                        scalingTracking,
-                        now,
-                        new JobTopology());
+                        ctx, evaluatedMetrics, scalingHistory, scalingTracking, now, jobTopology);
 
         if (parallelismChanged) {
             autoscalerMetrics.incrementScaling();
