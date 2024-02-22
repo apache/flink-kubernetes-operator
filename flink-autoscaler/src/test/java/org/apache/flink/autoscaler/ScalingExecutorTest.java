@@ -334,8 +334,10 @@ public class ScalingExecutorTest {
                         Map.of(
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
                                 "0.652",
-                                TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.002",
+                                TaskManagerOptions.NETWORK_MEMORY_MIN.key(),
+                                "25 mb",
+                                TaskManagerOptions.NETWORK_MEMORY_MAX.key(),
+                                "25 mb",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "360 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),

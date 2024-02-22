@@ -175,9 +175,8 @@ public class MemoryTuning {
                 getFraction(newManagedSize, flinkMemorySize));
         tuningConfig.addRemoval(TaskManagerOptions.MANAGED_MEMORY_SIZE);
 
-        tuningConfig.addOverride(
-                TaskManagerOptions.NETWORK_MEMORY_FRACTION,
-                getFraction(newNetworkSize, flinkMemorySize));
+        tuningConfig.addOverride(TaskManagerOptions.NETWORK_MEMORY_MIN, newNetworkSize);
+        tuningConfig.addOverride(TaskManagerOptions.NETWORK_MEMORY_MAX, newNetworkSize);
 
         tuningConfig.addOverride(
                 TaskManagerOptions.JVM_OVERHEAD_FRACTION,
