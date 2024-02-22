@@ -26,6 +26,8 @@ import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
+import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -43,6 +45,7 @@ import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
@@ -166,12 +169,22 @@ public class ScalingExecutorTest {
         var now = Instant.now();
         assertFalse(
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        now,
+                        new JobTopology()));
         // filter operator should scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of());
         assertTrue(
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        now,
+                        new JobTopology()));
     }
 
     @Test
@@ -196,7 +209,12 @@ public class ScalingExecutorTest {
                         dummyGlobalMetrics);
         assertFalse(
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        now,
+                        new JobTopology()));
         // scaling execution outside excluded periods
         excludedPeriod =
                 new StringBuilder(localTime.plusSeconds(100).toString().split("\\.")[0])
@@ -206,7 +224,12 @@ public class ScalingExecutorTest {
         conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of(excludedPeriod));
         assertTrue(
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        now,
+                        new JobTopology()));
     }
 
     @Test
@@ -230,7 +253,12 @@ public class ScalingExecutorTest {
         // Would normally scale without resource usage check
         assertTrue(
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        now,
+                        new JobTopology()));
 
         scalingDecisionExecutor =
                 new ScalingExecutor<>(
@@ -254,7 +282,8 @@ public class ScalingExecutorTest {
                         metrics,
                         new HashMap<>(),
                         new ScalingTracking(),
-                        now));
+                        now,
+                        new JobTopology()));
     }
 
     @Test
@@ -287,24 +316,34 @@ public class ScalingExecutorTest {
                 Map.of(source, evaluated(10, 100, 50, 0), sink, evaluated(10, 100, 50, 0));
         var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
 
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Set.of(), 10, 1000, false, null),
+                        new VertexInfo(sink, Set.of(source), 10, 1000, false, null));
+
         assertTrue(
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        now,
+                        jobTopology));
         assertThat(stateStore.getConfigChanges(context).getOverrides())
                 .containsExactlyInAnyOrderEntriesOf(
                         Map.of(
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
-                                "0.561",
+                                "0.652",
                                 TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
-                                "0.14",
+                                "0.002",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "360 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.097",
+                                "0.134",
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "11114905646 bytes"));
+                                "7681 mb"));
     }
 
     @ParameterizedTest
@@ -341,11 +380,21 @@ public class ScalingExecutorTest {
         assertEquals(
                 scalingEnabled,
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        now,
+                        new JobTopology()));
         assertEquals(
                 scalingEnabled,
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        now,
+                        new JobTopology()));
         int expectedSize = (interval == null || interval.toMillis() > 0) && !scalingEnabled ? 1 : 2;
         assertEquals(expectedSize, eventCollector.events.size());
 
@@ -379,7 +428,12 @@ public class ScalingExecutorTest {
         assertEquals(
                 scalingEnabled,
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), now));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        now,
+                        new JobTopology()));
         var event2 = eventCollector.events.poll();
         assertThat(event2).isNotNull();
         assertThat(event2.getContext()).isSameAs(event.getContext());
@@ -407,7 +461,12 @@ public class ScalingExecutorTest {
         // Baseline, no GC/Heap metrics
         assertTrue(
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), Instant.now()));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        Instant.now(),
+                        new JobTopology()));
 
         // Just below the thresholds
         metrics =
@@ -420,7 +479,12 @@ public class ScalingExecutorTest {
                                 new EvaluatedScalingMetric(0.9, 0.79)));
         assertTrue(
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), Instant.now()));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        Instant.now(),
+                        new JobTopology()));
 
         eventCollector.events.clear();
 
@@ -435,7 +499,12 @@ public class ScalingExecutorTest {
                                 new EvaluatedScalingMetric(0.9, 0.79)));
         assertFalse(
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), Instant.now()));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        Instant.now(),
+                        new JobTopology()));
         assertEquals("MemoryPressure", eventCollector.events.poll().getReason());
         assertTrue(eventCollector.events.isEmpty());
 
@@ -450,7 +519,12 @@ public class ScalingExecutorTest {
                                 new EvaluatedScalingMetric(0.6, 0.81)));
         assertFalse(
                 scalingDecisionExecutor.scaleResource(
-                        context, metrics, new HashMap<>(), new ScalingTracking(), Instant.now()));
+                        context,
+                        metrics,
+                        new HashMap<>(),
+                        new ScalingTracking(),
+                        Instant.now(),
+                        new JobTopology()));
         assertEquals("MemoryPressure", eventCollector.events.poll().getReason());
         assertTrue(eventCollector.events.isEmpty());
     }

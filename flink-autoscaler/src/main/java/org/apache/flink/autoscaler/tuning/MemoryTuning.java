@@ -18,16 +18,22 @@
 package org.apache.flink.autoscaler.tuning;
 
 import org.apache.flink.autoscaler.JobAutoScalerContext;
+import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.autoscaler.topology.VertexInfo;
+import org.apache.flink.autoscaler.utils.ResourceCheckUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.configuration.MemorySize;
+import org.apache.flink.configuration.NettyShuffleEnvironmentOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.configuration.UnmodifiableConfiguration;
+import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.util.config.memory.CommonProcessMemorySpec;
 import org.apache.flink.runtime.util.config.memory.JvmMetaspaceAndOverheadOptions;
 import org.apache.flink.runtime.util.config.memory.ProcessMemoryOptions;
@@ -38,6 +44,8 @@ import org.apache.flink.runtime.util.config.memory.taskmanager.TaskExecutorFlink
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -63,6 +71,8 @@ public class MemoryTuning {
     public static ConfigChanges tuneTaskManagerHeapMemory(
             JobAutoScalerContext<?> context,
             EvaluatedMetrics evaluatedMetrics,
+            JobTopology jobTopology,
+            Map<JobVertexID, ScalingSummary> scalingSummaries,
             AutoScalerEventHandler eventHandler) {
 
         // Please note that this config is the original configuration created from the user spec.
@@ -103,7 +113,13 @@ public class MemoryTuning {
         var globalMetrics = evaluatedMetrics.getGlobalMetrics();
         // The order matters in case the memory usage is higher than the maximum available memory.
         // Managed memory comes last because it can grow arbitrary for RocksDB jobs.
-        MemorySize newNetworkSize = adjustNetworkMemory(specNetworkSize, memBudget);
+        MemorySize newNetworkSize =
+                adjustNetworkMemory(
+                        jobTopology,
+                        ResourceCheckUtils.computeNewParallelisms(
+                                scalingSummaries, evaluatedMetrics.getVertexMetrics()),
+                        config,
+                        memBudget);
         MemorySize newHeapSize =
                 determineNewSize(getUsage(HEAP_MEMORY_USED, globalMetrics), config, memBudget);
         MemorySize newMetaspaceSize =
@@ -218,11 +234,48 @@ public class MemoryTuning {
         }
     }
 
-    private static MemorySize adjustNetworkMemory(MemorySize usage, MemoryBudget memBudget) {
-        // TODO mxm: Follow-up to tune network memory via
-        // https://issues.apache.org/jira/browse/FLINK-34471
-        long networkBytes = memBudget.budget(usage.getBytes());
-        return new MemorySize(networkBytes);
+    /* Calculate the maximum amount of memory for a TaskManager required by all its subtask buffer pools.
+     *
+     * See https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/memory/network_mem_tuning/#network-buffer-lifecycle
+     */
+    private static MemorySize adjustNetworkMemory(
+            JobTopology jobTopology,
+            Map<JobVertexID, Integer> updatedParallelisms,
+            Configuration config,
+            MemoryBudget memBudget) {
+
+        final long buffersPerChannel =
+                config.get(NettyShuffleEnvironmentOptions.NETWORK_BUFFERS_PER_CHANNEL);
+        final long floatingBuffers =
+                config.get(NettyShuffleEnvironmentOptions.NETWORK_EXTRA_BUFFERS_PER_GATE);
+        final long memorySegmentBytes =
+                config.get(TaskManagerOptions.MEMORY_SEGMENT_SIZE).getBytes();
+
+        long maxNetworkMemory = 0;
+        for (VertexInfo vertexInfo : jobTopology.getVertexInfos().values()) {
+            // Add max amount of memory for each input gate
+            for (JobVertexID input : vertexInfo.getInputs()) {
+                int inputParallelism = updatedParallelisms.get(input);
+                maxNetworkMemory +=
+                        (inputParallelism * buffersPerChannel + floatingBuffers)
+                                * memorySegmentBytes;
+            }
+            // Add max amount of memory for each output gate
+            // Usually, there is just one output per task
+            for (JobVertexID output : vertexInfo.getOutputs()) {
+                int downstreamParallelism = updatedParallelisms.get(output);
+                maxNetworkMemory +=
+                        (downstreamParallelism * buffersPerChannel + floatingBuffers)
+                                * memorySegmentBytes;
+            }
+        }
+
+        // Each task slot will potentially host all runtime subtasks if slot sharing enabled.
+        // If slot sharing is disabled, this will use more memory than necessary, we better
+        // overprovision slightly than failing with "Insufficient Network buffers".
+        maxNetworkMemory *= config.get(TaskManagerOptions.NUM_TASK_SLOTS);
+
+        return new MemorySize(memBudget.budget(maxNetworkMemory));
     }
 
     private static MemorySize getUsage(
@@ -255,10 +308,11 @@ public class MemoryTuning {
     }
 
     private static float getFraction(MemorySize enumerator, MemorySize denominator) {
-        // Round to three decimal places
-        return (float)
-                (Math.round(enumerator.getBytes() / (double) denominator.getBytes() * 1000)
-                        / 1000.);
+        // Round to three decimal places but make sure to round up values
+        // like 0.0002 to 0.001 instead of 0.0
+        return BigDecimal.valueOf(enumerator.getBytes() / (double) denominator.getBytes())
+                .setScale(3, RoundingMode.CEILING)
+                .floatValue();
     }
 
     /** Format config such that it can be directly used as a Flink configuration. */
