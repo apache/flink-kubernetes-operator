@@ -74,8 +74,14 @@ public enum ScalingMetric {
      */
     GC_PRESSURE(false),
 
-    /** Measured used heap size in bytes. */
-    HEAP_USED(true),
+    /** Measured max used heap size in bytes. */
+    HEAP_MEMORY_USED(true),
+
+    /** Measured max managed memory size in bytes. */
+    MANAGED_MEMORY_USED(true),
+
+    /** Measured max metaspace memory size in bytes. */
+    METASPACE_MEMORY_USED(true),
 
     /** Percentage of max heap used (between 0 and 1). */
     HEAP_MAX_USAGE_RATIO(true),

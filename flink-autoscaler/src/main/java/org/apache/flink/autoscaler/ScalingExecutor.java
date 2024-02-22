@@ -118,12 +118,15 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return false;
         }
 
-        var tuningConfig =
+        var configOverrides =
                 MemoryTuning.tuneTaskManagerHeapMemory(
                         context, evaluatedMetrics, autoScalerEventHandler);
 
         if (scalingWouldExceedClusterResources(
-                tuningConfig, evaluatedMetrics, scalingSummaries, context)) {
+                configOverrides.applyOverrides(conf),
+                evaluatedMetrics,
+                scalingSummaries,
+                context)) {
             return false;
         }
 
@@ -138,7 +141,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 getVertexParallelismOverrides(
                         evaluatedMetrics.getVertexMetrics(), scalingSummaries));
 
-        autoScalerStateStore.storeConfigOverrides(context, tuningConfig);
+        autoScalerStateStore.storeConfigChanges(context, configOverrides);
 
         return true;
     }
@@ -267,13 +270,13 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     }
 
     private boolean scalingWouldExceedClusterResources(
-            Configuration tuningConfig,
+            Configuration tunedConfig,
             EvaluatedMetrics evaluatedMetrics,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             JobAutoScalerContext<?> ctx) {
 
         final double taskManagerCpu = ctx.getTaskManagerCpu().orElse(0.);
-        final MemorySize taskManagerMemory = MemoryTuning.getTotalMemory(tuningConfig, ctx);
+        final MemorySize taskManagerMemory = MemoryTuning.getTotalMemory(tunedConfig, ctx);
 
         if (taskManagerCpu <= 0 || taskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
             // We can't extract the requirements, we can't make any assumptions

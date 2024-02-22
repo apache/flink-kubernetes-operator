@@ -20,7 +20,6 @@ package org.apache.flink.autoscaler.metrics;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
-import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -170,22 +169,22 @@ public class ScalingMetrics {
             out.put(ScalingMetric.GC_PRESSURE, gcTime.getMax() / 1000);
         }
 
-        var heapMax = collectedTmMetrics.get(FlinkMetric.HEAP_MAX);
-        var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_USED);
+        var heapMax = collectedTmMetrics.get(FlinkMetric.HEAP_MEMORY_MAX);
+        var heapUsed = collectedTmMetrics.get(FlinkMetric.HEAP_MEMORY_USED);
+
         if (heapMax != null && heapUsed != null) {
-            MemoryTuning.HeapUsageTarget heapTarget =
-                    conf.get(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET);
-            switch (heapTarget) {
-                case AVG:
-                    out.put(ScalingMetric.HEAP_USED, heapUsed.getAvg());
-                    break;
-                case MAX:
-                    out.put(ScalingMetric.HEAP_USED, heapUsed.getMax());
-                    break;
-                default:
-                    LOG.warn("Unknown value {} for heap target", heapTarget);
-            }
+            out.put(ScalingMetric.HEAP_MEMORY_USED, heapUsed.getMax());
             out.put(ScalingMetric.HEAP_MAX_USAGE_RATIO, heapUsed.getMax() / heapMax.getMax());
+        }
+
+        var managedMemory = collectedTmMetrics.get(FlinkMetric.MANAGED_MEMORY_USED);
+        if (managedMemory != null) {
+            out.put(ScalingMetric.MANAGED_MEMORY_USED, managedMemory.getMax());
+        }
+
+        var metaspaceMemory = collectedTmMetrics.get(FlinkMetric.METASPACE_MEMORY_USED);
+        if (metaspaceMemory != null) {
+            out.put(ScalingMetric.METASPACE_MEMORY_USED, metaspaceMemory.getMax());
         }
 
         return out;

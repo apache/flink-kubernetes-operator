@@ -22,7 +22,7 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.ScalingTracking;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import javax.annotation.Nonnull;
@@ -70,12 +70,12 @@ public interface AutoScalerStateStore<KEY, Context extends JobAutoScalerContext<
 
     void removeParallelismOverrides(Context jobContext) throws Exception;
 
-    void storeConfigOverrides(Context jobContext, Configuration configOverrides) throws Exception;
+    void storeConfigChanges(Context jobContext, ConfigChanges configChanges) throws Exception;
 
     @Nonnull
-    Configuration getConfigOverrides(Context jobContext) throws Exception;
+    ConfigChanges getConfigChanges(Context jobContext) throws Exception;
 
-    void removeConfigOverrides(Context jobContext) throws Exception;
+    void removeConfigChanges(Context jobContext) throws Exception;
 
     /** Removes all data from this context. Flush stil needs to be called. */
     void clearAll(Context jobContext) throws Exception;

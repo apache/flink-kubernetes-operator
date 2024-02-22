@@ -273,8 +273,12 @@ public class ScalingExecutorTest {
                 Map.of(
                         ScalingMetric.NUM_TASK_SLOTS_USED,
                         EvaluatedScalingMetric.of(9),
-                        ScalingMetric.HEAP_USED,
+                        ScalingMetric.HEAP_MEMORY_USED,
                         EvaluatedScalingMetric.avg(MemorySize.parse("5 Gb").getBytes()),
+                        ScalingMetric.MANAGED_MEMORY_USED,
+                        EvaluatedScalingMetric.avg(MemorySize.parse("2 Gb").getBytes()),
+                        ScalingMetric.METASPACE_MEMORY_USED,
+                        EvaluatedScalingMetric.avg(MemorySize.parse("300 mb").getBytes()),
                         ScalingMetric.HEAP_MAX_USAGE_RATIO,
                         EvaluatedScalingMetric.of(Double.NaN),
                         ScalingMetric.GC_PRESSURE,
@@ -286,12 +290,21 @@ public class ScalingExecutorTest {
         assertTrue(
                 scalingDecisionExecutor.scaleResource(
                         context, metrics, new HashMap<>(), new ScalingTracking(), now));
-        assertEquals(
-                "6.000gb (6442450944 bytes)",
-                stateStore
-                        .getConfigOverrides(context)
-                        .get(TaskManagerOptions.TASK_HEAP_MEMORY)
-                        .toHumanReadableString());
+        assertThat(stateStore.getConfigChanges(context).getOverrides())
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of(
+                                TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
+                                "0.561",
+                                TaskManagerOptions.NETWORK_MEMORY_FRACTION.key(),
+                                "0.14",
+                                TaskManagerOptions.JVM_METASPACE.key(),
+                                "360 mb",
+                                TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
+                                "0.097",
+                                TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
+                                "0 bytes",
+                                TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
+                                "11114905646 bytes"));
     }
 
     @ParameterizedTest

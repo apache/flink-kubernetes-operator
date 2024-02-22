@@ -19,7 +19,7 @@ package org.apache.flink.autoscaler.realizer;
 
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
-import org.apache.flink.configuration.Configuration;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 
 import java.util.Map;
 
@@ -37,5 +37,5 @@ public interface ScalingRealizer<KEY, Context extends JobAutoScalerContext<KEY>>
     void realizeParallelismOverrides(Context context, Map<String, String> parallelismOverrides);
 
     /** Updates the TaskManager memory configuration. */
-    void realizeConfigOverrides(Context context, Configuration configOverrides);
+    void realizeConfigOverrides(Context context, ConfigChanges configChanges);
 }

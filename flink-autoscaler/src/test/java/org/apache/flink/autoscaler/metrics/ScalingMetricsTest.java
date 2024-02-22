@@ -21,7 +21,6 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
-import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
@@ -247,40 +246,32 @@ public class ScalingMetricsTest {
     @Test
     public void testGlobalMetrics() {
         Configuration conf = new Configuration();
-        conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapUsageTarget.AVG);
         assertEquals(Map.of(), ScalingMetrics.computeGlobalMetrics(Map.of(), Map.of(), conf));
         assertEquals(
                 Map.of(),
                 ScalingMetrics.computeGlobalMetrics(
-                        Map.of(), Map.of(FlinkMetric.HEAP_USED, aggMax(100)), conf));
+                        Map.of(), Map.of(FlinkMetric.HEAP_MEMORY_USED, aggMax(100)), conf));
+
         assertEquals(
                 Map.of(
                         ScalingMetric.HEAP_MAX_USAGE_RATIO,
                         0.5,
-                        ScalingMetric.GC_PRESSURE,
-                        0.25,
-                        ScalingMetric.HEAP_USED,
-                        75.),
+                        ScalingMetric.HEAP_MEMORY_USED,
+                        100.,
+                        ScalingMetric.MANAGED_MEMORY_USED,
+                        133.,
+                        ScalingMetric.METASPACE_MEMORY_USED,
+                        22.),
                 ScalingMetrics.computeGlobalMetrics(
                         Map.of(),
                         Map.of(
-                                FlinkMetric.HEAP_USED,
+                                FlinkMetric.HEAP_MEMORY_USED,
                                 aggAvgMax(75, 100),
-                                FlinkMetric.HEAP_MAX,
-                                aggMax(200.),
-                                FlinkMetric.TOTAL_GC_TIME_PER_SEC,
-                                aggMax(250.)),
-                        conf));
-
-        conf.set(AutoScalerOptions.MEMORY_TUNING_HEAP_TARGET, MemoryTuning.HeapUsageTarget.MAX);
-        assertEquals(
-                Map.of(ScalingMetric.HEAP_MAX_USAGE_RATIO, 0.5, ScalingMetric.HEAP_USED, 100.),
-                ScalingMetrics.computeGlobalMetrics(
-                        Map.of(),
-                        Map.of(
-                                FlinkMetric.HEAP_USED,
-                                aggAvgMax(75, 100),
-                                FlinkMetric.HEAP_MAX,
+                                FlinkMetric.MANAGED_MEMORY_USED,
+                                aggAvgMax(128, 133),
+                                FlinkMetric.METASPACE_MEMORY_USED,
+                                aggAvgMax(11, 22),
+                                FlinkMetric.HEAP_MEMORY_MAX,
                                 aggMax(200.)),
                         conf));
     }

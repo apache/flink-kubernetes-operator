@@ -41,9 +41,13 @@ public enum FlinkMetric {
     PENDING_RECORDS(s -> s.endsWith(".pendingRecords")),
     BACKPRESSURE_TIME_PER_SEC(s -> s.equals("backPressuredTimeMsPerSecond")),
 
-    HEAP_MAX(s -> s.equals("Status.JVM.Memory.Heap.Max")),
-    HEAP_USED(s -> s.equals("Status.JVM.Memory.Heap.Used")),
+    HEAP_MEMORY_MAX(s -> s.equals("Status.JVM.Memory.Heap.Max")),
+    HEAP_MEMORY_USED(s -> s.equals("Status.JVM.Memory.Heap.Used")),
+    MANAGED_MEMORY_USED(s -> s.equals("Status.Flink.Memory.Managed.Used")),
+    METASPACE_MEMORY_USED(s -> s.equals("Status.JVM.Memory.Metaspace.Used")),
+
     TOTAL_GC_TIME_PER_SEC(s -> s.equals("Status.JVM.GarbageCollector.All.TimeMsPerSecond")),
+
     NUM_TASK_SLOTS_TOTAL(s -> s.equals("taskSlotsTotal")),
     NUM_TASK_SLOTS_AVAILABLE(s -> s.equals("taskSlotsAvailable"));
 

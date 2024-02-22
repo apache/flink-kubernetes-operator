@@ -24,6 +24,7 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.realizer.ScalingRealizer;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.JobManagerOptions;
@@ -126,12 +127,12 @@ public class RescaleApiScalingRealizer<KEY, Context extends JobAutoScalerContext
     }
 
     @Override
-    public void realizeConfigOverrides(Context context, Configuration configOverrides) {
+    public void realizeConfigOverrides(Context context, ConfigChanges configChanges) {
         // Not currently supported
         LOG.warn(
                 "{} does not support updating the TaskManager configuration ({})",
                 getClass().getSimpleName(),
-                configOverrides);
+                configChanges);
     }
 
     private Map<JobVertexID, JobVertexResourceRequirements> getVertexResources(

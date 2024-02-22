@@ -22,8 +22,8 @@ import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.ScalingTracking;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.autoscaler.utils.AutoScalerSerDeModule;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -42,6 +42,8 @@ import org.apache.commons.io.IOUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.annotation.Nullable;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -195,22 +197,22 @@ public class KubernetesAutoScalerStateStore
 
     @NotNull
     @Override
-    public Configuration getConfigOverrides(KubernetesJobAutoScalerContext jobContext) {
+    public ConfigChanges getConfigChanges(KubernetesJobAutoScalerContext jobContext) {
         return configMapStore
                 .getSerializedState(jobContext, CONFIG_OVERRIDES_KEY)
                 .map(KubernetesAutoScalerStateStore::deserializeConfigOverrides)
-                .orElse(new Configuration());
+                .orElse(new ConfigChanges());
     }
 
     @Override
-    public void storeConfigOverrides(
-            KubernetesJobAutoScalerContext jobContext, Configuration overrides) {
+    public void storeConfigChanges(
+            KubernetesJobAutoScalerContext jobContext, ConfigChanges overrides) {
         configMapStore.putSerializedState(
                 jobContext, CONFIG_OVERRIDES_KEY, serializeConfigOverrides(overrides));
     }
 
     @Override
-    public void removeConfigOverrides(KubernetesJobAutoScalerContext jobContext) {
+    public void removeConfigChanges(KubernetesJobAutoScalerContext jobContext) {
         configMapStore.removeSerializedState(jobContext, CONFIG_OVERRIDES_KEY);
     }
 
@@ -276,12 +278,24 @@ public class KubernetesAutoScalerStateStore
         return ConfigurationUtils.convertValue(overrides, Map.class);
     }
 
-    private static String serializeConfigOverrides(Configuration overrides) {
-        return ConfigurationUtils.convertValue(overrides.toMap(), String.class);
+    @Nullable
+    private static String serializeConfigOverrides(ConfigChanges configChanges) {
+        try {
+            return YAML_MAPPER.writeValueAsString(configChanges);
+        } catch (Exception e) {
+            LOG.error("Failed to serialize ConfigOverrides", e);
+            return null;
+        }
     }
 
-    private static Configuration deserializeConfigOverrides(String overrides) {
-        return Configuration.fromMap(ConfigurationUtils.convertValue(overrides, Map.class));
+    @Nullable
+    private static ConfigChanges deserializeConfigOverrides(String configOverrides) {
+        try {
+            return YAML_MAPPER.readValue(configOverrides, new TypeReference<>() {});
+        } catch (Exception e) {
+            LOG.error("Failed to deserialize ConfigOverrides", e);
+            return null;
+        }
     }
 
     @VisibleForTesting

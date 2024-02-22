@@ -21,11 +21,11 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
+import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.IllegalConfigurationException;
 import org.apache.flink.configuration.MemorySize;
-import org.apache.flink.configuration.StateBackendOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.configuration.UnmodifiableConfiguration;
 import org.apache.flink.runtime.util.config.memory.CommonProcessMemorySpec;
@@ -41,6 +41,10 @@ import org.slf4j.LoggerFactory;
 import java.util.Arrays;
 import java.util.Map;
 
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MEMORY_USED;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.MANAGED_MEMORY_USED;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.METASPACE_MEMORY_USED;
+
 /** Tunes the TaskManager memory. */
 public class MemoryTuning {
 
@@ -48,13 +52,7 @@ public class MemoryTuning {
     public static final ProcessMemoryUtils<TaskExecutorFlinkMemory> FLINK_MEMORY_UTILS =
             new ProcessMemoryUtils<>(getMemoryOptions(), new TaskExecutorFlinkMemoryUtils());
 
-    private static final Configuration EMPTY_CONFIG = new Configuration();
-
-    /** What memory usage to target. */
-    public enum HeapUsageTarget {
-        AVG,
-        MAX
-    }
+    private static final ConfigChanges EMPTY_CONFIG = new ConfigChanges();
 
     /**
      * Emits a Configuration which contains overrides for the current configuration. We are not
@@ -62,7 +60,7 @@ public class MemoryTuning {
      * overrides. This config is persisted separately and applied by the autoscaler. That way we can
      * clear any applied overrides if auto-tuning is disabled.
      */
-    public static Configuration tuneTaskManagerHeapMemory(
+    public static ConfigChanges tuneTaskManagerHeapMemory(
             JobAutoScalerContext<?> context,
             EvaluatedMetrics evaluatedMetrics,
             AutoScalerEventHandler eventHandler) {
@@ -80,56 +78,96 @@ public class MemoryTuning {
             return EMPTY_CONFIG;
         }
 
-        var maxHeapSize = memSpecs.getFlinkMemory().getJvmHeapMemorySize();
-        LOG.debug("Current configured heap size: {}", maxHeapSize);
+        MemorySize specHeapSize = memSpecs.getFlinkMemory().getJvmHeapMemorySize();
+        MemorySize specManagedSize = memSpecs.getFlinkMemory().getManaged();
+        MemorySize specNetworkSize = memSpecs.getFlinkMemory().getNetwork();
+        MemorySize specMetaspaceSize = memSpecs.getJvmMetaspaceSize();
+        LOG.info(
+                "Spec memory - heap: {}, managed: {}, network: {}, meta: {}",
+                specHeapSize.toHumanReadableString(),
+                specManagedSize.toHumanReadableString(),
+                specNetworkSize.toHumanReadableString(),
+                specMetaspaceSize.toHumanReadableString());
 
-        MemorySize newHeapSize = determineNewHeapSize(evaluatedMetrics, config, maxHeapSize);
-        LOG.info("New TM heap memory {}", newHeapSize.toHumanReadableString());
+        MemorySize maxMemoryBySpec = context.getTaskManagerMemory().orElse(MemorySize.ZERO);
+        if (maxMemoryBySpec.compareTo(MemorySize.ZERO) <= 0) {
+            LOG.warn("Spec TaskManager memory size could not be determined.");
+            return EMPTY_CONFIG;
+        }
+        MemoryBudget memBudget = new MemoryBudget(maxMemoryBySpec.getBytes());
+        // Add these current settings from the budget
+        memBudget.budget(memSpecs.getFlinkMemory().getFrameworkOffHeap().getBytes());
+        memBudget.budget(memSpecs.getFlinkMemory().getTaskOffHeap().getBytes());
+        memBudget.budget(memSpecs.getJvmOverheadSize().getBytes());
+
+        var globalMetrics = evaluatedMetrics.getGlobalMetrics();
+        // The order matters in case the memory usage is higher than the maximum available memory.
+        // Managed memory comes last because it can grow arbitrary for RocksDB jobs.
+        MemorySize newNetworkSize = adjustNetworkMemory(specNetworkSize, memBudget);
+        MemorySize newHeapSize =
+                determineNewSize(getUsage(HEAP_MEMORY_USED, globalMetrics), config, memBudget);
+        MemorySize newMetaspaceSize =
+                determineNewSize(getUsage(METASPACE_MEMORY_USED, globalMetrics), config, memBudget);
+        MemorySize newManagedSize =
+                adjustManagedMemory(
+                        getUsage(MANAGED_MEMORY_USED, globalMetrics),
+                        specManagedSize,
+                        config,
+                        memBudget);
+        LOG.info(
+                "Optimized memory sizes: heap: {} managed: {}, network: {}, meta: {}",
+                newHeapSize.toHumanReadableString(),
+                newManagedSize.toHumanReadableString(),
+                newNetworkSize.toHumanReadableString(),
+                newMetaspaceSize.toHumanReadableString());
 
         // Diff can be negative (memory shrinks) or positive (memory grows)
-        final long heapDiffBytes = newHeapSize.getBytes() - maxHeapSize.getBytes();
+        final long heapDiffBytes = newHeapSize.getBytes() - specHeapSize.getBytes();
+        final long managedDiffBytes = newManagedSize.getBytes() - specManagedSize.getBytes();
+        final long networkDiffBytes = newNetworkSize.getBytes() - specNetworkSize.getBytes();
+        final long flinkMemoryDiffBytes = heapDiffBytes + managedDiffBytes + networkDiffBytes;
 
-        final MemorySize totalMemory = adjustTotalTmMemory(context, heapDiffBytes);
-        if (totalMemory.equals(MemorySize.ZERO)) {
+        // Update total memory according to memory diffs
+        final MemorySize totalMemory =
+                new MemorySize(maxMemoryBySpec.getBytes() - memBudget.getRemaining());
+        if (totalMemory.compareTo(MemorySize.ZERO) <= 0) {
+            LOG.warn("Invalid total memory configuration: {}", totalMemory);
             return EMPTY_CONFIG;
         }
 
         // Prepare the tuning config for new configuration values
-        var tuningConfig = new Configuration();
-        // Update total memory according to new heap size
-        // Adjust the total container memory and the JVM heap size accordingly.
-        tuningConfig.set(TaskManagerOptions.TOTAL_PROCESS_MEMORY, totalMemory);
-        // Framework and Task heap memory configs add up together yield the max heap memory.
-        // To simplify the calculation, set the framework heap memory to zero.
-        tuningConfig.set(TaskManagerOptions.FRAMEWORK_HEAP_MEMORY, MemorySize.ZERO);
-        tuningConfig.set(TaskManagerOptions.TASK_HEAP_MEMORY, newHeapSize);
+        var tuningConfig = new ConfigChanges();
+        // Adjust the total container memory
+        tuningConfig.addOverride(TaskManagerOptions.TOTAL_PROCESS_MEMORY, totalMemory);
+        // We do not set the framework/task heap memory because those are automatically derived from
+        // setting the other mandatory memory options for managed memory, network, metaspace and jvm
+        // overhead. However, we do precise accounting for heap memory above. In contrast to other
+        // memory pools, there are no fractional variants for heap memory. Setting the absolute heap
+        // memory options could cause invalid configuration states when users adapt the total amount
+        // of memory. We also need to take care to remove any user-provided overrides for those.
+        tuningConfig.addRemoval(TaskManagerOptions.TASK_HEAP_MEMORY);
+        // Set default to zero because we already account for heap via task heap.
+        tuningConfig.addOverride(TaskManagerOptions.FRAMEWORK_HEAP_MEMORY, MemorySize.ZERO);
 
-        // All memory options which can be configured via fractions need to be set to their
-        // absolute values or, if there is no absolute setting, the fractions need to be
-        // re-calculated.
-        MemorySize managedMemory = memSpecs.getFlinkMemory().getManaged();
-        if (shouldTransferHeapToManagedMemory(config, heapDiffBytes)) {
-            // If RocksDB is configured, give back the heap memory as managed memory to RocksDB
-            MemorySize newManagedMemory =
-                    new MemorySize(managedMemory.getBytes() + Math.abs(heapDiffBytes));
-            LOG.info(
-                    "Increasing managed memory size from {} to {}",
-                    managedMemory,
-                    newManagedMemory);
-            tuningConfig.set(TaskManagerOptions.MANAGED_MEMORY_SIZE, newManagedMemory);
-        } else {
-            tuningConfig.set(TaskManagerOptions.MANAGED_MEMORY_SIZE, managedMemory);
-        }
+        MemorySize flinkMemorySize =
+                new MemorySize(
+                        memSpecs.getTotalFlinkMemorySize().getBytes() + flinkMemoryDiffBytes);
 
-        tuningConfig.set(
+        // All memory options which can be configured via fractions need to be re-calculated.
+        tuningConfig.addOverride(
+                TaskManagerOptions.MANAGED_MEMORY_FRACTION,
+                getFraction(newManagedSize, flinkMemorySize));
+        tuningConfig.addRemoval(TaskManagerOptions.MANAGED_MEMORY_SIZE);
+
+        tuningConfig.addOverride(
                 TaskManagerOptions.NETWORK_MEMORY_FRACTION,
-                getFraction(
-                        memSpecs.getFlinkMemory().getNetwork(),
-                        new MemorySize(
-                                memSpecs.getTotalFlinkMemorySize().getBytes() + heapDiffBytes)));
-        tuningConfig.set(
+                getFraction(newNetworkSize, flinkMemorySize));
+
+        tuningConfig.addOverride(
                 TaskManagerOptions.JVM_OVERHEAD_FRACTION,
                 getFraction(memSpecs.getJvmOverheadSize(), totalMemory));
+
+        tuningConfig.addOverride(TaskManagerOptions.JVM_METASPACE, newMetaspaceSize);
 
         eventHandler.handleEvent(
                 context,
@@ -151,39 +189,47 @@ public class MemoryTuning {
         return tuningConfig;
     }
 
-    private static MemorySize determineNewHeapSize(
-            EvaluatedMetrics evaluatedMetrics, Configuration config, MemorySize maxHeapSize) {
+    private static MemorySize determineNewSize(
+            MemorySize usage, Configuration config, MemoryBudget memoryBudget) {
 
-        double overheadFactor = 1 + config.get(AutoScalerOptions.MEMORY_TUNING_HEAP_OVERHEAD);
-        long heapTargetSizeBytes =
-                (long) (getHeapUsed(evaluatedMetrics).getBytes() * overheadFactor);
+        double overheadFactor = 1 + config.get(AutoScalerOptions.MEMORY_TUNING_OVERHEAD);
+        long targetSizeBytes = (long) (usage.getBytes() * overheadFactor);
 
-        // Apply min/max heap size limits
-        heapTargetSizeBytes =
-                Math.min(
-                        Math.max(
-                                // Lower limit is the minimum configured heap size
-                                config.get(AutoScalerOptions.MEMORY_TUNING_MIN_HEAP).getBytes(),
-                                heapTargetSizeBytes),
-                        // Upper limit is the original max heap size in the spec
-                        maxHeapSize.getBytes());
+        // Upper limit is the available memory budget
+        targetSizeBytes = memoryBudget.budget(targetSizeBytes);
 
-        return new MemorySize(heapTargetSizeBytes);
+        return new MemorySize(targetSizeBytes);
     }
 
-    private static MemorySize getHeapUsed(EvaluatedMetrics evaluatedMetrics) {
-        var globalMetrics = evaluatedMetrics.getGlobalMetrics();
-        MemorySize heapUsed =
-                new MemorySize((long) globalMetrics.get(ScalingMetric.HEAP_USED).getAverage());
-        LOG.info("TM heap used size: {}", heapUsed);
+    private static MemorySize adjustManagedMemory(
+            MemorySize managedMemoryUsage,
+            MemorySize managedMemoryConfigured,
+            Configuration config,
+            MemoryBudget memBudget) {
+        // Managed memory usage can't accurately be measured yet.
+        // It is either zero (no usage) or an opaque amount of memory (RocksDB).
+        if (managedMemoryUsage.compareTo(MemorySize.ZERO) <= 0) {
+            return MemorySize.ZERO;
+        } else if (config.get(AutoScalerOptions.MEMORY_TUNING_MAXIMIZE_MANAGED_MEMORY)) {
+            long maxManagedMemorySize = memBudget.budget(Long.MAX_VALUE);
+            return new MemorySize(maxManagedMemorySize);
+        } else {
+            return managedMemoryConfigured;
+        }
+    }
+
+    private static MemorySize adjustNetworkMemory(MemorySize usage, MemoryBudget memBudget) {
+        // TODO mxm: Follow-up to tune network memory via
+        // https://issues.apache.org/jira/browse/FLINK-34471
+        long networkBytes = memBudget.budget(usage.getBytes());
+        return new MemorySize(networkBytes);
+    }
+
+    private static MemorySize getUsage(
+            ScalingMetric scalingMetric, Map<ScalingMetric, EvaluatedScalingMetric> globalMetrics) {
+        MemorySize heapUsed = new MemorySize((long) globalMetrics.get(scalingMetric).getAverage());
+        LOG.debug("{}: {}", scalingMetric, heapUsed);
         return heapUsed;
-    }
-
-    private static boolean shouldTransferHeapToManagedMemory(
-            Configuration config, long heapDiffBytes) {
-        return config.get(AutoScalerOptions.MEMORY_TUNING_TRANSFER_HEAP_TO_MANAGED)
-                && heapDiffBytes < 0
-                && "rocksdb".equalsIgnoreCase(config.get(StateBackendOptions.STATE_BACKEND));
     }
 
     public static MemorySize getTotalMemory(Configuration config, JobAutoScalerContext<?> ctx) {
@@ -192,28 +238,6 @@ public class MemoryTuning {
             return overrideSize;
         }
         return ctx.getTaskManagerMemory().orElse(MemorySize.ZERO);
-    }
-
-    private static MemorySize adjustTotalTmMemory(JobAutoScalerContext<?> ctx, long heapDiffBytes) {
-
-        var specTaskManagerMemory = ctx.getTaskManagerMemory().orElse(MemorySize.ZERO);
-        if (specTaskManagerMemory.compareTo(MemorySize.ZERO) <= 0) {
-            LOG.warn("Spec TaskManager memory size could not be determined.");
-            return MemorySize.ZERO;
-        }
-
-        if (shouldTransferHeapToManagedMemory(ctx.getConfiguration(), heapDiffBytes)) {
-            // Total size does not change
-            return specTaskManagerMemory;
-        }
-
-        long newTotalMemBytes = specTaskManagerMemory.getBytes() + heapDiffBytes;
-        // TM container memory can never grow beyond the user-specified max memory
-        newTotalMemBytes = Math.min(newTotalMemBytes, specTaskManagerMemory.getBytes());
-
-        MemorySize totalMemory = new MemorySize(newTotalMemBytes);
-        LOG.info("Setting new total TaskManager memory to {}", totalMemory);
-        return totalMemory;
     }
 
     private static ProcessMemoryOptions getMemoryOptions() {
@@ -238,13 +262,26 @@ public class MemoryTuning {
     }
 
     /** Format config such that it can be directly used as a Flink configuration. */
-    private static String formatConfig(Configuration config) {
+    private static String formatConfig(ConfigChanges config) {
         var sb = new StringBuilder();
-        for (Map.Entry<String, String> entry : config.toMap().entrySet()) {
+        for (Map.Entry<String, String> entry : config.getOverrides().entrySet()) {
             sb.append(entry.getKey())
                     .append(": ")
                     .append(entry.getValue())
                     .append(System.lineSeparator());
+        }
+        if (!config.getRemovals().isEmpty()) {
+            sb.append("Remove the following config entries if present: [");
+            boolean first = true;
+            for (String toRemove : config.getRemovals()) {
+                if (first) {
+                    first = false;
+                } else {
+                    sb.append(", ");
+                }
+                sb.append(toRemove);
+            }
+            sb.append("]");
         }
         return sb.toString();
     }

@@ -30,9 +30,8 @@ import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
+import org.apache.flink.autoscaler.tuning.ConfigChanges;
 import org.apache.flink.client.program.rest.RestClusterClient;
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.metrics.Gauge;
@@ -306,23 +305,27 @@ public class JobAutoScalerImplTest {
                         null, null, null, eventCollector, scalingRealizer, stateStore);
 
         // Initially we should return empty overrides, do not crate any state
-        assertThat(stateStore.getConfigOverrides(context).toMap()).isEmpty();
+        assertThat(stateStore.getConfigChanges(context).getOverrides()).isEmpty();
 
-        var config = new Configuration();
-        config.set(TaskManagerOptions.TASK_HEAP_MEMORY, new MemorySize(42));
-        stateStore.storeConfigOverrides(context, config);
+        ConfigChanges config = new ConfigChanges();
+        config.addOverride(TaskManagerOptions.MANAGED_MEMORY_FRACTION, 0.42f);
+        config.addRemoval(TaskManagerOptions.TASK_HEAP_MEMORY);
+        stateStore.storeConfigChanges(context, config);
         stateStore.flush(context);
 
         autoscaler.applyConfigOverrides(context);
-        assertThat(getEvent().getConfigOverrides().toMap())
-                .containsExactly(entry(TaskManagerOptions.TASK_HEAP_MEMORY.key(), "42 bytes"));
-        assertThat(stateStore.getConfigOverrides(context)).isEqualTo(config);
+        var event = getEvent();
+        assertThat(event.getConfigChanges().getOverrides())
+                .containsExactly(entry(TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(), "0.42"));
+        assertThat(event.getConfigChanges().getRemovals())
+                .containsExactly(TaskManagerOptions.TASK_HEAP_MEMORY.key());
+        assertThat(stateStore.getConfigChanges(context)).isEqualTo(config);
 
         // Disabling autoscaler should clear overrides
         context.getConfiguration().setString(AUTOSCALER_ENABLED.key(), "false");
         autoscaler.scale(context);
         autoscaler.applyConfigOverrides(context);
-        assertThat(getEvent().getConfigOverrides().toMap()).isEmpty();
+        assertThat(getEvent().getConfigChanges().getOverrides()).isEmpty();
     }
 
     @Test
@@ -366,17 +369,6 @@ public class JobAutoScalerImplTest {
         }
         assertThat(scalingEvent).isNotNull();
         assertEquals(expectedOverrides, scalingEvent.getParallelismOverrides());
-    }
-
-    @Nullable
-    private TestingScalingRealizer.Event<JobID, JobAutoScalerContext<JobID>> getEvent(
-            Map<String, String> expectedOverrides) {
-        var scalingEvent = getEvent();
-        if (expectedOverrides == null) {
-            assertThat(scalingEvent).isNull();
-            return null;
-        }
-        return scalingEvent;
     }
 
     @Nullable
