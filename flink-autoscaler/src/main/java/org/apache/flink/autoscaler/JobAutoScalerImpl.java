@@ -216,7 +216,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
         var parallelismChanged =
                 scalingExecutor.scaleResource(
-                        ctx, evaluatedMetrics, scalingHistory, scalingTracking, now);
+                        ctx, evaluatedMetrics, scalingHistory, scalingTracking, now, jobTopology);
 
         if (parallelismChanged) {
             autoscalerMetrics.incrementScaling();

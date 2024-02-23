@@ -174,7 +174,12 @@ public class MetricsCollectionAndEvaluationTest {
 
         var evaluation = evaluator.evaluate(conf, collectedMetrics, restartTime);
         scalingExecutor.scaleResource(
-                context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
+                context,
+                evaluation,
+                new HashMap<>(),
+                new ScalingTracking(),
+                clock.instant(),
+                new JobTopology());
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.size());
@@ -387,7 +392,12 @@ public class MetricsCollectionAndEvaluationTest {
                         .getCurrent());
 
         scalingExecutor.scaleResource(
-                context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
+                context,
+                evaluation,
+                new HashMap<>(),
+                new ScalingTracking(),
+                clock.instant(),
+                new JobTopology());
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(1, scaledParallelism.get(source1));
     }
@@ -633,7 +643,12 @@ public class MetricsCollectionAndEvaluationTest {
                         .getCurrent());
 
         scalingExecutor.scaleResource(
-                context, evaluation, new HashMap<>(), new ScalingTracking(), clock.instant());
+                context,
+                evaluation,
+                new HashMap<>(),
+                new ScalingTracking(),
+                clock.instant(),
+                new JobTopology());
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(1, scaledParallelism.get(source1));
 

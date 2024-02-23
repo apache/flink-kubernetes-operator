@@ -46,7 +46,7 @@ public class ResourceCheckUtils {
         }
     }
 
-    private static Map<JobVertexID, Integer> computeNewParallelisms(
+    public static Map<JobVertexID, Integer> computeNewParallelisms(
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> vertexMetrics) {
 
