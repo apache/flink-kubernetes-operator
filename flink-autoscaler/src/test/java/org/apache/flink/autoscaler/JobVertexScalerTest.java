@@ -85,6 +85,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(10, 50, 100),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -95,6 +96,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(10, 50, 100),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -105,6 +107,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(10, 80, 100),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -115,6 +118,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(10, 60, 100),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -124,6 +128,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(10, 59, 100),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -134,6 +139,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(2, 100, 40),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -144,6 +150,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(2, 100, 100),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -155,6 +162,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(10, 10, 100),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -165,6 +173,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(10, 10, 100),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -176,6 +185,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(10, 200, 10),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -186,6 +196,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         op,
+                        true,
                         evaluated(10, 200, 10),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -195,26 +206,44 @@ public class JobVertexScalerTest {
     public void testParallelismComputation() {
         final int minParallelism = 1;
         final int maxParallelism = Integer.MAX_VALUE;
-        assertEquals(1, JobVertexScaler.scale(1, 720, 0.0001, minParallelism, maxParallelism));
-        assertEquals(1, JobVertexScaler.scale(2, 720, 0.1, minParallelism, maxParallelism));
-        assertEquals(5, JobVertexScaler.scale(6, 720, 0.8, minParallelism, maxParallelism));
-        assertEquals(32, JobVertexScaler.scale(16, 128, 1.5, minParallelism, maxParallelism));
-        assertEquals(400, JobVertexScaler.scale(200, 720, 2, minParallelism, maxParallelism));
+        assertEquals(
+                1, JobVertexScaler.scale(1, 720, 0.0001, minParallelism, maxParallelism, false));
+        assertEquals(1, JobVertexScaler.scale(2, 720, 0.1, minParallelism, maxParallelism, false));
+        assertEquals(5, JobVertexScaler.scale(6, 720, 0.8, minParallelism, maxParallelism, false));
+        assertEquals(
+                24, JobVertexScaler.scale(16, 128, 1.5, minParallelism, maxParallelism, false));
+        assertEquals(
+                400, JobVertexScaler.scale(200, 720, 2, minParallelism, maxParallelism, false));
         assertEquals(
                 720,
-                JobVertexScaler.scale(200, 720, Integer.MAX_VALUE, minParallelism, maxParallelism));
+                JobVertexScaler.scale(
+                        200, 720, Integer.MAX_VALUE, minParallelism, maxParallelism, false));
+    }
+
+    @Test
+    public void testParallelismComputationWithKeyedOperator() {
+        final int minParallelism = 1;
+        final int maxParallelism = Integer.MAX_VALUE;
+        assertEquals(6, JobVertexScaler.scale(6, 36, 0.8, minParallelism, maxParallelism, true));
+        assertEquals(32, JobVertexScaler.scale(16, 128, 1.5, minParallelism, maxParallelism, true));
+        assertEquals(
+                360, JobVertexScaler.scale(200, 720, 1.3, minParallelism, maxParallelism, true));
+        assertEquals(
+                720,
+                JobVertexScaler.scale(
+                        200, 720, Integer.MAX_VALUE, minParallelism, maxParallelism, true));
     }
 
     @Test
     public void testParallelismComputationWithLimit() {
-        assertEquals(5, JobVertexScaler.scale(6, 720, 0.8, 1, 700));
-        assertEquals(8, JobVertexScaler.scale(8, 720, 0.8, 8, 700));
+        assertEquals(5, JobVertexScaler.scale(6, 720, 0.8, 1, 700, true));
+        assertEquals(8, JobVertexScaler.scale(8, 720, 0.8, 8, 700, true));
 
-        assertEquals(32, JobVertexScaler.scale(16, 128, 1.5, 1, Integer.MAX_VALUE));
-        assertEquals(64, JobVertexScaler.scale(16, 128, 1.5, 60, Integer.MAX_VALUE));
+        assertEquals(32, JobVertexScaler.scale(16, 128, 1.5, 1, Integer.MAX_VALUE, true));
+        assertEquals(64, JobVertexScaler.scale(16, 128, 1.5, 60, Integer.MAX_VALUE, true));
 
-        assertEquals(300, JobVertexScaler.scale(200, 720, 2, 1, 300));
-        assertEquals(600, JobVertexScaler.scale(200, 720, Integer.MAX_VALUE, 1, 600));
+        assertEquals(300, JobVertexScaler.scale(200, 720, 2, 1, 300, true));
+        assertEquals(600, JobVertexScaler.scale(200, 720, Integer.MAX_VALUE, 1, 600, true));
     }
 
     @Test
@@ -225,7 +254,7 @@ public class JobVertexScalerTest {
                                 assertEquals(
                                         600,
                                         JobVertexScaler.scale(
-                                                200, 720, Integer.MAX_VALUE, 500, 499)));
+                                                200, 720, Integer.MAX_VALUE, 500, 499, true)));
     }
 
     @Test
@@ -236,6 +265,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         new JobVertexID(),
+                        true,
                         evaluated(10, 100, 500),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -246,6 +276,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         new JobVertexID(),
+                        true,
                         evaluated(4, 100, 500),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -260,6 +291,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         new JobVertexID(),
+                        true,
                         evaluated(10, 500, 100),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -270,6 +302,7 @@ public class JobVertexScalerTest {
                 vertexScaler.computeScaleTargetParallelism(
                         context,
                         new JobVertexID(),
+                        true,
                         evaluated(12, 500, 100),
                         Collections.emptySortedMap(),
                         restartTime));
@@ -288,7 +321,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 10,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
 
         history.put(clock.instant(), new ScalingSummary(5, 10, evaluated));
 
@@ -297,7 +330,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 10,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
 
         // Pass some time...
         clock = Clock.offset(Clock.systemDefaultZone(), Duration.ofSeconds(61));
@@ -306,7 +339,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 5,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
         history.put(clock.instant(), new ScalingSummary(10, 5, evaluated));
 
         // Allow immediate scale up
@@ -314,7 +347,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 10,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
         history.put(clock.instant(), new ScalingSummary(5, 10, evaluated));
     }
 
@@ -330,7 +363,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 10,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
         assertEquals(100, evaluated.get(ScalingMetric.EXPECTED_PROCESSING_RATE).getCurrent());
         history.put(Instant.now(), new ScalingSummary(5, 10, evaluated));
 
@@ -339,7 +372,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 20,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
         assertEquals(180, evaluated.get(ScalingMetric.EXPECTED_PROCESSING_RATE).getCurrent());
         history.put(Instant.now(), new ScalingSummary(10, 20, evaluated));
 
@@ -349,7 +382,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 20,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
         assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
 
         // Still considered ineffective (less than <10%)
@@ -357,7 +390,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 20,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
         assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
 
         // Allow scale up if current parallelism doesnt match last (user rescaled manually)
@@ -365,14 +398,14 @@ public class JobVertexScalerTest {
         assertEquals(
                 20,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
 
         // Over 10%, effective
         evaluated = evaluated(20, 180, 100);
         assertEquals(
                 36,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
         assertTrue(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
 
         // Ineffective but detection is turned off
@@ -381,7 +414,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 40,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
         assertTrue(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
         conf.set(AutoScalerOptions.SCALING_EFFECTIVENESS_DETECTION_ENABLED, true);
 
@@ -390,7 +423,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 10,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, op, evaluated, history, restartTime));
+                        context, op, true, evaluated, history, restartTime));
         assertTrue(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
     }
 
@@ -406,7 +439,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 10,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, jobVertexID, evaluated, history, restartTime));
+                        context, jobVertexID, true, evaluated, history, restartTime));
         assertEquals(100, evaluated.get(ScalingMetric.EXPECTED_PROCESSING_RATE).getCurrent());
         history.put(Instant.now(), new ScalingSummary(5, 10, evaluated));
 
@@ -415,7 +448,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 20,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, jobVertexID, evaluated, history, restartTime));
+                        context, jobVertexID, true, evaluated, history, restartTime));
         assertEquals(180, evaluated.get(ScalingMetric.EXPECTED_PROCESSING_RATE).getCurrent());
         history.put(Instant.now(), new ScalingSummary(10, 20, evaluated));
         assertEquals(0, eventCollector.events.size());
@@ -425,7 +458,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 20,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, jobVertexID, evaluated, history, restartTime));
+                        context, jobVertexID, true, evaluated, history, restartTime));
         assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
         assertEquals(1, eventCollector.events.size());
         var event = eventCollector.events.poll();
@@ -441,7 +474,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 20,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, jobVertexID, evaluated, history, restartTime));
+                        context, jobVertexID, true, evaluated, history, restartTime));
         assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
         assertEquals(0, eventCollector.events.size());
 
@@ -450,7 +483,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 20,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, jobVertexID, evaluated, history, restartTime));
+                        context, jobVertexID, true, evaluated, history, restartTime));
         assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
         assertEquals(0, eventCollector.events.size());
 
@@ -459,7 +492,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 20,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, jobVertexID, evaluated, history, restartTime));
+                        context, jobVertexID, true, evaluated, history, restartTime));
         assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
         assertEquals(1, eventCollector.events.size());
         event = eventCollector.events.poll();
@@ -476,7 +509,7 @@ public class JobVertexScalerTest {
         assertEquals(
                 40,
                 vertexScaler.computeScaleTargetParallelism(
-                        context, jobVertexID, evaluated, history, restartTime));
+                        context, jobVertexID, true, evaluated, history, restartTime));
         assertEquals(1, eventCollector.events.size());
         event = eventCollector.events.poll();
         assertThat(event).isNotNull();

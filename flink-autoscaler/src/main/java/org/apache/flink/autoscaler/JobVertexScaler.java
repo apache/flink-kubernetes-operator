@@ -71,6 +71,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     public int computeScaleTargetParallelism(
             Context context,
             JobVertexID vertex,
+            boolean hasKeyBy,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             SortedMap<Instant, ScalingSummary> history,
             Duration restartTime) {
@@ -124,7 +125,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         (int) evaluatedMetrics.get(MAX_PARALLELISM).getCurrent(),
                         scaleFactor,
                         Math.min(currentParallelism, conf.getInteger(VERTEX_MIN_PARALLELISM)),
-                        Math.max(currentParallelism, conf.getInteger(VERTEX_MAX_PARALLELISM)));
+                        Math.max(currentParallelism, conf.getInteger(VERTEX_MAX_PARALLELISM)),
+                        hasKeyBy);
 
         if (newParallelism == currentParallelism
                 || blockScalingBasedOnPastActions(
@@ -251,7 +253,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             int numKeyGroups,
             double scaleFactor,
             int minParallelism,
-            int maxParallelism) {
+            int maxParallelism,
+            boolean hasKeyBy) {
         Preconditions.checkArgument(
                 minParallelism <= maxParallelism,
                 "The minimum parallelism must not be greater than the maximum parallelism.");
@@ -280,11 +283,14 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         // Apply min/max parallelism
         newParallelism = Math.min(Math.max(minParallelism, newParallelism), upperBound);
 
-        // Try to adjust the parallelism such that it divides the number of key groups without a
-        // remainder => state is evenly spread across subtasks
-        for (int p = newParallelism; p <= numKeyGroups / 2 && p <= upperBound; p++) {
-            if (numKeyGroups % p == 0) {
-                return p;
+        // When the shuffle type of vertex data source contains keyBy, we try to adjust the
+        // parallelism such that it divides the number of key groups without a remainder =>
+        // data is evenly spread across subtasks
+        if (hasKeyBy) {
+            for (int p = newParallelism; p <= numKeyGroups / 2 && p <= upperBound; p++) {
+                if (numKeyGroups % p == 0) {
+                    return p;
+                }
             }
         }
 

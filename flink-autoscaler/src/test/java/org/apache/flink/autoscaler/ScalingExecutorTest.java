@@ -151,6 +151,14 @@ public class ScalingExecutorTest {
         var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
         var sink = JobVertexID.fromHexString(sinkHexString);
 
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 10, 1000, false, null),
+                        new VertexInfo(
+                                filterOperator, Map.of(source, "HASH"), 10, 1000, false, null),
+                        new VertexInfo(
+                                sink, Map.of(filterOperator, "HASH"), 10, 1000, false, null));
+
         var conf = context.getConfiguration();
         conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
         var metrics =
@@ -173,7 +181,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
         // filter operator should scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of());
         assertTrue(
@@ -183,7 +191,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
     }
 
     @Test
@@ -192,6 +200,12 @@ public class ScalingExecutorTest {
         var source = JobVertexID.fromHexString(sourceHexString);
         var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
         var sink = JobVertexID.fromHexString(sinkHexString);
+
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 10, 1000, false, null),
+                        new VertexInfo(sink, Map.of(source, "HASH"), 10, 1000, false, null));
+
         var conf = context.getConfiguration();
         var now = Instant.now();
         var localTime = ZonedDateTime.ofInstant(now, ZoneId.systemDefault()).toLocalTime();
@@ -213,7 +227,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
         // scaling execution outside excluded periods
         excludedPeriod =
                 new StringBuilder(localTime.plusSeconds(100).toString().split("\\.")[0])
@@ -228,7 +242,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
     }
 
     @Test
@@ -237,6 +251,12 @@ public class ScalingExecutorTest {
         var source = JobVertexID.fromHexString(sourceHexString);
         var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
         var sink = JobVertexID.fromHexString(sinkHexString);
+
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 10, 1000, false, null),
+                        new VertexInfo(sink, Map.of(source, "HASH"), 10, 1000, false, null));
+
         var now = Instant.now();
         var metrics =
                 new EvaluatedMetrics(
@@ -257,7 +277,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
 
         scalingDecisionExecutor =
                 new ScalingExecutor<>(
@@ -282,7 +302,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
     }
 
     @Test
@@ -334,9 +354,9 @@ public class ScalingExecutorTest {
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
                                 "0.652",
                                 TaskManagerOptions.NETWORK_MEMORY_MIN.key(),
-                                "25 mb",
+                                "23040 kb",
                                 TaskManagerOptions.NETWORK_MEMORY_MAX.key(),
-                                "25 mb",
+                                "23040 kb",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "360 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
@@ -344,7 +364,7 @@ public class ScalingExecutorTest {
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "7681 mb"));
+                                "7862784 kb"));
     }
 
     @ParameterizedTest
@@ -368,6 +388,10 @@ public class ScalingExecutorTest {
 
     private void testScalingEvents(boolean scalingEnabled, Duration interval) throws Exception {
         var jobVertexID = new JobVertexID();
+
+        JobTopology jobTopology =
+                new JobTopology(new VertexInfo(jobVertexID, Map.of(), 10, 1000, false, null));
+
         var conf = context.getConfiguration();
         conf.set(AutoScalerOptions.SCALING_ENABLED, scalingEnabled);
         if (interval != null) {
@@ -386,7 +410,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
         assertEquals(
                 scalingEnabled,
                 scalingDecisionExecutor.scaleResource(
@@ -395,7 +419,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
         int expectedSize = (interval == null || interval.toMillis() > 0) && !scalingEnabled ? 1 : 2;
         assertEquals(expectedSize, eventCollector.events.size());
 
@@ -434,7 +458,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
         var event2 = eventCollector.events.poll();
         assertThat(event2).isNotNull();
         assertThat(event2.getContext()).isSameAs(event.getContext());
@@ -450,6 +474,8 @@ public class ScalingExecutorTest {
         conf.set(AutoScalerOptions.HEAP_USAGE_THRESHOLD, 0.8);
 
         var vertexMetrics = Map.of(jobVertexID, evaluated(1, 110, 100));
+        JobTopology jobTopology =
+                new JobTopology(new VertexInfo(jobVertexID, Map.of(), 10, 1000, false, null));
         var metrics =
                 new EvaluatedMetrics(
                         vertexMetrics,
@@ -467,7 +493,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         Instant.now(),
-                        new JobTopology()));
+                        jobTopology));
 
         // Just below the thresholds
         metrics =
@@ -485,7 +511,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         Instant.now(),
-                        new JobTopology()));
+                        jobTopology));
 
         eventCollector.events.clear();
 
@@ -505,7 +531,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         Instant.now(),
-                        new JobTopology()));
+                        jobTopology));
         assertEquals("MemoryPressure", eventCollector.events.poll().getReason());
         assertTrue(eventCollector.events.isEmpty());
 
@@ -525,7 +551,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         Instant.now(),
-                        new JobTopology()));
+                        jobTopology));
         assertEquals("MemoryPressure", eventCollector.events.poll().getReason());
         assertTrue(eventCollector.events.isEmpty());
     }

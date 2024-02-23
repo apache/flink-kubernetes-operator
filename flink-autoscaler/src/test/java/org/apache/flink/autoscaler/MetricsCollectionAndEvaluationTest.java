@@ -183,7 +183,7 @@ public class MetricsCollectionAndEvaluationTest {
                 new HashMap<>(),
                 new ScalingTracking(),
                 clock.instant(),
-                new JobTopology());
+                topology);
 
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(4, scaledParallelism.size());
@@ -401,7 +401,7 @@ public class MetricsCollectionAndEvaluationTest {
                 new HashMap<>(),
                 new ScalingTracking(),
                 clock.instant(),
-                new JobTopology());
+                topology);
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(1, scaledParallelism.get(source1));
     }
@@ -652,7 +652,7 @@ public class MetricsCollectionAndEvaluationTest {
                 new HashMap<>(),
                 new ScalingTracking(),
                 clock.instant(),
-                new JobTopology());
+                topology);
         var scaledParallelism = ScalingExecutorTest.getScaledParallelism(stateStore, context);
         assertEquals(1, scaledParallelism.get(source1));
 
