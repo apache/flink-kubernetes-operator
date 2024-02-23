@@ -255,11 +255,13 @@ public class MemoryTuning {
         for (VertexInfo vertexInfo : jobTopology.getVertexInfos().values()) {
             // Add max amount of memory for each input gate
             for (Map.Entry<JobVertexID, String> inputEntry : vertexInfo.getInputs().entrySet()) {
+                final JobVertexID inputVertexId = inputEntry.getKey();
+                final String shipStrategy = inputEntry.getValue();
                 maxNetworkMemory +=
                         calculateNetworkSegmentNumber(
                                         updatedParallelisms.get(vertexInfo.getId()),
-                                        updatedParallelisms.get(inputEntry.getKey()),
-                                        inputEntry.getValue(),
+                                        updatedParallelisms.get(inputVertexId),
+                                        shipStrategy,
                                         buffersPerChannel,
                                         floatingBuffers)
                                 * memorySegmentBytes;
@@ -267,11 +269,13 @@ public class MemoryTuning {
             // Add max amount of memory for each output gate
             // Usually, there is just one output per task
             for (Map.Entry<JobVertexID, String> outputEntry : vertexInfo.getOutputs().entrySet()) {
+                final JobVertexID outputVertexId = outputEntry.getKey();
+                final String shipStrategy = outputEntry.getValue();
                 maxNetworkMemory +=
                         calculateNetworkSegmentNumber(
                                         updatedParallelisms.get(vertexInfo.getId()),
-                                        updatedParallelisms.get(outputEntry.getKey()),
-                                        outputEntry.getValue(),
+                                        updatedParallelisms.get(outputVertexId),
+                                        shipStrategy,
                                         buffersPerChannel,
                                         floatingBuffers)
                                 * memorySegmentBytes;
@@ -290,25 +294,26 @@ public class MemoryTuning {
      * Calculate how many network segment current vertex needs.
      *
      * @param currentVertexParallelism The parallelism of current vertex.
-     * @param otherVertexParallelism The parallelism of other vertex.
+     * @param connectedVertexParallelism The parallelism of connected vertex.
      */
     @VisibleForTesting
     static int calculateNetworkSegmentNumber(
             int currentVertexParallelism,
-            int otherVertexParallelism,
+            int connectedVertexParallelism,
             String shipStrategy,
             int buffersPerChannel,
             int floatingBuffers) {
         // TODO When the parallelism is changed via the rescale api, the FORWARD may be changed to
         // RESCALE. This logic may needs to be updated after FLINK-33123.
-        if (currentVertexParallelism == otherVertexParallelism && "FORWARD".equals(shipStrategy)) {
+        if (currentVertexParallelism == connectedVertexParallelism
+                && "FORWARD".equals(shipStrategy)) {
             return buffersPerChannel + floatingBuffers;
         } else if ("FORWARD".equals(shipStrategy) || "RESCALE".equals(shipStrategy)) {
             final int channelCount =
-                    (int) Math.ceil(1.0d * otherVertexParallelism / currentVertexParallelism);
+                    (int) Math.ceil(connectedVertexParallelism / (double) currentVertexParallelism);
             return channelCount * buffersPerChannel + floatingBuffers;
         } else {
-            return otherVertexParallelism * buffersPerChannel + floatingBuffers;
+            return connectedVertexParallelism * buffersPerChannel + floatingBuffers;
         }
     }
 
