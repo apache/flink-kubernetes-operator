@@ -40,7 +40,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.Set;
+import java.util.Map;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.JobAutoScalerImpl.AUTOSCALER_ERROR;
@@ -78,9 +78,13 @@ public class BacklogBasedScalingTest {
         metricsCollector =
                 new TestingMetricsCollector<>(
                         new JobTopology(
-                                new VertexInfo(source1, Set.of(), 1, 720, new IOMetrics(0, 0, 0)),
+                                new VertexInfo(source1, Map.of(), 1, 720, new IOMetrics(0, 0, 0)),
                                 new VertexInfo(
-                                        sink, Set.of(source1), 1, 720, new IOMetrics(0, 0, 0))));
+                                        sink,
+                                        Map.of(source1, "REBALANCE"),
+                                        1,
+                                        720,
+                                        new IOMetrics(0, 0, 0))));
 
         var defaultConf = context.getConfiguration();
         defaultConf.set(AutoScalerOptions.AUTOSCALER_ENABLED, true);
@@ -152,8 +156,8 @@ public class BacklogBasedScalingTest {
         // Update topology to reflect updated parallelisms
         metricsCollector.setJobTopology(
                 new JobTopology(
-                        new VertexInfo(source1, Set.of(), 4, 24),
-                        new VertexInfo(sink, Set.of(source1), 4, 720)));
+                        new VertexInfo(source1, Map.of(), 4, 24),
+                        new VertexInfo(sink, Map.of(source1, "REBALANCE"), 4, 720)));
 
         metricsCollector.updateMetrics(
                 source1,
@@ -234,8 +238,8 @@ public class BacklogBasedScalingTest {
         metricsCollector.setJobUpdateTs(now);
         metricsCollector.setJobTopology(
                 new JobTopology(
-                        new VertexInfo(source1, Set.of(), 2, 24),
-                        new VertexInfo(sink, Set.of(source1), 2, 720)));
+                        new VertexInfo(source1, Map.of(), 2, 24),
+                        new VertexInfo(sink, Map.of(source1, "REBALANCE"), 2, 720)));
 
         /* Test stability while processing backlog. */
 
@@ -356,8 +360,8 @@ public class BacklogBasedScalingTest {
         context = context.toBuilder().jobStatus(JobStatus.RUNNING).build();
         metricsCollector.setJobTopology(
                 new JobTopology(
-                        new VertexInfo(source1, Set.of(), 4, 720),
-                        new VertexInfo(sink, Set.of(source1), 4, 720)));
+                        new VertexInfo(source1, Map.of(), 4, 720),
+                        new VertexInfo(sink, Map.of(source1, "REBALANCE"), 4, 720)));
 
         var expectedEndTime = Instant.ofEpochMilli(10);
         metricsCollector.setJobUpdateTs(expectedEndTime);

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.autoscaler.utils;
+package org.apache.flink.autoscaler.tuning;
 
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
@@ -28,8 +28,6 @@ import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
-import org.apache.flink.autoscaler.tuning.ConfigChanges;
-import org.apache.flink.autoscaler.tuning.MemoryTuning;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.TaskManagerOptions;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -39,7 +37,6 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
@@ -87,8 +84,14 @@ public class MemoryTuningTest {
 
         JobTopology jobTopology =
                 new JobTopology(
-                        new VertexInfo(jobVertex1, Set.of(), 50, 1000, false, null),
-                        new VertexInfo(jobVertex2, Set.of(jobVertex1), 50, 1000, false, null));
+                        new VertexInfo(jobVertex1, Map.of(), 50, 1000, false, null),
+                        new VertexInfo(
+                                jobVertex2,
+                                Map.of(jobVertex1, "REBALANCE"),
+                                50,
+                                1000,
+                                false,
+                                null));
 
         Map<JobVertexID, ScalingSummary> scalingSummaries =
                 Map.of(
@@ -194,5 +197,28 @@ public class MemoryTuningTest {
         assertThat(eventHandler.events.poll().getMessage())
                 .startsWith(
                         "Memory tuning recommends the following configuration (automatic tuning is disabled):");
+    }
+
+    @Test
+    void testCalculateNetworkSegmentNumber() {
+        // Test FORWARD
+        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 10, "FORWARD", 2, 8))
+                .isEqualTo(10);
+
+        // Test FORWARD is changed to RESCALE.
+        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, "FORWARD", 2, 8))
+                .isEqualTo(12);
+
+        // Test RESCALE.
+        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, "RESCALE", 2, 8))
+                .isEqualTo(12);
+
+        // Test REBALANCE.
+        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, "REBALANCE", 2, 8))
+                .isEqualTo(38);
+
+        // Test Unrecognizable.
+        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, "Unrecognizable", 2, 8))
+                .isEqualTo(38);
     }
 }

@@ -45,7 +45,6 @@ import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
@@ -318,8 +317,8 @@ public class ScalingExecutorTest {
 
         JobTopology jobTopology =
                 new JobTopology(
-                        new VertexInfo(source, Set.of(), 10, 1000, false, null),
-                        new VertexInfo(sink, Set.of(source), 10, 1000, false, null));
+                        new VertexInfo(source, Map.of(), 10, 1000, false, null),
+                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 10, 1000, false, null));
 
         assertTrue(
                 scalingDecisionExecutor.scaleResource(

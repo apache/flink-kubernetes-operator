@@ -53,7 +53,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 
 import static java.util.Map.entry;
@@ -87,7 +86,7 @@ public class JobAutoScalerImplTest {
     @Test
     void testMetricReporting() throws Exception {
         JobVertexID jobVertexID = new JobVertexID();
-        JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Set.of(), 1, 10));
+        JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Map.of(), 1, 10));
 
         var metricsCollector =
                 new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(jobTopology);

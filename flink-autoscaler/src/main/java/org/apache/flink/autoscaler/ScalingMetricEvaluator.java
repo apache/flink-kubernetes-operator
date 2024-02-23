@@ -338,7 +338,7 @@ public class ScalingMetricEvaluator {
             }
             out.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchUpInputRate));
         } else {
-            var inputs = topology.get(vertex).getInputs();
+            var inputs = topology.get(vertex).getInputs().keySet();
             double sumAvgTargetRate = 0;
             double sumCatchUpDataRate = 0;
             for (var inputVertex : inputs) {
@@ -531,7 +531,7 @@ public class ScalingMetricEvaluator {
             JobVertexID from,
             JobVertexID to) {
 
-        var toVertexInputs = topology.get(to).getInputs();
+        var toVertexInputs = topology.get(to).getInputs().keySet();
         // Case 1: Downstream vertex has single input (from) so we can use the most reliable num
         // records in
         if (toVertexInputs.size() == 1) {

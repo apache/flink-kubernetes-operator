@@ -36,7 +36,6 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.CATCH_UP_DURATION;
@@ -60,8 +59,8 @@ public class ScalingMetricEvaluatorTest {
 
         var topology =
                 new JobTopology(
-                        new VertexInfo(source, Collections.emptySet(), 1, 1, null),
-                        new VertexInfo(sink, Set.of(source), 1, 1, null));
+                        new VertexInfo(source, Collections.emptyMap(), 1, 1, null),
+                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 1, null));
 
         var metricHistory = new TreeMap<Instant, CollectedMetrics>();
 
@@ -324,8 +323,8 @@ public class ScalingMetricEvaluatorTest {
 
         var topology =
                 new JobTopology(
-                        new VertexInfo(source, Collections.emptySet(), 1, 1),
-                        new VertexInfo(sink, Set.of(source), 1, 1));
+                        new VertexInfo(source, Collections.emptyMap(), 1, 1),
+                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 1));
 
         var metricHistory = new TreeMap<Instant, CollectedMetrics>();
 
@@ -660,10 +659,11 @@ public class ScalingMetricEvaluatorTest {
 
         var topology =
                 new JobTopology(
-                        new VertexInfo(source1, Collections.emptySet(), 1, 1),
-                        new VertexInfo(source2, Collections.emptySet(), 1, 1),
-                        new VertexInfo(op1, Set.of(source1, source2), 1, 1),
-                        new VertexInfo(sink1, Set.of(op1), 1, 1));
+                        new VertexInfo(source1, Collections.emptyMap(), 1, 1),
+                        new VertexInfo(source2, Collections.emptyMap(), 1, 1),
+                        new VertexInfo(
+                                op1, Map.of(source1, "REBALANCE", source2, "REBALANCE"), 1, 1),
+                        new VertexInfo(sink1, Map.of(op1, "REBALANCE"), 1, 1));
 
         var metricHistory = new TreeMap<Instant, CollectedMetrics>();
 
@@ -726,10 +726,12 @@ public class ScalingMetricEvaluatorTest {
 
         var topology =
                 new JobTopology(
-                        new VertexInfo(source1, Collections.emptySet(), 1, 1),
-                        new VertexInfo(source2, Collections.emptySet(), 1, 1),
-                        new VertexInfo(op1, Set.of(source1, source2), 1, 1),
-                        new VertexInfo(op2, Set.of(source1, source2), 1, 1));
+                        new VertexInfo(source1, Collections.emptyMap(), 1, 1),
+                        new VertexInfo(source2, Collections.emptyMap(), 1, 1),
+                        new VertexInfo(
+                                op1, Map.of(source1, "REBALANCE", source2, "REBALANCE"), 1, 1),
+                        new VertexInfo(
+                                op2, Map.of(source1, "REBALANCE", source2, "REBALANCE"), 1, 1));
 
         var metricHistory = new TreeMap<Instant, CollectedMetrics>();
 
