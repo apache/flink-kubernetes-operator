@@ -209,8 +209,7 @@ class ScalingTrackingTest {
         Set<VertexInfo> vertexInfos = new HashSet<>();
         for (Map.Entry<JobVertexID, Integer> entry : parallelisms.entrySet()) {
             vertexInfos.add(
-                    new VertexInfo(
-                            entry.getKey(), new HashSet<>(), entry.getValue(), entry.getValue()));
+                    new VertexInfo(entry.getKey(), Map.of(), entry.getValue(), entry.getValue()));
         }
         return vertexInfos;
     }

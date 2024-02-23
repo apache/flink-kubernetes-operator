@@ -30,7 +30,6 @@ import org.junit.jupiter.api.Test;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -45,17 +44,17 @@ public class JobTopologyTest {
         var s2 = env.fromElements(1).name("s2");
 
         s1.union(s2)
-                .shuffle()
+                .keyBy(v -> v)
                 .map(i -> i)
                 .name("map1")
                 .setParallelism(2)
-                .shuffle()
                 .print()
+                .disableChaining()
                 .name("sink1")
-                .setParallelism(3);
+                .setParallelism(2);
 
         var s3 = env.fromElements(1).name("s3");
-        var map2 = s3.shuffle().map(i -> i).name("map2").setParallelism(4).shuffle();
+        var map2 = s3.rescale().map(i -> i).name("map2").setParallelism(4).rebalance();
 
         map2.print().name("sink2").setParallelism(5);
         map2.print().name("sink3").setParallelism(6);
@@ -83,17 +82,25 @@ public class JobTopologyTest {
         assertTrue(jobTopology.get(vertices.get("Sink: sink3")).getOutputs().isEmpty());
 
         assertEquals(
-                Set.of(vertices.get("map1")),
+                Map.of(vertices.get("map1"), "HASH"),
                 jobTopology.get(vertices.get("Source: s1")).getOutputs());
         assertEquals(
-                Set.of(vertices.get("map1")),
+                Map.of(vertices.get("map1"), "HASH"),
                 jobTopology.get(vertices.get("Source: s2")).getOutputs());
         assertEquals(
-                Set.of(vertices.get("map2")),
+                Map.of(vertices.get("Sink: sink1"), "FORWARD"),
+                jobTopology.get(vertices.get("map1")).getOutputs());
+
+        assertEquals(
+                Map.of(vertices.get("map2"), "RESCALE"),
                 jobTopology.get(vertices.get("Source: s3")).getOutputs());
 
         assertEquals(
-                Set.of(vertices.get("Sink: sink2"), vertices.get("Sink: sink3")),
+                Map.of(
+                        vertices.get("Sink: sink2"),
+                        "REBALANCE",
+                        vertices.get("Sink: sink3"),
+                        "REBALANCE"),
                 jobTopology.get(vertices.get("map2")).getOutputs());
 
         assertEquals(2, jobTopology.get(vertices.get("map1")).getParallelism());

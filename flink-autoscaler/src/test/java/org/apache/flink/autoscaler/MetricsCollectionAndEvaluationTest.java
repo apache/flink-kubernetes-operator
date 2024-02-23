@@ -47,7 +47,6 @@ import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Supplier;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
@@ -89,11 +88,16 @@ public class MetricsCollectionAndEvaluationTest {
 
         topology =
                 new JobTopology(
-                        new VertexInfo(source1, Set.of(), 2, 720, new IOMetrics(0, 0, 0)),
-                        new VertexInfo(source2, Set.of(), 2, 720, new IOMetrics(0, 0, 0)),
+                        new VertexInfo(source1, Map.of(), 2, 720, new IOMetrics(0, 0, 0)),
+                        new VertexInfo(source2, Map.of(), 2, 720, new IOMetrics(0, 0, 0)),
                         new VertexInfo(
-                                map, Set.of(source1, source2), 12, 720, new IOMetrics(0, 0, 0)),
-                        new VertexInfo(sink, Set.of(map), 8, 24, new IOMetrics(0, 0, 0)));
+                                map,
+                                Map.of(source1, "REBALANCE", source2, "REBALANCE"),
+                                12,
+                                720,
+                                new IOMetrics(0, 0, 0)),
+                        new VertexInfo(
+                                sink, Map.of(map, "REBALANCE"), 8, 24, new IOMetrics(0, 0, 0)));
 
         metricsCollector = new TestingMetricsCollector<>(topology);
 
@@ -335,7 +339,7 @@ public class MetricsCollectionAndEvaluationTest {
 
     @Test
     public void testTolerateAbsenceOfPendingRecordsMetric() throws Exception {
-        var topology = new JobTopology(new VertexInfo(source1, Set.of(), 5, 720));
+        var topology = new JobTopology(new VertexInfo(source1, Map.of(), 5, 720));
 
         metricsCollector = new TestingMetricsCollector(topology);
         metricsCollector.setJobUpdateTs(startTime);
@@ -408,9 +412,9 @@ public class MetricsCollectionAndEvaluationTest {
         var finished = new JobVertexID();
         var topology =
                 new JobTopology(
-                        new VertexInfo(s1, Set.of(), 10, 720),
+                        new VertexInfo(s1, Map.of(), 10, 720),
                         new VertexInfo(
-                                finished, Set.of(), 10, 720, true, IOMetrics.FINISHED_METRICS));
+                                finished, Map.of(), 10, 720, true, IOMetrics.FINISHED_METRICS));
 
         metricsCollector = new TestingMetricsCollector(topology);
         metricsCollector.setJobUpdateTs(startTime);
@@ -445,7 +449,7 @@ public class MetricsCollectionAndEvaluationTest {
     @Test
     public void testObservedTprCollection() throws Exception {
         var source = new JobVertexID();
-        var topology = new JobTopology(new VertexInfo(source, Set.of(), 10, 720));
+        var topology = new JobTopology(new VertexInfo(source, Map.of(), 10, 720));
 
         metricsCollector = new TestingMetricsCollector(topology);
         metricsCollector.setJobUpdateTs(startTime);
@@ -521,7 +525,7 @@ public class MetricsCollectionAndEvaluationTest {
     @Test
     public void testMetricCollectionDuringStabilization() throws Exception {
         var source = new JobVertexID();
-        var topology = new JobTopology(new VertexInfo(source, Set.of(), 10, 720));
+        var topology = new JobTopology(new VertexInfo(source, Map.of(), 10, 720));
 
         metricsCollector = new TestingMetricsCollector(topology);
         metricsCollector.setJobUpdateTs(startTime);
@@ -596,7 +600,7 @@ public class MetricsCollectionAndEvaluationTest {
 
     @Test
     public void testScaleDownWithZeroProcessingRate() throws Exception {
-        var topology = new JobTopology(new VertexInfo(source1, Set.of(), 2, 720));
+        var topology = new JobTopology(new VertexInfo(source1, Map.of(), 2, 720));
 
         metricsCollector = new TestingMetricsCollector<>(topology);
         metricsCollector.setJobUpdateTs(startTime);

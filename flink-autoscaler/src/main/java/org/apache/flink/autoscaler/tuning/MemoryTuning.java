@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler.tuning;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
@@ -243,9 +244,9 @@ public class MemoryTuning {
             Configuration config,
             MemoryBudget memBudget) {
 
-        final long buffersPerChannel =
+        final int buffersPerChannel =
                 config.get(NettyShuffleEnvironmentOptions.NETWORK_BUFFERS_PER_CHANNEL);
-        final long floatingBuffers =
+        final int floatingBuffers =
                 config.get(NettyShuffleEnvironmentOptions.NETWORK_EXTRA_BUFFERS_PER_GATE);
         final long memorySegmentBytes =
                 config.get(TaskManagerOptions.MEMORY_SEGMENT_SIZE).getBytes();
@@ -253,18 +254,30 @@ public class MemoryTuning {
         long maxNetworkMemory = 0;
         for (VertexInfo vertexInfo : jobTopology.getVertexInfos().values()) {
             // Add max amount of memory for each input gate
-            for (JobVertexID input : vertexInfo.getInputs()) {
-                int inputParallelism = updatedParallelisms.get(input);
+            for (Map.Entry<JobVertexID, String> inputEntry : vertexInfo.getInputs().entrySet()) {
+                final JobVertexID inputVertexId = inputEntry.getKey();
+                final String shipStrategy = inputEntry.getValue();
                 maxNetworkMemory +=
-                        (inputParallelism * buffersPerChannel + floatingBuffers)
+                        calculateNetworkSegmentNumber(
+                                        updatedParallelisms.get(vertexInfo.getId()),
+                                        updatedParallelisms.get(inputVertexId),
+                                        shipStrategy,
+                                        buffersPerChannel,
+                                        floatingBuffers)
                                 * memorySegmentBytes;
             }
             // Add max amount of memory for each output gate
             // Usually, there is just one output per task
-            for (JobVertexID output : vertexInfo.getOutputs()) {
-                int downstreamParallelism = updatedParallelisms.get(output);
+            for (Map.Entry<JobVertexID, String> outputEntry : vertexInfo.getOutputs().entrySet()) {
+                final JobVertexID outputVertexId = outputEntry.getKey();
+                final String shipStrategy = outputEntry.getValue();
                 maxNetworkMemory +=
-                        (downstreamParallelism * buffersPerChannel + floatingBuffers)
+                        calculateNetworkSegmentNumber(
+                                        updatedParallelisms.get(vertexInfo.getId()),
+                                        updatedParallelisms.get(outputVertexId),
+                                        shipStrategy,
+                                        buffersPerChannel,
+                                        floatingBuffers)
                                 * memorySegmentBytes;
             }
         }
@@ -275,6 +288,33 @@ public class MemoryTuning {
         maxNetworkMemory *= config.get(TaskManagerOptions.NUM_TASK_SLOTS);
 
         return new MemorySize(memBudget.budget(maxNetworkMemory));
+    }
+
+    /**
+     * Calculate how many network segment current vertex needs.
+     *
+     * @param currentVertexParallelism The parallelism of current vertex.
+     * @param connectedVertexParallelism The parallelism of connected vertex.
+     */
+    @VisibleForTesting
+    static int calculateNetworkSegmentNumber(
+            int currentVertexParallelism,
+            int connectedVertexParallelism,
+            String shipStrategy,
+            int buffersPerChannel,
+            int floatingBuffers) {
+        // TODO When the parallelism is changed via the rescale api, the FORWARD may be changed to
+        // RESCALE. This logic may needs to be updated after FLINK-33123.
+        if (currentVertexParallelism == connectedVertexParallelism
+                && "FORWARD".equals(shipStrategy)) {
+            return buffersPerChannel + floatingBuffers;
+        } else if ("FORWARD".equals(shipStrategy) || "RESCALE".equals(shipStrategy)) {
+            final int channelCount =
+                    (int) Math.ceil(connectedVertexParallelism / (double) currentVertexParallelism);
+            return channelCount * buffersPerChannel + floatingBuffers;
+        } else {
+            return connectedVertexParallelism * buffersPerChannel + floatingBuffers;
+        }
     }
 
     private static MemorySize getUsage(

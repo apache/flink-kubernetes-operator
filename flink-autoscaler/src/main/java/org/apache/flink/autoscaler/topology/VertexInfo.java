@@ -22,7 +22,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import lombok.Data;
 
-import java.util.Set;
+import java.util.Map;
 
 /** Job vertex information. */
 @Data
@@ -30,9 +30,11 @@ public class VertexInfo {
 
     private final JobVertexID id;
 
-    private final Set<JobVertexID> inputs;
+    // All input vertices and the ship_strategy
+    private final Map<JobVertexID, String> inputs;
 
-    private Set<JobVertexID> outputs;
+    // All output vertices and the ship_strategy
+    private Map<JobVertexID, String> outputs;
 
     private final int parallelism;
 
@@ -46,7 +48,7 @@ public class VertexInfo {
 
     public VertexInfo(
             JobVertexID id,
-            Set<JobVertexID> inputs,
+            Map<JobVertexID, String> inputs,
             int parallelism,
             int maxParallelism,
             boolean finished,
@@ -63,7 +65,7 @@ public class VertexInfo {
     @VisibleForTesting
     public VertexInfo(
             JobVertexID id,
-            Set<JobVertexID> inputs,
+            Map<JobVertexID, String> inputs,
             int parallelism,
             int maxParallelism,
             IOMetrics ioMetrics) {
@@ -72,7 +74,7 @@ public class VertexInfo {
 
     @VisibleForTesting
     public VertexInfo(
-            JobVertexID id, Set<JobVertexID> inputs, int parallelism, int maxParallelism) {
+            JobVertexID id, Map<JobVertexID, String> inputs, int parallelism, int maxParallelism) {
         this(id, inputs, parallelism, maxParallelism, null);
     }
 

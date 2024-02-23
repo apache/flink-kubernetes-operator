@@ -217,10 +217,15 @@ public class ScalingMetricCollectorTest {
         var sourceId = JobVertexID.fromHexString("bc764cd8ddf7a0cff126f51c16239658");
         var sinkId = JobVertexID.fromHexString("20ba6b65f97481d5570070de90e4e791");
 
-        var source = new VertexInfo(sourceId, Set.of(), 2, 128, true, IOMetrics.FINISHED_METRICS);
+        var source = new VertexInfo(sourceId, Map.of(), 2, 128, true, IOMetrics.FINISHED_METRICS);
         var sink =
                 new VertexInfo(
-                        sinkId, Set.of(sourceId), 2, 128, false, new IOMetrics(291532, 1, 2));
+                        sinkId,
+                        Map.of(sourceId, "HASH"),
+                        2,
+                        128,
+                        false,
+                        new IOMetrics(291532, 1, 2));
 
         assertEquals(
                 new JobTopology(source, sink), metricsCollector.getJobTopology(jobDetailsInfo));
@@ -269,13 +274,13 @@ public class ScalingMetricCollectorTest {
 
         var t1 =
                 new JobTopology(
-                        new VertexInfo(source, Set.of(), 1, 1),
-                        new VertexInfo(sink, Set.of(source), 1, 1));
+                        new VertexInfo(source, Map.of(), 1, 1),
+                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 1));
 
         var t2 =
                 new JobTopology(
-                        new VertexInfo(source2, Set.of(), 1, 1),
-                        new VertexInfo(sink, Set.of(source2), 1, 1));
+                        new VertexInfo(source2, Map.of(), 1, 1),
+                        new VertexInfo(sink, Map.of(source2, "REBALANCE"), 1, 1));
 
         collector.queryFilteredMetricNames(context, t1);
         assertEquals(1, metricNameQueryCounter.get(source));
@@ -303,8 +308,8 @@ public class ScalingMetricCollectorTest {
         // Mark source finished, should not be queried again
         t2 =
                 new JobTopology(
-                        new VertexInfo(source2, Set.of(), 1, 1, true, null),
-                        new VertexInfo(sink, Set.of(source2), 1, 1));
+                        new VertexInfo(source2, Map.of(), 1, 1, true, null),
+                        new VertexInfo(sink, Map.of(source2, "REBALANCE"), 1, 1));
         collector.queryFilteredMetricNames(context, t2);
         assertEquals(3, metricNameQueryCounter.get(source));
         assertEquals(2, metricNameQueryCounter.get(source2));
@@ -327,8 +332,8 @@ public class ScalingMetricCollectorTest {
         var sink = new JobVertexID();
         var topology =
                 new JobTopology(
-                        new VertexInfo(source, Set.of(), 1, 1),
-                        new VertexInfo(sink, Set.of(source), 1, 1));
+                        new VertexInfo(source, Map.of(), 1, 1),
+                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 1));
 
         testRequiredMetrics(
                 metricList, getSourceRequiredMetrics(), testCollector, source, topology);
@@ -404,8 +409,8 @@ public class ScalingMetricCollectorTest {
         var sink = new JobVertexID();
         var topology =
                 new JobTopology(
-                        new VertexInfo(source, Set.of(), 1, 1),
-                        new VertexInfo(sink, Set.of(source), 1, 1));
+                        new VertexInfo(source, Map.of(), 1, 1),
+                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 1));
 
         var metricCollector = new TestingMetricsCollector<>(topology);
 

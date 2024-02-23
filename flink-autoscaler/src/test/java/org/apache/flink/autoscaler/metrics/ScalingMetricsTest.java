@@ -33,7 +33,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -52,8 +51,9 @@ public class ScalingMetricsTest {
         var topology =
                 new JobTopology(
                         new VertexInfo(
-                                source, Collections.emptySet(), 1, 1, new IOMetrics(1, 2, 3)),
-                        new VertexInfo(op, Set.of(source), 1, 1, new IOMetrics(1, 2, 3)));
+                                source, Collections.emptyMap(), 1, 1, new IOMetrics(1, 2, 3)),
+                        new VertexInfo(
+                                op, Map.of(source, "REBALANCE"), 1, 1, new IOMetrics(1, 2, 3)));
 
         Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
         ScalingMetrics.computeDataRateMetrics(
@@ -221,8 +221,9 @@ public class ScalingMetricsTest {
         var topology =
                 new JobTopology(
                         new VertexInfo(
-                                SOURCE, Collections.emptySet(), 1, 1, new IOMetrics(0, 0, 0)),
-                        new VertexInfo(sink, Set.of(SOURCE), 1, 1, new IOMetrics(0, 0, 0)));
+                                SOURCE, Collections.emptyMap(), 1, 1, new IOMetrics(0, 0, 0)),
+                        new VertexInfo(
+                                sink, Map.of(SOURCE, "REBALANCE"), 1, 1, new IOMetrics(0, 0, 0)));
 
         Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
         scalingMetrics.put(ScalingMetric.LAG, lag);

@@ -61,7 +61,7 @@ public class JobTopology {
 
     public JobTopology(Set<VertexInfo> vertexInfo) {
 
-        Map<JobVertexID, Set<JobVertexID>> vertexOutputs = new HashMap<>();
+        Map<JobVertexID, Map<JobVertexID, String>> vertexOutputs = new HashMap<>();
         vertexInfos =
                 ImmutableMap.copyOf(
                         vertexInfo.stream().collect(Collectors.toMap(VertexInfo::getId, v -> v)));
@@ -72,13 +72,13 @@ public class JobTopology {
                 info -> {
                     var vertexId = info.getId();
 
-                    vertexOutputs.computeIfAbsent(vertexId, id -> new HashSet<>());
+                    vertexOutputs.computeIfAbsent(vertexId, id -> new HashMap<>());
                     info.getInputs()
                             .forEach(
-                                    inputId ->
+                                    (inputId, shipStrategy) ->
                                             vertexOutputs
-                                                    .computeIfAbsent(inputId, id -> new HashSet<>())
-                                                    .add(vertexId));
+                                                    .computeIfAbsent(inputId, id -> new HashMap<>())
+                                                    .put(vertexId, shipStrategy));
                     if (info.isFinished()) {
                         finishedVertices.add(vertexId);
                     }
@@ -105,7 +105,8 @@ public class JobTopology {
         List<JobVertexID> sorted = new ArrayList<>(vertexInfos.size());
 
         Map<JobVertexID, List<JobVertexID>> remainingInputs = new HashMap<>(vertexInfos.size());
-        vertexInfos.forEach((id, v) -> remainingInputs.put(id, new ArrayList<>(v.getInputs())));
+        vertexInfos.forEach(
+                (id, v) -> remainingInputs.put(id, new ArrayList<>(v.getInputs().keySet())));
 
         while (!remainingInputs.isEmpty()) {
             List<JobVertexID> verticesWithZeroIndegree = new ArrayList<>();
@@ -122,6 +123,7 @@ public class JobTopology {
                         vertexInfos
                                 .get(v)
                                 .getOutputs()
+                                .keySet()
                                 .forEach(o -> remainingInputs.get(o).remove(v));
                     });
 
@@ -143,20 +145,22 @@ public class JobTopology {
 
         for (JsonNode node : nodes) {
             var vertexId = JobVertexID.fromHexString(node.get("id").asText());
-            var inputList = new HashSet<JobVertexID>();
+            var inputs = new HashMap<JobVertexID, String>();
             var ioMetrics = metrics.get(vertexId);
             var finished = finishedVertices.contains(vertexId);
             vertexInfo.add(
                     new VertexInfo(
                             vertexId,
-                            inputList,
+                            inputs,
                             node.get("parallelism").asInt(),
                             maxParallelismMap.get(vertexId),
                             finished,
                             finished ? IOMetrics.FINISHED_METRICS : ioMetrics));
             if (node.has("inputs")) {
                 for (JsonNode input : node.get("inputs")) {
-                    inputList.add(JobVertexID.fromHexString(input.get("id").asText()));
+                    inputs.put(
+                            JobVertexID.fromHexString(input.get("id").asText()),
+                            input.get("ship_strategy").asText());
                 }
             }
         }

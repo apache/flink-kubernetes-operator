@@ -37,7 +37,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.Set;
+import java.util.Map;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.getRestClusterClientSupplier;
@@ -74,8 +74,8 @@ public class RecommendedParallelismTest {
         metricsCollector =
                 new TestingMetricsCollector<>(
                         new JobTopology(
-                                new VertexInfo(source, Set.of(), 1, 720),
-                                new VertexInfo(sink, Set.of(source), 1, 720)));
+                                new VertexInfo(source, Map.of(), 1, 720),
+                                new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 720)));
 
         var defaultConf = context.getConfiguration();
         defaultConf.set(AutoScalerOptions.AUTOSCALER_ENABLED, true);
@@ -198,8 +198,8 @@ public class RecommendedParallelismTest {
         // updating the topology to reflect the scale
         metricsCollector.setJobTopology(
                 new JobTopology(
-                        new VertexInfo(source, Set.of(), 4, 24),
-                        new VertexInfo(sink, Set.of(source), 4, 720)));
+                        new VertexInfo(source, Map.of(), 4, 24),
+                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 4, 720)));
 
         now = now.plus(Duration.ofSeconds(10));
         setClocksTo(now);
