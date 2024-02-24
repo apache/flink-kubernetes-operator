@@ -57,6 +57,7 @@ import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScali
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
 
 /** Class responsible for executing scaling decisions. */
 public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
@@ -229,7 +230,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                         (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
 
                                 final boolean hasKeyBy =
-                                        jobTopology.get(v).getInputs().containsValue("HASH");
+                                        jobTopology.get(v).getInputs().containsValue(HASH);
                                 var newParallelism =
                                         jobVertexScaler.computeScaleTargetParallelism(
                                                 context,

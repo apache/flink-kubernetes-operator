@@ -50,6 +50,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -92,12 +93,12 @@ public class MetricsCollectionAndEvaluationTest {
                         new VertexInfo(source2, Map.of(), 2, 720, new IOMetrics(0, 0, 0)),
                         new VertexInfo(
                                 map,
-                                Map.of(source1, "REBALANCE", source2, "REBALANCE"),
+                                Map.of(source1, REBALANCE, source2, REBALANCE),
                                 12,
                                 720,
                                 new IOMetrics(0, 0, 0)),
                         new VertexInfo(
-                                sink, Map.of(map, "REBALANCE"), 8, 24, new IOMetrics(0, 0, 0)));
+                                sink, Map.of(map, REBALANCE), 8, 24, new IOMetrics(0, 0, 0)));
 
         metricsCollector = new TestingMetricsCollector<>(topology);
 

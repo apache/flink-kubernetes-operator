@@ -43,6 +43,7 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.PREFER_TRACKE
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.RESTART_TIME;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -60,7 +61,7 @@ public class ScalingMetricEvaluatorTest {
         var topology =
                 new JobTopology(
                         new VertexInfo(source, Collections.emptyMap(), 1, 1, null),
-                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 1, null));
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1, null));
 
         var metricHistory = new TreeMap<Instant, CollectedMetrics>();
 
@@ -324,7 +325,7 @@ public class ScalingMetricEvaluatorTest {
         var topology =
                 new JobTopology(
                         new VertexInfo(source, Collections.emptyMap(), 1, 1),
-                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 1));
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1));
 
         var metricHistory = new TreeMap<Instant, CollectedMetrics>();
 
@@ -661,9 +662,8 @@ public class ScalingMetricEvaluatorTest {
                 new JobTopology(
                         new VertexInfo(source1, Collections.emptyMap(), 1, 1),
                         new VertexInfo(source2, Collections.emptyMap(), 1, 1),
-                        new VertexInfo(
-                                op1, Map.of(source1, "REBALANCE", source2, "REBALANCE"), 1, 1),
-                        new VertexInfo(sink1, Map.of(op1, "REBALANCE"), 1, 1));
+                        new VertexInfo(op1, Map.of(source1, REBALANCE, source2, REBALANCE), 1, 1),
+                        new VertexInfo(sink1, Map.of(op1, REBALANCE), 1, 1));
 
         var metricHistory = new TreeMap<Instant, CollectedMetrics>();
 
@@ -728,10 +728,8 @@ public class ScalingMetricEvaluatorTest {
                 new JobTopology(
                         new VertexInfo(source1, Collections.emptyMap(), 1, 1),
                         new VertexInfo(source2, Collections.emptyMap(), 1, 1),
-                        new VertexInfo(
-                                op1, Map.of(source1, "REBALANCE", source2, "REBALANCE"), 1, 1),
-                        new VertexInfo(
-                                op2, Map.of(source1, "REBALANCE", source2, "REBALANCE"), 1, 1));
+                        new VertexInfo(op1, Map.of(source1, REBALANCE, source2, REBALANCE), 1, 1),
+                        new VertexInfo(op2, Map.of(source1, REBALANCE, source2, REBALANCE), 1, 1));
 
         var metricHistory = new TreeMap<Instant, CollectedMetrics>();
 

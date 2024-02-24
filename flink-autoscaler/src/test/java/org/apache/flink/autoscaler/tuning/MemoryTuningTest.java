@@ -38,6 +38,10 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.apache.flink.autoscaler.topology.ShipStrategy.FORWARD;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.RESCALE;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.UNKNOWN;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 /** Tests for {@link MemoryTuning}. */
@@ -86,12 +90,7 @@ public class MemoryTuningTest {
                 new JobTopology(
                         new VertexInfo(jobVertex1, Map.of(), 50, 1000, false, null),
                         new VertexInfo(
-                                jobVertex2,
-                                Map.of(jobVertex1, "REBALANCE"),
-                                50,
-                                1000,
-                                false,
-                                null));
+                                jobVertex2, Map.of(jobVertex1, REBALANCE), 50, 1000, false, null));
 
         Map<JobVertexID, ScalingSummary> scalingSummaries =
                 Map.of(
@@ -202,23 +201,19 @@ public class MemoryTuningTest {
     @Test
     void testCalculateNetworkSegmentNumber() {
         // Test FORWARD
-        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 10, "FORWARD", 2, 8))
-                .isEqualTo(10);
+        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 10, FORWARD, 2, 8)).isEqualTo(10);
 
         // Test FORWARD is changed to RESCALE.
-        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, "FORWARD", 2, 8))
-                .isEqualTo(12);
+        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, FORWARD, 2, 8)).isEqualTo(12);
 
         // Test RESCALE.
-        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, "RESCALE", 2, 8))
-                .isEqualTo(12);
+        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, RESCALE, 2, 8)).isEqualTo(12);
 
         // Test REBALANCE.
-        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, "REBALANCE", 2, 8))
+        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, REBALANCE, 2, 8))
                 .isEqualTo(38);
 
-        // Test Unrecognizable.
-        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, "Unrecognizable", 2, 8))
-                .isEqualTo(38);
+        // Test UNKNOWN.
+        assertThat(MemoryTuning.calculateNetworkSegmentNumber(10, 15, UNKNOWN, 2, 8)).isEqualTo(38);
     }
 }

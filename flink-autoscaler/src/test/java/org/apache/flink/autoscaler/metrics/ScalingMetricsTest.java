@@ -34,6 +34,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -53,7 +54,7 @@ public class ScalingMetricsTest {
                         new VertexInfo(
                                 source, Collections.emptyMap(), 1, 1, new IOMetrics(1, 2, 3)),
                         new VertexInfo(
-                                op, Map.of(source, "REBALANCE"), 1, 1, new IOMetrics(1, 2, 3)));
+                                op, Map.of(source, REBALANCE), 1, 1, new IOMetrics(1, 2, 3)));
 
         Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
         ScalingMetrics.computeDataRateMetrics(
@@ -223,7 +224,7 @@ public class ScalingMetricsTest {
                         new VertexInfo(
                                 SOURCE, Collections.emptyMap(), 1, 1, new IOMetrics(0, 0, 0)),
                         new VertexInfo(
-                                sink, Map.of(SOURCE, "REBALANCE"), 1, 1, new IOMetrics(0, 0, 0)));
+                                sink, Map.of(SOURCE, REBALANCE), 1, 1, new IOMetrics(0, 0, 0)));
 
         Map<ScalingMetric, Double> scalingMetrics = new HashMap<>();
         scalingMetrics.put(ScalingMetric.LAG, lag);

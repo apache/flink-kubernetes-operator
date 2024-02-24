@@ -31,10 +31,10 @@ public class VertexInfo {
     private final JobVertexID id;
 
     // All input vertices and the ship_strategy
-    private final Map<JobVertexID, String> inputs;
+    private final Map<JobVertexID, ShipStrategy> inputs;
 
     // All output vertices and the ship_strategy
-    private Map<JobVertexID, String> outputs;
+    private Map<JobVertexID, ShipStrategy> outputs;
 
     private final int parallelism;
 
@@ -48,7 +48,7 @@ public class VertexInfo {
 
     public VertexInfo(
             JobVertexID id,
-            Map<JobVertexID, String> inputs,
+            Map<JobVertexID, ShipStrategy> inputs,
             int parallelism,
             int maxParallelism,
             boolean finished,
@@ -65,7 +65,7 @@ public class VertexInfo {
     @VisibleForTesting
     public VertexInfo(
             JobVertexID id,
-            Map<JobVertexID, String> inputs,
+            Map<JobVertexID, ShipStrategy> inputs,
             int parallelism,
             int maxParallelism,
             IOMetrics ioMetrics) {
@@ -74,7 +74,10 @@ public class VertexInfo {
 
     @VisibleForTesting
     public VertexInfo(
-            JobVertexID id, Map<JobVertexID, String> inputs, int parallelism, int maxParallelism) {
+            JobVertexID id,
+            Map<JobVertexID, ShipStrategy> inputs,
+            int parallelism,
+            int maxParallelism) {
         this(id, inputs, parallelism, maxParallelism, null);
     }
 

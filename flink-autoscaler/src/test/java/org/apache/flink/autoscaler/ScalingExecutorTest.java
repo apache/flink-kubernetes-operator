@@ -52,6 +52,8 @@ import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_R
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_ENTRY;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -154,10 +156,8 @@ public class ScalingExecutorTest {
         JobTopology jobTopology =
                 new JobTopology(
                         new VertexInfo(source, Map.of(), 10, 1000, false, null),
-                        new VertexInfo(
-                                filterOperator, Map.of(source, "HASH"), 10, 1000, false, null),
-                        new VertexInfo(
-                                sink, Map.of(filterOperator, "HASH"), 10, 1000, false, null));
+                        new VertexInfo(filterOperator, Map.of(source, HASH), 10, 1000, false, null),
+                        new VertexInfo(sink, Map.of(filterOperator, HASH), 10, 1000, false, null));
 
         var conf = context.getConfiguration();
         conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
@@ -204,7 +204,7 @@ public class ScalingExecutorTest {
         JobTopology jobTopology =
                 new JobTopology(
                         new VertexInfo(source, Map.of(), 10, 1000, false, null),
-                        new VertexInfo(sink, Map.of(source, "HASH"), 10, 1000, false, null));
+                        new VertexInfo(sink, Map.of(source, HASH), 10, 1000, false, null));
 
         var conf = context.getConfiguration();
         var now = Instant.now();
@@ -255,7 +255,7 @@ public class ScalingExecutorTest {
         JobTopology jobTopology =
                 new JobTopology(
                         new VertexInfo(source, Map.of(), 10, 1000, false, null),
-                        new VertexInfo(sink, Map.of(source, "HASH"), 10, 1000, false, null));
+                        new VertexInfo(sink, Map.of(source, HASH), 10, 1000, false, null));
 
         var now = Instant.now();
         var metrics =
@@ -338,7 +338,7 @@ public class ScalingExecutorTest {
         JobTopology jobTopology =
                 new JobTopology(
                         new VertexInfo(source, Map.of(), 10, 1000, false, null),
-                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 10, 1000, false, null));
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 10, 1000, false, null));
 
         assertTrue(
                 scalingDecisionExecutor.scaleResource(

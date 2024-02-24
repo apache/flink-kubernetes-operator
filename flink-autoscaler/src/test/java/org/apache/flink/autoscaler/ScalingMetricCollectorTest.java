@@ -53,6 +53,8 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -220,12 +222,7 @@ public class ScalingMetricCollectorTest {
         var source = new VertexInfo(sourceId, Map.of(), 2, 128, true, IOMetrics.FINISHED_METRICS);
         var sink =
                 new VertexInfo(
-                        sinkId,
-                        Map.of(sourceId, "HASH"),
-                        2,
-                        128,
-                        false,
-                        new IOMetrics(291532, 1, 2));
+                        sinkId, Map.of(sourceId, HASH), 2, 128, false, new IOMetrics(291532, 1, 2));
 
         assertEquals(
                 new JobTopology(source, sink), metricsCollector.getJobTopology(jobDetailsInfo));
@@ -275,12 +272,12 @@ public class ScalingMetricCollectorTest {
         var t1 =
                 new JobTopology(
                         new VertexInfo(source, Map.of(), 1, 1),
-                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 1));
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1));
 
         var t2 =
                 new JobTopology(
                         new VertexInfo(source2, Map.of(), 1, 1),
-                        new VertexInfo(sink, Map.of(source2, "REBALANCE"), 1, 1));
+                        new VertexInfo(sink, Map.of(source2, REBALANCE), 1, 1));
 
         collector.queryFilteredMetricNames(context, t1);
         assertEquals(1, metricNameQueryCounter.get(source));
@@ -309,7 +306,7 @@ public class ScalingMetricCollectorTest {
         t2 =
                 new JobTopology(
                         new VertexInfo(source2, Map.of(), 1, 1, true, null),
-                        new VertexInfo(sink, Map.of(source2, "REBALANCE"), 1, 1));
+                        new VertexInfo(sink, Map.of(source2, REBALANCE), 1, 1));
         collector.queryFilteredMetricNames(context, t2);
         assertEquals(3, metricNameQueryCounter.get(source));
         assertEquals(2, metricNameQueryCounter.get(source2));
@@ -333,7 +330,7 @@ public class ScalingMetricCollectorTest {
         var topology =
                 new JobTopology(
                         new VertexInfo(source, Map.of(), 1, 1),
-                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 1));
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1));
 
         testRequiredMetrics(
                 metricList, getSourceRequiredMetrics(), testCollector, source, topology);
@@ -410,7 +407,7 @@ public class ScalingMetricCollectorTest {
         var topology =
                 new JobTopology(
                         new VertexInfo(source, Map.of(), 1, 1),
-                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 1));
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 1, 1));
 
         var metricCollector = new TestingMetricsCollector<>(topology);
 

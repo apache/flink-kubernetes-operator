@@ -283,14 +283,16 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         // Apply min/max parallelism
         newParallelism = Math.min(Math.max(minParallelism, newParallelism), upperBound);
 
+        if (!hasKeyBy) {
+            return newParallelism;
+        }
+
         // When the shuffle type of vertex data source contains keyBy, we try to adjust the
         // parallelism such that it divides the number of key groups without a remainder =>
         // data is evenly spread across subtasks
-        if (hasKeyBy) {
-            for (int p = newParallelism; p <= numKeyGroups / 2 && p <= upperBound; p++) {
-                if (numKeyGroups % p == 0) {
-                    return p;
-                }
+        for (int p = newParallelism; p <= numKeyGroups / 2 && p <= upperBound; p++) {
+            if (numKeyGroups % p == 0) {
+                return p;
             }
         }
 
