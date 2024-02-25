@@ -62,6 +62,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** Test for {@link ScalingExecutor}. */
 public class ScalingExecutorTest {
 
+    private static final int MAX_PARALLELISM = 720;
+
     private JobAutoScalerContext<JobID> context;
     private TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventCollector;
     private ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingDecisionExecutor;
@@ -556,11 +558,77 @@ public class ScalingExecutorTest {
         assertTrue(eventCollector.events.isEmpty());
     }
 
+    @Test
+    public void testAdjustByMaxParallelism() throws Exception {
+        var sourceHexString = "0bfd135746ac8efb3cce668b12e16d3a";
+        var source = JobVertexID.fromHexString(sourceHexString);
+        var filterOperatorHexString = "869fb403873411306404e9f2e4438c0e";
+        var filterOperator = JobVertexID.fromHexString(filterOperatorHexString);
+        var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
+        var sink = JobVertexID.fromHexString(sinkHexString);
+
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 2, MAX_PARALLELISM, false, null),
+                        new VertexInfo(
+                                filterOperator,
+                                Map.of(source, REBALANCE),
+                                2,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                sink,
+                                Map.of(filterOperator, HASH),
+                                2,
+                                MAX_PARALLELISM,
+                                false,
+                                null));
+
+        var conf = context.getConfiguration();
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.d);
+
+        // The expected new parallelism is 7 without adjustment by max parallelism.
+        var metrics =
+                new EvaluatedMetrics(
+                        Map.of(
+                                source,
+                                evaluated(2, 70, 20),
+                                filterOperator,
+                                evaluated(2, 70, 20),
+                                sink,
+                                evaluated(2, 70, 20)),
+                        dummyGlobalMetrics);
+        var now = Instant.now();
+        assertThat(
+                        scalingDecisionExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                now,
+                                jobTopology))
+                .isTrue();
+
+        Map<String, String> parallelismOverrides = stateStore.getParallelismOverrides(context);
+        // The source and keyed Operator should enable the parallelism adjustment, so the
+        // parallelism of source and sink are adjusted, but filter is not.
+        assertThat(parallelismOverrides)
+                .containsAllEntriesOf(
+                        Map.of(
+                                "0bfd135746ac8efb3cce668b12e16d3a",
+                                "8",
+                                "869fb403873411306404e9f2e4438c0e",
+                                "7",
+                                "a6b7102b8d3e3a9564998c1ffeb5e2b7",
+                                "8"));
+    }
+
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
             int parallelism, double target, double procRate, double catchupRate) {
         var metrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
         metrics.put(ScalingMetric.PARALLELISM, EvaluatedScalingMetric.of(parallelism));
-        metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(720));
+        metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(MAX_PARALLELISM));
         metrics.put(ScalingMetric.TARGET_DATA_RATE, new EvaluatedScalingMetric(target, target));
         metrics.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchupRate));
         metrics.put(
