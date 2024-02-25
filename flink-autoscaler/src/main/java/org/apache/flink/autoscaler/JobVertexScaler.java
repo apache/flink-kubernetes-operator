@@ -71,7 +71,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     public int computeScaleTargetParallelism(
             Context context,
             JobVertexID vertex,
-            boolean hasKeyBy,
+            boolean adjustByMaxParallelism,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             SortedMap<Instant, ScalingSummary> history,
             Duration restartTime) {
@@ -126,7 +126,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         scaleFactor,
                         Math.min(currentParallelism, conf.getInteger(VERTEX_MIN_PARALLELISM)),
                         Math.max(currentParallelism, conf.getInteger(VERTEX_MAX_PARALLELISM)),
-                        hasKeyBy);
+                        adjustByMaxParallelism);
 
         if (newParallelism == currentParallelism
                 || blockScalingBasedOnPastActions(
@@ -247,51 +247,63 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
     }
 
+    /**
+     * Compute newParallelism according to currentParallelism.
+     *
+     * @param currentParallelism The current parallelism.
+     * @param maxParallelism The max parallelism for job vertices. It's numKeyGroups by default, and
+     *     it's partition number for kafka source vertex.
+     * @param scaleFactor The scale factor.
+     * @param parallelismLowerLimit The parallelism lower limitation in autoscaler option.
+     * @param parallelismUpperLimit The parallelism upper limitation in autoscaler option.
+     * @param adjustByMaxParallelism True means we need to adjust parallelism according to the
+     *     maxParallelism to ensure the keyGroup or partition evenly.
+     */
     @VisibleForTesting
     protected static int scale(
-            int parallelism,
-            int numKeyGroups,
-            double scaleFactor,
-            int minParallelism,
+            int currentParallelism,
             int maxParallelism,
-            boolean hasKeyBy) {
+            double scaleFactor,
+            int parallelismLowerLimit,
+            int parallelismUpperLimit,
+            boolean adjustByMaxParallelism) {
         Preconditions.checkArgument(
-                minParallelism <= maxParallelism,
-                "The minimum parallelism must not be greater than the maximum parallelism.");
-        if (minParallelism > numKeyGroups) {
+                parallelismLowerLimit <= parallelismUpperLimit,
+                "The parallelism lower limitation must not be greater than the parallelism upper limitation.");
+        if (parallelismLowerLimit > maxParallelism) {
             LOG.warn(
                     "Specified autoscaler minimum parallelism {} is greater than the operator max parallelism {}. The min parallelism will be set to the operator max parallelism.",
-                    minParallelism,
-                    numKeyGroups);
+                    parallelismLowerLimit,
+                    maxParallelism);
         }
-        if (numKeyGroups < maxParallelism && maxParallelism != Integer.MAX_VALUE) {
+        if (maxParallelism < parallelismUpperLimit && parallelismUpperLimit != Integer.MAX_VALUE) {
             LOG.debug(
                     "Specified autoscaler maximum parallelism {} is greater than the operator max parallelism {}. This means the operator max parallelism can never be reached.",
-                    maxParallelism,
-                    numKeyGroups);
+                    parallelismUpperLimit,
+                    maxParallelism);
         }
 
         int newParallelism =
                 // Prevent integer overflow when converting from double to integer.
                 // We do not have to detect underflow because doubles cannot
                 // underflow.
-                (int) Math.min(Math.ceil(scaleFactor * parallelism), Integer.MAX_VALUE);
+                (int) Math.min(Math.ceil(scaleFactor * currentParallelism), Integer.MAX_VALUE);
 
         // Cap parallelism at either number of key groups or parallelism limit
-        final int upperBound = Math.min(numKeyGroups, maxParallelism);
+        final int upperBound = Math.min(maxParallelism, parallelismUpperLimit);
 
         // Apply min/max parallelism
-        newParallelism = Math.min(Math.max(minParallelism, newParallelism), upperBound);
+        newParallelism = Math.min(Math.max(parallelismLowerLimit, newParallelism), upperBound);
 
-        if (!hasKeyBy) {
+        if (!adjustByMaxParallelism) {
             return newParallelism;
         }
 
         // When the shuffle type of vertex data source contains keyBy, we try to adjust the
         // parallelism such that it divides the number of key groups without a remainder =>
         // data is evenly spread across subtasks
-        for (int p = newParallelism; p <= numKeyGroups / 2 && p <= upperBound; p++) {
-            if (numKeyGroups % p == 0) {
+        for (int p = newParallelism; p <= maxParallelism / 2 && p <= upperBound; p++) {
+            if (maxParallelism % p == 0) {
                 return p;
             }
         }

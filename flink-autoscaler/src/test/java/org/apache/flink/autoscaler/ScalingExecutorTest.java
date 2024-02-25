@@ -354,9 +354,9 @@ public class ScalingExecutorTest {
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
                                 "0.652",
                                 TaskManagerOptions.NETWORK_MEMORY_MIN.key(),
-                                "23040 kb",
+                                "24320 kb",
                                 TaskManagerOptions.NETWORK_MEMORY_MAX.key(),
-                                "23040 kb",
+                                "24320 kb",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "360 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
@@ -364,7 +364,7 @@ public class ScalingExecutorTest {
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "7862784 kb"));
+                                "7864064 kb"));
     }
 
     @ParameterizedTest

@@ -229,13 +229,14 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                 var currentParallelism =
                                         (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
 
-                                final boolean hasKeyBy =
-                                        jobTopology.get(v).getInputs().containsValue(HASH);
+                                var inputs = jobTopology.get(v).getInputs();
+                                var adjustByMaxParallelism =
+                                        inputs.isEmpty() || inputs.containsValue(HASH);
                                 var newParallelism =
                                         jobVertexScaler.computeScaleTargetParallelism(
                                                 context,
                                                 v,
-                                                hasKeyBy,
+                                                adjustByMaxParallelism,
                                                 metrics,
                                                 scalingHistory.getOrDefault(
                                                         v, Collections.emptySortedMap()),
