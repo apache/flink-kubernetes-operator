@@ -289,7 +289,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 // underflow.
                 (int) Math.min(Math.ceil(scaleFactor * currentParallelism), Integer.MAX_VALUE);
 
-        // Cap parallelism at either number of key groups or parallelism limit
+        // Cap parallelism at either maxParallelism(number of key groups or source partitions) or
+        // parallelism upper limit
         final int upperBound = Math.min(maxParallelism, parallelismUpperLimit);
 
         // Apply min/max parallelism
@@ -299,16 +300,16 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             return newParallelism;
         }
 
-        // When the shuffle type of vertex data source contains keyBy, we try to adjust the
-        // parallelism such that it divides the number of key groups without a remainder =>
-        // data is evenly spread across subtasks
+        // When the shuffle type of vertex inputs contains keyBy or vertex is a source, we try to
+        // adjust the parallelism such that it divides the number of key groups without a remainder
+        // => data is evenly spread across subtasks
         for (int p = newParallelism; p <= maxParallelism / 2 && p <= upperBound; p++) {
             if (maxParallelism % p == 0) {
                 return p;
             }
         }
 
-        // If key group adjustment fails, use originally computed parallelism
+        // If parallelism adjustment fails, use originally computed parallelism
         return newParallelism;
     }
 
