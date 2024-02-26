@@ -45,6 +45,7 @@ import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.JobAutoScalerImpl.AUTOSCALER_ERROR;
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -81,7 +82,7 @@ public class BacklogBasedScalingTest {
                                 new VertexInfo(source1, Map.of(), 1, 720, new IOMetrics(0, 0, 0)),
                                 new VertexInfo(
                                         sink,
-                                        Map.of(source1, "REBALANCE"),
+                                        Map.of(source1, REBALANCE),
                                         1,
                                         720,
                                         new IOMetrics(0, 0, 0))));
@@ -157,7 +158,7 @@ public class BacklogBasedScalingTest {
         metricsCollector.setJobTopology(
                 new JobTopology(
                         new VertexInfo(source1, Map.of(), 4, 24),
-                        new VertexInfo(sink, Map.of(source1, "REBALANCE"), 4, 720)));
+                        new VertexInfo(sink, Map.of(source1, REBALANCE), 4, 720)));
 
         metricsCollector.updateMetrics(
                 source1,
@@ -239,7 +240,7 @@ public class BacklogBasedScalingTest {
         metricsCollector.setJobTopology(
                 new JobTopology(
                         new VertexInfo(source1, Map.of(), 2, 24),
-                        new VertexInfo(sink, Map.of(source1, "REBALANCE"), 2, 720)));
+                        new VertexInfo(sink, Map.of(source1, REBALANCE), 2, 720)));
 
         /* Test stability while processing backlog. */
 
@@ -361,7 +362,7 @@ public class BacklogBasedScalingTest {
         metricsCollector.setJobTopology(
                 new JobTopology(
                         new VertexInfo(source1, Map.of(), 4, 720),
-                        new VertexInfo(sink, Map.of(source1, "REBALANCE"), 4, 720)));
+                        new VertexInfo(sink, Map.of(source1, REBALANCE), 4, 720)));
 
         var expectedEndTime = Instant.ofEpochMilli(10);
         metricsCollector.setJobUpdateTs(expectedEndTime);

@@ -102,7 +102,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         var restartTime = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
         var scalingSummaries =
-                computeScalingSummary(context, evaluatedMetrics, scalingHistory, restartTime);
+                computeScalingSummary(
+                        context, evaluatedMetrics, scalingHistory, restartTime, jobTopology);
 
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
@@ -203,7 +204,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Context context,
             EvaluatedMetrics evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
-            Duration restartTime) {
+            Duration restartTime,
+            JobTopology jobTopology) {
         LOG.debug("Restart time used in scaling summary computation: {}", restartTime);
 
         if (isJobUnderMemoryPressure(context, evaluatedMetrics.getGlobalMetrics())) {
@@ -225,10 +227,12 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                             } else {
                                 var currentParallelism =
                                         (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
+
                                 var newParallelism =
                                         jobVertexScaler.computeScaleTargetParallelism(
                                                 context,
                                                 v,
+                                                jobTopology.get(v).getInputs().values(),
                                                 metrics,
                                                 scalingHistory.getOrDefault(
                                                         v, Collections.emptySortedMap()),

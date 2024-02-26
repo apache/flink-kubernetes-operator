@@ -26,6 +26,7 @@ import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.topology.JobTopology;
+import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.autoscaler.utils.ResourceCheckUtils;
 import org.apache.flink.configuration.Configuration;
@@ -53,6 +54,8 @@ import java.util.Map;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.HEAP_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MANAGED_MEMORY_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.METASPACE_MEMORY_USED;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.FORWARD;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.RESCALE;
 
 /** Tunes the TaskManager memory. */
 public class MemoryTuning {
@@ -254,9 +257,9 @@ public class MemoryTuning {
         long maxNetworkMemory = 0;
         for (VertexInfo vertexInfo : jobTopology.getVertexInfos().values()) {
             // Add max amount of memory for each input gate
-            for (Map.Entry<JobVertexID, String> inputEntry : vertexInfo.getInputs().entrySet()) {
-                final JobVertexID inputVertexId = inputEntry.getKey();
-                final String shipStrategy = inputEntry.getValue();
+            for (var inputEntry : vertexInfo.getInputs().entrySet()) {
+                var inputVertexId = inputEntry.getKey();
+                var shipStrategy = inputEntry.getValue();
                 maxNetworkMemory +=
                         calculateNetworkSegmentNumber(
                                         updatedParallelisms.get(vertexInfo.getId()),
@@ -268,9 +271,9 @@ public class MemoryTuning {
             }
             // Add max amount of memory for each output gate
             // Usually, there is just one output per task
-            for (Map.Entry<JobVertexID, String> outputEntry : vertexInfo.getOutputs().entrySet()) {
-                final JobVertexID outputVertexId = outputEntry.getKey();
-                final String shipStrategy = outputEntry.getValue();
+            for (var outputEntry : vertexInfo.getOutputs().entrySet()) {
+                var outputVertexId = outputEntry.getKey();
+                var shipStrategy = outputEntry.getValue();
                 maxNetworkMemory +=
                         calculateNetworkSegmentNumber(
                                         updatedParallelisms.get(vertexInfo.getId()),
@@ -300,15 +303,15 @@ public class MemoryTuning {
     static int calculateNetworkSegmentNumber(
             int currentVertexParallelism,
             int connectedVertexParallelism,
-            String shipStrategy,
+            ShipStrategy shipStrategy,
             int buffersPerChannel,
             int floatingBuffers) {
         // TODO When the parallelism is changed via the rescale api, the FORWARD may be changed to
         // RESCALE. This logic may needs to be updated after FLINK-33123.
         if (currentVertexParallelism == connectedVertexParallelism
-                && "FORWARD".equals(shipStrategy)) {
+                && FORWARD.equals(shipStrategy)) {
             return buffersPerChannel + floatingBuffers;
-        } else if ("FORWARD".equals(shipStrategy) || "RESCALE".equals(shipStrategy)) {
+        } else if (FORWARD.equals(shipStrategy) || RESCALE.equals(shipStrategy)) {
             final int channelCount =
                     (int) Math.ceil(connectedVertexParallelism / (double) currentVertexParallelism);
             return channelCount * buffersPerChannel + floatingBuffers;

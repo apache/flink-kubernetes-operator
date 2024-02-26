@@ -52,6 +52,8 @@ import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_R
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_ENTRY;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -59,6 +61,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Test for {@link ScalingExecutor}. */
 public class ScalingExecutorTest {
+
+    private static final int MAX_PARALLELISM = 720;
 
     private JobAutoScalerContext<JobID> context;
     private TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventCollector;
@@ -151,6 +155,12 @@ public class ScalingExecutorTest {
         var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
         var sink = JobVertexID.fromHexString(sinkHexString);
 
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 10, 1000, false, null),
+                        new VertexInfo(filterOperator, Map.of(source, HASH), 10, 1000, false, null),
+                        new VertexInfo(sink, Map.of(filterOperator, HASH), 10, 1000, false, null));
+
         var conf = context.getConfiguration();
         conf.set(AutoScalerOptions.TARGET_UTILIZATION, .8);
         var metrics =
@@ -173,7 +183,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
         // filter operator should scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of());
         assertTrue(
@@ -183,7 +193,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
     }
 
     @Test
@@ -192,6 +202,12 @@ public class ScalingExecutorTest {
         var source = JobVertexID.fromHexString(sourceHexString);
         var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
         var sink = JobVertexID.fromHexString(sinkHexString);
+
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 10, 1000, false, null),
+                        new VertexInfo(sink, Map.of(source, HASH), 10, 1000, false, null));
+
         var conf = context.getConfiguration();
         var now = Instant.now();
         var localTime = ZonedDateTime.ofInstant(now, ZoneId.systemDefault()).toLocalTime();
@@ -213,7 +229,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
         // scaling execution outside excluded periods
         excludedPeriod =
                 new StringBuilder(localTime.plusSeconds(100).toString().split("\\.")[0])
@@ -228,7 +244,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
     }
 
     @Test
@@ -237,6 +253,12 @@ public class ScalingExecutorTest {
         var source = JobVertexID.fromHexString(sourceHexString);
         var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
         var sink = JobVertexID.fromHexString(sinkHexString);
+
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 10, 1000, false, null),
+                        new VertexInfo(sink, Map.of(source, HASH), 10, 1000, false, null));
+
         var now = Instant.now();
         var metrics =
                 new EvaluatedMetrics(
@@ -257,7 +279,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
 
         scalingDecisionExecutor =
                 new ScalingExecutor<>(
@@ -282,7 +304,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
     }
 
     @Test
@@ -318,7 +340,7 @@ public class ScalingExecutorTest {
         JobTopology jobTopology =
                 new JobTopology(
                         new VertexInfo(source, Map.of(), 10, 1000, false, null),
-                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 10, 1000, false, null));
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 10, 1000, false, null));
 
         assertTrue(
                 scalingDecisionExecutor.scaleResource(
@@ -334,9 +356,9 @@ public class ScalingExecutorTest {
                                 TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
                                 "0.652",
                                 TaskManagerOptions.NETWORK_MEMORY_MIN.key(),
-                                "25 mb",
+                                "24320 kb",
                                 TaskManagerOptions.NETWORK_MEMORY_MAX.key(),
-                                "25 mb",
+                                "24320 kb",
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "360 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
@@ -344,7 +366,7 @@ public class ScalingExecutorTest {
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "7681 mb"));
+                                "7864064 kb"));
     }
 
     @ParameterizedTest
@@ -368,6 +390,10 @@ public class ScalingExecutorTest {
 
     private void testScalingEvents(boolean scalingEnabled, Duration interval) throws Exception {
         var jobVertexID = new JobVertexID();
+
+        JobTopology jobTopology =
+                new JobTopology(new VertexInfo(jobVertexID, Map.of(), 10, 1000, false, null));
+
         var conf = context.getConfiguration();
         conf.set(AutoScalerOptions.SCALING_ENABLED, scalingEnabled);
         if (interval != null) {
@@ -386,7 +412,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
         assertEquals(
                 scalingEnabled,
                 scalingDecisionExecutor.scaleResource(
@@ -395,7 +421,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
         int expectedSize = (interval == null || interval.toMillis() > 0) && !scalingEnabled ? 1 : 2;
         assertEquals(expectedSize, eventCollector.events.size());
 
@@ -434,7 +460,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         now,
-                        new JobTopology()));
+                        jobTopology));
         var event2 = eventCollector.events.poll();
         assertThat(event2).isNotNull();
         assertThat(event2.getContext()).isSameAs(event.getContext());
@@ -450,6 +476,8 @@ public class ScalingExecutorTest {
         conf.set(AutoScalerOptions.HEAP_USAGE_THRESHOLD, 0.8);
 
         var vertexMetrics = Map.of(jobVertexID, evaluated(1, 110, 100));
+        JobTopology jobTopology =
+                new JobTopology(new VertexInfo(jobVertexID, Map.of(), 10, 1000, false, null));
         var metrics =
                 new EvaluatedMetrics(
                         vertexMetrics,
@@ -467,7 +495,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         Instant.now(),
-                        new JobTopology()));
+                        jobTopology));
 
         // Just below the thresholds
         metrics =
@@ -485,7 +513,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         Instant.now(),
-                        new JobTopology()));
+                        jobTopology));
 
         eventCollector.events.clear();
 
@@ -505,7 +533,7 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         Instant.now(),
-                        new JobTopology()));
+                        jobTopology));
         assertEquals("MemoryPressure", eventCollector.events.poll().getReason());
         assertTrue(eventCollector.events.isEmpty());
 
@@ -525,16 +553,82 @@ public class ScalingExecutorTest {
                         new HashMap<>(),
                         new ScalingTracking(),
                         Instant.now(),
-                        new JobTopology()));
+                        jobTopology));
         assertEquals("MemoryPressure", eventCollector.events.poll().getReason());
         assertTrue(eventCollector.events.isEmpty());
+    }
+
+    @Test
+    public void testAdjustByMaxParallelism() throws Exception {
+        var sourceHexString = "0bfd135746ac8efb3cce668b12e16d3a";
+        var source = JobVertexID.fromHexString(sourceHexString);
+        var filterOperatorHexString = "869fb403873411306404e9f2e4438c0e";
+        var filterOperator = JobVertexID.fromHexString(filterOperatorHexString);
+        var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
+        var sink = JobVertexID.fromHexString(sinkHexString);
+
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 2, MAX_PARALLELISM, false, null),
+                        new VertexInfo(
+                                filterOperator,
+                                Map.of(source, REBALANCE),
+                                2,
+                                MAX_PARALLELISM,
+                                false,
+                                null),
+                        new VertexInfo(
+                                sink,
+                                Map.of(filterOperator, HASH),
+                                2,
+                                MAX_PARALLELISM,
+                                false,
+                                null));
+
+        var conf = context.getConfiguration();
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.d);
+
+        // The expected new parallelism is 7 without adjustment by max parallelism.
+        var metrics =
+                new EvaluatedMetrics(
+                        Map.of(
+                                source,
+                                evaluated(2, 70, 20),
+                                filterOperator,
+                                evaluated(2, 70, 20),
+                                sink,
+                                evaluated(2, 70, 20)),
+                        dummyGlobalMetrics);
+        var now = Instant.now();
+        assertThat(
+                        scalingDecisionExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                now,
+                                jobTopology))
+                .isTrue();
+
+        Map<String, String> parallelismOverrides = stateStore.getParallelismOverrides(context);
+        // The source and keyed Operator should enable the parallelism adjustment, so the
+        // parallelism of source and sink are adjusted, but filter is not.
+        assertThat(parallelismOverrides)
+                .containsAllEntriesOf(
+                        Map.of(
+                                "0bfd135746ac8efb3cce668b12e16d3a",
+                                "8",
+                                "869fb403873411306404e9f2e4438c0e",
+                                "7",
+                                "a6b7102b8d3e3a9564998c1ffeb5e2b7",
+                                "8"));
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
             int parallelism, double target, double procRate, double catchupRate) {
         var metrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
         metrics.put(ScalingMetric.PARALLELISM, EvaluatedScalingMetric.of(parallelism));
-        metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(720));
+        metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(MAX_PARALLELISM));
         metrics.put(ScalingMetric.TARGET_DATA_RATE, new EvaluatedScalingMetric(target, target));
         metrics.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchupRate));
         metrics.put(

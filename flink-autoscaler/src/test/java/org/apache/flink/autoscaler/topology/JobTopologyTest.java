@@ -31,6 +31,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import static org.apache.flink.autoscaler.topology.ShipStrategy.FORWARD;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.RESCALE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -82,25 +86,25 @@ public class JobTopologyTest {
         assertTrue(jobTopology.get(vertices.get("Sink: sink3")).getOutputs().isEmpty());
 
         assertEquals(
-                Map.of(vertices.get("map1"), "HASH"),
+                Map.of(vertices.get("map1"), HASH),
                 jobTopology.get(vertices.get("Source: s1")).getOutputs());
         assertEquals(
-                Map.of(vertices.get("map1"), "HASH"),
+                Map.of(vertices.get("map1"), HASH),
                 jobTopology.get(vertices.get("Source: s2")).getOutputs());
         assertEquals(
-                Map.of(vertices.get("Sink: sink1"), "FORWARD"),
+                Map.of(vertices.get("Sink: sink1"), FORWARD),
                 jobTopology.get(vertices.get("map1")).getOutputs());
 
         assertEquals(
-                Map.of(vertices.get("map2"), "RESCALE"),
+                Map.of(vertices.get("map2"), RESCALE),
                 jobTopology.get(vertices.get("Source: s3")).getOutputs());
 
         assertEquals(
                 Map.of(
                         vertices.get("Sink: sink2"),
-                        "REBALANCE",
+                        REBALANCE,
                         vertices.get("Sink: sink3"),
-                        "REBALANCE"),
+                        REBALANCE),
                 jobTopology.get(vertices.get("map2")).getOutputs());
 
         assertEquals(2, jobTopology.get(vertices.get("map1")).getParallelism());

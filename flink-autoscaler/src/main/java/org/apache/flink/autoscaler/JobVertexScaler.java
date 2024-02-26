@@ -22,6 +22,7 @@ import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -34,6 +35,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.Map;
 import java.util.SortedMap;
 
@@ -48,6 +50,7 @@ import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESS
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
 
 /** Component responsible for computing vertex parallelism based on the scaling metrics. */
 public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
@@ -71,6 +74,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     public int computeScaleTargetParallelism(
             Context context,
             JobVertexID vertex,
+            Collection<ShipStrategy> inputShipStrategies,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             SortedMap<Instant, ScalingSummary> history,
             Duration restartTime) {
@@ -121,6 +125,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         int newParallelism =
                 scale(
                         currentParallelism,
+                        inputShipStrategies,
                         (int) evaluatedMetrics.get(MAX_PARALLELISM).getCurrent(),
                         scaleFactor,
                         Math.min(currentParallelism, conf.getInteger(VERTEX_MIN_PARALLELISM)),
@@ -245,50 +250,68 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
     }
 
+    /**
+     * Computing the newParallelism. In general, newParallelism = currentParallelism * scaleFactor.
+     * But we limit newParallelism between parallelismLowerLimit and min(parallelismUpperLimit,
+     * maxParallelism).
+     *
+     * <p>Also, in order to ensure the data is evenly spread across subtasks, we try to adjust the
+     * parallelism for source and keyed vertex such that it divides the maxParallelism without a
+     * remainder.
+     */
     @VisibleForTesting
     protected static int scale(
-            int parallelism,
-            int numKeyGroups,
+            int currentParallelism,
+            Collection<ShipStrategy> inputShipStrategies,
+            int maxParallelism,
             double scaleFactor,
-            int minParallelism,
-            int maxParallelism) {
+            int parallelismLowerLimit,
+            int parallelismUpperLimit) {
         Preconditions.checkArgument(
-                minParallelism <= maxParallelism,
-                "The minimum parallelism must not be greater than the maximum parallelism.");
-        if (minParallelism > numKeyGroups) {
+                parallelismLowerLimit <= parallelismUpperLimit,
+                "The parallelism lower limitation must not be greater than the parallelism upper limitation.");
+        if (parallelismLowerLimit > maxParallelism) {
             LOG.warn(
                     "Specified autoscaler minimum parallelism {} is greater than the operator max parallelism {}. The min parallelism will be set to the operator max parallelism.",
-                    minParallelism,
-                    numKeyGroups);
+                    parallelismLowerLimit,
+                    maxParallelism);
         }
-        if (numKeyGroups < maxParallelism && maxParallelism != Integer.MAX_VALUE) {
+        if (maxParallelism < parallelismUpperLimit && parallelismUpperLimit != Integer.MAX_VALUE) {
             LOG.debug(
                     "Specified autoscaler maximum parallelism {} is greater than the operator max parallelism {}. This means the operator max parallelism can never be reached.",
-                    maxParallelism,
-                    numKeyGroups);
+                    parallelismUpperLimit,
+                    maxParallelism);
         }
 
         int newParallelism =
                 // Prevent integer overflow when converting from double to integer.
                 // We do not have to detect underflow because doubles cannot
                 // underflow.
-                (int) Math.min(Math.ceil(scaleFactor * parallelism), Integer.MAX_VALUE);
+                (int) Math.min(Math.ceil(scaleFactor * currentParallelism), Integer.MAX_VALUE);
 
-        // Cap parallelism at either number of key groups or parallelism limit
-        final int upperBound = Math.min(numKeyGroups, maxParallelism);
+        // Cap parallelism at either maxParallelism(number of key groups or source partitions) or
+        // parallelism upper limit
+        final int upperBound = Math.min(maxParallelism, parallelismUpperLimit);
 
         // Apply min/max parallelism
-        newParallelism = Math.min(Math.max(minParallelism, newParallelism), upperBound);
+        newParallelism = Math.min(Math.max(parallelismLowerLimit, newParallelism), upperBound);
 
-        // Try to adjust the parallelism such that it divides the number of key groups without a
-        // remainder => state is evenly spread across subtasks
-        for (int p = newParallelism; p <= numKeyGroups / 2 && p <= upperBound; p++) {
-            if (numKeyGroups % p == 0) {
+        var adjustByMaxParallelism =
+                inputShipStrategies.isEmpty() || inputShipStrategies.contains(HASH);
+        if (!adjustByMaxParallelism) {
+            return newParallelism;
+        }
+
+        // When the shuffle type of vertex inputs contains keyBy or vertex is a source, we try to
+        // adjust the parallelism such that it divides the maxParallelism without a remainder
+        // => data is evenly spread across subtasks
+        for (int p = newParallelism; p <= maxParallelism / 2 && p <= upperBound; p++) {
+            if (maxParallelism % p == 0) {
                 return p;
             }
         }
 
-        // If key group adjustment fails, use originally computed parallelism
+        // If parallelism adjustment fails, use originally computed parallelism
         return newParallelism;
     }
 

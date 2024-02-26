@@ -43,6 +43,7 @@ import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJo
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.getRestClusterClientSupplier;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.RECOMMENDED_PARALLELISM;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.REBALANCE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -75,7 +76,7 @@ public class RecommendedParallelismTest {
                 new TestingMetricsCollector<>(
                         new JobTopology(
                                 new VertexInfo(source, Map.of(), 1, 720),
-                                new VertexInfo(sink, Map.of(source, "REBALANCE"), 1, 720)));
+                                new VertexInfo(sink, Map.of(source, REBALANCE), 1, 720)));
 
         var defaultConf = context.getConfiguration();
         defaultConf.set(AutoScalerOptions.AUTOSCALER_ENABLED, true);
@@ -199,7 +200,7 @@ public class RecommendedParallelismTest {
         metricsCollector.setJobTopology(
                 new JobTopology(
                         new VertexInfo(source, Map.of(), 4, 24),
-                        new VertexInfo(sink, Map.of(source, "REBALANCE"), 4, 720)));
+                        new VertexInfo(sink, Map.of(source, REBALANCE), 4, 720)));
 
         now = now.plus(Duration.ofSeconds(10));
         setClocksTo(now);

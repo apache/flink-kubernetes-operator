@@ -61,7 +61,7 @@ public class JobTopology {
 
     public JobTopology(Set<VertexInfo> vertexInfo) {
 
-        Map<JobVertexID, Map<JobVertexID, String>> vertexOutputs = new HashMap<>();
+        Map<JobVertexID, Map<JobVertexID, ShipStrategy>> vertexOutputs = new HashMap<>();
         vertexInfos =
                 ImmutableMap.copyOf(
                         vertexInfo.stream().collect(Collectors.toMap(VertexInfo::getId, v -> v)));
@@ -145,7 +145,7 @@ public class JobTopology {
 
         for (JsonNode node : nodes) {
             var vertexId = JobVertexID.fromHexString(node.get("id").asText());
-            var inputs = new HashMap<JobVertexID, String>();
+            var inputs = new HashMap<JobVertexID, ShipStrategy>();
             var ioMetrics = metrics.get(vertexId);
             var finished = finishedVertices.contains(vertexId);
             vertexInfo.add(
@@ -160,7 +160,7 @@ public class JobTopology {
                 for (JsonNode input : node.get("inputs")) {
                     inputs.put(
                             JobVertexID.fromHexString(input.get("id").asText()),
-                            input.get("ship_strategy").asText());
+                            ShipStrategy.of(input.get("ship_strategy").asText()));
                 }
             }
         }
