@@ -232,7 +232,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                         jobVertexScaler.computeScaleTargetParallelism(
                                                 context,
                                                 v,
-                                                jobTopology.get(v).getInputs(),
+                                                jobTopology.get(v).getInputs().values(),
                                                 metrics,
                                                 scalingHistory.getOrDefault(
                                                         v, Collections.emptySortedMap()),

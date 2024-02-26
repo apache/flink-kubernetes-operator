@@ -35,6 +35,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Collection;
 import java.util.Map;
 import java.util.SortedMap;
 
@@ -73,7 +74,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     public int computeScaleTargetParallelism(
             Context context,
             JobVertexID vertex,
-            Map<JobVertexID, ShipStrategy> inputs,
+            Collection<ShipStrategy> inputShipStrategies,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             SortedMap<Instant, ScalingSummary> history,
             Duration restartTime) {
@@ -124,7 +125,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         int newParallelism =
                 scale(
                         currentParallelism,
-                        inputs,
+                        inputShipStrategies,
                         (int) evaluatedMetrics.get(MAX_PARALLELISM).getCurrent(),
                         scaleFactor,
                         Math.min(currentParallelism, conf.getInteger(VERTEX_MIN_PARALLELISM)),
@@ -261,7 +262,7 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
     @VisibleForTesting
     protected static int scale(
             int currentParallelism,
-            Map<JobVertexID, ShipStrategy> inputs,
+            Collection<ShipStrategy> inputShipStrategies,
             int maxParallelism,
             double scaleFactor,
             int parallelismLowerLimit,
@@ -295,7 +296,8 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         // Apply min/max parallelism
         newParallelism = Math.min(Math.max(parallelismLowerLimit, newParallelism), upperBound);
 
-        var adjustByMaxParallelism = inputs.isEmpty() || inputs.containsValue(HASH);
+        var adjustByMaxParallelism =
+                inputShipStrategies.isEmpty() || inputShipStrategies.contains(HASH);
         if (!adjustByMaxParallelism) {
             return newParallelism;
         }
