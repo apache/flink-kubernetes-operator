@@ -258,6 +258,14 @@ public class AutoScalerOptions {
                     .withDescription(
                             "If enabled, the initial amount of memory specified for TaskManagers will be reduced/increased according to the observed needs.");
 
+    public static final ConfigOption<Boolean> MEMORY_SCALING_ENABLED =
+            autoScalerConfig("memory.tuning.scaling.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withFallbackKeys(oldOperatorConfigKey("memory.tuning.scaling.enabled"))
+                    .withDescription(
+                            "If this option is enabled and memory tuning is enabled, TaskManager heap and managed memory will be increased when scaling down. This ensures that after applying memory tuning there is sufficient memory when running with fewer TaskManagers.");
+
     public static final ConfigOption<Double> MEMORY_TUNING_OVERHEAD =
             autoScalerConfig("memory.tuning.overhead")
                     .doubleType()

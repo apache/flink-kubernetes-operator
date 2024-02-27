@@ -55,6 +55,7 @@ public class MemoryTuningTest {
         var context = TestingAutoscalerUtils.createResourceAwareContext();
         var config = context.getConfiguration();
         config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, true);
+        config.set(AutoScalerOptions.MEMORY_SCALING_ENABLED, false);
         config.set(TaskManagerOptions.NUM_TASK_SLOTS, 5);
         config.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, Duration.ZERO);
         MemorySize totalMemory = MemorySize.parse("30 gb");
@@ -82,7 +83,9 @@ public class MemoryTuningTest {
                         ScalingMetric.MANAGED_MEMORY_USED,
                         EvaluatedScalingMetric.avg(MemorySize.ofMebiBytes(10000).getBytes()),
                         ScalingMetric.METASPACE_MEMORY_USED,
-                        EvaluatedScalingMetric.avg(MemorySize.ofMebiBytes(100).getBytes()));
+                        EvaluatedScalingMetric.avg(MemorySize.ofMebiBytes(100).getBytes()),
+                        ScalingMetric.NUM_TASK_SLOTS_USED,
+                        EvaluatedScalingMetric.of(50));
 
         var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
 
@@ -98,7 +101,7 @@ public class MemoryTuningTest {
                         jobVertex2, new ScalingSummary(50, 10, Map.of()));
 
         ConfigChanges configChanges =
-                MemoryTuning.tuneTaskManagerHeapMemory(
+                MemoryTuning.tuneTaskManagerMemory(
                         context, metrics, jobTopology, scalingSummaries, eventHandler);
         // Test reducing overall memory
         assertThat(configChanges.getOverrides())
@@ -136,7 +139,7 @@ public class MemoryTuningTest {
         // Test maximize managed memory
         config.set(AutoScalerOptions.MEMORY_TUNING_MAXIMIZE_MANAGED_MEMORY, true);
         configChanges =
-                MemoryTuning.tuneTaskManagerHeapMemory(
+                MemoryTuning.tuneTaskManagerMemory(
                         context, metrics, jobTopology, scalingSummaries, eventHandler);
         assertThat(configChanges.getOverrides())
                 .containsExactlyInAnyOrderEntriesOf(
@@ -161,7 +164,7 @@ public class MemoryTuningTest {
         metrics.getGlobalMetrics()
                 .put(ScalingMetric.MANAGED_MEMORY_USED, EvaluatedScalingMetric.avg(0));
         configChanges =
-                MemoryTuning.tuneTaskManagerHeapMemory(
+                MemoryTuning.tuneTaskManagerMemory(
                         context, metrics, jobTopology, scalingSummaries, eventHandler);
         assertThat(configChanges.getOverrides())
                 .containsExactlyInAnyOrderEntriesOf(
@@ -181,10 +184,33 @@ public class MemoryTuningTest {
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
                                 "7760130867 bytes"));
 
+        // Test integration with MemoryScaling
+        config.set(AutoScalerOptions.MEMORY_SCALING_ENABLED, true);
+        configChanges =
+                MemoryTuning.tuneTaskManagerMemory(
+                        context, metrics, jobTopology, scalingSummaries, eventHandler);
+        assertThat(configChanges.getOverrides())
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of(
+                                TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
+                                "0.0",
+                                TaskManagerOptions.NETWORK_MEMORY_MIN.key(),
+                                "13760 kb",
+                                TaskManagerOptions.NETWORK_MEMORY_MAX.key(),
+                                "13760 kb",
+                                TaskManagerOptions.JVM_METASPACE.key(),
+                                "120 mb",
+                                TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
+                                "0.07",
+                                TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
+                                "0 bytes",
+                                TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
+                                "15520261734 bytes"));
+
         // Test tuning disabled
         config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, false);
         assertThat(
-                        MemoryTuning.tuneTaskManagerHeapMemory(
+                        MemoryTuning.tuneTaskManagerMemory(
                                         context,
                                         metrics,
                                         jobTopology,

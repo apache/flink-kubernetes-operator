@@ -122,7 +122,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         var configOverrides =
-                MemoryTuning.tuneTaskManagerHeapMemory(
+                MemoryTuning.tuneTaskManagerMemory(
                         context,
                         evaluatedMetrics,
                         jobTopology,
@@ -130,7 +130,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         autoScalerEventHandler);
 
         if (scalingWouldExceedClusterResources(
-                configOverrides.applyOverrides(conf),
+                configOverrides.newConfigWithOverrides(conf),
                 evaluatedMetrics,
                 scalingSummaries,
                 context)) {

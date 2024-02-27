@@ -68,11 +68,11 @@ public class MemoryTuning {
 
     /**
      * Emits a Configuration which contains overrides for the current configuration. We are not
-     * modifying the config directly, but we are emitting a new configuration which contains any
-     * overrides. This config is persisted separately and applied by the autoscaler. That way we can
-     * clear any applied overrides if auto-tuning is disabled.
+     * modifying the config directly, but we are emitting ConfigChanges which contain any overrides
+     * or removals. This config is persisted separately and applied by the autoscaler. That way we
+     * can clear any applied overrides if auto-tuning is disabled.
      */
-    public static ConfigChanges tuneTaskManagerHeapMemory(
+    public static ConfigChanges tuneTaskManagerMemory(
             JobAutoScalerContext<?> context,
             EvaluatedMetrics evaluatedMetrics,
             JobTopology jobTopology,
@@ -109,6 +109,7 @@ public class MemoryTuning {
             return EMPTY_CONFIG;
         }
         MemoryBudget memBudget = new MemoryBudget(maxMemoryBySpec.getBytes());
+
         // Add these current settings from the budget
         memBudget.budget(memSpecs.getFlinkMemory().getFrameworkOffHeap().getBytes());
         memBudget.budget(memSpecs.getFlinkMemory().getTaskOffHeap().getBytes());
@@ -148,8 +149,11 @@ public class MemoryTuning {
         final long flinkMemoryDiffBytes = heapDiffBytes + managedDiffBytes + networkDiffBytes;
 
         // Update total memory according to memory diffs
-        final MemorySize totalMemory =
+        MemorySize totalMemory =
                 new MemorySize(maxMemoryBySpec.getBytes() - memBudget.getRemaining());
+        totalMemory =
+                MemoryScaling.applyMemoryScaling(
+                        totalMemory, maxMemoryBySpec, context, scalingSummaries, evaluatedMetrics);
         if (totalMemory.compareTo(MemorySize.ZERO) <= 0) {
             LOG.warn("Invalid total memory configuration: {}", totalMemory);
             return EMPTY_CONFIG;
