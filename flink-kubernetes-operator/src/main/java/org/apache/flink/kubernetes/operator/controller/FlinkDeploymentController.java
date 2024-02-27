@@ -106,7 +106,7 @@ public class FlinkDeploymentController
         var ctx = ctxFactory.getResourceContext(flinkApp, josdkContext);
         try {
             observerFactory.getOrCreate(flinkApp).observe(ctx);
-        } catch (DeploymentFailedException dfe) {
+        } catch (Exception err) {
             // ignore during cleanup
         }
         statusRecorder.removeCachedStatus(flinkApp);

@@ -74,7 +74,6 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.JobVertexResourceRequirements;
 import org.apache.flink.util.concurrent.Executors;
 
-import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
@@ -1027,12 +1026,9 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         flinkService =
                 new TestingFlinkService() {
                     @Override
-                    protected void deleteClusterInternal(
-                            ObjectMeta meta,
-                            Configuration conf,
-                            boolean deleteHaMeta,
-                            DeletionPropagation deletionPropagation) {
-                        deleted.set(deleteHaMeta);
+                    protected void deleteHAData(
+                            String namespace, String clusterId, Configuration conf) {
+                        deleted.set(true);
                     }
                 };
 

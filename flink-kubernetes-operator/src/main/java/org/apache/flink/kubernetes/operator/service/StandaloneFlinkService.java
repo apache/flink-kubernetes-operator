@@ -41,13 +41,11 @@ import org.apache.flink.kubernetes.operator.utils.StandaloneKubernetesUtils;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -105,13 +103,6 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                 .list();
     }
 
-    @Override
-    protected List<String> getDeploymentNames(String namespace, String clusterId) {
-        return List.of(
-                StandaloneKubernetesUtils.getJobManagerDeploymentName(clusterId),
-                StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId));
-    }
-
     @VisibleForTesting
     protected FlinkStandaloneKubeClient createNamespacedKubeClient(Configuration configuration) {
         final int poolSize =
@@ -152,33 +143,33 @@ public class StandaloneFlinkService extends AbstractFlinkService {
 
     @Override
     protected void deleteClusterInternal(
-            ObjectMeta meta,
+            String namespace,
+            String clusterId,
             Configuration conf,
-            boolean deleteHaData,
             DeletionPropagation deletionPropagation) {
-        final String clusterId = meta.getName();
-        final String namespace = meta.getNamespace();
 
-        LOG.info("Deleting Flink Standalone cluster JM resources");
-        kubernetesClient
-                .apps()
-                .deployments()
-                .inNamespace(namespace)
-                .withName(StandaloneKubernetesUtils.getJobManagerDeploymentName(clusterId))
-                .withPropagationPolicy(deletionPropagation)
-                .delete();
+        var jmDeployment =
+                kubernetesClient
+                        .apps()
+                        .deployments()
+                        .inNamespace(namespace)
+                        .withName(StandaloneKubernetesUtils.getJobManagerDeploymentName(clusterId));
+        var remainingTimeout =
+                deleteDeploymentBlocking(
+                        "JobManager",
+                        jmDeployment,
+                        deletionPropagation,
+                        operatorConfig.getFlinkShutdownClusterTimeout());
 
-        LOG.info("Deleting Flink Standalone cluster TM resources");
-        kubernetesClient
-                .apps()
-                .deployments()
-                .inNamespace(namespace)
-                .withName(StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId))
-                .withPropagationPolicy(deletionPropagation)
-                .delete();
-        if (deleteHaData) {
-            deleteHAData(namespace, clusterId, conf);
-        }
+        var tmDeployment =
+                kubernetesClient
+                        .apps()
+                        .deployments()
+                        .inNamespace(namespace)
+                        .withName(
+                                StandaloneKubernetesUtils.getTaskManagerDeploymentName(clusterId));
+        deleteDeploymentBlocking(
+                "TaskManager", tmDeployment, deletionPropagation, remainingTimeout);
     }
 
     @Override

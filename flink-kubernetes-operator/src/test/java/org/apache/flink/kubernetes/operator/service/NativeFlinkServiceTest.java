@@ -53,14 +53,18 @@ import org.apache.flink.runtime.rest.messages.job.metrics.IOMetricsInfo;
 import org.apache.flink.util.concurrent.Executors;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
+import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -85,6 +89,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 @EnableKubernetesMockClient(crud = true)
 public class NativeFlinkServiceTest {
     KubernetesClient client;
+    KubernetesMockServer mockServer;
     private final Configuration configuration = new Configuration();
     private final FlinkConfigManager configManager = new FlinkConfigManager(configuration);
 
@@ -106,9 +111,26 @@ public class NativeFlinkServiceTest {
 
     @Test
     public void testDeleteClusterInternal() {
+
+        var flinkService =
+                new NativeFlinkService(
+                        client, null, executorService, operatorConfig, eventRecorder) {
+
+                    @Override
+                    protected Duration deleteDeploymentBlocking(
+                            String name,
+                            Resource<Deployment> deployment,
+                            DeletionPropagation propagation,
+                            Duration timeout) {
+                        // Ensure deployment is scaled down before deletion
+                        assertEquals(0, deployment.get().getSpec().getReplicas());
+                        return super.deleteDeploymentBlocking(
+                                name, deployment, propagation, timeout);
+                    }
+                };
+
         var deployment = TestUtils.buildApplicationCluster();
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-        var flinkService = createFlinkService(null);
 
         var dep =
                 new DeploymentBuilder()
@@ -117,10 +139,10 @@ public class NativeFlinkServiceTest {
                         .withNamespace(TestUtils.TEST_NAMESPACE)
                         .endMetadata()
                         .withNewSpec()
+                        .withReplicas(1)
                         .endSpec()
                         .build();
         client.resource(dep).create();
-
         assertNotNull(
                 client.apps()
                         .deployments()
@@ -129,10 +151,11 @@ public class NativeFlinkServiceTest {
                         .get());
 
         flinkService.deleteClusterInternal(
-                deployment.getMetadata(),
+                deployment.getMetadata().getNamespace(),
+                deployment.getMetadata().getName(),
                 configManager.getObserveConfig(deployment),
-                false,
                 DeletionPropagation.FOREGROUND);
+
         assertNull(
                 client.apps()
                         .deployments()

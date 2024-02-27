@@ -101,8 +101,12 @@ import org.apache.flink.util.Preconditions;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.KubernetesClientTimeoutException;
+import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.fabric8.kubernetes.client.dsl.Resource;
+import io.fabric8.kubernetes.client.dsl.Waitable;
+import lombok.SneakyThrows;
 import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,6 +116,7 @@ import javax.annotation.Nullable;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
 import java.net.Socket;
@@ -119,6 +124,7 @@ import java.net.SocketAddress;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -127,6 +133,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -399,7 +406,6 @@ public abstract class AbstractFlinkService implements FlinkService {
         // Unless we leave the jm around after savepoint, we should wait until it has finished
         // shutting down
         if (deleteClusterAfterSavepoint || upgradeMode != UpgradeMode.SAVEPOINT) {
-            waitForClusterShutdown(conf);
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
         }
     }
@@ -756,14 +762,6 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public void waitForClusterShutdown(Configuration conf) {
-        waitForClusterShutdown(
-                conf.getString(KubernetesConfigOptions.NAMESPACE),
-                conf.getString(KubernetesConfigOptions.CLUSTER_ID),
-                operatorConfig.getFlinkShutdownClusterTimeout().toSeconds());
-    }
-
-    @Override
     public RestClusterClient<String> getClusterClient(Configuration conf) throws Exception {
         final String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         final String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
@@ -899,50 +897,20 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    /** Returns a list of Kubernetes Deployment names for given cluster. */
-    protected abstract List<String> getDeploymentNames(String namespace, String clusterId);
-
-    /** Wait until the FLink cluster has completely shut down. */
-    protected void waitForClusterShutdown(
-            String namespace, String clusterId, long shutdownTimeout) {
-        long timeoutAt = System.currentTimeMillis() + shutdownTimeout * 1000;
-        LOG.info("Waiting {} seconds for cluster shutdown...", shutdownTimeout);
-
-        for (var deploymentName : getDeploymentNames(namespace, clusterId)) {
-            long deploymentTimeout = timeoutAt - System.currentTimeMillis();
-
-            if (!waitForDeploymentToBeRemoved(namespace, deploymentName, deploymentTimeout)) {
-                LOG.error(
-                        "Failed to shut down cluster {} (deployment {}) in {} seconds, proceeding...",
-                        clusterId,
-                        deploymentName,
-                        shutdownTimeout);
-                return;
-            }
-        }
-    }
-
-    /** Wait until Deployment is removed, return false if timed out, otherwise return true. */
+    /** Wait until Deployment is removed, return remaining timeout. */
     @VisibleForTesting
-    boolean waitForDeploymentToBeRemoved(String namespace, String deploymentName, long timeout) {
-        LOG.info(
-                "Waiting for Deployment {} to shut down with {} seconds timeout...",
-                deploymentName,
-                timeout / 1000);
-
-        try {
-            kubernetesClient
-                    .apps()
-                    .deployments()
-                    .inNamespace(namespace)
-                    .withName(deploymentName)
-                    .waitUntilCondition(Objects::isNull, timeout, TimeUnit.MILLISECONDS);
-
-            LOG.info("Deployment {} successfully shut down", deploymentName);
-        } catch (KubernetesClientTimeoutException e) {
-            return false;
-        }
-        return true;
+    protected Duration deleteDeploymentBlocking(
+            String name,
+            Resource<Deployment> deployment,
+            DeletionPropagation propagation,
+            Duration timeout) {
+        return deleteBlocking(
+                String.format("Deleting %s Deployment", name),
+                () -> {
+                    deployment.withPropagationPolicy(propagation).delete();
+                    return deployment;
+                },
+                timeout);
     }
 
     private static List<JobStatusMessage> toJobStatusMessage(
@@ -1050,33 +1018,35 @@ public abstract class AbstractFlinkService implements FlinkService {
             Configuration conf,
             boolean deleteHaData) {
 
+        var namespace = meta.getNamespace();
+        var clusterId = meta.getName();
+
         var deletionPropagation = operatorConfig.getDeletionPropagation();
         LOG.info("Deleting cluster with {} propagation", deletionPropagation);
-        deleteClusterInternal(meta, conf, deleteHaData, deletionPropagation);
+        deleteClusterInternal(namespace, clusterId, conf, deletionPropagation);
+        if (deleteHaData) {
+            deleteHAData(namespace, clusterId, conf);
+        } else {
+            LOG.info("Keeping HA metadata for last-state restore");
+        }
         updateStatusAfterClusterDeletion(status);
     }
 
     /**
-     * Delete Flink kubernetes cluster by deleting the kubernetes resources directly. Optionally
-     * allows deleting the native kubernetes HA resources as well.
+     * Delete Flink kubernetes cluster by deleting the kubernetes resources directly.
      *
-     * @param meta ObjectMeta of the deployment
+     * @param namespace Namespace
+     * @param clusterId ClusterId
      * @param conf Configuration of the Flink application
-     * @param deleteHaData Flag to indicate whether k8s or Zookeeper HA metadata should be removed
-     *     as well
      * @param deletionPropagation Resource deletion propagation policy
      */
     protected abstract void deleteClusterInternal(
-            ObjectMeta meta,
+            String namespace,
+            String clusterId,
             Configuration conf,
-            boolean deleteHaData,
             DeletionPropagation deletionPropagation);
 
     protected void deleteHAData(String namespace, String clusterId, Configuration conf) {
-        // We need to wait for cluster shutdown otherwise HA data might be recreated
-        waitForClusterShutdown(
-                namespace, clusterId, operatorConfig.getFlinkShutdownClusterTimeout().toSeconds());
-
         if (FlinkUtils.isKubernetesHAActivated(conf)) {
             LOG.info("Deleting Kubernetes HA metadata");
             FlinkUtils.deleteKubernetesHAMetadata(clusterId, namespace, kubernetesClient);
@@ -1133,5 +1103,49 @@ public abstract class AbstractFlinkService implements FlinkService {
                             conf.removeConfig(SecurityOptions.SSL_KEYSTORE_PASSWORD);
                         });
         return conf;
+    }
+
+    /**
+     * Generic blocking delete operation implementation for triggering and waiting for removal of
+     * the selected resources. By returning the remaining timeout we allow chaining multiple delete
+     * operations under a single timeout setting easily.
+     *
+     * @param operation Name of the operation for logging
+     * @param delete Call that should trigger the async deletion and return the resource to be
+     *     watched
+     * @param timeout Timeout for the operation
+     * @return Remaining timeout after deletion.
+     */
+    @SneakyThrows
+    protected static Duration deleteBlocking(
+            String operation, Callable<Waitable> delete, Duration timeout) {
+        LOG.info("{} with {} seconds timeout...", operation, timeout.toSeconds());
+        long start = System.currentTimeMillis();
+
+        Waitable deleted = null;
+        try {
+            deleted = delete.call();
+        } catch (KubernetesClientException kce) {
+            // During the deletion we need to throw other types of errors
+            if (kce.getCode() != HttpURLConnection.HTTP_NOT_FOUND) {
+                throw kce;
+            }
+        }
+
+        if (deleted != null) {
+            try {
+                deleted.waitUntilCondition(
+                        Objects::isNull, timeout.toMillis(), TimeUnit.MILLISECONDS);
+                LOG.info("Completed {}", operation);
+            } catch (KubernetesClientException kce) {
+                // We completely ignore not found errors and simply log others
+                if (kce.getCode() != HttpURLConnection.HTTP_NOT_FOUND) {
+                    LOG.warn("Error while " + operation, kce);
+                }
+            }
+        }
+
+        long elapsedMillis = System.currentTimeMillis() - start;
+        return Duration.ofMillis(Math.max(0, timeout.toMillis() - elapsedMillis));
     }
 }
