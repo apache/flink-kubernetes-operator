@@ -55,14 +55,18 @@ import org.apache.flink.runtime.rest.messages.job.JobResourceRequirementsHeaders
 import org.apache.flink.runtime.rest.messages.job.JobResourcesRequirementsUpdateHeaders;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
-import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.EditReplacePatchable;
+import io.fabric8.kubernetes.client.dsl.base.PatchContext;
+import io.fabric8.kubernetes.client.dsl.base.PatchType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -77,6 +81,8 @@ import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLI
 public class NativeFlinkService extends AbstractFlinkService {
 
     private static final Logger LOG = LoggerFactory.getLogger(NativeFlinkService.class);
+    private static final Deployment SCALE_TO_ZERO =
+            new DeploymentBuilder().editOrNewSpec().withReplicas(0).endSpec().build();
     private final EventRecorder eventRecorder;
 
     public NativeFlinkService(
@@ -133,11 +139,6 @@ public class NativeFlinkService extends AbstractFlinkService {
         return new PodList();
     }
 
-    @Override
-    protected List<String> getDeploymentNames(String namespace, String clusterId) {
-        return List.of(KubernetesUtils.getDeploymentName(clusterId));
-    }
-
     protected void submitClusterInternal(Configuration conf) throws Exception {
         LOG.info("Deploying session cluster");
         final ClusterClientServiceLoader clusterClientServiceLoader =
@@ -154,28 +155,25 @@ public class NativeFlinkService extends AbstractFlinkService {
 
     @Override
     protected void deleteClusterInternal(
-            ObjectMeta meta,
+            String namespace,
+            String clusterId,
             Configuration conf,
-            boolean deleteHaData,
             DeletionPropagation deletionPropagation) {
 
-        String namespace = meta.getNamespace();
-        String clusterId = meta.getName();
+        var jmDeployment =
+                kubernetesClient
+                        .apps()
+                        .deployments()
+                        .inNamespace(namespace)
+                        .withName(KubernetesUtils.getDeploymentName(clusterId));
 
-        LOG.info(
-                "Deleting JobManager deployment {}.",
-                deleteHaData ? "and HA metadata" : "while preserving HA metadata");
-        kubernetesClient
-                .apps()
-                .deployments()
-                .inNamespace(namespace)
-                .withName(KubernetesUtils.getDeploymentName(clusterId))
-                .withPropagationPolicy(deletionPropagation)
-                .delete();
-
-        if (deleteHaData) {
-            deleteHAData(namespace, clusterId, conf);
-        }
+        var remainingTimeout =
+                scaleJmToZeroBlocking(
+                        jmDeployment,
+                        namespace,
+                        clusterId,
+                        operatorConfig.getFlinkShutdownClusterTimeout());
+        deleteDeploymentBlocking("JobManager", jmDeployment, deletionPropagation, remainingTimeout);
     }
 
     @Override
@@ -355,5 +353,37 @@ public class NativeFlinkService extends AbstractFlinkService {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Scale JM deployment to zero to gracefully stop all JM instances before any TMs are stopped.
+     * This avoids race conditions between JM shutdown and TM shutdown / failure handling.
+     *
+     * @param jmDeployment
+     * @param namespace
+     * @param clusterId
+     * @param timeout
+     * @return Remaining timeout after the operation.
+     */
+    private Duration scaleJmToZeroBlocking(
+            EditReplacePatchable<Deployment> jmDeployment,
+            String namespace,
+            String clusterId,
+            Duration timeout) {
+        return deleteBlocking(
+                "Scaling JobManager Deployment to zero",
+                () -> {
+                    try {
+                        jmDeployment.patch(PatchContext.of(PatchType.JSON_MERGE), SCALE_TO_ZERO);
+                    } catch (Exception ignore) {
+                        // Ignore all errors here as this is an optional step
+                        return null;
+                    }
+                    return kubernetesClient
+                            .pods()
+                            .inNamespace(namespace)
+                            .withLabels(KubernetesUtils.getJobManagerSelectors(clusterId));
+                },
+                timeout);
     }
 }

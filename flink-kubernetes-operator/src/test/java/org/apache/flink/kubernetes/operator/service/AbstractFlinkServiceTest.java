@@ -104,8 +104,10 @@ import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.api.model.apps.DeploymentList;
 import io.fabric8.kubernetes.api.model.apps.DeploymentListBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -119,6 +121,7 @@ import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -350,7 +353,12 @@ public class AbstractFlinkServiceTest {
                         ? JobManagerDeploymentStatus.MISSING
                         : JobManagerDeploymentStatus.READY);
         if (deleteAfterSavepoint) {
-            assertEquals(List.of(deployment.getMetadata()), flinkService.deleted);
+            assertEquals(
+                    List.of(
+                            Tuple2.of(
+                                    deployment.getMetadata().getNamespace(),
+                                    deployment.getMetadata().getName())),
+                    flinkService.deleted);
         } else {
             assertTrue(flinkService.deleted.isEmpty());
         }
@@ -502,9 +510,9 @@ public class AbstractFlinkServiceTest {
                 new TestingService(null) {
                     @Override
                     protected void deleteClusterInternal(
-                            ObjectMeta meta,
+                            String ns,
+                            String clusterId,
                             Configuration conf,
-                            boolean deleteHaData,
                             DeletionPropagation deletionPropagation) {
                         propagation.add(deletionPropagation);
                     }
@@ -523,9 +531,9 @@ public class AbstractFlinkServiceTest {
                 new TestingService(null) {
                     @Override
                     protected void deleteClusterInternal(
-                            ObjectMeta meta,
+                            String ns,
+                            String clusterId,
                             Configuration conf,
-                            boolean deleteHaData,
                             DeletionPropagation deletionPropagation) {
                         propagation.add(deletionPropagation);
                     }
@@ -1056,7 +1064,7 @@ public class AbstractFlinkServiceTest {
     }
 
     @Test
-    public void testWaitForClusterShutdown() {
+    public void testBlockingDeploymentDeletion() {
         String deploymentName = "test-cluster";
         String namespace = "test-namespace";
         String getUrl =
@@ -1089,30 +1097,132 @@ public class AbstractFlinkServiceTest {
                 .get()
                 .withPath(getUrl)
                 .andReturn(HttpURLConnection.HTTP_OK, deploymentList)
-                .once();
+                .always();
+
+        long deleteDelay = 1000;
         mockServer
                 .expect()
                 .get()
                 .withPath(watchUrl)
                 .andUpgradeToWebSocket()
                 .open()
-                .waitFor(10)
+                .waitFor(deleteDelay)
                 .andEmit(new WatchEvent(deployment, "DELETED"))
                 .done()
                 .always();
 
-        boolean result =
-                flinkService.waitForDeploymentToBeRemoved(namespace, deploymentName, 10000);
+        long start = System.currentTimeMillis();
+        long remainingMillis =
+                flinkService
+                        .deleteDeploymentBlocking(
+                                "Test",
+                                client.apps()
+                                        .deployments()
+                                        .inNamespace(namespace)
+                                        .withName(deploymentName),
+                                DeletionPropagation.BACKGROUND,
+                                Duration.ofMillis(10000))
+                        .toMillis();
+        long deleteTime = System.currentTimeMillis() - start;
 
-        assertTrue(result);
-        assertEquals(2, mockServer.getRequestCount());
+        // We make sure that delete waits until it gets the event
+        // This logic is not the best but seems to be good enough to capture the expectation
+        assertTrue(deleteTime > deleteDelay / 2);
+        assertEquals(3, mockServer.getRequestCount());
+        assertTrue(remainingMillis > 0);
+        assertTrue(remainingMillis < 10000 - deleteDelay / 2);
+
+        // Test actual timeout
+        remainingMillis =
+                flinkService
+                        .deleteDeploymentBlocking(
+                                "Test",
+                                client.apps()
+                                        .deployments()
+                                        .inNamespace(namespace)
+                                        .withName(deploymentName),
+                                DeletionPropagation.BACKGROUND,
+                                Duration.ofMillis(10))
+                        .toMillis();
+        assertEquals(0, remainingMillis);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {HttpURLConnection.HTTP_NOT_FOUND, HttpURLConnection.HTTP_BAD_REQUEST})
+    public void testBlockingDeletionWaitErrorHandling(int errorCode) {
+        int reqCount = mockServer.getRequestCount();
+        String deploymentName = "test-cluster";
+        String namespace = "test-namespace";
+        String getUrl =
+                String.format(
+                        "/apis/apps/v1/namespaces/%s/deployments?fieldSelector=metadata.name%%3D%s",
+                        namespace, deploymentName);
+
+        // Throw error when we try to wait for deletion
+        mockServer
+                .expect()
+                .get()
+                .withPath(getUrl)
+                .andReply(
+                        errorCode,
+                        recordedRequest -> {
+                            // Send error after a short delay
+                            try {
+                                Thread.sleep(10);
+                            } catch (Exception e) {
+                            }
+                            return null;
+                        })
+                .always();
+
+        var remaining =
+                AbstractFlinkService.deleteBlocking(
+                        "Test",
+                        () ->
+                                client.apps()
+                                        .deployments()
+                                        .inNamespace(namespace)
+                                        .withName(deploymentName),
+                        Duration.ofMillis(1000));
+
+        assertEquals(1, mockServer.getRequestCount() - reqCount);
+        assertTrue(remaining.toMillis() < 1000);
+    }
+
+    @Test
+    public void testBlockingDeletionDeleteCallErrorHandling() {
+        // Non not-found errors should be thrown
+        Assertions.assertThrows(
+                KubernetesClientException.class,
+                () ->
+                        AbstractFlinkService.deleteBlocking(
+                                "Test",
+                                () -> {
+                                    throw new KubernetesClientException(
+                                            null, HttpURLConnection.HTTP_BAD_REQUEST, null);
+                                },
+                                Duration.ofMillis(1000)));
+
+        // Not found errors should be ignored
+        var remaining =
+                AbstractFlinkService.deleteBlocking(
+                        "Test",
+                        () -> {
+                            Thread.sleep(10);
+                            throw new KubernetesClientException(
+                                    null, HttpURLConnection.HTTP_NOT_FOUND, null);
+                        },
+                        Duration.ofMillis(1000));
+
+        assertTrue(remaining.toMillis() > 0);
+        assertTrue(remaining.toMillis() < 1000);
     }
 
     class TestingService extends AbstractFlinkService {
 
         RestClusterClient<String> clusterClient;
         RestClient restClient;
-        List<ObjectMeta> deleted = new ArrayList<>();
+        List<Tuple2<String, String>> deleted = new ArrayList<>();
 
         Map<Tuple2<String, String>, PodList> jmPods = new HashMap<>();
         Map<Tuple2<String, String>, PodList> tmPods = new HashMap<>();
@@ -1152,11 +1262,6 @@ public class AbstractFlinkServiceTest {
         }
 
         @Override
-        protected List<String> getDeploymentNames(String namespace, String clusterId) {
-            return List.of(clusterId);
-        }
-
-        @Override
         protected void deployApplicationCluster(JobSpec jobSpec, Configuration conf) {
             throw new UnsupportedOperationException();
         }
@@ -1184,11 +1289,11 @@ public class AbstractFlinkServiceTest {
 
         @Override
         protected void deleteClusterInternal(
-                ObjectMeta meta,
+                String namespace,
+                String cluserId,
                 Configuration conf,
-                boolean deleteHaData,
                 DeletionPropagation deletionPropagation) {
-            deleted.add(meta);
+            deleted.add(Tuple2.of(namespace, cluserId));
         }
     }
 }

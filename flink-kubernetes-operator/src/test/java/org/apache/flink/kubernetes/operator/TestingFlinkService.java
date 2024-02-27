@@ -76,13 +76,16 @@ import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.Resource;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
 import lombok.Getter;
 import lombok.Setter;
 
 import javax.annotation.Nullable;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -484,16 +487,22 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Override
     protected void deleteClusterInternal(
-            ObjectMeta meta,
+            String namespace,
+            String clusterId,
             Configuration conf,
-            boolean deleteHaMeta,
             DeletionPropagation deletionPropagation) {
         jobs.clear();
-        sessions.remove(meta.getName());
+        sessions.remove(clusterId);
     }
 
     @Override
-    public void waitForClusterShutdown(Configuration conf) {}
+    protected Duration deleteDeploymentBlocking(
+            String name,
+            Resource<Deployment> deployment,
+            DeletionPropagation propagation,
+            Duration timeout) {
+        return timeout;
+    }
 
     @Override
     public void disposeSavepoint(String savepointPath, Configuration conf) {
@@ -627,10 +636,5 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Override
     public JobDetailsInfo getJobDetailsInfo(JobID jobID, Configuration conf) {
         return NativeFlinkServiceTest.createJobDetailsFor(List.of());
-    }
-
-    @Override
-    protected List<String> getDeploymentNames(String namespace, String clusterId) {
-        return List.of(clusterId + "-deployment");
     }
 }

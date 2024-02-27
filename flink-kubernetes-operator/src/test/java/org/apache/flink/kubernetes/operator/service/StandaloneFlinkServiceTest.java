@@ -97,7 +97,8 @@ public class StandaloneFlinkServiceTest {
                 new Configuration(),
                 false);
 
-        assertEquals(2, mockServer.getRequestCount() - requestsBeforeDelete);
+        assertEquals(4, mockServer.getRequestCount() - requestsBeforeDelete);
+
         assertTrue(mockServer.getLastRequest().getPath().contains("taskmanager"));
 
         deployments = kubernetesClient.apps().deployments().list().getItems();
@@ -118,9 +119,6 @@ public class StandaloneFlinkServiceTest {
                 flinkDeployment.getStatus(),
                 new Configuration(),
                 true);
-
-        // How many times were getDeploymentNames() called
-        assertEquals(1, service.nbCall);
 
         deployments = kubernetesClient.apps().deployments().list().getItems();
 
@@ -269,7 +267,6 @@ public class StandaloneFlinkServiceTest {
 
     class TestingStandaloneFlinkService extends StandaloneFlinkService {
         Configuration runtimeConfig;
-        int nbCall = 0;
 
         public TestingStandaloneFlinkService(StandaloneFlinkService service) {
             super(
@@ -286,12 +283,6 @@ public class StandaloneFlinkServiceTest {
         @Override
         protected void submitClusterInternal(Configuration conf, Mode mode) {
             this.runtimeConfig = conf;
-        }
-
-        @Override
-        protected List<String> getDeploymentNames(String namespace, String clusterId) {
-            nbCall++;
-            return List.of(clusterId);
         }
     }
 

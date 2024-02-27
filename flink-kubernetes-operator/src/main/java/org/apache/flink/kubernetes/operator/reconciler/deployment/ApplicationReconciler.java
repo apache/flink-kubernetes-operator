@@ -139,8 +139,7 @@ public class ApplicationReconciler
         deployment.getStatus().getJobStatus().setState(JobStatus.FAILED.name());
         flinkService.deleteClusterDeployment(
                 deployment.getMetadata(), deployment.getStatus(), deployConfig, false);
-        flinkService.waitForClusterShutdown(deployConfig);
-        LOG.info("Deleted jobmanager deployment that never started.");
+        LOG.info("Deleted application cluster that never started.");
     }
 
     @Override
@@ -170,10 +169,9 @@ public class ApplicationReconciler
 
         if (status.getJobManagerDeploymentStatus() != JobManagerDeploymentStatus.MISSING) {
             Preconditions.checkArgument(ReconciliationUtils.isJobInTerminalState(status));
-            LOG.info("Deleting deployment with terminated application before new deployment");
+            LOG.info("Deleting cluster with terminated application before new deployment");
             flinkService.deleteClusterDeployment(
                     relatedResource.getMetadata(), status, deployConfig, !requireHaMetadata);
-            flinkService.waitForClusterShutdown(deployConfig);
             statusRecorder.patchAndCacheStatus(relatedResource, ctx.getKubernetesClient());
         }
 
@@ -238,7 +236,6 @@ public class ApplicationReconciler
         var conf = ctx.getDeployConfig(ctx.getResource().getSpec());
         flinkService.deleteClusterDeployment(
                 ctx.getResource().getMetadata(), ctx.getResource().getStatus(), conf, false);
-        flinkService.waitForClusterShutdown(conf);
     }
 
     // Workaround for https://issues.apache.org/jira/browse/FLINK-27569

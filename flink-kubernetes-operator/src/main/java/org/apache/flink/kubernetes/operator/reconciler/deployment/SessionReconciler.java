@@ -85,7 +85,6 @@ public class SessionReconciler
         ctx.getFlinkService()
                 .deleteClusterDeployment(
                         deployment.getMetadata(), deployment.getStatus(), conf, false);
-        ctx.getFlinkService().waitForClusterShutdown(ctx.getObserveConfig());
     }
 
     @Override

@@ -118,8 +118,6 @@ public interface FlinkService {
 
     PodList getJmPodList(FlinkDeployment deployment, Configuration conf);
 
-    void waitForClusterShutdown(Configuration conf);
-
     ScalingResult scale(FlinkResourceContext<?> resourceContext, Configuration deployConfig)
             throws Exception;
 
