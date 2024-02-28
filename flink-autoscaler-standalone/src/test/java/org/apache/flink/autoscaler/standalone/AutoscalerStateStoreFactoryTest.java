@@ -18,13 +18,11 @@
 package org.apache.flink.autoscaler.standalone;
 
 import org.apache.flink.autoscaler.jdbc.state.JdbcAutoScalerStateStore;
+import org.apache.flink.autoscaler.standalone.utils.HikariJDBCUtil;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.configuration.Configuration;
 
 import org.junit.jupiter.api.Test;
-
-import java.sql.DriverManager;
-import java.sql.SQLException;
 
 import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.JDBC;
 import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.MEMORY;
@@ -64,19 +62,20 @@ class AutoscalerStateStoreFactoryTest {
     @Test
     void testCreateJdbcStateStore() throws Exception {
         final var jdbcUrl = "jdbc:derby:memory:test";
-        DriverManager.getConnection(String.format("%s;create=true", jdbcUrl)).close();
-
         // Test for create JDBC State store.
         final var conf = new Configuration();
         conf.set(STATE_STORE_TYPE, JDBC);
-        conf.set(JDBC_URL, jdbcUrl);
+        conf.set(JDBC_URL, String.format("%s;create=true", jdbcUrl));
+        HikariJDBCUtil.getConnection(conf, "testCreateJdbcStateStore Failed").close();
 
         var stateStore = AutoscalerStateStoreFactory.create(conf);
         assertThat(stateStore).isInstanceOf(JdbcAutoScalerStateStore.class);
 
         try {
-            DriverManager.getConnection(String.format("%s;shutdown=true", jdbcUrl)).close();
-        } catch (SQLException ignored) {
+            conf.set(JDBC_URL, String.format("%s;shutdown=true", jdbcUrl));
+            HikariJDBCUtil.getConnection(conf, "testCreateJdbcStateStore Failed").close();
+        } catch (RuntimeException ignored) {
+            // database shutdown ignored exception
         }
     }
 }
