@@ -140,15 +140,15 @@ public final class IOMetricsInfo {
     }
 
     public long getAccumulatedBackpressured() {
-        return accumulatedBackpressured;
+        return accumulatedBackpressured != null ? accumulatedBackpressured : 0;
     }
 
     public double getAccumulatedBusy() {
-        return accumulatedBusy;
+        return accumulatedBusy != null ? accumulatedBusy : Double.NaN;
     }
 
     public long getAccumulatedIdle() {
-        return accumulatedIdle;
+        return accumulatedIdle != null ? accumulatedIdle : 0;
     }
 
     @Override
