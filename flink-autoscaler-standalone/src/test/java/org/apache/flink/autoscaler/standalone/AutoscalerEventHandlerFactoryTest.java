@@ -19,12 +19,10 @@ package org.apache.flink.autoscaler.standalone;
 
 import org.apache.flink.autoscaler.event.LoggingEventHandler;
 import org.apache.flink.autoscaler.jdbc.event.JdbcAutoScalerEventHandler;
+import org.apache.flink.autoscaler.standalone.utils.HikariJDBCUtil;
 import org.apache.flink.configuration.Configuration;
 
 import org.junit.jupiter.api.Test;
-
-import java.sql.DriverManager;
-import java.sql.SQLException;
 
 import static org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFactory.EventHandlerType.JDBC;
 import static org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFactory.EventHandlerType.LOGGING;
@@ -65,19 +63,20 @@ class AutoscalerEventHandlerFactoryTest {
     @Test
     void testCreateJdbcEventHandler() throws Exception {
         final var jdbcUrl = "jdbc:derby:memory:test";
-        DriverManager.getConnection(String.format("%s;create=true", jdbcUrl)).close();
-
         // Test for create JDBC Event Handler.
         final var conf = new Configuration();
         conf.set(EVENT_HANDLER_TYPE, JDBC);
-        conf.set(JDBC_URL, jdbcUrl);
+        conf.set(JDBC_URL, String.format("%s;create=true", jdbcUrl));
+        HikariJDBCUtil.getConnection(conf, "testCreateJdbcEventHandler Failed").close();
 
         var eventHandler = AutoscalerEventHandlerFactory.create(conf);
         assertThat(eventHandler).isInstanceOf(JdbcAutoScalerEventHandler.class);
 
         try {
-            DriverManager.getConnection(String.format("%s;shutdown=true", jdbcUrl)).close();
-        } catch (SQLException ignored) {
+            conf.set(JDBC_URL, String.format("%s;shutdown=true", jdbcUrl));
+            HikariJDBCUtil.getConnection(conf, "testCreateJdbcEventHandler Failed").close();
+        } catch (RuntimeException ignored) {
+            // database shutdown ignored exception
         }
     }
 }
