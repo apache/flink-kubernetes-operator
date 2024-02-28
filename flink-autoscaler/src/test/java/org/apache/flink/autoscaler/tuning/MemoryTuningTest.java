@@ -124,6 +124,7 @@ public class MemoryTuningTest {
 
         assertThat(configChanges.getRemovals())
                 .containsExactlyInAnyOrder(
+                        TaskManagerOptions.TOTAL_FLINK_MEMORY.key(),
                         TaskManagerOptions.TASK_HEAP_MEMORY.key(),
                         TaskManagerOptions.MANAGED_MEMORY_SIZE.key(),
                         TaskManagerOptions.MANAGED_MEMORY_SIZE

@@ -169,6 +169,7 @@ public class MemoryTuning {
         // memory pools, there are no fractional variants for heap memory. Setting the absolute heap
         // memory options could cause invalid configuration states when users adapt the total amount
         // of memory. We also need to take care to remove any user-provided overrides for those.
+        tuningConfig.addRemoval(TaskManagerOptions.TOTAL_FLINK_MEMORY);
         tuningConfig.addRemoval(TaskManagerOptions.TASK_HEAP_MEMORY);
         // Set default to zero because we already account for heap via task heap.
         tuningConfig.addOverride(TaskManagerOptions.FRAMEWORK_HEAP_MEMORY, MemorySize.ZERO);
