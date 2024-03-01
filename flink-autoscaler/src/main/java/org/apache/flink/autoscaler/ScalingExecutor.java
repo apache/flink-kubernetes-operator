@@ -44,7 +44,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
@@ -129,6 +131,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         scalingSummaries,
                         autoScalerEventHandler);
 
+        // Increase the biggest vertex's parallelism to the current taskmanager count's
+        // max-parallelism
+        updateBiggestVertexParallelism(
+                context, evaluatedMetrics.getVertexMetrics(), scalingSummaries);
+
         if (scalingWouldExceedClusterResources(
                 configOverrides.applyOverrides(conf),
                 evaluatedMetrics,
@@ -151,6 +158,52 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         autoScalerStateStore.storeConfigChanges(context, configOverrides);
 
         return true;
+    }
+
+    private void updateBiggestVertexParallelism(
+            Context context,
+            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
+            Map<JobVertexID, ScalingSummary> scalingSummaries) {
+        int taskSlotsPerTm = context.getConfiguration().get(TaskManagerOptions.NUM_TASK_SLOTS);
+
+        Map<Integer, Set<JobVertexID>> parallelismVertexMap = new HashMap<>();
+        int maxParallelism = 0;
+
+        for (Map.Entry<JobVertexID, ScalingSummary> entry : scalingSummaries.entrySet()) {
+            JobVertexID vertex = entry.getKey();
+            ScalingSummary summary = entry.getValue();
+            int newParallelism = summary.getNewParallelism();
+
+            // Update maxParallelism if a new maximum is found
+            if (newParallelism > maxParallelism) {
+                maxParallelism = newParallelism;
+            }
+
+            // Map newParallelism to JobVertexID
+            parallelismVertexMap.computeIfAbsent(newParallelism, k -> new HashSet<>()).add(vertex);
+        }
+
+        // After the loop, retrieve the JobVertexIDs with the maxParallelism value
+        Set<JobVertexID> verticesWithMaxParallelism =
+                parallelismVertexMap.getOrDefault(maxParallelism, new HashSet<>());
+
+        //  Compute the maximum parallelism for a given taskSlotsPerTm
+        var time = maxParallelism / taskSlotsPerTm;
+        if (maxParallelism > time * taskSlotsPerTm) {
+            maxParallelism = (time + 1) * taskSlotsPerTm;
+        }
+
+        final var finalMaxNewParallelism = maxParallelism;
+
+        scalingSummaries.forEach(
+                (vertexID, summary) -> {
+                    if (verticesWithMaxParallelism.contains(vertexID)) {
+                        // Here, you update the newParallelism for each matching JobVertexID
+                        summary.setNewParallelism(
+                                finalMaxNewParallelism); // Assuming setNewParallelism updates the
+                        // value
+                    }
+                });
     }
 
     private void updateRecommendedParallelism(
