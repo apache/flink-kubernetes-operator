@@ -264,7 +264,7 @@ public class AutoScalerOptions {
                     .defaultValue(true)
                     .withFallbackKeys(oldOperatorConfigKey("memory.tuning.scaling.enabled"))
                     .withDescription(
-                            "If this option is enabled and memory tuning is enabled, TaskManager heap and managed memory will be increased when scaling down. This ensures that after applying memory tuning there is sufficient memory when running with fewer TaskManagers.");
+                            "If this option is enabled and memory tuning is enabled, TaskManager memory will be increased when scaling down. This ensures that after applying memory tuning there is sufficient memory when running with fewer TaskManagers.");
 
     public static final ConfigOption<Double> MEMORY_TUNING_OVERHEAD =
             autoScalerConfig("memory.tuning.overhead")
