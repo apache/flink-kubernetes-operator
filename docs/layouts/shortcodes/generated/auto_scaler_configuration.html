@@ -81,7 +81,7 @@
             <td>Overhead to add to tuning decisions (0-1). This ensures spare capacity and allows the memory to grow beyond the dynamically computed limits, but never beyond the original memory limits.</td>
         </tr>
         <tr>
-            <td><h5>job.autoscaler.memory.tuning.scaling.enabled</h5></td>
+            <td><h5>job.autoscaler.memory.tuning.scale-down-compensation.enabled</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
             <td>If this option is enabled and memory tuning is enabled, TaskManager memory will be increased when scaling down. This ensures that after applying memory tuning there is sufficient memory when running with fewer TaskManagers.</td>
