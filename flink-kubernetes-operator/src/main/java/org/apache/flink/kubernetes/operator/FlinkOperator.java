@@ -137,7 +137,7 @@ public class FlinkOperator {
             overrider.withExecutorService(Executors.newCachedThreadPool());
         } else {
             LOG.info("Configuring operator with {} reconciliation threads.", parallelism);
-            overrider.withConcurrentReconciliationThreads(parallelism);
+            overrider.withExecutorService(Executors.newFixedThreadPool(parallelism));
         }
 
         if (operatorConf.isJosdkMetricsEnabled()) {
