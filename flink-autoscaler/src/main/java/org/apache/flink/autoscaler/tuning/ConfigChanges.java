@@ -56,7 +56,7 @@ public class ConfigChanges {
         return this;
     }
 
-    public Configuration applyOverrides(Configuration existingConfig) {
+    public Configuration newConfigWithOverrides(Configuration existingConfig) {
         Configuration config = new Configuration(existingConfig);
         for (String key : removals) {
             config.removeKey(key);

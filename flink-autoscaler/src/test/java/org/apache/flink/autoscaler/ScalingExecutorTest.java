@@ -362,11 +362,11 @@ public class ScalingExecutorTest {
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "360 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.134",
+                                "0.053",
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "7864064 kb"));
+                                "20400832696 bytes"));
     }
 
     @ParameterizedTest

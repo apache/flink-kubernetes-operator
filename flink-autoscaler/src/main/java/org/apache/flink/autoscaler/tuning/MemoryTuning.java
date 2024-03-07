@@ -68,11 +68,11 @@ public class MemoryTuning {
 
     /**
      * Emits a Configuration which contains overrides for the current configuration. We are not
-     * modifying the config directly, but we are emitting a new configuration which contains any
-     * overrides. This config is persisted separately and applied by the autoscaler. That way we can
-     * clear any applied overrides if auto-tuning is disabled.
+     * modifying the config directly, but we are emitting ConfigChanges which contain any overrides
+     * or removals. This config is persisted separately and applied by the autoscaler. That way we
+     * can clear any applied overrides if auto-tuning is disabled.
      */
-    public static ConfigChanges tuneTaskManagerHeapMemory(
+    public static ConfigChanges tuneTaskManagerMemory(
             JobAutoScalerContext<?> context,
             EvaluatedMetrics evaluatedMetrics,
             JobTopology jobTopology,
@@ -108,8 +108,9 @@ public class MemoryTuning {
             LOG.warn("Spec TaskManager memory size could not be determined.");
             return EMPTY_CONFIG;
         }
+
         MemoryBudget memBudget = new MemoryBudget(maxMemoryBySpec.getBytes());
-        // Add these current settings from the budget
+        // Budget the original spec's memory settings which we do not modify
         memBudget.budget(memSpecs.getFlinkMemory().getFrameworkOffHeap().getBytes());
         memBudget.budget(memSpecs.getFlinkMemory().getTaskOffHeap().getBytes());
         memBudget.budget(memSpecs.getJvmOverheadSize().getBytes());
@@ -134,6 +135,10 @@ public class MemoryTuning {
                         specManagedSize,
                         config,
                         memBudget);
+        // Rescale heap according to scaling decision after distributing all memory pools
+        newHeapSize =
+                MemoryScaling.applyMemoryScaling(
+                        newHeapSize, memBudget, context, scalingSummaries, evaluatedMetrics);
         LOG.info(
                 "Optimized memory sizes: heap: {} managed: {}, network: {}, meta: {}",
                 newHeapSize.toHumanReadableString(),
@@ -165,6 +170,7 @@ public class MemoryTuning {
         // memory pools, there are no fractional variants for heap memory. Setting the absolute heap
         // memory options could cause invalid configuration states when users adapt the total amount
         // of memory. We also need to take care to remove any user-provided overrides for those.
+        tuningConfig.addRemoval(TaskManagerOptions.TOTAL_FLINK_MEMORY);
         tuningConfig.addRemoval(TaskManagerOptions.TASK_HEAP_MEMORY);
         // Set default to zero because we already account for heap via task heap.
         tuningConfig.addOverride(TaskManagerOptions.FRAMEWORK_HEAP_MEMORY, MemorySize.ZERO);
@@ -233,7 +239,8 @@ public class MemoryTuning {
             long maxManagedMemorySize = memBudget.budget(Long.MAX_VALUE);
             return new MemorySize(maxManagedMemorySize);
         } else {
-            return managedMemoryConfigured;
+            long managedMemorySize = memBudget.budget(managedMemoryConfigured.getBytes());
+            return new MemorySize(managedMemorySize);
         }
     }
 
@@ -322,9 +329,10 @@ public class MemoryTuning {
 
     private static MemorySize getUsage(
             ScalingMetric scalingMetric, Map<ScalingMetric, EvaluatedScalingMetric> globalMetrics) {
-        MemorySize heapUsed = new MemorySize((long) globalMetrics.get(scalingMetric).getAverage());
-        LOG.debug("{}: {}", scalingMetric, heapUsed);
-        return heapUsed;
+        MemorySize memoryUsed =
+                new MemorySize((long) globalMetrics.get(scalingMetric).getAverage());
+        LOG.debug("{}: {}", scalingMetric, memoryUsed);
+        return memoryUsed;
     }
 
     public static MemorySize getTotalMemory(Configuration config, JobAutoScalerContext<?> ctx) {
