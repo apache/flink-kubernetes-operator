@@ -29,6 +29,7 @@ rules:
       - events
       - configmaps
       - secrets
+      - namespaces
     verbs:
       - "*"
 {{- if .Values.rbac.nodesRule.create }}

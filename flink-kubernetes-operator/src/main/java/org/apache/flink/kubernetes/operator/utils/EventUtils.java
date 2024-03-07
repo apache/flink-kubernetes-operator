@@ -31,12 +31,15 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The util to generate an event for the target resource. It is copied from
  * https://github.com/EnMasseProject/enmasse/blob/master/k8s-api/src/main/java/io/enmasse/k8s/api/KubeEventLogger.java
  */
 public class EventUtils {
+    private static final Logger LOG = LoggerFactory.getLogger(EventUtils.class);
 
     public static String generateEventName(
             HasMetadata target,
@@ -125,6 +128,11 @@ public class EventUtils {
             @Nullable Duration interval,
             @Nullable Predicate<Map<String, String>> dedupePredicate,
             @Nullable Map<String, String> labels) {
+        var namespace = target.getMetadata().getNamespace();
+        if (isNamespaceMarkedForDeletion(client, namespace)) {
+            LOG.info("Ignoring event because namespace is marked for deletion");
+            return true;
+        }
         String eventName =
                 generateEventName(
                         target, type, reason, messageKey != null ? messageKey : message, component);
@@ -213,4 +221,13 @@ public class EventUtils {
                 || (existing.getMetadata() != null
                         && dedupePredicate.test(existing.getMetadata().getLabels()));
     }
+
+    private static boolean isNamespaceMarkedForDeletion(KubernetesClient client, String namespace) {
+            try {
+                return client.namespaces().withName(namespace).get().isMarkedForDeletion();
+            } catch (Exception e) {
+                LOG.warn("Error while checking namespace status", e);
+                return false;
+            }
+        }
 }
