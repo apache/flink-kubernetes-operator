@@ -41,7 +41,6 @@ import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.diff.DiffResult;
 import org.apache.flink.kubernetes.operator.reconciler.diff.ReflectiveDiffBuilder;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -194,6 +193,11 @@ public abstract class AbstractFlinkResourceReconciler<
     }
 
     private void triggerSpecChangeEvent(CR cr, DiffResult<SPEC> specDiff, KubernetesClient client) {
+        if (DiffType.IGNORE == specDiff.getType()) {
+            // This can happen if an ignore change comes in while we are waiting in upgrading state
+            // for scaling completion
+            return;
+        }
         eventRecorder.triggerEventOnce(
                 cr,
                 EventRecorder.Type.Normal,
@@ -341,14 +345,13 @@ public abstract class AbstractFlinkResourceReconciler<
     private boolean scale(FlinkResourceContext<CR> ctx, Configuration deployConfig)
             throws Exception {
 
-        var scalingResult = ctx.getFlinkService().scale(ctx, deployConfig);
-        if (scalingResult == FlinkService.ScalingResult.CANNOT_SCALE) {
-            return false;
+        var scaled = ctx.getFlinkService().scale(ctx, deployConfig);
+
+        if (scaled) {
+            ReconciliationUtils.updateStatusForDeployedSpec(ctx.getResource(), deployConfig, clock);
         }
 
-        ReconciliationUtils.updateAfterScaleUp(
-                ctx.getResource(), deployConfig, clock, scalingResult);
-        return true;
+        return scaled;
     }
 
     /**

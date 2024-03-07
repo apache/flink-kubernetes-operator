@@ -24,12 +24,9 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.utils.BaseTestUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.javaoperatorsdk.operator.api.reconciler.UpdateControl;
 import org.junit.jupiter.api.Test;
-
-import java.time.Clock;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -66,24 +63,6 @@ public class ReconciliationUtilsTest {
         assertFalse(updateControl.isUpdateResource());
         assertFalse(updateControl.isUpdateStatus());
         assertNotEquals(0, updateControl.getScheduleDelay().get());
-    }
-
-    @Test
-    public void testRescheduleDuringScaling() {
-        FlinkDeployment app = BaseTestUtils.buildApplicationCluster();
-        app.getSpec().getJob().setState(JobState.RUNNING);
-        app.getStatus().getReconciliationStatus().setState(ReconciliationState.DEPLOYED);
-        var previous = ReconciliationUtils.clone(app);
-        ReconciliationUtils.updateAfterScaleUp(
-                app,
-                new Configuration(),
-                Clock.systemDefaultZone(),
-                FlinkService.ScalingResult.SCALING_TRIGGERED);
-
-        var updateControl =
-                ReconciliationUtils.toUpdateControl(operatorConfiguration, app, previous, true);
-
-        assertTrue(updateControl.getScheduleDelay().get() > 0);
     }
 
     @Test

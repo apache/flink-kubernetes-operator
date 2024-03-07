@@ -69,7 +69,6 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusHeader
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerHeaders;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerRequestBody;
-import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.metrics.JobMetricsHeaders;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalRequest;
 import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointDisposalTriggerHeaders;
@@ -884,16 +883,6 @@ public abstract class AbstractFlinkService implements FlinkService {
                     .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
         } catch (Exception e) {
             LOG.error("Failed to delete the jar: {}.", jarId, e);
-        }
-    }
-
-    @Override
-    public JobDetailsInfo getJobDetailsInfo(JobID jobID, Configuration conf) throws Exception {
-
-        try (var restClient = getClusterClient(conf)) {
-            return restClient
-                    .getJobDetails(jobID)
-                    .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
         }
     }
 

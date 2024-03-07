@@ -1278,12 +1278,7 @@ public class AbstractFlinkServiceTest {
         }
 
         @Override
-        public ScalingResult scale(FlinkResourceContext<?> resourceContext, Configuration conf) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean scalingCompleted(FlinkResourceContext<?> resourceContext) {
+        public boolean scale(FlinkResourceContext<?> resourceContext, Configuration conf) {
             throw new UnsupportedOperationException();
         }
 

@@ -35,7 +35,6 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.exception.DeploymentFailedException;
 import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
@@ -867,25 +866,12 @@ public class ApplicationObserverTest extends OperatorTestBase {
         conf.set(PipelineOptions.PARALLELISM_OVERRIDES, Map.of(v1.toHexString(), "2"));
         deployment.getSpec().setFlinkConfiguration(conf.toMap());
 
-        // Update status after triggering scale operation
-        ReconciliationUtils.updateAfterScaleUp(
-                deployment,
-                new Configuration(),
-                Clock.systemDefaultZone(),
-                FlinkService.ScalingResult.SCALING_TRIGGERED);
+        // Assert that we move to deployed when in deprecated scaling UPGRADING state
+        ReconciliationUtils.updateStatusForSpecReconciliation(
+                deployment, JobState.RUNNING, conf, true, Clock.systemDefaultZone());
         assertEquals(
                 ReconciliationState.UPGRADING,
                 deployment.getStatus().getReconciliationStatus().getState());
-
-        // Assert that we remain in upgrading until scaling completes
-        flinkService.setScalingCompleted(false);
-        observer.observe(deployment, context);
-        assertEquals(
-                ReconciliationState.UPGRADING,
-                deployment.getStatus().getReconciliationStatus().getState());
-
-        // Assert that we move to deployed when scaling completes
-        flinkService.setScalingCompleted(true);
         observer.observe(deployment, context);
         assertEquals(
                 ReconciliationState.DEPLOYED,

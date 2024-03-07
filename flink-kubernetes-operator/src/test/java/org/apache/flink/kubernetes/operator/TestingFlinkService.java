@@ -50,7 +50,6 @@ import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.service.AbstractFlinkService;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
-import org.apache.flink.kubernetes.operator.service.NativeFlinkServiceTest;
 import org.apache.flink.kubernetes.operator.standalone.StandaloneKubernetesConfigOptionsInternal;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.execution.ExecutionState;
@@ -65,7 +64,6 @@ import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.messages.DashboardConfiguration;
 import org.apache.flink.runtime.rest.messages.EmptyResponseBody;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
-import org.apache.flink.runtime.rest.messages.job.JobDetailsInfo;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetricsResponseBody;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsHeaders;
@@ -147,8 +145,6 @@ public class TestingFlinkService extends AbstractFlinkService {
 
     @Setter
     private Collection<AggregatedMetric> aggregatedMetricsResponse = Collections.emptyList();
-
-    @Setter private boolean scalingCompleted;
 
     public TestingFlinkService() {
         this(null);
@@ -599,7 +595,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public ScalingResult scale(FlinkResourceContext<?> ctx, Configuration deployConfig) {
+    public boolean scale(FlinkResourceContext<?> ctx, Configuration deployConfig) {
         boolean standalone = ctx.getDeploymentMode() == KubernetesDeploymentMode.STANDALONE;
         boolean session = ctx.getResource().getSpec().getJob() == null;
         boolean reactive =
@@ -612,15 +608,10 @@ public class TestingFlinkService extends AbstractFlinkService {
                             .get(
                                     StandaloneKubernetesConfigOptionsInternal
                                             .KUBERNETES_TASKMANAGER_REPLICAS);
-            return ScalingResult.SCALING_TRIGGERED;
+            return true;
         }
 
-        return ScalingResult.CANNOT_SCALE;
-    }
-
-    @Override
-    public boolean scalingCompleted(FlinkResourceContext<?> resourceContext) {
-        return scalingCompleted;
+        return false;
     }
 
     public void setMetricValue(String name, String value) {
@@ -631,10 +622,5 @@ public class TestingFlinkService extends AbstractFlinkService {
     public Map<String, String> getMetrics(
             Configuration conf, String jobId, List<String> metricNames) {
         return metricsValues;
-    }
-
-    @Override
-    public JobDetailsInfo getJobDetailsInfo(JobID jobID, Configuration conf) {
-        return NativeFlinkServiceTest.createJobDetailsFor(List.of());
     }
 }
