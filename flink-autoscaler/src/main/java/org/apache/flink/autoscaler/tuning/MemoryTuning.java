@@ -108,9 +108,9 @@ public class MemoryTuning {
             LOG.warn("Spec TaskManager memory size could not be determined.");
             return EMPTY_CONFIG;
         }
-        MemoryBudget memBudget = new MemoryBudget(maxMemoryBySpec.getBytes());
 
-        // Add these current settings from the budget
+        MemoryBudget memBudget = new MemoryBudget(maxMemoryBySpec.getBytes());
+        // Budget the original spec's memory settings which we do not modify
         memBudget.budget(memSpecs.getFlinkMemory().getFrameworkOffHeap().getBytes());
         memBudget.budget(memSpecs.getFlinkMemory().getTaskOffHeap().getBytes());
         memBudget.budget(memSpecs.getJvmOverheadSize().getBytes());
@@ -135,6 +135,7 @@ public class MemoryTuning {
                         specManagedSize,
                         config,
                         memBudget);
+        // Rescale heap according to scaling decision after distributing all memory pools
         newHeapSize =
                 MemoryScaling.applyMemoryScaling(
                         newHeapSize, memBudget, context, scalingSummaries, evaluatedMetrics);
