@@ -546,6 +546,11 @@ public class JobVertexScalerTest {
         assertEquals(1, event.getCount());
 
         // Repeat ineffective scale with default interval, no event is triggered
+        // We slightly modify the computed tpr to simulate changing metrics
+        var tpr = evaluated.get(ScalingMetric.TRUE_PROCESSING_RATE);
+        evaluated.put(
+                ScalingMetric.TRUE_PROCESSING_RATE,
+                EvaluatedScalingMetric.avg(tpr.getAverage() + 0.01));
         assertEquals(
                 20,
                 vertexScaler.computeScaleTargetParallelism(
@@ -557,6 +562,9 @@ public class JobVertexScalerTest {
                         restartTime));
         assertFalse(evaluated.containsKey(ScalingMetric.EXPECTED_PROCESSING_RATE));
         assertEquals(0, eventCollector.events.size());
+
+        // reset tpr
+        evaluated.put(ScalingMetric.TRUE_PROCESSING_RATE, tpr);
 
         // Repeat ineffective scale with postive interval, no event is triggered
         conf.set(AutoScalerOptions.SCALING_EVENT_INTERVAL, Duration.ofSeconds(1800));

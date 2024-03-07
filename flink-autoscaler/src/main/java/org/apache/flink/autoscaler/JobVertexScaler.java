@@ -235,19 +235,10 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 AutoScalerEventHandler.Type.Normal,
                 INEFFECTIVE_SCALING,
                 message,
-                null,
+                "ineffective" + vertex + expectedIncrease,
                 conf.get(SCALING_EVENT_INTERVAL));
 
-        if (blockIneffectiveScalings) {
-            LOG.warn(
-                    "Ineffective scaling detected for {}, expected increase {}, actual {}",
-                    vertex,
-                    expectedIncrease,
-                    actualIncrease);
-            return true;
-        } else {
-            return false;
-        }
+        return blockIneffectiveScalings;
     }
 
     /**
