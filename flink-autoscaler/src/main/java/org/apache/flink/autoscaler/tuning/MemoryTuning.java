@@ -238,7 +238,8 @@ public class MemoryTuning {
             long maxManagedMemorySize = memBudget.budget(Long.MAX_VALUE);
             return new MemorySize(maxManagedMemorySize);
         } else {
-            return managedMemoryConfigured;
+            long managedMemorySize = memBudget.budget(managedMemoryConfigured.getBytes());
+            return new MemorySize(managedMemorySize);
         }
     }
 
