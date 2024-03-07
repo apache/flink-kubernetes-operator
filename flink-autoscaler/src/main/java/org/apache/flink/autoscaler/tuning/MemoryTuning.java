@@ -135,6 +135,9 @@ public class MemoryTuning {
                         specManagedSize,
                         config,
                         memBudget);
+        newHeapSize =
+                MemoryScaling.applyMemoryScaling(
+                        newHeapSize, memBudget, context, scalingSummaries, evaluatedMetrics);
         LOG.info(
                 "Optimized memory sizes: heap: {} managed: {}, network: {}, meta: {}",
                 newHeapSize.toHumanReadableString(),
@@ -149,11 +152,8 @@ public class MemoryTuning {
         final long flinkMemoryDiffBytes = heapDiffBytes + managedDiffBytes + networkDiffBytes;
 
         // Update total memory according to memory diffs
-        MemorySize totalMemory =
+        final MemorySize totalMemory =
                 new MemorySize(maxMemoryBySpec.getBytes() - memBudget.getRemaining());
-        totalMemory =
-                MemoryScaling.applyMemoryScaling(
-                        totalMemory, maxMemoryBySpec, context, scalingSummaries, evaluatedMetrics);
         if (totalMemory.compareTo(MemorySize.ZERO) <= 0) {
             LOG.warn("Invalid total memory configuration: {}", totalMemory);
             return EMPTY_CONFIG;
@@ -328,9 +328,10 @@ public class MemoryTuning {
 
     private static MemorySize getUsage(
             ScalingMetric scalingMetric, Map<ScalingMetric, EvaluatedScalingMetric> globalMetrics) {
-        MemorySize heapUsed = new MemorySize((long) globalMetrics.get(scalingMetric).getAverage());
-        LOG.debug("{}: {}", scalingMetric, heapUsed);
-        return heapUsed;
+        MemorySize memoryUsed =
+                new MemorySize((long) globalMetrics.get(scalingMetric).getAverage());
+        LOG.debug("{}: {}", scalingMetric, memoryUsed);
+        return memoryUsed;
     }
 
     public static MemorySize getTotalMemory(Configuration config, JobAutoScalerContext<?> ctx) {

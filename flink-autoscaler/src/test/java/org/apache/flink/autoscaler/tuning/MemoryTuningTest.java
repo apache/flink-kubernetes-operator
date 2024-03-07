@@ -202,11 +202,11 @@ public class MemoryTuningTest {
                                 TaskManagerOptions.JVM_METASPACE.key(),
                                 "120 mb",
                                 TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
-                                "0.07",
+                                "0.076",
                                 TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
                                 "0 bytes",
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
-                                "15520261734 bytes"));
+                                "14172382822 bytes"));
 
         // Test tuning disabled
         config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, false);

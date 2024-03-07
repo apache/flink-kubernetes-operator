@@ -49,7 +49,7 @@ class MemoryScalingTest {
         int currentParallelism = 20;
         int rescaleParallelism = 10;
         MemorySize currentMemory = MemorySize.parse("10 gb");
-        MemorySize maxMemory = MemorySize.parse("30 gb");
+        MemoryBudget memoryBudget = new MemoryBudget(MemorySize.parse("30 gb").getBytes());
 
         assertThat(
                         runMemoryScaling(
@@ -57,7 +57,7 @@ class MemoryScalingTest {
                                 rescaleParallelism,
                                 context,
                                 currentMemory,
-                                maxMemory))
+                                memoryBudget))
                 .isEqualTo(MemorySize.parse("20 gb"));
     }
 
@@ -66,7 +66,7 @@ class MemoryScalingTest {
         int currentParallelism = 10;
         int rescaleParallelism = 20;
         MemorySize currentMemory = MemorySize.parse("10 gb");
-        MemorySize maxMemory = MemorySize.parse("30 gb");
+        MemoryBudget memoryBudget = new MemoryBudget(MemorySize.parse("30 gb").getBytes());
 
         assertThat(
                         runMemoryScaling(
@@ -74,7 +74,7 @@ class MemoryScalingTest {
                                 rescaleParallelism,
                                 context,
                                 currentMemory,
-                                maxMemory))
+                                memoryBudget))
                 .isEqualTo(MemorySize.parse("10 gb"));
     }
 
@@ -82,11 +82,11 @@ class MemoryScalingTest {
     void testMemoryScalingDisabled() {
         context.getConfiguration().set(AutoScalerOptions.MEMORY_SCALING_ENABLED, false);
         MemorySize currentMemory = MemorySize.parse("10 gb");
-        MemorySize maxMemory = MemorySize.parse("30 gb");
+        MemoryBudget memoryBudget = new MemoryBudget(MemorySize.parse("30 gb").getBytes());
 
         assertThat(
                         MemoryScaling.applyMemoryScaling(
-                                currentMemory, maxMemory, context, Map.of(), null))
+                                currentMemory, memoryBudget, context, Map.of(), null))
                 .isEqualTo(currentMemory);
     }
 
@@ -95,7 +95,7 @@ class MemoryScalingTest {
             int rescaleParallelism,
             JobAutoScalerContext<JobID> context,
             MemorySize currentMemory,
-            MemorySize maxMemory) {
+            MemoryBudget memoryBudget) {
         var globalMetrics =
                 Map.of(
                         ScalingMetric.NUM_TASK_SLOTS_USED,
@@ -124,6 +124,6 @@ class MemoryScalingTest {
                                         currentParallelism, rescaleParallelism, Map.of()));
 
         return MemoryScaling.applyMemoryScaling(
-                currentMemory, maxMemory, context, scalingSummaries, metrics);
+                currentMemory, memoryBudget, context, scalingSummaries, metrics);
     }
 }

@@ -53,29 +53,32 @@ public class MemoryScaling {
      * removed/added.
      */
     public static MemorySize applyMemoryScaling(
-            MemorySize currentTotalMemory,
-            MemorySize maxMemoryBySpec,
+            MemorySize currentMemorySize,
+            MemoryBudget memoryBudget,
             JobAutoScalerContext<?> context,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             EvaluatedMetrics evaluatedMetrics) {
 
         if (!context.getConfiguration().get(AutoScalerOptions.MEMORY_SCALING_ENABLED)) {
-            return currentTotalMemory;
+            return currentMemorySize;
         }
 
         double memScalingFactor =
                 getMemoryScalingFactor(
                         evaluatedMetrics, scalingSummaries, context.getConfiguration());
+
+        long additionalBytes =
+                memoryBudget.budget(
+                        (long) (memScalingFactor * currentMemorySize.getBytes())
+                                - currentMemorySize.getBytes());
+
         MemorySize scaledTotalMemory =
-                new MemorySize(
-                        Math.min(
-                                (long) (memScalingFactor * currentTotalMemory.getBytes()),
-                                maxMemoryBySpec.getBytes()));
+                new MemorySize(currentMemorySize.getBytes() + additionalBytes);
 
         LOG.info(
-                "Scaling factor: {}, Adjusting total memory from {} to {}.",
+                "Scaling factor: {}, Adjusting memory from {} to {}.",
                 memScalingFactor,
-                currentTotalMemory,
+                currentMemorySize,
                 scaledTotalMemory);
 
         return scaledTotalMemory;
