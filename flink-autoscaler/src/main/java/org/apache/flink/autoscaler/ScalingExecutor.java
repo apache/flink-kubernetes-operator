@@ -56,9 +56,12 @@ import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_E
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.NUM_TASK_SLOTS_USED;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
+import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
 
 /** Class responsible for executing scaling decisions. */
 public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
@@ -117,6 +120,11 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return false;
         }
 
+        // Increase the biggest vertex's parallelism to the current taskmanager count's
+        // max-parallelism
+        updateBiggestVertexParallelism(
+                context, evaluatedMetrics.getVertexMetrics(), scalingSummaries, jobTopology);
+
         updateRecommendedParallelism(evaluatedMetrics.getVertexMetrics(), scalingSummaries);
 
         if (checkIfBlockedAndTriggerScalingEvent(context, scalingSummaries, conf, now)) {
@@ -130,11 +138,6 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         jobTopology,
                         scalingSummaries,
                         autoScalerEventHandler);
-
-        // Increase the biggest vertex's parallelism to the current taskmanager count's
-        // max-parallelism
-        updateBiggestVertexParallelism(
-                context, evaluatedMetrics.getVertexMetrics(), scalingSummaries);
 
         if (scalingWouldExceedClusterResources(
                 configOverrides.applyOverrides(conf),
@@ -163,7 +166,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     private void updateBiggestVertexParallelism(
             Context context,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
-            Map<JobVertexID, ScalingSummary> scalingSummaries) {
+            Map<JobVertexID, ScalingSummary> scalingSummaries, JobTopology jobTopology) {
+
         int taskSlotsPerTm = context.getConfiguration().get(TaskManagerOptions.NUM_TASK_SLOTS);
 
         Map<Integer, Set<JobVertexID>> parallelismVertexMap = new HashMap<>();
@@ -172,6 +176,19 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         for (Map.Entry<JobVertexID, ScalingSummary> entry : scalingSummaries.entrySet()) {
             JobVertexID vertex = entry.getKey();
             ScalingSummary summary = entry.getValue();
+            // perform this adjustment only when we are not using slot sharing feature
+            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetric = evaluatedMetrics.get(vertex);
+            if (evaluatedMetric.get(MAX_PARALLELISM) != evaluatedMetric.get(NUM_TASK_SLOTS_USED)) {
+                continue;
+            }
+            // if need to update parallelism by max parallelism do not take update vertex's parallelism
+            var inputShipStrategies = jobTopology.get(vertex).getInputs().values();
+            var adjustByMaxParallelism =
+                           inputShipStrategies.isEmpty() || inputShipStrategies.contains(HASH);
+             if (adjustByMaxParallelism) {
+                 // if need to update parallelism by max parallelism do not take update vertex's parallelism
+                   continue;
+             }
             int newParallelism = summary.getNewParallelism();
 
             // Update maxParallelism if a new maximum is found
@@ -201,7 +218,6 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         // Here, you update the newParallelism for each matching JobVertexID
                         summary.setNewParallelism(
                                 finalMaxNewParallelism); // Assuming setNewParallelism updates the
-                        // value
                     }
                 });
     }
