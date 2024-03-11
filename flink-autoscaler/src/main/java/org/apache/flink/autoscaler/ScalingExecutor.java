@@ -174,15 +174,16 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             var vertex = entry.getKey();
             var metrics = evaluatedMetrics.get(vertex);
 
-            double processingRate = metrics.get(TRUE_PROCESSING_RATE).getAverage();
+            double trueProcessingRate = metrics.get(TRUE_PROCESSING_RATE).getAverage();
             double scaleUpRateThreshold = metrics.get(SCALE_UP_RATE_THRESHOLD).getCurrent();
             double scaleDownRateThreshold = metrics.get(SCALE_DOWN_RATE_THRESHOLD).getCurrent();
 
-            if (processingRate < scaleUpRateThreshold || processingRate > scaleDownRateThreshold) {
+            if (trueProcessingRate < scaleUpRateThreshold
+                    || trueProcessingRate > scaleDownRateThreshold) {
                 LOG.debug(
                         "Vertex {} processing rate {} is outside ({}, {})",
                         vertex,
-                        processingRate,
+                        trueProcessingRate,
                         scaleUpRateThreshold,
                         scaleDownRateThreshold);
                 return false;
@@ -190,7 +191,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 LOG.debug(
                         "Vertex {} processing rate {} is within target ({}, {})",
                         vertex,
-                        processingRate,
+                        trueProcessingRate,
                         scaleUpRateThreshold,
                         scaleDownRateThreshold);
             }

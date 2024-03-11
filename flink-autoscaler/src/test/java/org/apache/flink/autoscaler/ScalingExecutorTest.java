@@ -26,6 +26,7 @@ import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.resources.ResourceCheck;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
+import org.apache.flink.autoscaler.topology.IOMetrics;
 import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.VertexInfo;
 import org.apache.flink.configuration.Configuration;
@@ -45,6 +46,7 @@ import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
@@ -66,11 +68,13 @@ public class ScalingExecutorTest {
 
     private JobAutoScalerContext<JobID> context;
     private TestingEventCollector<JobID, JobAutoScalerContext<JobID>> eventCollector;
-    private ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingDecisionExecutor;
+    private ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingExecutor;
 
     private InMemoryAutoScalerStateStore<JobID, JobAutoScalerContext<JobID>> stateStore;
 
     private Configuration conf;
+
+    private ScalingTracking scalingTracking = new ScalingTracking();
 
     private static final Map<ScalingMetric, EvaluatedScalingMetric> dummyGlobalMetrics =
             Map.of(
@@ -83,7 +87,7 @@ public class ScalingExecutorTest {
         context = createDefaultJobAutoScalerContext();
         stateStore = new InMemoryAutoScalerStateStore<>();
 
-        scalingDecisionExecutor = new ScalingExecutor<>(eventCollector, stateStore);
+        scalingExecutor = new ScalingExecutor<>(eventCollector, stateStore);
         conf = context.getConfiguration();
         conf.set(AutoScalerOptions.STABILIZATION_INTERVAL, Duration.ZERO);
         conf.set(AutoScalerOptions.SCALING_ENABLED, true);
@@ -147,6 +151,55 @@ public class ScalingExecutorTest {
     }
 
     @Test
+    public void testNoScaleDownOnZeroLowerUtilizationBoundary() throws Exception {
+        var conf = context.getConfiguration();
+        // Target utilization and boundary are identical
+        // which will set the scale down boundary to infinity
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 0.6);
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY, 0.6);
+
+        var vertex = new JobVertexID();
+        int parallelism = 100;
+        int expectedParallelism = 1;
+        int targetRate = 1000;
+        // Intentionally also set the true processing rate to infinity
+        // to test the boundaries of the scaling condition.
+        double trueProcessingRate = Double.POSITIVE_INFINITY;
+
+        var evaluated =
+                new EvaluatedMetrics(
+                        Map.of(vertex, evaluated(parallelism, targetRate, trueProcessingRate)),
+                        dummyGlobalMetrics);
+
+        // Verify precondition
+        var scalingSummary =
+                Map.of(
+                        vertex,
+                        new ScalingSummary(
+                                parallelism,
+                                expectedParallelism,
+                                evaluated.getVertexMetrics().get(vertex)));
+        assertTrue(
+                ScalingExecutor.allVerticesWithinUtilizationTarget(
+                        evaluated.getVertexMetrics(), scalingSummary));
+
+        // Execute the full scaling path
+        HashMap<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory = new HashMap<>();
+        Instant now = Instant.now();
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(
+                                vertex,
+                                Map.of(),
+                                parallelism,
+                                Integer.MAX_VALUE,
+                                new IOMetrics(10000, 10000, 100)));
+        assertFalse(
+                scalingExecutor.scaleResource(
+                        context, evaluated, scalingHistory, scalingTracking, now, jobTopology));
+    }
+
+    @Test
     public void testVertexesExclusionForScaling() throws Exception {
         var sourceHexString = "0bfd135746ac8efb3cce668b12e16d3a";
         var source = JobVertexID.fromHexString(sourceHexString);
@@ -177,7 +230,7 @@ public class ScalingExecutorTest {
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of(filterOperatorHexString));
         var now = Instant.now();
         assertFalse(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -187,7 +240,7 @@ public class ScalingExecutorTest {
         // filter operator should scale
         conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of());
         assertTrue(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -223,7 +276,7 @@ public class ScalingExecutorTest {
                         Map.of(source, evaluated(10, 110, 100), sink, evaluated(10, 110, 100)),
                         dummyGlobalMetrics);
         assertFalse(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -238,7 +291,7 @@ public class ScalingExecutorTest {
                         .toString();
         conf.set(AutoScalerOptions.EXCLUDED_PERIODS, List.of(excludedPeriod));
         assertTrue(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -273,7 +326,7 @@ public class ScalingExecutorTest {
 
         // Would normally scale without resource usage check
         assertTrue(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -281,7 +334,7 @@ public class ScalingExecutorTest {
                         now,
                         jobTopology));
 
-        scalingDecisionExecutor =
+        scalingExecutor =
                 new ScalingExecutor<>(
                         eventCollector,
                         stateStore,
@@ -298,7 +351,7 @@ public class ScalingExecutorTest {
 
         // Scaling blocked due to unavailable resources
         assertFalse(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         TestingAutoscalerUtils.createResourceAwareContext(),
                         metrics,
                         new HashMap<>(),
@@ -343,7 +396,7 @@ public class ScalingExecutorTest {
                         new VertexInfo(sink, Map.of(source, REBALANCE), 10, 1000, false, null));
 
         assertTrue(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -406,7 +459,7 @@ public class ScalingExecutorTest {
                         Map.of(jobVertexID, evaluated(1, 110, 100)), dummyGlobalMetrics);
         assertEquals(
                 scalingEnabled,
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -415,7 +468,7 @@ public class ScalingExecutorTest {
                         jobTopology));
         assertEquals(
                 scalingEnabled,
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -454,7 +507,7 @@ public class ScalingExecutorTest {
                         Map.of(jobVertexID, evaluated(1, 110, 101)), dummyGlobalMetrics);
         assertEquals(
                 scalingEnabled,
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -489,7 +542,7 @@ public class ScalingExecutorTest {
 
         // Baseline, no GC/Heap metrics
         assertTrue(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -507,7 +560,7 @@ public class ScalingExecutorTest {
                                 ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 new EvaluatedScalingMetric(0.9, 0.79)));
         assertTrue(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -527,7 +580,7 @@ public class ScalingExecutorTest {
                                 ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 new EvaluatedScalingMetric(0.9, 0.79)));
         assertFalse(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -547,7 +600,7 @@ public class ScalingExecutorTest {
                                 ScalingMetric.HEAP_MAX_USAGE_RATIO,
                                 new EvaluatedScalingMetric(0.6, 0.81)));
         assertFalse(
-                scalingDecisionExecutor.scaleResource(
+                scalingExecutor.scaleResource(
                         context,
                         metrics,
                         new HashMap<>(),
@@ -601,7 +654,7 @@ public class ScalingExecutorTest {
                         dummyGlobalMetrics);
         var now = Instant.now();
         assertThat(
-                        scalingDecisionExecutor.scaleResource(
+                        scalingExecutor.scaleResource(
                                 context,
                                 metrics,
                                 new HashMap<>(),
@@ -625,14 +678,15 @@ public class ScalingExecutorTest {
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
-            int parallelism, double target, double procRate, double catchupRate) {
+            int parallelism, double target, double trueProcessingRate, double catchupRate) {
         var metrics = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
         metrics.put(ScalingMetric.PARALLELISM, EvaluatedScalingMetric.of(parallelism));
         metrics.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(MAX_PARALLELISM));
         metrics.put(ScalingMetric.TARGET_DATA_RATE, new EvaluatedScalingMetric(target, target));
         metrics.put(ScalingMetric.CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchupRate));
         metrics.put(
-                ScalingMetric.TRUE_PROCESSING_RATE, new EvaluatedScalingMetric(procRate, procRate));
+                ScalingMetric.TRUE_PROCESSING_RATE,
+                new EvaluatedScalingMetric(trueProcessingRate, trueProcessingRate));
 
         var restartTime = context.getConfiguration().get(AutoScalerOptions.RESTART_TIME);
         ScalingMetricEvaluator.computeProcessingRateThresholds(
@@ -641,8 +695,8 @@ public class ScalingExecutorTest {
     }
 
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
-            int parallelism, double target, double procRate) {
-        return evaluated(parallelism, target, procRate, 0.);
+            int parallelism, double target, double trueProcessingRate) {
+        return evaluated(parallelism, target, trueProcessingRate, 0.);
     }
 
     protected static <KEY, Context extends JobAutoScalerContext<KEY>>
