@@ -100,8 +100,7 @@ public class AutoScalerOptions {
                     .defaultValue(0.3)
                     .withFallbackKeys(oldOperatorConfigKey("target.utilization.boundary"))
                     .withDescription(
-                            "Target vertex utilization boundary. Scaling won't be performed if the current processing rate is within [target_rate / (target_utilization - boundary), (target_rate / (target_utilization + boundary)]");
-
+                            "Target vertex utilization boundary. Scaling won't be performed if the processing capacity is within [target_rate / (target_utilization - boundary), (target_rate / (target_utilization + boundary)]");
     public static final ConfigOption<Duration> SCALE_UP_GRACE_PERIOD =
             autoScalerConfig("scale-up.grace-period")
                     .durationType()
