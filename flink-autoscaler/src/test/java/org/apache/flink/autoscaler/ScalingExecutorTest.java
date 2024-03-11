@@ -46,7 +46,6 @@ import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.SortedMap;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.TestingAutoscalerUtils.createDefaultJobAutoScalerContext;
@@ -184,9 +183,8 @@ public class ScalingExecutorTest {
                         evaluated.getVertexMetrics(), scalingSummary));
 
         // Execute the full scaling path
-        HashMap<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory = new HashMap<>();
-        Instant now = Instant.now();
-        JobTopology jobTopology =
+        var now = Instant.now();
+        var jobTopology =
                 new JobTopology(
                         new VertexInfo(
                                 vertex,
@@ -196,7 +194,7 @@ public class ScalingExecutorTest {
                                 new IOMetrics(10000, 10000, 100)));
         assertFalse(
                 scalingExecutor.scaleResource(
-                        context, evaluated, scalingHistory, scalingTracking, now, jobTopology));
+                        context, evaluated, new HashMap<>(), scalingTracking, now, jobTopology));
     }
 
     @Test
