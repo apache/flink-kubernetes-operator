@@ -46,6 +46,8 @@ import org.apache.flink.runtime.util.config.memory.taskmanager.TaskExecutorFlink
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nonnull;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Arrays;
@@ -78,6 +80,11 @@ public class MemoryTuning {
             JobTopology jobTopology,
             Map<JobVertexID, ScalingSummary> scalingSummaries,
             AutoScalerEventHandler eventHandler) {
+        MemorySize maxMemoryBySpec = context.getTaskManagerMemory().orElse(MemorySize.ZERO);
+        if (maxMemoryBySpec.compareTo(MemorySize.ZERO) <= 0) {
+            LOG.warn("Spec TaskManager memory size could not be determined.");
+            return EMPTY_CONFIG;
+        }
 
         // Please note that this config is the original configuration created from the user spec.
         // It does not contain any already applied overrides.
@@ -92,24 +99,51 @@ public class MemoryTuning {
             return EMPTY_CONFIG;
         }
 
-        MemorySize specHeapSize = memSpecs.getFlinkMemory().getJvmHeapMemorySize();
-        MemorySize specManagedSize = memSpecs.getFlinkMemory().getManaged();
-        MemorySize specNetworkSize = memSpecs.getFlinkMemory().getNetwork();
-        MemorySize specMetaspaceSize = memSpecs.getJvmMetaspaceSize();
-        LOG.info(
-                "Spec memory - heap: {}, managed: {}, network: {}, meta: {}",
-                specHeapSize.toHumanReadableString(),
-                specManagedSize.toHumanReadableString(),
-                specNetworkSize.toHumanReadableString(),
-                specMetaspaceSize.toHumanReadableString());
+        final TuningSimpleMemorySpec originalSimpleSpec = new TuningSimpleMemorySpec(memSpecs);
+        LOG.info("The original memory spec : {}", originalSimpleSpec);
 
-        MemorySize maxMemoryBySpec = context.getTaskManagerMemory().orElse(MemorySize.ZERO);
-        if (maxMemoryBySpec.compareTo(MemorySize.ZERO) <= 0) {
-            LOG.warn("Spec TaskManager memory size could not be determined.");
+        MemoryBudget memBudget = new MemoryBudget(maxMemoryBySpec.getBytes());
+        final TuningSimpleMemorySpec tunedSimpleSpec =
+                generateTunedMemorySpec(
+                        memSpecs,
+                        context,
+                        evaluatedMetrics,
+                        jobTopology,
+                        scalingSummaries,
+                        config,
+                        originalSimpleSpec,
+                        memBudget);
+        final long flinkMemoryDiffBytes =
+                calculateFlinkMemoryDiffBytes(originalSimpleSpec, tunedSimpleSpec);
+
+        // Update total memory according to memory diffs
+        final MemorySize totalMemory =
+                new MemorySize(maxMemoryBySpec.getBytes() - memBudget.getRemaining());
+        if (totalMemory.compareTo(MemorySize.ZERO) <= 0) {
+            LOG.warn("Invalid total memory configuration: {}", totalMemory);
             return EMPTY_CONFIG;
         }
 
-        MemoryBudget memBudget = new MemoryBudget(maxMemoryBySpec.getBytes());
+        ConfigChanges tuningConfig =
+                generateTuningConfig(memSpecs, tunedSimpleSpec, flinkMemoryDiffBytes, totalMemory);
+        triggerMemoryTuningEvent(context, eventHandler, config, tuningConfig);
+
+        if (!context.getConfiguration().get(AutoScalerOptions.MEMORY_TUNING_ENABLED)) {
+            return EMPTY_CONFIG;
+        }
+        return tuningConfig;
+    }
+
+    @Nonnull
+    private static TuningSimpleMemorySpec generateTunedMemorySpec(
+            CommonProcessMemorySpec<TaskExecutorFlinkMemory> memSpecs,
+            JobAutoScalerContext<?> context,
+            EvaluatedMetrics evaluatedMetrics,
+            JobTopology jobTopology,
+            Map<JobVertexID, ScalingSummary> scalingSummaries,
+            UnmodifiableConfiguration config,
+            TuningSimpleMemorySpec originalSimpleSpec,
+            MemoryBudget memBudget) {
         // Budget the original spec's memory settings which we do not modify
         memBudget.budget(memSpecs.getFlinkMemory().getFrameworkOffHeap().getBytes());
         memBudget.budget(memSpecs.getFlinkMemory().getTaskOffHeap().getBytes());
@@ -132,34 +166,38 @@ public class MemoryTuning {
         MemorySize newManagedSize =
                 adjustManagedMemory(
                         getUsage(MANAGED_MEMORY_USED, globalMetrics),
-                        specManagedSize,
+                        originalSimpleSpec.getManagedSize(),
                         config,
                         memBudget);
         // Rescale heap according to scaling decision after distributing all memory pools
         newHeapSize =
                 MemoryScaling.applyMemoryScaling(
                         newHeapSize, memBudget, context, scalingSummaries, evaluatedMetrics);
-        LOG.info(
-                "Optimized memory sizes: heap: {} managed: {}, network: {}, meta: {}",
-                newHeapSize.toHumanReadableString(),
-                newManagedSize.toHumanReadableString(),
-                newNetworkSize.toHumanReadableString(),
-                newMetaspaceSize.toHumanReadableString());
 
+        final TuningSimpleMemorySpec newSimpleSpec =
+                new TuningSimpleMemorySpec(
+                        newHeapSize, newManagedSize, newNetworkSize, newMetaspaceSize);
+        LOG.info("Optimized memory sizes: {}", newSimpleSpec);
+        return newSimpleSpec;
+    }
+
+    private static long calculateFlinkMemoryDiffBytes(
+            TuningSimpleMemorySpec originalSpec, TuningSimpleMemorySpec tunedSpec) {
         // Diff can be negative (memory shrinks) or positive (memory grows)
-        final long heapDiffBytes = newHeapSize.getBytes() - specHeapSize.getBytes();
-        final long managedDiffBytes = newManagedSize.getBytes() - specManagedSize.getBytes();
-        final long networkDiffBytes = newNetworkSize.getBytes() - specNetworkSize.getBytes();
-        final long flinkMemoryDiffBytes = heapDiffBytes + managedDiffBytes + networkDiffBytes;
+        final long heapDiffBytes =
+                tunedSpec.getHeapSize().getBytes() - originalSpec.getHeapSize().getBytes();
+        final long managedDiffBytes =
+                tunedSpec.getManagedSize().getBytes() - originalSpec.getManagedSize().getBytes();
+        final long networkDiffBytes =
+                tunedSpec.getNetworkSize().getBytes() - originalSpec.getNetworkSize().getBytes();
+        return heapDiffBytes + managedDiffBytes + networkDiffBytes;
+    }
 
-        // Update total memory according to memory diffs
-        final MemorySize totalMemory =
-                new MemorySize(maxMemoryBySpec.getBytes() - memBudget.getRemaining());
-        if (totalMemory.compareTo(MemorySize.ZERO) <= 0) {
-            LOG.warn("Invalid total memory configuration: {}", totalMemory);
-            return EMPTY_CONFIG;
-        }
-
+    private static ConfigChanges generateTuningConfig(
+            CommonProcessMemorySpec<TaskExecutorFlinkMemory> memSpecs,
+            TuningSimpleMemorySpec newSimpleSpec,
+            long flinkMemoryDiffBytes,
+            MemorySize totalMemory) {
         // Prepare the tuning config for new configuration values
         var tuningConfig = new ConfigChanges();
         // Adjust the total container memory
@@ -182,18 +220,28 @@ public class MemoryTuning {
         // All memory options which can be configured via fractions need to be re-calculated.
         tuningConfig.addOverride(
                 TaskManagerOptions.MANAGED_MEMORY_FRACTION,
-                getFraction(newManagedSize, flinkMemorySize));
+                getFraction(newSimpleSpec.getManagedSize(), flinkMemorySize));
         tuningConfig.addRemoval(TaskManagerOptions.MANAGED_MEMORY_SIZE);
 
-        tuningConfig.addOverride(TaskManagerOptions.NETWORK_MEMORY_MIN, newNetworkSize);
-        tuningConfig.addOverride(TaskManagerOptions.NETWORK_MEMORY_MAX, newNetworkSize);
+        tuningConfig.addOverride(
+                TaskManagerOptions.NETWORK_MEMORY_MIN, newSimpleSpec.getNetworkSize());
+        tuningConfig.addOverride(
+                TaskManagerOptions.NETWORK_MEMORY_MAX, newSimpleSpec.getNetworkSize());
 
         tuningConfig.addOverride(
                 TaskManagerOptions.JVM_OVERHEAD_FRACTION,
                 getFraction(memSpecs.getJvmOverheadSize(), totalMemory));
 
-        tuningConfig.addOverride(TaskManagerOptions.JVM_METASPACE, newMetaspaceSize);
+        tuningConfig.addOverride(
+                TaskManagerOptions.JVM_METASPACE, newSimpleSpec.getMetaspaceSize());
+        return tuningConfig;
+    }
 
+    private static void triggerMemoryTuningEvent(
+            JobAutoScalerContext<?> context,
+            AutoScalerEventHandler eventHandler,
+            UnmodifiableConfiguration config,
+            ConfigChanges tuningConfig) {
         eventHandler.handleEvent(
                 context,
                 AutoScalerEventHandler.Type.Normal,
@@ -206,12 +254,6 @@ public class MemoryTuning {
                         formatConfig(tuningConfig)),
                 "MemoryTuning",
                 config.get(AutoScalerOptions.SCALING_EVENT_INTERVAL));
-
-        if (!context.getConfiguration().get(AutoScalerOptions.MEMORY_TUNING_ENABLED)) {
-            return EMPTY_CONFIG;
-        }
-
-        return tuningConfig;
     }
 
     private static MemorySize determineNewSize(
