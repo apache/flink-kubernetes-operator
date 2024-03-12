@@ -91,7 +91,8 @@ public class ScalingMetricEvaluator {
         }
 
         var globalMetrics = evaluateGlobalMetrics(metricsHistory);
-        return new EvaluatedMetrics(scalingOutput, globalMetrics);
+        return new EvaluatedMetrics(
+                collectedMetrics.getJobTopology(), scalingOutput, globalMetrics);
     }
 
     @VisibleForTesting

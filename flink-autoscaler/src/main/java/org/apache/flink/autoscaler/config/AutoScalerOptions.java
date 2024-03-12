@@ -20,6 +20,7 @@ package org.apache.flink.autoscaler.config;
 import org.apache.flink.autoscaler.metrics.MetricAggregator;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.ConfigOptions;
+import org.apache.flink.configuration.MemorySize;
 
 import java.time.Duration;
 import java.util.List;
@@ -327,4 +328,20 @@ public class AutoScalerOptions {
                     .defaultValue(Duration.ofSeconds(10))
                     .withFallbackKeys(oldOperatorConfigKey("flink.rest-client.timeout"))
                     .withDescription("The timeout for waiting the flink rest client to return.");
+
+    public static final ConfigOption<MemorySize> MEMORY_QUOTA =
+            autoScalerConfig("quota.memory")
+                    .memoryType()
+                    .noDefaultValue()
+                    .withFallbackKeys(oldOperatorConfigKey("quota.memory"))
+                    .withDescription(
+                            "Quota of the memory size. When scaling would go beyond this number the the scaling is not going to happen.");
+
+    public static final ConfigOption<Double> CPU_QUOTA =
+            autoScalerConfig("quota.cpu")
+                    .doubleType()
+                    .noDefaultValue()
+                    .withFallbackKeys(oldOperatorConfigKey("quota.cpu"))
+                    .withDescription(
+                            "Quota of the CPU count. When scaling would go beyond this number the the scaling is not going to happen.");
 }

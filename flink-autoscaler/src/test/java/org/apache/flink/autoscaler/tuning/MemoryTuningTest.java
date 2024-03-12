@@ -87,7 +87,7 @@ public class MemoryTuningTest {
                         ScalingMetric.NUM_TASK_SLOTS_USED,
                         EvaluatedScalingMetric.of(50));
 
-        var metrics = new EvaluatedMetrics(vertexMetrics, globalMetrics);
+        var metrics = new EvaluatedMetrics(null, vertexMetrics, globalMetrics);
 
         JobTopology jobTopology =
                 new JobTopology(
@@ -161,7 +161,7 @@ public class MemoryTuningTest {
                                 totalMemory.toString()));
 
         // Test managed memory is zero
-        metrics = new EvaluatedMetrics(vertexMetrics, new HashMap<>(globalMetrics));
+        metrics = new EvaluatedMetrics(null, vertexMetrics, new HashMap<>(globalMetrics));
         metrics.getGlobalMetrics()
                 .put(ScalingMetric.MANAGED_MEMORY_USED, EvaluatedScalingMetric.avg(0));
         configChanges =

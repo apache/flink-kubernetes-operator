@@ -572,6 +572,7 @@ public class NativeFlinkServiceTest {
         var ioMetricsInfo = new IOMetricsInfo(0, false, 0, false, 0, false, 0, false, 0L, 0L, 0.);
         return new JobDetailsInfo.JobVertexDetailsInfo(
                 jvi,
+                null,
                 "",
                 900,
                 parallelism,
