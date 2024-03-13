@@ -44,7 +44,7 @@ jobs:
       - name: Build with Maven
         run: |
           set -o pipefail; mvn clean install javadoc:javadoc -Pgenerate-docs | tee ./mvn.log; set +o pipefail
-          if [[ $(cat ./mvn.log | grep -E -v '(flink-runtime-.*.jar, flink-kubernetes-operator-.*.jar)|(flink-kubernetes-operator-.*.jar, flink-runtime-.*.jar) define 3 overlapping classes' | grep -c "overlapping classes" -) -gt 0 ]];then
+          if [[ $(cat ./mvn.log | grep -E -v '(flink-runtime-.*.jar, flink-kubernetes-operator-.*.jar)|(flink-kubernetes-operator-.*.jar, flink-runtime-.*.jar) define 3 overlapping classes' | grep -E -v '(flink-runtime-.*.jar, flink-autoscaler-.*.jar)|(flink-autoscaler-.*.jar, flink-runtime-.*.jar) define 1 overlapping classes' | grep -c "overlapping classes" -) -gt 0 ]];then
             echo "Found overlapping classes: "
             cat ./mvn.log | grep "overlapping classes"
             exit 1
