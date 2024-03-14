@@ -78,9 +78,8 @@ public abstract class AbstractFlinkResourceObserver<CR extends AbstractFlinkReso
             // We must check if the upgrade went through without the status upgrade for some reason
 
             if (reconciliationStatus.scalingInProgress()) {
-                if (ctx.getFlinkService().scalingCompleted(ctx)) {
-                    reconciliationStatus.setState(ReconciliationState.DEPLOYED);
-                }
+                // Keep this for backward compatibility
+                reconciliationStatus.setState(ReconciliationState.DEPLOYED);
             } else if (checkIfAlreadyUpgraded(ctx)) {
                 ReconciliationUtils.updateStatusForAlreadyUpgraded(resource);
             } else {

@@ -150,8 +150,7 @@ public class StandaloneFlinkServiceTest {
                                 TestUtils.createTestMetricGroup(new Configuration()),
                                 null)
                         .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
-        assertEquals(
-                FlinkService.ScalingResult.SCALING_TRIGGERED,
+        assertTrue(
                 flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
         assertEquals(
                 5,
@@ -181,8 +180,7 @@ public class StandaloneFlinkServiceTest {
 
         // Add replicas and verify that the scaling is not honoured as reactive mode not enabled
         flinkDeployment.getSpec().getTaskManager().setReplicas(10);
-        assertEquals(
-                FlinkService.ScalingResult.CANNOT_SCALE,
+        assertFalse(
                 flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
     }
 
@@ -210,8 +208,7 @@ public class StandaloneFlinkServiceTest {
                                 TestUtils.createTestMetricGroup(new Configuration()),
                                 null)
                         .getResourceContext(flinkDeployment, TestUtils.createEmptyContext());
-        assertEquals(
-                FlinkService.ScalingResult.SCALING_TRIGGERED,
+        assertTrue(
                 flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
 
         assertEquals(
@@ -228,8 +225,7 @@ public class StandaloneFlinkServiceTest {
         // Scale the replica count of the task managers
         flinkDeployment.getSpec().getTaskManager().setReplicas(10);
         createDeployments(flinkDeployment);
-        assertEquals(
-                FlinkService.ScalingResult.SCALING_TRIGGERED,
+        assertTrue(
                 flinkStandaloneService.scale(ctx, ctx.getDeployConfig(flinkDeployment.getSpec())));
 
         assertEquals(

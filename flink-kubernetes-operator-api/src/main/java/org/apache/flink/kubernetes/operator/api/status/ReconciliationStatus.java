@@ -101,7 +101,15 @@ public abstract class ReconciliationStatus<SPEC extends AbstractFlinkSpec> {
         return lastReconciledSpec == null;
     }
 
+    /**
+     * This method is only here for backward compatibility reasons. The current version of the
+     * operator does not leave the resources in UPGRADING state during in-place scaling therefore
+     * this method will always return false.
+     *
+     * @return True if in-place scaling is in progress.
+     */
     @JsonIgnore
+    @Deprecated
     public boolean scalingInProgress() {
         if (isBeforeFirstDeployment() || state != ReconciliationState.UPGRADING) {
             return false;

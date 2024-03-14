@@ -173,14 +173,14 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public ScalingResult scale(FlinkResourceContext<?> ctx, Configuration deployConfig) {
+    public boolean scale(FlinkResourceContext<?> ctx, Configuration deployConfig) {
         var observeConfig = ctx.getObserveConfig();
         var jobSpec = ctx.getResource().getSpec();
         var meta = ctx.getResource().getMetadata();
         if (observeConfig.get(JobManagerOptions.SCHEDULER_MODE) != SchedulerExecutionMode.REACTIVE
                 && jobSpec != null) {
             LOG.info("Reactive scaling is not enabled");
-            return ScalingResult.CANNOT_SCALE;
+            return false;
         }
 
         var clusterId = meta.getName();
@@ -191,7 +191,7 @@ public class StandaloneFlinkService extends AbstractFlinkService {
 
         if (deployment == null || deployment.get() == null) {
             LOG.warn("TM Deployment ({}) not found", name);
-            return ScalingResult.CANNOT_SCALE;
+            return false;
         }
 
         var actualReplicas = deployment.get().getSpec().getReplicas();
@@ -204,19 +204,12 @@ public class StandaloneFlinkService extends AbstractFlinkService {
                     actualReplicas,
                     desiredReplicas);
             deployment.scale(desiredReplicas);
-            return ScalingResult.SCALING_TRIGGERED;
         } else {
             LOG.info(
                     "Not scaling TM replicas: actual({}) == desired({})",
                     actualReplicas,
                     desiredReplicas);
-            return ScalingResult.ALREADY_SCALED;
         }
-    }
-
-    @Override
-    public boolean scalingCompleted(FlinkResourceContext<?> resourceContext) {
-        // Currently there is no good way of checking whether reactive scaling has completed or not.
         return true;
     }
 }

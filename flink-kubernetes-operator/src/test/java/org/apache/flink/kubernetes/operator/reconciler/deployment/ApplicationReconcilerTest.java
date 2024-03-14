@@ -725,7 +725,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         getJobSpec(deployment).setParallelism(100);
         reconciler.reconcile(deployment, context);
         assertEquals(JobState.SUSPENDED, getReconciledJobState(deployment));
-        assertFalse(deployment.getStatus().getReconciliationStatus().scalingInProgress());
     }
 
     @Test
@@ -749,7 +748,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 .getFlinkConfiguration()
                 .put(CoreOptions.DEFAULT_PARALLELISM.key(), "100");
 
-        assertFalse(deployment.getStatus().getReconciliationStatus().scalingInProgress());
         reconciler.reconcile(deployment, context);
         assertEquals(JobState.RUNNING, getReconciledJobState(deployment));
         assertEquals(0, flinkService.getDesiredReplicas());
@@ -758,7 +756,6 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(deployment, context);
         assertEquals(JobState.RUNNING, getReconciledJobState(deployment));
         assertEquals(2, flinkService.getDesiredReplicas());
-        assertTrue(deployment.getStatus().getReconciliationStatus().scalingInProgress());
 
         getJobSpec(deployment).setParallelism(8);
         reconciler.reconcile(deployment, context);
@@ -839,49 +836,21 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         // Job should not be stopped, we simply call the rescale api
         assertEquals(JobState.RUNNING, getReconciledJobState(deployment));
-        assertTrue(deployment.getStatus().getReconciliationStatus().scalingInProgress());
+        var reconStatus = deployment.getStatus().getReconciliationStatus();
         assertEquals(
                 v1.toHexString() + ":2",
-                deployment
-                        .getStatus()
-                        .getReconciliationStatus()
+                reconStatus
                         .deserializeLastReconciledSpec()
                         .getFlinkConfiguration()
                         .get(PipelineOptions.PARALLELISM_OVERRIDES.key()));
+        assertEquals(ReconciliationState.DEPLOYED, reconStatus.getState());
+        assertFalse(reconStatus.isLastReconciledSpecStable());
 
-        // Reconciler should not do anything while waiting for scaling completion
+        // Reconciler should not do anything after successful scaling
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
-        assertEquals(JobState.RUNNING, getReconciledJobState(deployment));
-        assertTrue(deployment.getStatus().getReconciliationStatus().scalingInProgress());
-        assertEquals(
-                v1.toHexString() + ":2",
-                deployment
-                        .getStatus()
-                        .getReconciliationStatus()
-                        .deserializeLastReconciledSpec()
-                        .getFlinkConfiguration()
-                        .get(PipelineOptions.PARALLELISM_OVERRIDES.key()));
         assertEquals(1, rescaleCounter.get());
         assertEquals(3, eventCollector.events.size());
-
-        var deploymentClone = ReconciliationUtils.clone(deployment);
-
-        // Make sure to trigger regular upgrade on other spec changes
-        deployment.getSpec().setRestartNonce(5L);
-        deployment.getMetadata().setGeneration(3L);
-        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
-        assertEquals(JobState.SUSPENDED, getReconciledJobState(deployment));
-        assertEquals(1, rescaleCounter.get());
-        assertEquals(
-                EventRecorder.Reason.SpecChanged.toString(),
-                eventCollector.events.get(eventCollector.events.size() - 2).getReason());
-
-        // If the job failed while rescaling we fall back to the regular upgrade mechanism
-        deployment = deploymentClone;
-        getJobStatus(deployment).setState(org.apache.flink.api.common.JobStatus.FAILED.name());
-        appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
-        assertEquals(JobState.SUSPENDED, getReconciledJobState(deployment));
-        assertEquals(1, rescaleCounter.get());
+        assertFalse(reconStatus.isLastReconciledSpecStable());
     }
 
     @Test
