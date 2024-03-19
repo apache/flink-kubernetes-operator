@@ -27,6 +27,7 @@ import lombok.Getter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /** Holds the configuration overrides and removals for a Flink Configuration. */
@@ -63,5 +64,22 @@ public class ConfigChanges {
         }
         config.addAll(Configuration.fromMap(overrides));
         return config;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        ConfigChanges that = (ConfigChanges) o;
+        return Objects.equals(overrides, that.overrides) && Objects.equals(removals, that.removals);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(overrides, removals);
     }
 }

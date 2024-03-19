@@ -105,20 +105,15 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                 computeScalingSummary(
                         context, evaluatedMetrics, scalingHistory, restartTime, jobTopology);
 
+        var parallelismChanged = true;
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
-            return false;
+            parallelismChanged = false;
         }
 
         if (allVerticesWithinUtilizationTarget(
                 evaluatedMetrics.getVertexMetrics(), scalingSummaries)) {
-            return false;
-        }
-
-        updateRecommendedParallelism(evaluatedMetrics.getVertexMetrics(), scalingSummaries);
-
-        if (checkIfBlockedAndTriggerScalingEvent(context, scalingSummaries, conf, now)) {
-            return false;
+            parallelismChanged = false;
         }
 
         var configOverrides =
@@ -126,31 +121,45 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                         context,
                         evaluatedMetrics,
                         jobTopology,
-                        scalingSummaries,
+                        // Ignore the scalingSummaries when parallelism is not changed.
+                        parallelismChanged ? scalingSummaries : Map.of(),
                         autoScalerEventHandler);
 
-        if (scalingWouldExceedClusterResources(
-                configOverrides.newConfigWithOverrides(conf),
-                evaluatedMetrics,
-                scalingSummaries,
-                context)) {
+        var configChanged = !configOverrides.equals(autoScalerStateStore.getConfigChanges(context));
+        if (!parallelismChanged && !configChanged) {
             return false;
         }
 
-        addToScalingHistoryAndStore(
-                autoScalerStateStore, context, scalingHistory, now, scalingSummaries);
+        if (checkIfBlockedAndTriggerScalingEvent(context, scalingSummaries, conf, now)
+                || scalingWouldExceedClusterResources(
+                        configOverrides.newConfigWithOverrides(conf),
+                        evaluatedMetrics,
+                        parallelismChanged ? scalingSummaries : Map.of(),
+                        context)) {
+            parallelismChanged = false;
+            configChanged = false;
+        }
 
-        scalingTracking.addScalingRecord(now, new ScalingRecord());
-        autoScalerStateStore.storeScalingTracking(context, scalingTracking);
+        if (parallelismChanged) {
+            updateRecommendedParallelism(evaluatedMetrics.getVertexMetrics(), scalingSummaries);
+            addToScalingHistoryAndStore(
+                    autoScalerStateStore, context, scalingHistory, now, scalingSummaries);
+            autoScalerStateStore.storeParallelismOverrides(
+                    context,
+                    getVertexParallelismOverrides(
+                            evaluatedMetrics.getVertexMetrics(), scalingSummaries));
+        }
 
-        autoScalerStateStore.storeParallelismOverrides(
-                context,
-                getVertexParallelismOverrides(
-                        evaluatedMetrics.getVertexMetrics(), scalingSummaries));
+        if (configChanged) {
+            autoScalerStateStore.storeConfigChanges(context, configOverrides);
+        }
 
-        autoScalerStateStore.storeConfigChanges(context, configOverrides);
-
-        return true;
+        if (parallelismChanged || configChanged) {
+            scalingTracking.addScalingRecord(now, new ScalingRecord());
+            autoScalerStateStore.storeScalingTracking(context, scalingTracking);
+            return true;
+        }
+        return false;
     }
 
     private void updateRecommendedParallelism(
@@ -342,26 +351,29 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Instant now) {
         var scaleEnabled = conf.get(SCALING_ENABLED);
         var isExcluded = CalendarUtils.inExcludedPeriods(conf, now);
-        String message;
-        if (!scaleEnabled) {
-            message =
-                    SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
-                            + String.format(
-                                    SCALING_EXECUTION_DISABLED_REASON,
-                                    SCALING_ENABLED.key(),
-                                    false);
-        } else if (isExcluded) {
-            message =
-                    SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
-                            + String.format(
-                                    SCALING_EXECUTION_DISABLED_REASON,
-                                    EXCLUDED_PERIODS.key(),
-                                    conf.get(EXCLUDED_PERIODS));
-        } else {
-            message = SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
+
+        if (scalingSummaries.isEmpty()) {
+            String message;
+            if (!scaleEnabled) {
+                message =
+                        SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
+                                + String.format(
+                                        SCALING_EXECUTION_DISABLED_REASON,
+                                        SCALING_ENABLED.key(),
+                                        false);
+            } else if (isExcluded) {
+                message =
+                        SCALING_SUMMARY_HEADER_SCALING_EXECUTION_DISABLED
+                                + String.format(
+                                        SCALING_EXECUTION_DISABLED_REASON,
+                                        EXCLUDED_PERIODS.key(),
+                                        conf.get(EXCLUDED_PERIODS));
+            } else {
+                message = SCALING_SUMMARY_HEADER_SCALING_EXECUTION_ENABLED;
+            }
+            autoScalerEventHandler.handleScalingEvent(
+                    context, scalingSummaries, message, conf.get(SCALING_EVENT_INTERVAL));
         }
-        autoScalerEventHandler.handleScalingEvent(
-                context, scalingSummaries, message, conf.get(SCALING_EVENT_INTERVAL));
 
         return !scaleEnabled || isExcluded;
     }

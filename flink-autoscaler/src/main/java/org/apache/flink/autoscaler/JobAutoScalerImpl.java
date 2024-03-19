@@ -214,11 +214,11 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             return;
         }
 
-        var parallelismChanged =
+        var parallelismOrConfChanged =
                 scalingExecutor.scaleResource(
                         ctx, evaluatedMetrics, scalingHistory, scalingTracking, now, jobTopology);
 
-        if (parallelismChanged) {
+        if (parallelismOrConfChanged) {
             autoscalerMetrics.incrementScaling();
         } else {
             autoscalerMetrics.incrementBalanced();
