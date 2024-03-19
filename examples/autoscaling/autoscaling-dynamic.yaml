@@ -50,7 +50,4 @@ spec:
     parallelism: 1
     upgradeMode: stateless
     args:
-    - --maxLoadPerTask
-    - "1;2;4;8;16;\n16;8;4;2;1\n8;4;16;1;2"
-    - --repeatsAfterMinutes
-    - "60"
+    - --maxLoadPerTask "1;2;4;8;16;\n16;8;4;2;1\n8;4;16;1;2" --repeatsAfterMinutes "60"
