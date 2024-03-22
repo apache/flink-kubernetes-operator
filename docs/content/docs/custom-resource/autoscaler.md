@@ -162,12 +162,14 @@ Setting `job.autoscaler.target.utilization.boundary: "0.2"` means that we allow 
 ### Target catch-up duration and restart time
 
 When taking scaling decisions the operator need to account for the extra capacity required to catch up the backlog created during scaling operations.
-The amount of extra capacity is determined automatically by the following 2 configs:
+The amount of extra capacity is determined automatically by the following 3 configs:
 
- - `job.autoscaler.restart.time` : Time it usually takes to restart the application
  - `job.autoscaler.catch-up.duration` : Time to job is expected to catch up after scaling
+ - `job.autoscaler.restart.time` : Time it usually takes to restart the application
+ - `job.autoscaler.restart.time-tracking.enabled` : Whether to use the actual observed rescaling restart times instead of the fixed 'job.autoscaler.restart.time' configuration. It's disabled by default.
 
-In the future the autoscaler may be able to automatically determine the restart time, but the target catch-up duration depends on the users SLO.
+The maximum restart duration over a number of samples will be used when `job.autoscaler.restart.time-tracking.enabled` is set to true, 
+but the target catch-up duration depends on the users SLO.
 
 By lowering the catch-up duration the autoscaler will have to reserve more extra capacity for the scaling actions.
 We suggest setting this based on your actual objective, such us 10,30,60 minutes etc.
