@@ -20,12 +20,15 @@ package org.apache.flink.autoscaler.standalone.flinkcluster;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.standalone.JobListFetcher;
+import org.apache.flink.autoscaler.utils.JobStatusUtils;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.metrics.groups.UnregisteredMetricsGroup;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.JobMessageParameters;
+import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.job.JobManagerJobConfigurationHeaders;
 import org.apache.flink.util.function.FunctionWithException;
 
@@ -54,7 +57,11 @@ public class FlinkClusterJobListFetcher
     public Collection<JobAutoScalerContext<JobID>> fetch() throws Exception {
         try (var restClusterClient = restClientGetter.apply(new Configuration())) {
             return restClusterClient
-                    .listJobs()
+                    .sendRequest(
+                            JobsOverviewHeaders.getInstance(),
+                            EmptyMessageParameters.getInstance(),
+                            EmptyRequestBody.getInstance())
+                    .thenApply(JobStatusUtils::toJobStatusMessage)
                     .get(restClientTimeout.toSeconds(), TimeUnit.SECONDS)
                     .stream()
                     .map(
