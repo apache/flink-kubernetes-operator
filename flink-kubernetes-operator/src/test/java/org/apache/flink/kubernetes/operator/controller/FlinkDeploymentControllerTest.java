@@ -68,6 +68,7 @@ import java.util.stream.Collectors;
 import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -131,6 +132,11 @@ public class FlinkDeploymentControllerTest {
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(7, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(
+                        "The resource deployment is considered to be stable and won’t be rolled back");
 
         FlinkDeploymentReconciliationStatus reconciliationStatus =
                 appCluster.getStatus().getReconciliationStatus();
@@ -1170,6 +1176,11 @@ public class FlinkDeploymentControllerTest {
         assertNull(appCluster.getStatus().getError());
         assertEquals(appCluster.getSpec(), reconciliationStatus.deserializeLastReconciledSpec());
         assertNull(appCluster.getStatus().getReconciliationStatus().getLastStableSpec());
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(
+                        "The resource is deployed, but it’s not yet considered to be stable and might be rolled back in the future");
 
         updateControl = testController.reconcile(appCluster, context);
         assertEquals(
@@ -1179,6 +1190,11 @@ public class FlinkDeploymentControllerTest {
                 org.apache.flink.api.common.JobStatus.RECONCILING.name(),
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(5, testController.getInternalStatusUpdateCount());
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(
+                        "The resource is deployed, but it’s not yet considered to be stable and might be rolled back in the future");
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -1193,6 +1209,11 @@ public class FlinkDeploymentControllerTest {
                 org.apache.flink.api.common.JobStatus.RUNNING.name(),
                 appCluster.getStatus().getJobStatus().getState());
         assertEquals(6, testController.getInternalStatusUpdateCount());
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(
+                        "The resource deployment is considered to be stable and won’t be rolled back");
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
@@ -1207,12 +1228,23 @@ public class FlinkDeploymentControllerTest {
         assertEquals(
                 org.apache.flink.api.common.JobStatus.RUNNING.name(),
                 appCluster.getStatus().getJobStatus().getState());
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(
+                        "The resource deployment is considered to be stable and won’t be rolled back");
         assertEquals(6, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
         assertEquals(
                 Optional.of(
                         configManager.getOperatorConfiguration().getReconcileInterval().toMillis()),
                 updateControl.getScheduleDelay());
+
+        assertThat(appCluster.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(
+                        "The resource deployment is considered to be stable and won’t be rolled back");
 
         // Validate job status
         JobStatus jobStatus = appCluster.getStatus().getJobStatus();

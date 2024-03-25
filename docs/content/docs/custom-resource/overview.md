@@ -69,6 +69,9 @@ spec:
 status:
   clusterInfo:
     ...
+  conditions:
+    
+    ...
   jobManagerDeploymentStatus: READY
   jobStatus:
     ...
