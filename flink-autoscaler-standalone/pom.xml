@@ -133,6 +133,12 @@ under the License.
             <version>${log4j.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>${hikari.version}</version>
+        </dependency>
+
         <!-- Test -->
 
         <dependency>
@@ -161,12 +167,6 @@ under the License.
             <artifactId>assertj-core</artifactId>
             <version>${assertj.version}</version>
             <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-            <version>${hikari.version}</version>
         </dependency>
 
         <!-- Derby tests -->
