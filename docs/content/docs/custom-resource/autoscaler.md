@@ -69,7 +69,7 @@ The autoscaler approach is based on [Three steps is all you need: fast, accurate
 
 ## Executing rescaling operations
 
-By default the autoscaler uses the built in job upgrade mechanism from the operator to perform the rescaling as detailed in [Job Management and Stateful upgrades]({{< ref "docs/custom-resource/job-management" >}}).
+By default, the autoscaler uses the built-in job upgrade mechanism from the operator to perform the rescaling as detailed in [Job Management and Stateful upgrades]({{< ref "docs/custom-resource/job-management" >}}).
 
 ### Flink 1.18 and in-place scaling support
 
@@ -99,9 +99,9 @@ For session job auto-scaling, a latest custom build of Flink 1.19 or 1.18 is req
 
 ### Limitations
 
-By default the autoscaler can work for all job vertices in the processing graph.
+By default, the autoscaler can work for all job vertices in the processing graph.
 
-However source scaling requires that the sources:
+However, source scaling requires that the sources:
 
    - Use the new [Source API](https://cwiki.apache.org/confluence/display/FLINK/FLIP-27%3A+Refactor+Source+Interface) that exposes the busy time metric (must have, most common connectors already do)
    - Expose the [standardized connector metrics](https://cwiki.apache.org/confluence/display/FLINK/FLIP-33%3A+Standardize+Connector+Metrics) for accessing backlog information (good to have, extra capacity will be added for catching up with backlog)
