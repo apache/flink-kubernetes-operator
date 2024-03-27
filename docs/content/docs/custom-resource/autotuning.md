@@ -118,7 +118,10 @@ Currently, only TaskManager memory is adjusted.
 Currently, if no managed memory is used, e.g. the heap-based state backend is used, managed memory will be set to
 zero by Flink Autotuning which helps save a lot of memory. However, if managed memory is used, e.g. via RocksDB, the
 configured managed memory will be kept constant because Flink currently lacks metrics to accurately measure the usage of
-managed memory. Nevertheless, users already benefit from the resource savings and optimizations for heap, metaspace, and
-network memory. RocksDB users can solely focus their attention on configuring managed memory. We also added an option to
-add all saved memory to the managed memory. This is beneficial when running with RocksDB to maximize the in-memory
-performance.
+managed memory.
+
+Nevertheless, users already benefit from the resource savings and optimizations for heap, metaspace, and
+network memory. RocksDB users can solely focus their attention on configuring managed memory.
+
+We already added an option to add all saved memory to the managed memory. This is beneficial when running with RocksDB
+to maximize the in-memory performance.
