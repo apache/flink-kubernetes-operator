@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.autoscaler.utils.JobStatusUtils;
 import org.apache.flink.client.program.rest.RestClusterClient;
 import org.apache.flink.configuration.CheckpointingOptions;
 import org.apache.flink.configuration.Configuration;
@@ -50,12 +51,9 @@ import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
-import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
-import org.apache.flink.runtime.messages.webmonitor.JobDetails;
-import org.apache.flink.runtime.messages.webmonitor.MultipleJobsDetails;
 import org.apache.flink.runtime.rest.FileUpload;
 import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
@@ -272,7 +270,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                             JobsOverviewHeaders.getInstance(),
                             EmptyMessageParameters.getInstance(),
                             EmptyRequestBody.getInstance())
-                    .thenApply(AbstractFlinkService::toJobStatusMessage)
+                    .thenApply(JobStatusUtils::toJobStatusMessage)
                     .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
         }
     }
@@ -902,19 +900,6 @@ public abstract class AbstractFlinkService implements FlinkService {
                 timeout);
     }
 
-    private static List<JobStatusMessage> toJobStatusMessage(
-            MultipleJobsDetails multipleJobsDetails) {
-        return multipleJobsDetails.getJobs().stream()
-                .map(
-                        details ->
-                                new JobStatusMessage(
-                                        details.getJobId(),
-                                        details.getJobName(),
-                                        getEffectiveStatus(details),
-                                        details.getStartTime()))
-                .collect(Collectors.toList());
-    }
-
     @VisibleForTesting
     protected static Configuration removeOperatorConfigs(Configuration config) {
         Configuration newConfig = new Configuration();
@@ -927,19 +912,6 @@ public abstract class AbstractFlinkService implements FlinkService {
                         });
 
         return newConfig;
-    }
-
-    @VisibleForTesting
-    protected static JobStatus getEffectiveStatus(JobDetails details) {
-        int numRunning = details.getTasksPerState()[ExecutionState.RUNNING.ordinal()];
-        int numFinished = details.getTasksPerState()[ExecutionState.FINISHED.ordinal()];
-        boolean allRunningOrFinished = details.getNumTasks() == (numRunning + numFinished);
-        JobStatus effectiveStatus = details.getStatus();
-        if (JobStatus.RUNNING.equals(effectiveStatus) && !allRunningOrFinished) {
-            effectiveStatus = JobStatus.CREATED;
-            LOG.debug("Adjusting job state from {} to {}", JobStatus.RUNNING, effectiveStatus);
-        }
-        return effectiveStatus;
     }
 
     private void validateHaMetadataExists(Configuration conf) {

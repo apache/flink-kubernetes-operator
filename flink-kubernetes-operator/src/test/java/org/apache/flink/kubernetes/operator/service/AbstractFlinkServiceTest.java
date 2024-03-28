@@ -52,10 +52,8 @@ import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.runtime.clusterframework.types.ResourceID;
 import org.apache.flink.runtime.clusterframework.types.ResourceProfile;
-import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.instance.HardwareDescription;
 import org.apache.flink.runtime.messages.Acknowledge;
-import org.apache.flink.runtime.messages.webmonitor.JobDetails;
 import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
 import org.apache.flink.runtime.rest.handler.async.TriggerResponse;
@@ -123,7 +121,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -959,63 +956,6 @@ public class AbstractFlinkServiceTest {
                         AbstractFlinkService.FIELD_NAME_TOTAL_MEMORY,
                         "" + MemorySize.ofMebiBytes(1000).getBytes() * 2),
                 flinkService.getClusterInfo(conf));
-    }
-
-    @Test
-    public void effectiveStatusTest() {
-        JobDetails allRunning =
-                getJobDetails(
-                        org.apache.flink.api.common.JobStatus.RUNNING,
-                        Tuple2.of(ExecutionState.RUNNING, 4));
-        assertEquals(
-                org.apache.flink.api.common.JobStatus.RUNNING,
-                AbstractFlinkService.getEffectiveStatus(allRunning));
-
-        JobDetails allRunningOrFinished =
-                getJobDetails(
-                        org.apache.flink.api.common.JobStatus.RUNNING,
-                        Tuple2.of(ExecutionState.RUNNING, 2),
-                        Tuple2.of(ExecutionState.FINISHED, 2));
-        assertEquals(
-                org.apache.flink.api.common.JobStatus.RUNNING,
-                AbstractFlinkService.getEffectiveStatus(allRunningOrFinished));
-
-        JobDetails allRunningOrScheduled =
-                getJobDetails(
-                        org.apache.flink.api.common.JobStatus.RUNNING,
-                        Tuple2.of(ExecutionState.RUNNING, 2),
-                        Tuple2.of(ExecutionState.SCHEDULED, 2));
-        assertEquals(
-                org.apache.flink.api.common.JobStatus.CREATED,
-                AbstractFlinkService.getEffectiveStatus(allRunningOrScheduled));
-
-        JobDetails allFinished =
-                getJobDetails(
-                        org.apache.flink.api.common.JobStatus.FINISHED,
-                        Tuple2.of(ExecutionState.FINISHED, 4));
-        assertEquals(
-                org.apache.flink.api.common.JobStatus.FINISHED,
-                AbstractFlinkService.getEffectiveStatus(allFinished));
-    }
-
-    private JobDetails getJobDetails(
-            org.apache.flink.api.common.JobStatus status,
-            Tuple2<ExecutionState, Integer>... tasksPerState) {
-        int[] countPerState = new int[ExecutionState.values().length];
-        for (var taskPerState : tasksPerState) {
-            countPerState[taskPerState.f0.ordinal()] = taskPerState.f1;
-        }
-        int numTasks = Arrays.stream(countPerState).sum();
-        return new JobDetails(
-                new JobID(),
-                "test-job",
-                System.currentTimeMillis(),
-                -1,
-                0,
-                status,
-                System.currentTimeMillis(),
-                countPerState,
-                numTasks);
     }
 
     @Test
