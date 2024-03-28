@@ -141,13 +141,7 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
             autoScaler.scale(jobContext);
         } catch (Throwable e) {
             LOG.error("Error while scaling job", e);
-            eventHandler.handleEvent(
-                    jobContext,
-                    AutoScalerEventHandler.Type.Warning,
-                    AUTOSCALER_ERROR,
-                    e.getMessage(),
-                    null,
-                    null);
+            eventHandler.handleException(jobContext, AUTOSCALER_ERROR, e);
         } finally {
             MDC.clear();
         }
