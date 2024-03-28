@@ -78,6 +78,11 @@ operatorPod:
   # - configMapRef:
   #     name: ""
   nodeSelector: {}
+  affinity:
+    # Set the anti affinity type. Valid values:
+    # requiredDuringSchedulingIgnoredDuringExecution - rules must be met for pod to be scheduled (hard) requires at least one node per replica
+    # preferredDuringSchedulingIgnoredDuringExecution - scheduler will try to enforce but not guranentee
+    type: requiredDuringSchedulingIgnoredDuringExecution  
   # Node tolerations for operator pod assignment
   # https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/
   tolerations: []
