@@ -24,57 +24,66 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# Architecture
+<a name="architecture"></a>
 
-Flink Kubernetes Operator (Operator) acts as a control plane to manage the complete deployment lifecycle of Apache Flink applications. The Operator can be installed on a Kubernetes cluster using [Helm](https://helm.sh). In most production environments it is typically deployed in a designated namespace and controls Flink deployments in one or more managed namespaces. The custom resource definition (CRD) that describes the schema of a `FlinkDeployment` is a cluster wide resource. For a CRD, the declaration must be registered before any resources of that CRDs kind(s) can be used, and the registration process sometimes takes a few seconds.
+# 架构
 
-{{< img src="/img/concepts/architecture.svg" alt="Flink Kubernetes Operator Architecture" >}}
-> Note: There is no support at this time for [upgrading or deleting CRDs using Helm](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/).
+Flink Kubernetes Operator（Operator）充当控制平面，用于管理 Apache Flink 应用程序的完整 deployment 生命周期。可以使用 [Helm](https://helm.sh) 在 Kubernetes 集群上安装 Operator。在大多数生产环境中，它通常部署在指定的命名空间中，并控制一个或多个 Flink deployments 到受托管的 namespaces 。描述 `FlinkDeployment` 结构的自定义资源定义（CRD）是集群范围的资源。对于 CRD，必须在使用该 CRD 类型的任何资源之前注册声明，注册过程有时需要几秒钟。
 
-## Control Loop
-The Operator follow the Kubernetes principles, notably the [control loop](https://kubernetes.io/docs/concepts/architecture/controller/):
+{{< img src="/img/concepts/architecture.svg" alt="Flink Kubernetes Operator 架构" >}}
+> Note: 目前不支持[使用 Helm 升级或删除 CRD](https://helm.sh/docs/chart_best_practices/custom_resource_definitions/).
 
-{{< img src="/img/concepts/control_loop.svg" alt="Control Loop" >}}
+<a name="control-loop"></a>
 
-Users can interact with the operator using the Kubernetes command-line tool, [kubectl](https://kubernetes.io/docs/tasks/tools/). The Operator continuously tracks cluster events relating to the `FlinkDeployment` and `FlinkSessionJob` custom resources. When the operator receives a new resource update, it will take action to adjust the Kubernetes cluster to the desired state as part of its reconciliation loop. The initial loop consists of the following high-level steps:
+## 控制平面
+Operator 遵循 Kubernetes 原则，特别是 [控制平面](https://kubernetes.io/docs/concepts/architecture/controller/)：
 
-1. User submits a `FlinkDeployment`/`FlinkSessionJob` custom resource(CR) using `kubectl`
-2. Operator observes the current status of the Flink resource (if previously deployed)
-3. Operator validates the submitted resource change
-4. Operator reconciles any required changes and executes upgrades
+{{< img src="/img/concepts/control_loop.svg" alt="控制循环" >}}
 
-The CR can be (re)applied on the cluster any time. The Operator makes continuous adjustments to imitate the desired state until the current state becomes the desired state. All lifecycle management operations are realized using this very simple principle in the Operator.
+用户可以使用 Kubernetes 命令行工具 [kubectl](https://kubernetes.io/docs/tasks/tools/) 与 Operator 进行交互。Operator 不断跟踪与 `FlinkDeployment` 和 `FlinkSessionJob` 自定义资源相关的集群事件。当 Operator 接收到新的资源更新时，它将调整 Kubernetes 集群以达到所需状态，这个调整将作为其协调循环的一部分。初始循环包括以下高级步骤：
 
-The Operator is built with the [Java Operator SDK](https://github.com/java-operator-sdk/java-operator-sdk) and uses the [Native Kubernetes Integration](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/) for launching Flink deployments and submitting jobs under the hood. The Java Operator SDK is a higher level framework and related tooling to support writing Kubernetes Operators in Java. Both the Java Operator SDK and Flink's native kubernetes integration itself is using the [Fabric8 Kubernetes Client](https://github.com/fabric8io/kubernetes-client) to interact with the Kubernetes API Server.
+1. 用户使用 `kubectl` 提交 `FlinkDeployment`/`FlinkSessionJob` 自定义资源（CR）
+2. Operator 观察 Flink 资源的当前状态（如果先前已部署）
+3. Operator 验证提交的资源更改
+4. Operator 协调任何必要的更改并执行升级
 
-## Flink Resource Lifecycle
+CR 可以随时在集群上（重新）应用。Operator 通过不断调整来模拟期望的状态，直到当前状态变为期望的状态。Operator 中的所有生命周期管理操作都是使用这个非常简单的原则实现的。
 
-The Operator manages the lifecycle of Flink resources. The following chart illustrates the different possible states and transitions:
+Operator 使用 [Java Operator SDK](https://github.com/java-operator-sdk/java-operator-sdk) 构建，并使用 [Native Kubernetes Integration](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/native_kubernetes/) 用于启动 Flink deployment 并在后台提交作业。
+Java Operator SDK 是一个更高级别的框架和相关工具，用于支持使用 Java 编写 Kubernetes Operator。Java Operator SDK 和 Flink 的原生 kubernetes 集成本身都使用 [Fabric8 Kubernetes 客户端](https://github.com/fabric8io/kubernetes-client) 与 Kubernetes API 服务器交互。
 
-{{< img src="/img/concepts/resource_lifecycle.svg" alt="Flink Resource Lifecycle" >}}
+<a name="flink-resource-lifecycle"></a>
 
-**We can distinguish the following states:**
+## Flink 资源生命周期
 
-  - CREATED : The resource was created in Kubernetes but not yet handled by the operator
-  - SUSPENDED : The (job) resource has been suspended
-  - UPGRADING : The resource is suspended before upgrading to a new spec
-  - DEPLOYED : The resource is deployed/submitted to Kubernetes, but it's not yet considered to be stable and might be rolled back in the future
-  - STABLE : The resource deployment is considered to be stable and won't be rolled back
-  - ROLLING_BACK : The resource is being rolled back to the last stable spec
-  - ROLLED_BACK : The resource is deployed with the last stable spec
-  - FAILED : The job terminally failed
+Operator 管理 Flink 资源的生命周期。以下图表说明了可能的状态和转换：
 
-## Admission Control
+{{< img src="/img/concepts/resource_lifecycle.svg" alt="Flink 资源生命周期" >}}
 
-In addition to compiled-in admission plugins, a custom admission plugin named Flink Kubernetes Operator Webhook (Webhook)
-can be started as extension and run as webhook.
 
-The Webhook follow the Kubernetes principles, notably the [dynamic admission control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/).
+**我们可以区分以下几种状态：**
 
-It's deployed by default when the Operator is installed on a Kubernetes cluster using [Helm](https://helm.sh).
-Please see further details how to deploy the Operator/Webhook [here](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/try-flink-kubernetes-operator/quick-start/#deploying-the-operator).
+  - CREATED : 资源在 Kubernetes 中已创建，但尚未由 Operator 处理
+  - SUSPENDED : （flink job）资源已被暂停
+  - UPGRADING : 资源是在升级到新规格之前暂停的
+  - DEPLOYED : 资源已部署/提交到 Kubernetes，但尚未稳定，可能会回滚
+  - STABLE : 资源 deployment 被视为稳定，不会回滚
+  - ROLLING_BACK : 资源正在回滚到上一个稳定规格
+  - ROLLED_BACK : 资源已回滚到上一个稳定规格
+  - FAILED : flink job 终止失败
 
-The Webhook is using TLS protocol for communication by default. It automatically loads/re-loads keystore file when the file
-has changed and provides the following endpoints:
+<a name="admission-control"></a>
+
+## 准入控制
+
+除了预编译的准入插件之外，还有名为 Flink Kubernetes Operator Webhook (Webhook) 的自定义准入插件可以作为扩展启动并作为 webhook 运行。
+
+Webhook 遵循 Kubernetes 原则，特别是 [dynamic admission control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)。
+
+当使用 [Helm](https://helm.sh) 在 Kubernetes 集群上安装 Operator 时，它会默认部署。有关如何部署 Operator/Webhook 的更多详细信息，
+请参见[此处](https://nightlies.apache.org/flink/flink-kubernetes-operator-docs-main/docs/try-flink-kubernetes-operator/quick-start/#deploying-the-operator)。
+
+Webhook 默认使用 TLS 协议进行通信。当文件发生更改时，它会自动加载/重新加载 keystore 文件，并提供以下端点：
 
 {{< img src="/img/concepts/webhook.svg" alt="Webhook" >}}
+
