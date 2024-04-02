@@ -60,9 +60,11 @@ public class StandaloneAutoscalerEntrypoint {
 
         var autoScaler = createJobAutoscaler(eventHandler, stateStore);
 
-        var autoscalerExecutor =
-                new StandaloneAutoscalerExecutor<>(conf, jobListFetcher, eventHandler, autoScaler);
-        autoscalerExecutor.start();
+        try (var autoscalerExecutor =
+                new StandaloneAutoscalerExecutor<>(
+                        conf, jobListFetcher, eventHandler, autoScaler)) {
+            autoscalerExecutor.start();
+        }
     }
 
     private static <KEY, Context extends JobAutoScalerContext<KEY>>
