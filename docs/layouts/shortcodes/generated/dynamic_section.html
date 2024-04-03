@@ -159,6 +159,12 @@
             <td>Whether to enable clean up of savepoint history.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.savepoint.dispose-on-delete</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Savepoint data for FlinkStateSnapshot resources created by the operator during upgrades and periodic savepoints will be disposed of automatically when the generated Kubernetes resource is deleted.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.savepoint.format.type</h5></td>
             <td style="word-wrap: break-word;">CANONICAL</td>
             <td><p>Enum</p></td>
@@ -181,6 +187,12 @@
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>
             <td>The interval before a savepoint trigger attempt is marked as unsuccessful.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.snapshot.resource.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Create new FlinkStateSnapshot resources for storing snapshots. Disable if you wish to use the deprecated mode and save snapshot results to FlinkDeployment/FlinkSessionJob status fields. The Operator will fallback to legacy mode during runtime if the CRD is not found, even if this value is true.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.user.artifacts.http.header</h5></td>

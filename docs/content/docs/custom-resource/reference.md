@@ -48,6 +48,15 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 
 ## Spec
 
+### CheckpointSpec
+**Class**: org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec
+
+**Description**: Spec for checkpoint state snapshots.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| checkpointType | org.apache.flink.kubernetes.operator.api.status.CheckpointType | Type of checkpoint to take. |
+
 ### FlinkDeploymentSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec
 
@@ -81,6 +90,29 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment or Flink session job. |
 | deploymentName | java.lang.String | The name of the target session cluster deployment. |
 
+### FlinkStateSnapshotReference
+**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference
+
+**Description**: Reference for a FlinkStateSnapshot.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| namespace | java.lang.String | Namespace of the snapshot resource. |
+| name | java.lang.String | Name of the snapshot resource. |
+| path | java.lang.String | If a path is given, all other fields will be ignored, and this will be used as the initial savepoint path. |
+
+### FlinkStateSnapshotSpec
+**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec
+
+**Description**: Spec that describes a FlinkStateSnapshot.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| jobReference | org.apache.flink.kubernetes.operator.api.spec.JobReference | Source to take a snapshot of. Not required if it's a savepoint and alreadyExists is true. |
+| savepoint | org.apache.flink.kubernetes.operator.api.spec.SavepointSpec | Spec in case of savepoint. |
+| checkpoint | org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec | Spec in case of checkpoint. |
+| backoffLimit | int | Maximum number of retries before the snapshot is considered as failed. Set to -1 for unlimited or 0 for no retries. |
+
 ### FlinkVersion
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkVersion
 
@@ -109,6 +141,16 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | labels | java.util.Map<java.lang.String,java.lang.String> | Ingress labels. |
 | tls | java.util.List<io.fabric8.kubernetes.api.model.networking.v1.IngressTLS> | Ingress tls. |
 
+### JobKind
+**Class**: org.apache.flink.kubernetes.operator.api.spec.JobKind
+
+**Description**: Describes the Kubernetes kind of job reference.
+
+| Value | Docs |
+| ----- | ---- |
+| FlinkDeployment | FlinkDeployment CR kind. |
+| FlinkSessionJob | FlinkSessionJob CR kind. |
+
 ### JobManagerSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec
 
@@ -119,6 +161,16 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | resource | org.apache.flink.kubernetes.operator.api.spec.Resource | Resource specification for the JobManager pods. |
 | replicas | int | Number of JobManager replicas. Must be 1 for non-HA deployments. |
 | podTemplate | io.fabric8.kubernetes.api.model.PodTemplateSpec | JobManager pod template. It will be merged with FlinkDeploymentSpec.podTemplate. |
+
+### JobReference
+**Class**: org.apache.flink.kubernetes.operator.api.spec.JobReference
+
+**Description**: Flink resource reference that can be a FlinkDeployment or FlinkSessionJob.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| kind | org.apache.flink.kubernetes.operator.api.spec.JobKind | Kind of the Flink resource, FlinkDeployment or FlinkSessionJob. |
+| name | java.lang.String | Name of the Flink resource. |
 
 ### JobSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.JobSpec
@@ -134,10 +186,11 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | state | org.apache.flink.kubernetes.operator.api.spec.JobState | Desired state for the job. |
 | savepointTriggerNonce | java.lang.Long | Nonce used to manually trigger savepoint for the running job. In order to trigger a savepoint, change the number to a different non-null value. |
 | initialSavepointPath | java.lang.String | Savepoint path used by the job the first time it is deployed or during savepoint redeployments (triggered by changing the savepointRedeployNonce). |
+| flinkStateSnapshotReference | org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference | Snapshot reference used by the job the first time it is deployed or during savepoint redeployments (triggered by changing the savepointRedeployNonce). |
 | checkpointTriggerNonce | java.lang.Long | Nonce used to manually trigger checkpoint for the running job. In order to trigger a checkpoint, change the number to a different non-null value. |
 | upgradeMode | org.apache.flink.kubernetes.operator.api.spec.UpgradeMode | Upgrade mode of the Flink job. |
 | allowNonRestoredState | java.lang.Boolean | Allow checkpoint state that cannot be mapped to any job vertex in tasks. |
-| savepointRedeployNonce | java.lang.Long | Nonce used to trigger a full redeployment of the job from the savepoint path specified in initialSavepointPath. In order to trigger redeployment, change the number to a different non-null value. Rollback is not possible after redeployment. |
+| savepointRedeployNonce | java.lang.Long | Nonce used to trigger a full redeployment of the job from the savepoint path specified in initialSavepointPath or the path/FlinkStateSnapshot reference in flinkStateSnapshotReference. In order to trigger redeployment, change the number to a different non-null value. Rollback is not possible after redeployment. |
 
 ### JobState
 **Class**: org.apache.flink.kubernetes.operator.api.spec.JobState
@@ -169,6 +222,18 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | cpu | java.lang.Double | Amount of CPU allocated to the pod. |
 | memory | java.lang.String | Amount of memory allocated to the pod. Example: 1024m, 1g |
 | ephemeralStorage | java.lang.String | Amount of ephemeral storage allocated to the pod. Example: 1024m, 2G |
+
+### SavepointSpec
+**Class**: org.apache.flink.kubernetes.operator.api.spec.SavepointSpec
+
+**Description**: Spec for savepoint state snapshots.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| path | java.lang.String | Optional path for the savepoint. |
+| formatType | org.apache.flink.kubernetes.operator.api.status.SavepointFormatType | Savepoint format to use. |
+| disposeOnDelete | java.lang.Boolean | Dispose the savepoints upon CR deletion. |
+| alreadyExists | java.lang.Boolean | Indicates that the savepoint already exists on the given path. The Operator will not trigger any new savepoints, just update the status of the resource as a completed snapshot. |
 
 ### TaskManagerSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec
@@ -285,6 +350,47 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | lifecycleState | org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState | Lifecycle state of the Flink resource (including being rolled back, failed etc.). |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobReconciliationStatus | Status of the last reconcile operation. |
 
+### FlinkStateSnapshotStatus
+**Class**: org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus
+
+**Description**: Last observed status of the Flink state snapshot.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+
+### State
+**Class**: org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State
+
+**Description**: Describes state of a snapshot.
+
+| Value | Docs |
+| ----- | ---- |
+| COMPLETED | Snapshot was successful and available. |
+| FAILED | Error during snapshot. |
+| IN_PROGRESS | Snapshot in progress. |
+| TRIGGER_PENDING | Not yet processed by the operator. |
+| ABANDONED | Snapshot abandoned due to job failure/upgrade. |
+| state | org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State | Current state of the snapshot. |
+| triggerId | java.lang.String | Trigger ID of the snapshot. |
+| triggerTimestamp | java.lang.String | Trigger timestamp of a pending snapshot operation. |
+| resultTimestamp | java.lang.String | Timestamp when the snapshot was last created/failed. |
+| path | java.lang.String | Final path of the snapshot. |
+| error | java.lang.String | Optional error information about the FlinkStateSnapshot. |
+| failures | int | Number of failures, used for tracking max retries. |
+
+### State
+**Class**: org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State
+
+**Description**: Describes state of a snapshot.
+
+| Value | Docs |
+| ----- | ---- |
+| COMPLETED | Snapshot was successful and available. |
+| FAILED | Error during snapshot. |
+| IN_PROGRESS | Snapshot in progress. |
+| TRIGGER_PENDING | Not yet processed by the operator. |
+| ABANDONED | Snapshot abandoned due to job failure/upgrade. |
+
 ### JobManagerDeploymentStatus
 **Class**: org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus
 
@@ -310,6 +416,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | state | java.lang.String | Last observed state of the job. |
 | startTime | java.lang.String | Start time of the job. |
 | updateTime | java.lang.String | Update time of the job. |
+| upgradeSnapshotReference | org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference |  |
 | savepointInfo | org.apache.flink.kubernetes.operator.api.status.SavepointInfo | Information about pending and last savepoint for the job. |
 | checkpointInfo | org.apache.flink.kubernetes.operator.api.status.CheckpointInfo | Information about pending and last checkpoint for the job. |
 
@@ -356,7 +463,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| lastSavepoint | org.apache.flink.kubernetes.operator.api.status.Savepoint | Last completed savepoint by the operator. |
+| lastSavepoint | org.apache.flink.kubernetes.operator.api.status.Savepoint | Last completed savepoint by the operator for manual and periodic snapshots. Only used if FlinkStateSnapshot resources are disabled. |
 | triggerId | java.lang.String | Trigger id of a pending savepoint operation. |
 | triggerTimestamp | java.lang.Long | Trigger timestamp of a pending savepoint operation. |
 | triggerType | org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType | Savepoint trigger mechanism. |

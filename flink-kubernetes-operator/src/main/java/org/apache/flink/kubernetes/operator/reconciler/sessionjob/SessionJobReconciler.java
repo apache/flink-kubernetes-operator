@@ -36,6 +36,7 @@ import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 
 import io.javaoperatorsdk.operator.api.reconciler.DeleteControl;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
+import org.apache.commons.lang3.ObjectUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -99,8 +100,11 @@ public class SessionJobReconciler
     @Override
     protected void cancelJob(FlinkResourceContext<FlinkSessionJob> ctx, UpgradeMode upgradeMode)
             throws Exception {
+        var conf = ObjectUtils.firstNonNull(ctx.getObserveConfig(), new Configuration());
+
         ctx.getFlinkService()
-                .cancelSessionJob(ctx.getResource(), upgradeMode, ctx.getObserveConfig());
+                .cancelSessionJob(ctx.getResource(), upgradeMode, conf)
+                .ifPresent(location -> setUpgradeSnapshotReferenceFromSavepoint(ctx, location));
         ctx.getResource().getStatus().getJobStatus().setJobId(null);
     }
 

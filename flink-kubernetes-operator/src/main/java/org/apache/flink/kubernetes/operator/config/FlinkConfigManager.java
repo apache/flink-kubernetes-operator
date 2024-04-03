@@ -24,6 +24,7 @@ import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
@@ -62,6 +63,7 @@ import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConf
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.NAMESPACE_CONF_PREFIX;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_CHECK_INTERVAL;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_DYNAMIC_CONFIG_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.VERSION_CONF_PREFIX;
 
 /** Configuration manager for the Flink operator. */
@@ -72,21 +74,27 @@ public class FlinkConfigManager {
 
     private volatile Configuration defaultConfig;
     private volatile FlinkOperatorConfiguration defaultOperatorConfiguration;
+    // TODO: From 1.11 release, snapshot CRD should be mandatory and this can be removed.
+    private final boolean snapshotCrdInstalled;
     private final AtomicLong defaultConfigVersion = new AtomicLong(0);
     private final LoadingCache<Key, Configuration> cache;
     private final Consumer<Set<String>> namespaceListener;
 
     @VisibleForTesting
     public FlinkConfigManager(Configuration defaultConfig) {
-        this(defaultConfig, ns -> {});
-    }
-
-    public FlinkConfigManager(Consumer<Set<String>> namespaceListener) {
-        this(loadGlobalConfiguration(), namespaceListener);
+        this(defaultConfig, ns -> {}, true);
     }
 
     public FlinkConfigManager(
-            Configuration defaultConfig, Consumer<Set<String>> namespaceListener) {
+            Consumer<Set<String>> namespaceListener, boolean snapshotCrdInstalled) {
+        this(loadGlobalConfiguration(), namespaceListener, snapshotCrdInstalled);
+    }
+
+    public FlinkConfigManager(
+            Configuration defaultConfig,
+            Consumer<Set<String>> namespaceListener,
+            boolean snapshotCrdInstalled) {
+        this.snapshotCrdInstalled = snapshotCrdInstalled;
         this.namespaceListener = namespaceListener;
         Duration cacheTimeout =
                 defaultConfig.get(KubernetesOperatorConfigOptions.OPERATOR_CONFIG_CACHE_TIMEOUT);
@@ -135,6 +143,15 @@ public class FlinkConfigManager {
             return;
         } else {
             LOG.info("Setting default configuration to {}", newConf);
+        }
+
+        // Even if snapshot resources are enabled, we need to disable them if the CRD was not
+        // installed in the current Kubernetes cluster.
+        if (newConf.get(SNAPSHOT_RESOURCE_ENABLED) && !snapshotCrdInstalled) {
+            LOG.warn(
+                    "{} CRD was not installed, snapshot resources will be disabled!",
+                    FlinkStateSnapshot.class.getSimpleName());
+            newConf.set(SNAPSHOT_RESOURCE_ENABLED, false);
         }
 
         var oldNs =

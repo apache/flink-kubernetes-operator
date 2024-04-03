@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -28,16 +29,17 @@ import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationStatus;
-import org.apache.flink.kubernetes.operator.api.status.SnapshotInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotContext;
 import org.apache.flink.kubernetes.operator.exception.ValidationException;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -52,10 +54,12 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 
 import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
+import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkStateSnapshotException;
 
 /** Reconciliation utilities. */
 public class ReconciliationUtils {
@@ -182,12 +186,12 @@ public class ReconciliationUtils {
     }
 
     public static <SPEC extends AbstractFlinkSpec> void updateLastReconciledSnapshotTriggerNonce(
-            SnapshotInfo snapshotInfo,
+            SnapshotTriggerType snapshotTriggerType,
             AbstractFlinkResource<SPEC, ?> target,
             SnapshotType snapshotType) {
 
         // We only need to update for MANUAL triggers
-        if (snapshotInfo.getTriggerType() != SnapshotTriggerType.MANUAL) {
+        if (snapshotTriggerType != SnapshotTriggerType.MANUAL) {
             return;
         }
 
@@ -232,6 +236,16 @@ public class ReconciliationUtils {
 
     public static void updateForReconciliationError(FlinkResourceContext ctx, Throwable error) {
         updateFlinkResourceException(error, ctx.getResource(), ctx.getOperatorConfig());
+    }
+
+    public static void updateForReconciliationError(
+            FlinkStateSnapshotContext ctx, Throwable error) {
+        var snapshot = ctx.getResource();
+        snapshot.getStatus().setState(FlinkStateSnapshotStatus.State.FAILED);
+        snapshot.getStatus().setFailures(snapshot.getStatus().getFailures() + 1);
+        snapshot.getStatus().setResultTimestamp(DateTimeUtils.kubernetes(Instant.now()));
+
+        updateFlinkStateSnapshotException(error, ctx.getResource(), ctx.getOperatorConfig());
     }
 
     public static <T> T clone(T object) {

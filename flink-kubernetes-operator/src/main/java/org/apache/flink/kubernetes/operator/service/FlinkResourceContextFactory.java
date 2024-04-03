@@ -22,11 +22,13 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.controller.FlinkSessionJobContext;
+import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesResourceMetricGroup;
 import org.apache.flink.kubernetes.operator.metrics.OperatorMetricUtils;
@@ -69,6 +71,12 @@ public class FlinkResourceContextFactory {
                 Executors.newFixedThreadPool(
                         configManager.getOperatorConfiguration().getReconcilerMaxParallelism(),
                         new ExecutorThreadFactory("Flink-RestClusterClient-IO"));
+    }
+
+    public FlinkStateSnapshotContext getFlinkStateSnapshotContext(
+            FlinkStateSnapshot savepoint, Context<FlinkStateSnapshot> josdkContext) {
+        return new FlinkStateSnapshotContext(
+                savepoint, savepoint.getStatus().toBuilder().build(), josdkContext, configManager);
     }
 
     public <CR extends AbstractFlinkResource<?, ?>> FlinkResourceContext<CR> getResourceContext(

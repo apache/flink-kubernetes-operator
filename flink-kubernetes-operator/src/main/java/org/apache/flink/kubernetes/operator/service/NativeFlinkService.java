@@ -67,6 +67,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -117,10 +118,10 @@ public class NativeFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void cancelJob(
+    public Optional<String> cancelJob(
             FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration configuration)
             throws Exception {
-        cancelJob(deployment, upgradeMode, configuration, false);
+        return cancelJob(deployment, upgradeMode, configuration, false);
     }
 
     @Override

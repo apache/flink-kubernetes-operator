@@ -17,8 +17,10 @@
 
 package org.apache.flink.kubernetes.operator.validation;
 
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 
 import java.util.Optional;
 
@@ -33,6 +35,12 @@ public class TestValidator implements FlinkResourceValidator {
     @Override
     public Optional<String> validateSessionJob(
             FlinkSessionJob sessionJob, Optional<FlinkDeployment> session) {
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<String> validateStateSnapshot(
+            FlinkStateSnapshot savepoint, Optional<AbstractFlinkResource<?, ?>> target) {
         return Optional.empty();
     }
 }

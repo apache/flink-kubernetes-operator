@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.mutator;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 
 import java.util.HashMap;
 import java.util.Optional;
@@ -40,6 +41,11 @@ public class DefaultFlinkMutator implements FlinkResourceMutator {
         setSessionTargetLabel(sessionJob);
 
         return sessionJob;
+    }
+
+    @Override
+    public FlinkStateSnapshot mutateStateSnapshot(FlinkStateSnapshot stateSnapshot) {
+        return stateSnapshot;
     }
 
     private void setSessionTargetLabel(FlinkSessionJob flinkSessionJob) {

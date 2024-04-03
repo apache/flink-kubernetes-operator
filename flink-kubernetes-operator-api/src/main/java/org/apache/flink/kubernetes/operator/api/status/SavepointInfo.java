@@ -34,8 +34,12 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Deprecated
 public class SavepointInfo implements SnapshotInfo {
-    /** Last completed savepoint by the operator. */
+    /**
+     * Last completed savepoint by the operator for manual and periodic snapshots. Only used if
+     * FlinkStateSnapshot resources are disabled.
+     */
     private Savepoint lastSavepoint;
 
     /** Trigger id of a pending savepoint operation. */

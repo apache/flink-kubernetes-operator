@@ -33,8 +33,9 @@ import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentO
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
-import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
@@ -69,7 +70,8 @@ public class TestingFlinkDeploymentController
     @Getter private ReconcilerFactory reconcilerFactory;
     private FlinkDeploymentController flinkDeploymentController;
     private StatusUpdateCounter statusUpdateCounter = new StatusUpdateCounter();
-    private EventCollector eventCollector = new EventCollector();
+    private FlinkResourceEventCollector flinkResourceEventCollector =
+            new FlinkResourceEventCollector();
 
     private EventRecorder eventRecorder;
 
@@ -90,7 +92,9 @@ public class TestingFlinkDeploymentController
                         flinkService,
                         eventRecorder);
 
-        eventRecorder = new EventRecorder(eventCollector);
+        eventRecorder =
+                new EventRecorder(
+                        flinkResourceEventCollector, new FlinkStateSnapshotEventCollector());
         statusRecorder = new StatusRecorder<>(new MetricManager<>(), statusUpdateCounter);
         reconcilerFactory =
                 new ReconcilerFactory(
@@ -166,8 +170,8 @@ public class TestingFlinkDeploymentController
         throw new UnsupportedOperationException();
     }
 
-    public Queue<Event> events() {
-        return eventCollector.events;
+    public Queue<Event> flinkResourceEvents() {
+        return flinkResourceEventCollector.events;
     }
 
     private static class StatusUpdateCounter

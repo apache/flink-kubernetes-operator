@@ -21,9 +21,11 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.status.Checkpoint;
 import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
@@ -63,7 +65,6 @@ public class SnapshotObserver<
 
         var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
-        var savepointInfo = jobStatus.getSavepointInfo();
         var jobId = jobStatus.getJobId();
 
         // If any manual or periodic savepoint is in progress, observe it
@@ -73,11 +74,11 @@ public class SnapshotObserver<
 
         // If job is in globally terminal state, observe last savepoint
         if (ReconciliationUtils.isJobInTerminalState(resource.getStatus())) {
-            observeLatestSavepoint(
-                    ctx.getFlinkService(), savepointInfo, jobId, ctx.getObserveConfig());
+            observeLatestCheckpoint(
+                    ctx.getFlinkService(), jobStatus, jobId, ctx.getObserveConfig());
         }
 
-        cleanupSavepointHistory(ctx, savepointInfo);
+        cleanupSavepointHistory(ctx, jobStatus.getSavepointInfo());
     }
 
     public void observeCheckpointStatus(FlinkResourceContext<CR> ctx) {
@@ -122,7 +123,9 @@ public class SnapshotObserver<
                         "Savepoint attempt failed after grace period. Won't be retried again: "
                                 + err);
                 ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                        savepointInfo, (AbstractFlinkResource) resource, SAVEPOINT);
+                        savepointInfo.getTriggerType(),
+                        (AbstractFlinkResource) resource,
+                        SAVEPOINT);
             } else {
                 LOG.warn("Savepoint failed within grace period, retrying: " + err);
             }
@@ -149,7 +152,9 @@ public class SnapshotObserver<
                                 : null);
 
         ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                savepointInfo, resource, SAVEPOINT);
+                savepointInfo.getTriggerType(), resource, SAVEPOINT);
+
+        // In case of periodic and manual savepoint, we still use lastSavepoint
         savepointInfo.updateLastSavepoint(savepoint);
     }
 
@@ -181,7 +186,9 @@ public class SnapshotObserver<
                         "Checkpoint attempt failed after grace period. Won't be retried again: "
                                 + err);
                 ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                        checkpointInfo, (AbstractFlinkResource) resource, CHECKPOINT);
+                        checkpointInfo.getTriggerType(),
+                        (AbstractFlinkResource) resource,
+                        CHECKPOINT);
             } else {
                 LOG.warn("Checkpoint failed within grace period, retrying: " + err);
             }
@@ -207,7 +214,7 @@ public class SnapshotObserver<
                                 : null);
 
         ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                checkpointInfo, resource, CHECKPOINT);
+                checkpointInfo.getTriggerType(), resource, CHECKPOINT);
         checkpointInfo.updateLastCheckpoint(checkpoint);
     }
 
@@ -273,17 +280,21 @@ public class SnapshotObserver<
         }
     }
 
-    private void observeLatestSavepoint(
+    private void observeLatestCheckpoint(
             FlinkService flinkService,
-            SavepointInfo savepointInfo,
+            JobStatus jobStatus,
             String jobID,
             Configuration observeConfig) {
         try {
             flinkService
                     .getLastCheckpoint(JobID.fromHexString(jobID), observeConfig)
-                    .ifPresent(savepointInfo::updateLastSavepoint);
+                    .ifPresent(
+                            snapshot ->
+                                    jobStatus.setUpgradeSnapshotReference(
+                                            FlinkStateSnapshotReference.fromPath(
+                                                    snapshot.getLocation())));
         } catch (Exception e) {
-            LOG.error("Could not observe latest savepoint information.", e);
+            LOG.error("Could not observe latest checkpoint information.", e);
             throw new ReconciliationException(e);
         }
     }

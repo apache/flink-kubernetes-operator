@@ -21,11 +21,14 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.exception.StatusConflictException;
 import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
@@ -33,6 +36,7 @@ import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.fabric8.kubernetes.client.CustomResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
@@ -46,8 +50,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 /** Helper class for status management and updates. */
-public class StatusRecorder<
-        CR extends AbstractFlinkResource<?, STATUS>, STATUS extends CommonStatus<?>> {
+public class StatusRecorder<CR extends CustomResource<?, STATUS>, STATUS> {
 
     private static final Logger LOG = LoggerFactory.getLogger(StatusRecorder.class);
 
@@ -63,6 +66,10 @@ public class StatusRecorder<
             MetricManager<CR> metricManager, BiConsumer<CR, STATUS> statusUpdateListener) {
         this.statusUpdateListener = statusUpdateListener;
         this.metricManager = metricManager;
+    }
+
+    public void notifyListeners(CR resource, STATUS prevStatus) {
+        statusUpdateListener.accept(resource, prevStatus);
     }
 
     /**
@@ -85,10 +92,18 @@ public class StatusRecorder<
             return;
         }
 
-        var statusClass =
-                (resource instanceof FlinkDeployment)
-                        ? FlinkDeploymentStatus.class
-                        : FlinkSessionJobStatus.class;
+        Class<?> statusClass;
+        if (resource instanceof FlinkDeployment) {
+            statusClass = FlinkDeploymentStatus.class;
+        } else if (resource instanceof FlinkSessionJob) {
+            statusClass = FlinkSessionJobStatus.class;
+        } else if (resource instanceof FlinkStateSnapshot) {
+            statusClass = FlinkStateSnapshotStatus.class;
+        } else {
+            throw new RuntimeException(
+                    String.format("Resource is unknown class: %s", resource.getClass()));
+        }
+
         var prevStatus = (STATUS) objectMapper.convertValue(previousStatusNode, statusClass);
 
         Exception err = null;
@@ -208,8 +223,11 @@ public class StatusRecorder<
         } else {
             // Initialize cache with current status copy
             statusCache.put(key, objectMapper.convertValue(resource.getStatus(), ObjectNode.class));
-            if (ResourceLifecycleState.CREATED.equals(resource.getStatus().getLifecycleState())) {
-                statusUpdateListener.accept(resource, resource.getStatus());
+            if (resource.getStatus() instanceof CommonStatus<?>) {
+                if (ResourceLifecycleState.CREATED.equals(
+                        ((CommonStatus<?>) resource.getStatus()).getLifecycleState())) {
+                    statusUpdateListener.accept(resource, resource.getStatus());
+                }
             }
         }
         metricManager.onUpdate(resource);
@@ -264,6 +282,44 @@ public class StatusRecorder<
                                     listener.onSessionJobStatusUpdate(ctx);
                                 }
                             });
+                    AuditUtils.logContext(ctx);
+                };
+
+        return new StatusRecorder<>(metricManager, consumer);
+    }
+
+    public static StatusRecorder<FlinkStateSnapshot, FlinkStateSnapshotStatus>
+            createForFlinkStateSnapshot(
+                    KubernetesClient kubernetesClient,
+                    MetricManager<FlinkStateSnapshot> metricManager,
+                    Collection<FlinkResourceListener> listeners) {
+        BiConsumer<FlinkStateSnapshot, FlinkStateSnapshotStatus> consumer =
+                (resource, previousStatus) -> {
+                    var now = Instant.now();
+                    var ctx =
+                            new FlinkResourceListener.FlinkStateSnapshotStatusUpdateContext() {
+                                @Override
+                                public FlinkStateSnapshotStatus getPreviousStatus() {
+                                    return previousStatus;
+                                }
+
+                                @Override
+                                public KubernetesClient getKubernetesClient() {
+                                    return kubernetesClient;
+                                }
+
+                                @Override
+                                public FlinkStateSnapshot getStateSnapshot() {
+                                    return resource;
+                                }
+
+                                @Override
+                                public Instant getTimestamp() {
+                                    return now;
+                                }
+                            };
+
+                    listeners.forEach(listener -> listener.onStateSnapshotStatusUpdate(ctx));
                     AuditUtils.logContext(ctx);
                 };
 
