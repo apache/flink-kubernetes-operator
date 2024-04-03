@@ -23,12 +23,17 @@ import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectReferenceBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
+import java.net.HttpURLConnection;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -37,6 +42,7 @@ import java.util.function.Predicate;
  * https://github.com/EnMasseProject/enmasse/blob/master/k8s-api/src/main/java/io/enmasse/k8s/api/KubeEventLogger.java
  */
 public class EventUtils {
+    private static final Logger LOG = LoggerFactory.getLogger(EventUtils.class);
 
     public static String generateEventName(
             HasMetadata target,
@@ -108,7 +114,7 @@ public class EventUtils {
             return false;
         } else {
             Event event = buildEvent(target, type, reason, message, component, eventName);
-            eventListener.accept(client.resource(event).createOrReplace());
+            createOrReplaceEvent(client, event).ifPresent(eventListener);
             return true;
         }
     }
@@ -139,7 +145,7 @@ public class EventUtils {
         } else {
             Event event = buildEvent(target, type, reason, message, component, eventName);
             setLabels(event, labels);
-            eventListener.accept(client.resource(event).createOrReplace());
+            createOrReplaceEvent(client, event).ifPresent(eventListener);
             return true;
         }
     }
@@ -154,7 +160,7 @@ public class EventUtils {
         existing.setCount(existing.getCount() + 1);
         existing.setMessage(message);
         setLabels(existing, labels);
-        eventListener.accept(client.resource(existing).createOrReplace());
+        createOrReplaceEvent(client, existing).ifPresent(eventListener);
     }
 
     private static void setLabels(Event existing, @Nullable Map<String, String> labels) {
@@ -212,5 +218,21 @@ public class EventUtils {
         return dedupePredicate == null
                 || (existing.getMetadata() != null
                         && dedupePredicate.test(existing.getMetadata().getLabels()));
+    }
+
+    private static Optional<Event> createOrReplaceEvent(KubernetesClient client, Event event) {
+        try {
+            Event createdEvent = client.resource(event).createOrReplace();
+            return Optional.of(createdEvent);
+        } catch (KubernetesClientException e) {
+            if (e.getCode() == HttpURLConnection.HTTP_FORBIDDEN) {
+                // fail the reconcile when events cannot be delivered, unless FORBIDDEN
+                // which can be a result of recoverable rbac issue, or namespace is terminating
+                LOG.warn("Cannot create or update events, proceeding.", e);
+            } else {
+                throw e;
+            }
+        }
+        return Optional.empty();
     }
 }
