@@ -202,6 +202,7 @@ under the License.
                                     <includes>
                                         <include>flinkdeployments.flink.apache.org-v1.yml</include>
                                         <include>flinksessionjobs.flink.apache.org-v1.yml</include>
+                                        <include>flinkstatesnapshots.flink.apache.org-v1.yml</include>
                                     </includes>
                                     <filtering>false</filtering>
                                 </resource>

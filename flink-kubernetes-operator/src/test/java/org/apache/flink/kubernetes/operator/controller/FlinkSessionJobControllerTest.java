@@ -49,6 +49,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -181,11 +182,12 @@ class FlinkSessionJobControllerTest {
     }
 
     @Test
-    public void verifyUpgradeFromSavepoint() throws Exception {
+    public void verifyUpgradeFromSavepointLegacy() throws Exception {
         UpdateControl<FlinkDeployment> updateControl;
 
         sessionJob.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         sessionJob.getSpec().getJob().setInitialSavepointPath("s0");
+        sessionJob.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
         testController.reconcile(sessionJob, context);
         var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());

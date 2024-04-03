@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.reconciler.ReconciliationMetadata;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
@@ -28,6 +29,7 @@ import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
@@ -38,6 +40,7 @@ import org.apache.flink.kubernetes.operator.api.status.TaskManagerInfo;
 import org.apache.flink.kubernetes.operator.api.utils.SpecUtils;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.controller.FlinkStateSnapshotContext;
 import org.apache.flink.kubernetes.operator.exception.ValidationException;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -56,6 +59,7 @@ import java.time.Duration;
 import static org.apache.flink.api.common.JobStatus.FINISHED;
 import static org.apache.flink.api.common.JobStatus.RUNNING;
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
+import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkStateSnapshotException;
 
 /** Reconciliation utilities. */
 public class ReconciliationUtils {
@@ -232,6 +236,11 @@ public class ReconciliationUtils {
 
     public static void updateForReconciliationError(FlinkResourceContext ctx, Throwable error) {
         updateFlinkResourceException(error, ctx.getResource(), ctx.getOperatorConfig());
+    }
+
+    private static void updateForReconciliationError(
+            FlinkStateSnapshotContext ctx, Throwable error) {
+        updateFlinkStateSnapshotException(error, ctx.getResource(), ctx.getOperatorConfig());
     }
 
     public static <T> T clone(T object) {
@@ -423,6 +432,28 @@ public class ReconciliationUtils {
                     FlinkResourceContext<R> ctx,
                     Exception e,
                     StatusRecorder<R, STATUS> statusRecorder) {
+
+        var retryInfo = ctx.getJosdkContext().getRetryInfo();
+
+        retryInfo.ifPresent(
+                r ->
+                        LOG.warn(
+                                "Attempt count: {}, last attempt: {}",
+                                r.getAttemptCount(),
+                                r.isLastAttempt()));
+
+        statusRecorder.updateStatusFromCache(ctx.getResource());
+        ReconciliationUtils.updateForReconciliationError(ctx, e);
+        statusRecorder.patchAndCacheStatus(ctx.getResource(), ctx.getKubernetesClient());
+
+        // Status was updated already, no need to return anything
+        return ErrorStatusUpdateControl.noStatusUpdate();
+    }
+
+    public static ErrorStatusUpdateControl<FlinkStateSnapshot> toErrorStatusUpdateControl(
+            FlinkStateSnapshotContext ctx,
+            Exception e,
+            StatusRecorder<FlinkStateSnapshot, FlinkStateSnapshotStatus> statusRecorder) {
 
         var retryInfo = ctx.getJosdkContext().getRetryInfo();
 

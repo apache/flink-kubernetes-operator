@@ -27,13 +27,15 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.crd.TestCustomResourceDefinitionWatcher;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.sessionjob.FlinkSessionJobObserver;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.sessionjob.SessionJobReconciler;
-import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
@@ -66,7 +68,8 @@ public class TestingFlinkSessionJobController
     private FlinkSessionJobController flinkSessionJobController;
     private TestingFlinkSessionJobController.StatusUpdateCounter statusUpdateCounter =
             new TestingFlinkSessionJobController.StatusUpdateCounter();
-    private EventCollector eventCollector = new EventCollector();
+    private FlinkResourceEventCollector flinkResourceEventCollector =
+            new FlinkResourceEventCollector();
     private EventRecorder eventRecorder;
     private StatusRecorder<FlinkSessionJob, FlinkSessionJobStatus> statusRecorder;
 
@@ -81,7 +84,9 @@ public class TestingFlinkSessionJobController
                         flinkService,
                         eventRecorder);
 
-        eventRecorder = new EventRecorder(eventCollector);
+        eventRecorder =
+                new EventRecorder(
+                        flinkResourceEventCollector, new FlinkStateSnapshotEventCollector());
 
         statusRecorder = new StatusRecorder<>(new MetricManager<>(), statusUpdateCounter);
 
@@ -92,7 +97,10 @@ public class TestingFlinkSessionJobController
                         ValidatorUtils.discoverValidators(configManager),
                         ctxFactory,
                         new SessionJobReconciler(
-                                eventRecorder, statusRecorder, new NoopJobAutoscaler<>()),
+                                eventRecorder,
+                                statusRecorder,
+                                new NoopJobAutoscaler<>(),
+                                new TestCustomResourceDefinitionWatcher()),
                         new FlinkSessionJobObserver(eventRecorder),
                         statusRecorder,
                         eventRecorder,
@@ -154,7 +162,7 @@ public class TestingFlinkSessionJobController
     }
 
     public Queue<Event> events() {
-        return eventCollector.events;
+        return flinkResourceEventCollector.events;
     }
 
     private static class StatusUpdateCounter

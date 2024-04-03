@@ -22,8 +22,9 @@ import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesOperatorMetricGroup;
-import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
@@ -37,7 +38,10 @@ public abstract class OperatorTestBase {
     protected Configuration conf = new Configuration();
     protected FlinkConfigManager configManager = new FlinkConfigManager(conf);
     protected TestingFlinkService flinkService;
-    protected EventCollector eventCollector = new EventCollector();
+    protected FlinkResourceEventCollector flinkResourceEventCollector =
+            new FlinkResourceEventCollector();
+    protected FlinkStateSnapshotEventCollector flinkStateSnapshotEventCollector =
+            new FlinkStateSnapshotEventCollector();
     protected EventRecorder eventRecorder;
     protected TestingStatusRecorder statusRecorder = new TestingStatusRecorder();
     protected KubernetesOperatorMetricGroup operatorMetricGroup;
@@ -50,7 +54,8 @@ public abstract class OperatorTestBase {
         getKubernetesClient().resource(TestUtils.buildSessionJob()).createOrReplace();
         flinkService = new TestingFlinkService(getKubernetesClient());
         context = flinkService.getContext();
-        eventRecorder = new EventRecorder(eventCollector);
+        eventRecorder =
+                new EventRecorder(flinkResourceEventCollector, flinkStateSnapshotEventCollector);
         operatorMetricGroup = TestUtils.createTestMetricGroup(configManager.getDefaultConfig());
         setup();
     }

@@ -18,9 +18,12 @@
 package org.apache.flink.kubernetes.operator.admission;
 
 import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.spec.JobKind;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
@@ -62,6 +65,8 @@ public class FlinkValidator implements Validator<HasMetadata> {
             validateDeployment(resource);
         } else if (CrdConstants.KIND_SESSION_JOB.equals(resource.getKind())) {
             validateSessionJob(resource);
+        } else if (CrdConstants.KIND_FLINK_STATE_SNAPSHOT.equals(resource.getKind())) {
+            validateStateSnapshot(resource);
         } else {
             throw new NotAllowedException("Unexpected resource: " + resource.getKind());
         }
@@ -89,6 +94,36 @@ public class FlinkValidator implements Validator<HasMetadata> {
         for (FlinkResourceValidator validator : validators) {
             Optional<String> validationError =
                     validator.validateSessionJob(sessionJob, Optional.ofNullable(deployment));
+            if (validationError.isPresent()) {
+                throw new NotAllowedException(validationError.get());
+            }
+        }
+    }
+
+    private void validateStateSnapshot(KubernetesResource resource) {
+        FlinkStateSnapshot savepoint =
+                objectMapper.convertValue(resource, FlinkStateSnapshot.class);
+
+        var namespace = savepoint.getMetadata().getNamespace();
+        var jobRef = savepoint.getSpec().getJobReference();
+
+        if (jobRef.getName() == null || jobRef.getKind() == null) {
+            throw new NotAllowedException("Job reference name and kind must be supplied.");
+        }
+
+        AbstractFlinkResource<?, ?> targetResource;
+        var key = Cache.namespaceKeyFunc(namespace, jobRef.getName());
+        if (JobKind.FLINK_DEPLOYMENT.equals(jobRef.getKind())) {
+            targetResource =
+                    informerManager.getFlinkDepInformer(namespace).getStore().getByKey(key);
+        } else {
+            targetResource =
+                    informerManager.getFlinkSessionJobInformer(namespace).getStore().getByKey(key);
+        }
+
+        for (FlinkResourceValidator validator : validators) {
+            Optional<String> validationError =
+                    validator.validateStateSnapshot(savepoint, Optional.of(targetResource));
             if (validationError.isPresent()) {
                 throw new NotAllowedException(validationError.get());
             }

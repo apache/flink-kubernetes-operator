@@ -21,6 +21,7 @@ import org.apache.flink.kubernetes.operator.admission.informer.InformerManager;
 import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.mutator.FlinkResourceMutator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,6 +59,9 @@ public class FlinkMutator implements Mutator<HasMetadata> {
             if (CrdConstants.KIND_FLINK_DEPLOYMENT.equals(resource.getKind())) {
                 return mutateDeployment(resource);
             }
+            if (CrdConstants.KIND_FLINK_STATE_SNAPSHOT.equals(resource.getKind())) {
+                return mutateStateSnapshot(resource);
+            }
         }
         return resource;
     }
@@ -88,6 +92,18 @@ public class FlinkMutator implements Mutator<HasMetadata> {
                 flinkDeployment = mutator.mutateDeployment(flinkDeployment);
             }
             return flinkDeployment;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private FlinkStateSnapshot mutateStateSnapshot(HasMetadata resource) {
+        try {
+            var savepoint = mapper.convertValue(resource, FlinkStateSnapshot.class);
+            for (FlinkResourceMutator mutator : mutators) {
+                savepoint = mutator.mutateStateSnapshot(savepoint);
+            }
+            return savepoint;
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

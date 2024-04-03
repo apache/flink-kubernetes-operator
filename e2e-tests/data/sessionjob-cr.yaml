@@ -35,6 +35,7 @@ spec:
     high-availability.storageDir: file:///opt/flink/volume/flink-ha
     state.checkpoints.dir: file:///opt/flink/volume/flink-cp
     state.savepoints.dir: file:///opt/flink/volume/flink-sp
+    kubernetes.operator.snapshot.resource.enabled: "false"
   serviceAccount: flink
   podTemplate:
     spec:

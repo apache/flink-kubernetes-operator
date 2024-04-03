@@ -60,39 +60,39 @@ public class FlinkResourceListenerTest {
 
         var deployment = TestUtils.buildApplicationCluster();
 
-        assertTrue(listener1.updates.isEmpty());
-        assertTrue(listener2.updates.isEmpty());
-        assertTrue(listener1.events.isEmpty());
-        assertTrue(listener2.events.isEmpty());
+        assertTrue(listener1.flinkResourceUpdates.isEmpty());
+        assertTrue(listener2.flinkResourceUpdates.isEmpty());
+        assertTrue(listener1.flinkResourceEvents.isEmpty());
+        assertTrue(listener2.flinkResourceEvents.isEmpty());
 
         statusRecorder.updateStatusFromCache(deployment);
-        assertEquals(1, listener1.updates.size());
+        assertEquals(1, listener1.flinkResourceUpdates.size());
         statusRecorder.updateStatusFromCache(deployment);
-        assertEquals(1, listener1.updates.size());
-        assertEquals(deployment, listener1.updates.get(0).getFlinkResource());
+        assertEquals(1, listener1.flinkResourceUpdates.size());
+        assertEquals(deployment, listener1.flinkResourceUpdates.get(0).getFlinkResource());
 
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.ERROR);
         statusRecorder.patchAndCacheStatus(deployment, kubernetesClient);
-        assertEquals(2, listener1.updates.size());
-        assertEquals(deployment, listener1.updates.get(1).getFlinkResource());
+        assertEquals(2, listener1.flinkResourceUpdates.size());
+        assertEquals(deployment, listener1.flinkResourceUpdates.get(1).getFlinkResource());
 
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.DEPLOYING);
         statusRecorder.patchAndCacheStatus(deployment, kubernetesClient);
-        assertEquals(3, listener1.updates.size());
-        assertEquals(deployment, listener1.updates.get(2).getFlinkResource());
+        assertEquals(3, listener1.flinkResourceUpdates.size());
+        assertEquals(deployment, listener1.flinkResourceUpdates.get(2).getFlinkResource());
 
-        for (int i = 0; i < listener1.updates.size(); i++) {
+        for (int i = 0; i < listener1.flinkResourceUpdates.size(); i++) {
             assertEquals(
-                    listener1.updates.get(i).getTimestamp(),
-                    listener2.updates.get(i).getTimestamp());
+                    listener1.flinkResourceUpdates.get(i).getTimestamp(),
+                    listener2.flinkResourceUpdates.get(i).getTimestamp());
             assertEquals(
-                    listener1.updates.get(i).getFlinkResource(),
-                    listener2.updates.get(i).getFlinkResource());
+                    listener1.flinkResourceUpdates.get(i).getFlinkResource(),
+                    listener2.flinkResourceUpdates.get(i).getFlinkResource());
         }
 
         var updateContext =
                 (FlinkResourceListener.StatusUpdateContext<FlinkDeployment, FlinkDeploymentStatus>)
-                        listener1.updates.get(2);
+                        listener1.flinkResourceUpdates.get(2);
         assertEquals(
                 JobManagerDeploymentStatus.ERROR,
                 updateContext.getPreviousStatus().getJobManagerDeploymentStatus());
@@ -107,7 +107,7 @@ public class FlinkResourceListenerTest {
                 EventRecorder.Component.Operator,
                 "err",
                 kubernetesClient);
-        assertEquals(1, listener1.events.size());
+        assertEquals(1, listener1.flinkResourceEvents.size());
         eventRecorder.triggerEvent(
                 deployment,
                 EventRecorder.Type.Warning,
@@ -115,15 +115,19 @@ public class FlinkResourceListenerTest {
                 EventRecorder.Component.Operator,
                 "err",
                 kubernetesClient);
-        assertEquals(2, listener1.events.size());
+        assertEquals(2, listener1.flinkResourceEvents.size());
 
-        for (int i = 0; i < listener1.events.size(); i++) {
-            assertEquals(listener1.events.get(i).getEvent(), listener2.events.get(i).getEvent());
+        for (int i = 0; i < listener1.flinkResourceEvents.size(); i++) {
             assertEquals(
-                    listener1.events.get(i).getTimestamp(),
-                    Instant.parse(listener1.events.get(i).getEvent().getLastTimestamp()));
+                    listener1.flinkResourceEvents.get(i).getEvent(),
+                    listener2.flinkResourceEvents.get(i).getEvent());
             assertEquals(
-                    listener1.events.get(i).getTimestamp(), listener2.events.get(i).getTimestamp());
+                    listener1.flinkResourceEvents.get(i).getTimestamp(),
+                    Instant.parse(
+                            listener1.flinkResourceEvents.get(i).getEvent().getLastTimestamp()));
+            assertEquals(
+                    listener1.flinkResourceEvents.get(i).getTimestamp(),
+                    listener2.flinkResourceEvents.get(i).getTimestamp());
         }
     }
 }

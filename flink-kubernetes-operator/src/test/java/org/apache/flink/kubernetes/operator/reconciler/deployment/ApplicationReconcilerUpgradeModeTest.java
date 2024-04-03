@@ -26,6 +26,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -36,12 +37,15 @@ import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatu
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
+import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.crd.TestCustomResourceDefinitionWatcher;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -60,6 +64,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -81,7 +87,10 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                 new TestReconcilerAdapter<>(
                         this,
                         new ApplicationReconciler(
-                                eventRecorder, statusRecorder, new NoopJobAutoscaler<>()));
+                                eventRecorder,
+                                statusRecorder,
+                                new NoopJobAutoscaler<>(),
+                                new TestCustomResourceDefinitionWatcher()));
     }
 
     @ParameterizedTest
@@ -161,36 +170,49 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         reconciler.reconcile(modifiedDeployment, context);
         runningJobs = flinkService.listJobs();
         assertEquals(1, flinkService.getRunningCount());
-        assertEquals("savepoint_0", runningJobs.get(0).f0);
+
+        var snapshots =
+                FlinkStateSnapshotUtils.getFlinkStateSnapshotsForResource(
+                        kubernetesClient, modifiedDeployment);
+        assertThat(snapshots).isNotEmpty();
+        assertEquals("savepoint_0", snapshots.get(0).getSpec().getSavepoint().getPath());
         assertEquals(
-                SnapshotTriggerType.UPGRADE,
-                modifiedDeployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getTriggerType());
+                SnapshotTriggerType.UPGRADE.name(),
+                snapshots.get(0).getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TYPE));
+    }
+
+    private static Stream<Arguments> flinkVersionsWithLegacyMode() {
+        return TestUtils.flinkVersions()
+                .flatMap(
+                        arg ->
+                                Stream.of(
+                                        Arguments.of(arg.get()[0], true),
+                                        Arguments.of(arg.get()[0], false)));
     }
 
     @ParameterizedTest
-    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
-    public void testUpgradeFromStatelessToLastState(FlinkVersion flinkVersion) throws Exception {
-        testUpgradeToLastState(flinkVersion, UpgradeMode.STATELESS);
+    @MethodSource("flinkVersionsWithLegacyMode")
+    public void testUpgradeFromStatelessToLastState(
+            FlinkVersion flinkVersion, boolean legacySnapshots) throws Exception {
+        testUpgradeToLastState(flinkVersion, UpgradeMode.STATELESS, legacySnapshots);
     }
 
     @ParameterizedTest
-    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
-    public void testUpgradeFromSavepointToLastState(FlinkVersion flinkVersion) throws Exception {
-        testUpgradeToLastState(flinkVersion, UpgradeMode.SAVEPOINT);
+    @MethodSource("flinkVersionsWithLegacyMode")
+    public void testUpgradeFromSavepointToLastState(
+            FlinkVersion flinkVersion, boolean legacySnapshots) throws Exception {
+        testUpgradeToLastState(flinkVersion, UpgradeMode.SAVEPOINT, legacySnapshots);
     }
 
     @ParameterizedTest
-    @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
-    public void testUpgradeFromLastStateToLastState(FlinkVersion flinkVersion) throws Exception {
-        testUpgradeToLastState(flinkVersion, UpgradeMode.LAST_STATE);
+    @MethodSource("flinkVersionsWithLegacyMode")
+    public void testUpgradeFromLastStateToLastState(
+            FlinkVersion flinkVersion, boolean legacySnapshots) throws Exception {
+        testUpgradeToLastState(flinkVersion, UpgradeMode.LAST_STATE, legacySnapshots);
     }
 
-    private void testUpgradeToLastState(FlinkVersion flinkVersion, UpgradeMode fromUpgradeMode)
+    private void testUpgradeToLastState(
+            FlinkVersion flinkVersion, UpgradeMode fromUpgradeMode, boolean legacySnapshots)
             throws Exception {
         FlinkDeployment deployment = buildApplicationCluster(flinkVersion, fromUpgradeMode);
 
@@ -231,6 +253,8 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().setRestartNonce(200L);
         flinkService.setHaDataAvailable(false);
+        FlinkStateSnapshotUtils.createUpgradeSavepointResource(
+                kubernetesClient, deployment, "finished_sp", SavepointFormatType.CANONICAL, false);
         deployment
                 .getStatus()
                 .getJobStatus()
@@ -348,7 +372,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
 
     @ParameterizedTest
     @MethodSource("testInitialJmDeployCannotStartParams")
-    public void testInitialJmDeployCannotStart(UpgradeMode upgradeMode, boolean initSavepoint)
+    public void testInitialJmDeployCannotStartLegacy(UpgradeMode upgradeMode, boolean initSavepoint)
             throws Exception {
 
         // We simulate JM failure to test the initial submission/upgrade behavior when the JM can
@@ -357,6 +381,7 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         flinkService.setJobManagerReady(false);
 
         var deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
         if (initSavepoint) {
             deployment.getSpec().getJob().setInitialSavepointPath("init-sp");
         }
@@ -588,14 +613,11 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                 org.apache.flink.api.common.JobStatus.FINISHED.name(),
                 deployment.getStatus().getJobStatus().getState());
 
-        assertEquals(
-                expectedSavepointPath,
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
+        var snapshots =
+                FlinkStateSnapshotUtils.getFlinkStateSnapshotsForResource(
+                        kubernetesClient, deployment);
+        assertThat(snapshots).isNotEmpty();
+        assertEquals(expectedSavepointPath, snapshots.get(0).getSpec().getSavepoint().getPath());
 
         deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().getJob().setState(JobState.RUNNING);
@@ -648,8 +670,11 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                         .getImage());
         // Upgrade mode changes from stateless to last-state should trigger a savepoint
         final String expectedSavepointPath = "savepoint_0";
-        var runningJobs = flinkService.listJobs();
-        assertEquals(expectedSavepointPath, runningJobs.get(0).f0);
+        var snapshots =
+                FlinkStateSnapshotUtils.getFlinkStateSnapshotsForResource(
+                        kubernetesClient, deployment);
+        assertThat(snapshots).isNotEmpty();
+        assertEquals(expectedSavepointPath, snapshots.get(0).getSpec().getSavepoint().getPath());
     }
 
     @Test

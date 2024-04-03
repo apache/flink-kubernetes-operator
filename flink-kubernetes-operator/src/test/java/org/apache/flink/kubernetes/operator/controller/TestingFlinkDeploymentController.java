@@ -27,14 +27,16 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.autoscaler.AutoscalerFactory;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.crd.TestCustomResourceDefinitionWatcher;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
 import org.apache.flink.kubernetes.operator.metrics.MetricManager;
 import org.apache.flink.kubernetes.operator.observer.deployment.FlinkDeploymentObserverFactory;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.ReconcilerFactory;
 import org.apache.flink.kubernetes.operator.resources.ClusterResourceManager;
-import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.kubernetes.operator.utils.ValidatorUtils;
 
@@ -69,7 +71,8 @@ public class TestingFlinkDeploymentController
     @Getter private ReconcilerFactory reconcilerFactory;
     private FlinkDeploymentController flinkDeploymentController;
     private StatusUpdateCounter statusUpdateCounter = new StatusUpdateCounter();
-    private EventCollector eventCollector = new EventCollector();
+    private FlinkResourceEventCollector flinkResourceEventCollector =
+            new FlinkResourceEventCollector();
 
     private EventRecorder eventRecorder;
 
@@ -90,7 +93,9 @@ public class TestingFlinkDeploymentController
                         flinkService,
                         eventRecorder);
 
-        eventRecorder = new EventRecorder(eventCollector);
+        eventRecorder =
+                new EventRecorder(
+                        flinkResourceEventCollector, new FlinkStateSnapshotEventCollector());
         statusRecorder = new StatusRecorder<>(new MetricManager<>(), statusUpdateCounter);
         reconcilerFactory =
                 new ReconcilerFactory(
@@ -100,7 +105,8 @@ public class TestingFlinkDeploymentController
                                 flinkService.getKubernetesClient(),
                                 eventRecorder,
                                 new ClusterResourceManager(
-                                        Duration.ZERO, flinkService.getKubernetesClient())));
+                                        Duration.ZERO, flinkService.getKubernetesClient())),
+                        new TestCustomResourceDefinitionWatcher());
         canaryResourceManager = new CanaryResourceManager<>(configManager);
         flinkDeploymentController =
                 new FlinkDeploymentController(
@@ -166,8 +172,8 @@ public class TestingFlinkDeploymentController
         throw new UnsupportedOperationException();
     }
 
-    public Queue<Event> events() {
-        return eventCollector.events;
+    public Queue<Event> flinkResourceEvents() {
+        return flinkResourceEventCollector.events;
     }
 
     private static class StatusUpdateCounter

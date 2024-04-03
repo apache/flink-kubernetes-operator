@@ -67,6 +67,7 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -376,7 +377,7 @@ public class FlinkDeploymentControllerTest {
 
     @ParameterizedTest
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
-    public void verifyUpgradeFromSavepoint(FlinkVersion flinkVersion) throws Exception {
+    public void verifyUpgradeFromSavepointLegacyMode(FlinkVersion flinkVersion) throws Exception {
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
@@ -386,6 +387,7 @@ public class FlinkDeploymentControllerTest {
                 .put(
                         CheckpointingOptions.SAVEPOINT_DIRECTORY.key(),
                         "file:///flink-data/savepoints");
+        appCluster.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
         testController.reconcile(appCluster, context);
         var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
@@ -468,7 +470,7 @@ public class FlinkDeploymentControllerTest {
     @ParameterizedTest
     @MethodSource("org.apache.flink.kubernetes.operator.TestUtils#flinkVersions")
     public void verifyStatelessUpgrade(FlinkVersion flinkVersion) throws Exception {
-        testController.events().clear();
+        testController.flinkResourceEvents().clear();
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster(flinkVersion);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         appCluster.getSpec().getJob().setInitialSavepointPath("s0");
@@ -477,17 +479,19 @@ public class FlinkDeploymentControllerTest {
         var jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertEquals("s0", jobs.get(0).f0);
-        assertEquals(1, testController.events().size());
+        assertEquals(1, testController.flinkResourceEvents().size());
         assertEquals(
                 EventRecorder.Reason.Submit,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
 
-        assertEquals(1, testController.events().size());
+        assertEquals(1, testController.flinkResourceEvents().size());
         assertEquals(
                 EventRecorder.Reason.JobStatusChanged,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
 
         // Upgrade job
         appCluster.getSpec().getJob().setParallelism(100);
@@ -495,13 +499,15 @@ public class FlinkDeploymentControllerTest {
         UpdateControl<FlinkDeployment> updateControl =
                 testController.reconcile(appCluster, context);
 
-        assertEquals(2, testController.events().size());
+        assertEquals(2, testController.flinkResourceEvents().size());
         assertEquals(
                 EventRecorder.Reason.SpecChanged,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
         assertEquals(
                 EventRecorder.Reason.Suspended,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
 
         assertEquals(0, updateControl.getScheduleDelay().get());
         assertEquals(
@@ -514,10 +520,11 @@ public class FlinkDeploymentControllerTest {
                         .getState());
 
         updateControl = testController.reconcile(appCluster, context);
-        assertEquals(1, testController.events().size());
+        assertEquals(1, testController.flinkResourceEvents().size());
         assertEquals(
                 EventRecorder.Reason.Submit,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
 
         assertEquals(
                 ReconciliationUtils.rescheduleAfter(
@@ -534,33 +541,38 @@ public class FlinkDeploymentControllerTest {
 
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
-        assertEquals(1, testController.events().size());
+        assertEquals(1, testController.flinkResourceEvents().size());
         assertEquals(
                 EventRecorder.Reason.JobStatusChanged,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
 
         // Suspend job
         appCluster.getSpec().getJob().setState(JobState.SUSPENDED);
         testController.reconcile(appCluster, context);
 
-        assertEquals(2, testController.events().size());
+        assertEquals(2, testController.flinkResourceEvents().size());
         assertEquals(
                 EventRecorder.Reason.SpecChanged,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
         assertEquals(
                 EventRecorder.Reason.Suspended,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
 
         // Resume from empty state
         appCluster.getSpec().getJob().setState(JobState.RUNNING);
         testController.reconcile(appCluster, context);
-        assertEquals(2, testController.events().size());
+        assertEquals(2, testController.flinkResourceEvents().size());
         assertEquals(
                 EventRecorder.Reason.SpecChanged,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
         assertEquals(
                 EventRecorder.Reason.Submit,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
         jobs = flinkService.listJobs();
         assertEquals(1, jobs.size());
         assertNull(jobs.get(0).f0);
@@ -568,13 +580,15 @@ public class FlinkDeploymentControllerTest {
         // Inject validation error in the middle of the upgrade
         appCluster.getSpec().setRestartNonce(123L);
         testController.reconcile(appCluster, context);
-        assertEquals(2, testController.events().size());
+        assertEquals(2, testController.flinkResourceEvents().size());
         assertEquals(
                 EventRecorder.Reason.SpecChanged,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
         assertEquals(
                 EventRecorder.Reason.Suspended,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
         assertEquals(
                 JobState.SUSPENDED,
                 appCluster
@@ -586,15 +600,16 @@ public class FlinkDeploymentControllerTest {
         appCluster.getSpec().setLogConfiguration(Map.of("invalid", "conf"));
         testController.reconcile(
                 appCluster, TestUtils.createEmptyContextWithClient(kubernetesClient));
-        assertEquals(2, testController.events().size());
-        testController.events().remove();
+        assertEquals(2, testController.flinkResourceEvents().size());
+        testController.flinkResourceEvents().remove();
         assertEquals(
                 EventRecorder.Reason.Submit,
-                EventRecorder.Reason.valueOf(testController.events().remove().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().remove().getReason()));
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
         var statusEvents =
-                testController.events().stream()
+                testController.flinkResourceEvents().stream()
                         .filter(e -> !e.getReason().equals(ValidationError.name()))
                         .collect(Collectors.toList());
         assertEquals(1, statusEvents.size());
@@ -941,16 +956,16 @@ public class FlinkDeploymentControllerTest {
 
     @Test
     public void testValidationError() throws Exception {
-        assertTrue(testController.events().isEmpty());
+        assertTrue(testController.flinkResourceEvents().isEmpty());
         var flinkDeployment = TestUtils.buildApplicationCluster();
         flinkDeployment.getSpec().getJob().setParallelism(-1);
         testController.reconcile(flinkDeployment, context);
 
-        assertEquals(1, testController.events().size());
+        assertEquals(1, testController.flinkResourceEvents().size());
         assertEquals(
                 ResourceLifecycleState.FAILED, flinkDeployment.getStatus().getLifecycleState());
 
-        var event = testController.events().remove();
+        var event = testController.flinkResourceEvents().remove();
         assertEquals("Warning", event.getType());
         assertEquals("ValidationError", event.getReason());
         assertTrue(event.getMessage().startsWith("Job parallelism "));
@@ -958,7 +973,7 @@ public class FlinkDeploymentControllerTest {
 
     @Test
     public void testEventOfNonDeploymentFailedException() throws Exception {
-        assertTrue(testController.events().isEmpty());
+        assertTrue(testController.flinkResourceEvents().isEmpty());
         var flinkDeployment = TestUtils.buildApplicationCluster();
 
         flinkService.setDeployFailure(true);
@@ -967,11 +982,11 @@ public class FlinkDeploymentControllerTest {
             fail();
         } catch (Exception expected) {
         }
-        assertEquals(2, testController.events().size());
+        assertEquals(2, testController.flinkResourceEvents().size());
 
-        var event = testController.events().remove();
+        var event = testController.flinkResourceEvents().remove();
         assertEquals("Submit", event.getReason());
-        event = testController.events().remove();
+        event = testController.flinkResourceEvents().remove();
         assertEquals("ClusterDeploymentException", event.getReason());
         assertEquals("Deployment failure", event.getMessage());
     }
@@ -1067,38 +1082,41 @@ public class FlinkDeploymentControllerTest {
 
         flinkService.setHaDataAvailable(false);
         appCluster.getSpec().getJob().setState(JobState.RUNNING);
-        testController.events().clear();
+        testController.flinkResourceEvents().clear();
         testController.reconcile(appCluster, context);
 
-        assertEquals(3, testController.events().size());
+        assertEquals(3, testController.flinkResourceEvents().size());
         assertEquals(
                 EventRecorder.Reason.SpecChanged,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
         assertEquals(
                 EventRecorder.Reason.Submit,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
         assertTrue(
                 testController
-                        .events()
+                        .flinkResourceEvents()
                         .poll()
                         .getMessage()
                         .contains("HA metadata not available to restore from last state."));
 
-        testController.events().clear();
+        testController.flinkResourceEvents().clear();
         testController.reconcile(appCluster, context);
 
         assertEquals(
                 EventRecorder.Reason.Submit,
-                EventRecorder.Reason.valueOf(testController.events().poll().getReason()));
+                EventRecorder.Reason.valueOf(
+                        testController.flinkResourceEvents().poll().getReason()));
         assertTrue(
                 testController
-                        .events()
+                        .flinkResourceEvents()
                         .poll()
                         .getMessage()
                         .contains("HA metadata not available to restore from last state."));
 
         flinkService.setHaDataAvailable(true);
-        testController.events().clear();
+        testController.flinkResourceEvents().clear();
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);
@@ -1230,7 +1248,7 @@ public class FlinkDeploymentControllerTest {
     public void testUnsupportedVersions(FlinkVersion version) throws Exception {
         var appCluster = TestUtils.buildApplicationCluster(version);
         var updateControl = testController.reconcile(appCluster, context);
-        var lastEvent = testController.events().poll();
+        var lastEvent = testController.flinkResourceEvents().poll();
         if (!version.isEqualOrNewer(FlinkVersion.v1_15)) {
             assertTrue(updateControl.getScheduleDelay().isEmpty());
             assertEquals(

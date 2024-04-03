@@ -21,6 +21,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.Checkpoint;
@@ -255,6 +256,22 @@ public class TestUtils extends BaseTestUtils {
                 deployment.setSpec(spec);
                 deployment.setStatus(status);
                 return Optional.of(deployment);
+            }
+
+            @Override
+            public KubernetesClient getClient() {
+                return client;
+            }
+        };
+    }
+
+    public static Context<FlinkStateSnapshot> createSnapshotContext(
+            KubernetesClient client, AbstractFlinkResource<?, ?> secondaryResource) {
+        return new TestingContext<>() {
+            @Override
+            public Optional<AbstractFlinkResource<?, ?>> getSecondaryResource(
+                    Class expectedType, String eventSourceName) {
+                return Optional.ofNullable(secondaryResource);
             }
 
             @Override

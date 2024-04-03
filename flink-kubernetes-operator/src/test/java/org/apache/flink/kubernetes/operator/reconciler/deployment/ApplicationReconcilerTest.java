@@ -36,7 +36,9 @@ import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkResourceContextFactory;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -58,6 +60,7 @@ import org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.crd.TestCustomResourceDefinitionWatcher;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
@@ -66,6 +69,7 @@ import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 import org.apache.flink.kubernetes.operator.service.NativeFlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotStatus;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
@@ -114,12 +118,14 @@ import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getReconciledJobState;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getSavepointInfo;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractFlinkResourceReconciler.MSG_SUBMIT;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.MSG_RECOVERY;
 import static org.apache.flink.kubernetes.operator.reconciler.deployment.ApplicationReconciler.MSG_RESTART_UNHEALTHY;
 import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.getLastSnapshotStatus;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -148,7 +154,11 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     @Override
     public void setup() {
         appReconciler =
-                new ApplicationReconciler(eventRecorder, statusRecorder, new NoopJobAutoscaler<>());
+                new ApplicationReconciler(
+                        eventRecorder,
+                        statusRecorder,
+                        new NoopJobAutoscaler<>(),
+                        new TestCustomResourceDefinitionWatcher());
         reconciler = new TestReconcilerAdapter<>(this, appReconciler);
         operatorConfig = configManager.getOperatorConfiguration();
         executorService = Executors.newDirectExecutorService();
@@ -173,14 +183,12 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 null, deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
         reconciler.cleanup(
                 deployment, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(
-                "savepoint_0",
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
+
+        var snapshotList =
+                FlinkStateSnapshotUtils.getFlinkStateSnapshotsForResource(
+                        kubernetesClient, deployment);
+        assertThat(snapshotList).isNotEmpty();
+        assertEquals(snapshotList.get(0).getSpec().getSavepoint().getPath(), "savepoint_0");
     }
 
     @ParameterizedTest
@@ -203,14 +211,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 null, deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
         reconciler.cleanup(
                 deployment, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(
-                "savepoint_0",
-                deployment
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
+
+        var snapshot =
+                kubernetesClient.resources(FlinkStateSnapshot.class).list().getItems().get(0);
+        assertThat(snapshot.getSpec().getSavepoint().getPath()).isEqualTo("savepoint_0");
     }
 
     @ParameterizedTest
@@ -279,11 +283,14 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         runningJobs = flinkService.listJobs();
         assertEquals(1, flinkService.getRunningCount());
-        assertEquals("savepoint_0", runningJobs.get(0).f0);
+        var snapshots =
+                FlinkStateSnapshotUtils.getFlinkStateSnapshotsForResource(
+                        kubernetesClient, deployment);
+        assertThat(snapshots).isNotEmpty();
+        assertThat(snapshots.get(0).getSpec().getSavepoint().getPath()).isEqualTo("savepoint_0");
         assertEquals(
-                SnapshotTriggerType.UPGRADE,
-                getSavepointInfo(statefulUpgrade).getLastSavepoint().getTriggerType());
-        assertEquals(SnapshotStatus.SUCCEEDED, getLastSnapshotStatus(statefulUpgrade, SAVEPOINT));
+                SnapshotTriggerType.UPGRADE.name(),
+                snapshots.get(0).getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TYPE));
         verifyJobId(deployment, runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
 
         getJobSpec(deployment).setUpgradeMode(UpgradeMode.LAST_STATE);
@@ -316,15 +323,12 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         getJobSpec(deployment).setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().setRestartNonce(200L);
         flinkService.setHaDataAvailable(false);
-        getSavepointInfo(deployment)
-                .setLastSavepoint(Savepoint.of("finished_sp", SnapshotTriggerType.UPGRADE));
         getJobStatus(deployment).setState("FINISHED");
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
         reconciler.reconcile(deployment, context);
         reconciler.reconcile(deployment, context);
 
         assertEquals(1, flinkService.getRunningCount());
-        assertEquals("finished_sp", runningJobs.get(0).f0);
         verifyJobId(deployment, runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
     }
 
@@ -353,15 +357,17 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     }
 
     @Test
-    public void triggerCheckpoint() throws Exception {
+    public void triggerCheckpointLegacy() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        testSnapshot(deployment, CHECKPOINT);
+        deployment.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        testSnapshotLegacy(deployment, CHECKPOINT);
     }
 
     @Test
-    public void triggerSavepoint() throws Exception {
+    public void triggerSavepointLegacy() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
-        testSnapshot(deployment, SAVEPOINT);
+        deployment.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        testSnapshotLegacy(deployment, SAVEPOINT);
     }
 
     @Test
@@ -396,7 +402,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         }
     }
 
-    private void testSnapshot(FlinkDeployment deployment, SnapshotType snapshotType)
+    private void testSnapshotLegacy(FlinkDeployment deployment, SnapshotType snapshotType)
             throws Exception {
         final Predicate<JobStatus> isSnapshotInProgress;
         final Function<FlinkDeployment, SnapshotInfo> getSnapshotInfo;
@@ -632,8 +638,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     }
 
     @Test
-    public void testJobUpgradeIgnorePendingSavepoint() throws Exception {
+    public void testJobUpgradeIgnorePendingSavepointLegacy() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+
         reconciler.reconcile(deployment, context);
         var runningJobs = flinkService.listJobs();
         verifyAndSetRunningJobsToStatus(deployment, runningJobs);
@@ -796,10 +804,12 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                     }
 
                     @Override
-                    public void cancelJob(
+                    public Optional<String> cancelJob(
                             FlinkDeployment deployment,
                             UpgradeMode upgradeMode,
-                            Configuration conf) {}
+                            Configuration conf) {
+                        return Optional.empty();
+                    }
                 };
 
         var ctxFactory =
@@ -832,8 +842,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         assertEquals(1, rescaleCounter.get());
         assertEquals(
                 EventRecorder.Reason.Scaling.toString(),
-                eventCollector.events.getLast().getReason());
-        assertEquals(3, eventCollector.events.size());
+                flinkResourceEventCollector.events.getLast().getReason());
+        assertEquals(3, flinkResourceEventCollector.events.size());
 
         // Job should not be stopped, we simply call the rescale api
         assertEquals(JobState.RUNNING, getReconciledJobState(deployment));
@@ -850,7 +860,7 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         // Reconciler should not do anything after successful scaling
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
         assertEquals(1, rescaleCounter.get());
-        assertEquals(3, eventCollector.events.size());
+        assertEquals(3, flinkResourceEventCollector.events.size());
         assertFalse(reconStatus.isLastReconciledSpecStable());
     }
 
@@ -869,7 +879,12 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                     }
                 };
 
-        appReconciler = new ApplicationReconciler(eventRecorder, statusRecorder, autoscaler);
+        appReconciler =
+                new ApplicationReconciler(
+                        eventRecorder,
+                        statusRecorder,
+                        autoscaler,
+                        new TestCustomResourceDefinitionWatcher());
 
         var deployment = TestUtils.buildApplicationCluster();
         appReconciler.reconcile(ctxFactory.getResourceContext(deployment, context));
@@ -1035,7 +1050,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     public void testDeploymentRecoveryEvent() throws Exception {
         FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         reconciler.reconcile(deployment, context);
-        Assertions.assertEquals(MSG_SUBMIT, eventCollector.events.remove().getMessage());
+        Assertions.assertEquals(
+                MSG_SUBMIT, flinkResourceEventCollector.events.remove().getMessage());
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         flinkService.clear();
@@ -1045,7 +1061,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 .getJobStatus()
                 .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
         reconciler.reconcile(deployment, context);
-        Assertions.assertEquals(MSG_RECOVERY, eventCollector.events.remove().getMessage());
+        Assertions.assertEquals(
+                MSG_RECOVERY, flinkResourceEventCollector.events.remove().getMessage());
     }
 
     @Test
@@ -1056,7 +1073,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 .getFlinkConfiguration()
                 .put(OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED.key(), "true");
         reconciler.reconcile(deployment, context);
-        Assertions.assertEquals(MSG_SUBMIT, eventCollector.events.remove().getMessage());
+        Assertions.assertEquals(
+                MSG_SUBMIT, flinkResourceEventCollector.events.remove().getMessage());
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
         var clusterHealthInfo = new ClusterHealthInfo();
@@ -1066,7 +1084,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         ClusterHealthEvaluator.setLastValidClusterHealthInfo(
                 deployment.getStatus().getClusterInfo(), clusterHealthInfo);
         reconciler.reconcile(deployment, context);
-        Assertions.assertEquals(MSG_RESTART_UNHEALTHY, eventCollector.events.remove().getMessage());
+        Assertions.assertEquals(
+                MSG_RESTART_UNHEALTHY, flinkResourceEventCollector.events.remove().getMessage());
     }
 
     @Test

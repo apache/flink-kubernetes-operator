@@ -28,7 +28,6 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.commons.lang3.StringUtils;
@@ -123,51 +122,6 @@ public class SnapshotUtils {
     }
 
     /**
-     * Triggers any pending manual or periodic snapshots and updates the status accordingly.
-     *
-     * @param flinkService The {@link FlinkService} used to trigger snapshots.
-     * @param resource The resource that should be snapshotted.
-     * @param conf The observe config of the resource.
-     * @return True if a snapshot was triggered.
-     * @throws Exception An error during snapshot triggering.
-     */
-    public static boolean triggerSnapshotIfNeeded(
-            FlinkService flinkService,
-            AbstractFlinkResource<?, ?> resource,
-            Configuration conf,
-            SnapshotType snapshotType)
-            throws Exception {
-
-        Optional<SnapshotTriggerType> triggerOpt =
-                shouldTriggerSnapshot(resource, conf, snapshotType);
-        if (triggerOpt.isEmpty()) {
-            return false;
-        }
-
-        var triggerType = triggerOpt.get();
-        String jobId = resource.getStatus().getJobStatus().getJobId();
-        switch (snapshotType) {
-            case SAVEPOINT:
-                flinkService.triggerSavepoint(
-                        jobId,
-                        triggerType,
-                        resource.getStatus().getJobStatus().getSavepointInfo(),
-                        conf);
-                break;
-            case CHECKPOINT:
-                flinkService.triggerCheckpoint(
-                        jobId,
-                        triggerType,
-                        resource.getStatus().getJobStatus().getCheckpointInfo(),
-                        conf);
-                break;
-            default:
-                throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
-        }
-        return true;
-    }
-
-    /**
      * Checks whether a snapshot should be triggered based on the current status and spec, and if
      * yes, returns the correct {@link SnapshotTriggerType}.
      *
@@ -179,7 +133,7 @@ public class SnapshotUtils {
      * @return An optional {@link SnapshotTriggerType}.
      */
     @VisibleForTesting
-    protected static Optional<SnapshotTriggerType> shouldTriggerSnapshot(
+    public static Optional<SnapshotTriggerType> shouldTriggerSnapshot(
             AbstractFlinkResource<?, ?> resource, Configuration conf, SnapshotType snapshotType) {
 
         var status = resource.getStatus();

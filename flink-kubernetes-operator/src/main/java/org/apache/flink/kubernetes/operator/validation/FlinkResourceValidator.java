@@ -18,8 +18,10 @@
 package org.apache.flink.kubernetes.operator.validation;
 
 import org.apache.flink.core.plugin.Plugin;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 
 import java.util.Optional;
 
@@ -43,4 +45,13 @@ public interface FlinkResourceValidator extends Plugin {
      */
     Optional<String> validateSessionJob(
             FlinkSessionJob sessionJob, Optional<FlinkDeployment> session);
+
+    /**
+     * Validate and return optional error.
+     *
+     * @param savepoint the savepoint to be validated.
+     * @return Optional error string, should be present iff validation resulted in an error
+     */
+    Optional<String> validateStateSnapshot(
+            FlinkStateSnapshot savepoint, Optional<AbstractFlinkResource<?, ?>> target);
 }

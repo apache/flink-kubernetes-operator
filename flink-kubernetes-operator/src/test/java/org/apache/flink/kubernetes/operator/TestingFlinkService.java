@@ -29,17 +29,15 @@ import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.configuration.SchedulerExecutionMode;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesDeploymentTarget;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
-import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
-import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -111,6 +109,7 @@ public class TestingFlinkService extends AbstractFlinkService {
                     "15.0.0",
                     DashboardConfiguration.FIELD_NAME_FLINK_REVISION,
                     "1234567 @ 1970-01-01T00:00:00+00:00");
+    public static final String SNAPSHOT_ERROR_MESSAGE = "Failed";
 
     private int savepointCounter = 0;
     private int savepointTriggerCounter = 0;
@@ -127,12 +126,14 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Setter private boolean haDataAvailable = true;
     @Setter private boolean jobManagerReady = true;
     @Setter private boolean deployFailure = false;
+    @Setter private boolean disposeSavepointFailure = false;
     @Setter private Runnable sessionJobSubmittedCallback;
     @Setter private PodList podList = new PodList();
     @Setter private Consumer<Configuration> listJobConsumer = conf -> {};
-    private final List<String> disposedSavepoints = new ArrayList<>();
-    private final Map<String, Boolean> savepointTriggers = new HashMap<>();
-    private final Map<String, Boolean> checkpointTriggers = new HashMap<>();
+    @Getter private final List<String> disposedSavepoints = new ArrayList<>();
+    @Getter private final Map<String, Boolean> savepointTriggers = new HashMap<>();
+    @Getter private final Map<String, Boolean> checkpointTriggers = new HashMap<>();
+    private final Map<Long, String> checkpointStats = new HashMap<>();
 
     @Getter private int desiredReplicas = 0;
     @Getter private int cancelJobCallCount = 0;
@@ -291,33 +292,46 @@ public class TestingFlinkService extends AbstractFlinkService {
         return jobs.stream().filter(t -> !t.f1.getJobState().isTerminalState()).count();
     }
 
-    @Override
-    public void triggerSavepoint(
+    public void triggerSavepointLegacy(
             String jobId,
             SnapshotTriggerType triggerType,
-            SavepointInfo savepointInfo,
+            AbstractFlinkResource<?, ?> flinkResource,
             Configuration conf) {
-        var triggerId = "savepoint_trigger_" + savepointTriggerCounter++;
-
         var savepointFormatType =
                 conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
-        savepointInfo.setTrigger(
-                triggerId, triggerType, SavepointFormatType.valueOf(savepointFormatType.name()));
+        var triggerId = triggerSavepoint(jobId, savepointFormatType, null, conf);
+
+        flinkResource
+                .getStatus()
+                .getJobStatus()
+                .getSavepointInfo()
+                .setTrigger(
+                        triggerId,
+                        triggerType,
+                        SavepointFormatType.valueOf(savepointFormatType.name()));
         savepointTriggers.put(triggerId, false);
     }
 
     @Override
-    public void triggerCheckpoint(
+    public String triggerSavepoint(
             String jobId,
-            SnapshotTriggerType triggerType,
-            CheckpointInfo checkpointInfo,
+            org.apache.flink.core.execution.SavepointFormatType savepointFormatType,
+            String savepointDirectory,
+            Configuration conf) {
+        var triggerId = "savepoint_trigger_" + savepointTriggerCounter++;
+        savepointTriggers.put(triggerId, false);
+        return triggerId;
+    }
+
+    @Override
+    public String triggerCheckpoint(
+            String jobId,
+            org.apache.flink.core.execution.CheckpointType checkpointFormatType,
             Configuration conf) {
         var triggerId = "checkpoint_trigger_" + checkpointTriggerCounter++;
-
-        var checkpointType = conf.get(KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_TYPE);
-        checkpointInfo.setTrigger(
-                triggerId, triggerType, CheckpointType.valueOf(checkpointType.name()));
         checkpointTriggers.put(triggerId, false);
+
+        return triggerId;
     }
 
     @Override
@@ -332,7 +346,7 @@ public class TestingFlinkService extends AbstractFlinkService {
             return SavepointFetchResult.pending();
         }
 
-        return SavepointFetchResult.error("Failed");
+        return SavepointFetchResult.error(SNAPSHOT_ERROR_MESSAGE);
     }
 
     @Override
@@ -342,13 +356,25 @@ public class TestingFlinkService extends AbstractFlinkService {
         if (checkpointTriggers.containsKey(triggerId)) {
             if (checkpointTriggers.get(triggerId)) {
                 checkpointCounter++;
-                return CheckpointFetchResult.completed();
+                checkpointStats.put(
+                        (long) checkpointCounter,
+                        String.format("checkpoint_%d", (long) checkpointCounter));
+                return CheckpointFetchResult.completed((long) checkpointCounter);
             }
             checkpointTriggers.put(triggerId, true);
             return CheckpointFetchResult.pending();
         }
 
-        return CheckpointFetchResult.error("Failed");
+        return CheckpointFetchResult.error(SNAPSHOT_ERROR_MESSAGE);
+    }
+
+    @Override
+    public Optional<String> fetchCheckpointPath(
+            String jobId, Long checkpointId, Configuration conf) {
+        if (checkpointStats.containsKey(checkpointId)) {
+            return Optional.of(checkpointStats.get(checkpointId));
+        }
+        return Optional.empty();
     }
 
     @Override
@@ -436,10 +462,10 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void cancelJob(
+    public Optional<String> cancelJob(
             FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration configuration)
             throws Exception {
-        cancelJob(deployment, upgradeMode, configuration, false);
+        return cancelJob(deployment, upgradeMode, configuration, false);
     }
 
     private String cancelJob(FlinkVersion flinkVersion, JobID jobID, boolean savepoint)
@@ -514,12 +540,11 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void disposeSavepoint(String savepointPath, Configuration conf) {
+    public void disposeSavepoint(String savepointPath, Configuration conf) throws Exception {
+        if (disposeSavepointFailure) {
+            throw new Exception(SNAPSHOT_ERROR_MESSAGE);
+        }
         disposedSavepoints.add(savepointPath);
-    }
-
-    public List<String> getDisposedSavepoints() {
-        return disposedSavepoints;
     }
 
     @Override
