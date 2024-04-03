@@ -47,5 +47,8 @@ parallelism.default: 1
 # kubernetes.operator.leader-election.enabled: false
 # kubernetes.operator.leader-election.lease-name: flink-operator-lease
 
+# kubernetes.operator.snapshot.resource.enabled: true
+# kubernetes.operator.savepoint.dispose-on-delete: true
+
 # kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
 # kubernetes.operator.metrics.reporter.slf4j.interval: 5 MINUTE

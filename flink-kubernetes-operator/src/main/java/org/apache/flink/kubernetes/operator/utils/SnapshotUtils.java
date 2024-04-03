@@ -30,7 +30,6 @@ import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptio
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
-import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.apache.commons.lang3.StringUtils;
@@ -125,51 +124,6 @@ public class SnapshotUtils {
     }
 
     /**
-     * Triggers any pending manual or periodic snapshots and updates the status accordingly.
-     *
-     * @param flinkService The {@link FlinkService} used to trigger snapshots.
-     * @param resource The resource that should be snapshotted.
-     * @param conf The observe config of the resource.
-     * @return True if a snapshot was triggered.
-     * @throws Exception An error during snapshot triggering.
-     */
-    public static boolean triggerSnapshotIfNeeded(
-            FlinkService flinkService,
-            AbstractFlinkResource<?, ?> resource,
-            Configuration conf,
-            SnapshotType snapshotType)
-            throws Exception {
-
-        Optional<SnapshotTriggerType> triggerOpt =
-                shouldTriggerSnapshot(resource, conf, snapshotType);
-        if (triggerOpt.isEmpty()) {
-            return false;
-        }
-
-        var triggerType = triggerOpt.get();
-        String jobId = resource.getStatus().getJobStatus().getJobId();
-        switch (snapshotType) {
-            case SAVEPOINT:
-                flinkService.triggerSavepoint(
-                        jobId,
-                        triggerType,
-                        resource.getStatus().getJobStatus().getSavepointInfo(),
-                        conf);
-                break;
-            case CHECKPOINT:
-                flinkService.triggerCheckpoint(
-                        jobId,
-                        triggerType,
-                        resource.getStatus().getJobStatus().getCheckpointInfo(),
-                        conf);
-                break;
-            default:
-                throw new IllegalArgumentException("Unsupported snapshot type: " + snapshotType);
-        }
-        return true;
-    }
-
-    /**
      * Checks whether a snapshot should be triggered based on the current status and spec, and if
      * yes, returns the correct {@link SnapshotTriggerType}.
      *
@@ -181,7 +135,7 @@ public class SnapshotUtils {
      * @return An optional {@link SnapshotTriggerType}.
      */
     @VisibleForTesting
-    protected static Optional<SnapshotTriggerType> shouldTriggerSnapshot(
+    public static Optional<SnapshotTriggerType> shouldTriggerSnapshot(
             AbstractFlinkResource<?, ?> resource, Configuration conf, SnapshotType snapshotType) {
 
         var status = resource.getStatus();
@@ -375,7 +329,7 @@ public class SnapshotUtils {
             if (SnapshotUtils.savepointInProgress(jobStatus)) {
                 var savepointInfo = jobStatus.getSavepointInfo();
                 ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                        savepointInfo, resource, SAVEPOINT);
+                        savepointInfo.getTriggerType(), resource, SAVEPOINT);
                 savepointInfo.resetTrigger();
                 LOG.error("Job is not running, cancelling savepoint operation");
                 eventRecorder.triggerEvent(
@@ -390,7 +344,7 @@ public class SnapshotUtils {
             if (SnapshotUtils.checkpointInProgress(jobStatus)) {
                 var checkpointInfo = jobStatus.getCheckpointInfo();
                 ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
-                        checkpointInfo, resource, CHECKPOINT);
+                        checkpointInfo.getTriggerType(), resource, CHECKPOINT);
                 checkpointInfo.resetTrigger();
                 LOG.error("Job is not running, cancelling checkpoint operation");
                 eventRecorder.triggerEvent(
@@ -414,13 +368,17 @@ public class SnapshotUtils {
      * @return True if last savepoint is known
      */
     public static boolean lastSavepointKnown(CommonStatus<?> status) {
-        var lastSavepoint = status.getJobStatus().getSavepointInfo().getLastSavepoint();
+        var lastSavepoint = status.getJobStatus().getUpgradeSnapshotReference();
 
         if (lastSavepoint == null) {
             return true;
         }
-        String location = lastSavepoint.getLocation();
 
-        return !location.equals(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
+        if (StringUtils.isNotBlank(lastSavepoint.getName())) {
+            return true;
+        }
+
+        var location = lastSavepoint.getPath();
+        return location != null && !location.equals(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
     }
 }

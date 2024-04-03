@@ -35,17 +35,16 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.artifact.ArtifactManager;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
+import org.apache.flink.kubernetes.operator.observer.CheckpointStatsResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EnvUtils;
@@ -64,7 +63,10 @@ import org.apache.flink.runtime.rest.messages.EmptyMessageParameters;
 import org.apache.flink.runtime.rest.messages.EmptyRequestBody;
 import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.TriggerId;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointIdPathParameter;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointInfo;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatisticDetailsHeaders;
+import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatistics;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusHeaders;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointStatusMessageParameters;
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointTriggerHeaders;
@@ -98,6 +100,7 @@ import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
 
+import org.apache.flink.shaded.guava31.com.google.common.collect.Iterables;
 import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
@@ -308,7 +311,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    protected void cancelJob(
+    protected Optional<String> cancelJob(
             FlinkDeployment deployment,
             UpgradeMode upgradeMode,
             Configuration conf,
@@ -414,25 +417,17 @@ public abstract class AbstractFlinkService implements FlinkService {
             }
         }
         deploymentStatus.getJobStatus().setState(JobStatus.FINISHED.name());
-        savepointOpt.ifPresent(
-                location -> {
-                    Savepoint sp =
-                            Savepoint.of(
-                                    location,
-                                    SnapshotTriggerType.UPGRADE,
-                                    SavepointFormatType.valueOf(savepointFormatType.name()));
-                    deploymentStatus.getJobStatus().getSavepointInfo().updateLastSavepoint(sp);
-                });
 
         // Unless we leave the jm around after savepoint, we should wait until it has finished
         // shutting down
         if (deleteClusterAfterSavepoint || upgradeMode != UpgradeMode.SAVEPOINT) {
             deploymentStatus.setJobManagerDeploymentStatus(JobManagerDeploymentStatus.MISSING);
         }
+        return savepointOpt;
     }
 
     @Override
-    public void cancelSessionJob(
+    public Optional<String> cancelSessionJob(
             FlinkSessionJob sessionJob, UpgradeMode upgradeMode, Configuration conf)
             throws Exception {
 
@@ -442,6 +437,9 @@ public abstract class AbstractFlinkService implements FlinkService {
         Preconditions.checkNotNull(jobIdString, "The job to be suspend should not be null");
         var jobId = JobID.fromHexString(jobIdString);
         Optional<String> savepointOpt = Optional.empty();
+
+        var savepointFormatType =
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
 
         LOG.debug("Current job state: {}", jobStatus.getState());
 
@@ -485,9 +483,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                                                 KubernetesOperatorConfigOptions
                                                                         .DRAIN_ON_SAVEPOINT_DELETION),
                                                         savepointDirectory,
-                                                        conf.get(
-                                                                KubernetesOperatorConfigOptions
-                                                                        .OPERATOR_SAVEPOINT_FORMAT_TYPE))
+                                                        savepointFormatType)
                                                 .get(timeout, TimeUnit.SECONDS);
                                 savepointOpt = Optional.of(savepoint);
                                 LOG.info(
@@ -517,11 +513,7 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
 
         jobStatus.setState(JobStatus.FINISHED.name());
-        savepointOpt.ifPresent(
-                location -> {
-                    Savepoint sp = Savepoint.of(location, SnapshotTriggerType.UPGRADE);
-                    jobStatus.getSavepointInfo().updateLastSavepoint(sp);
-                });
+        return savepointOpt;
     }
 
     public static boolean isJobMissingOrTerminated(Exception e) {
@@ -541,25 +533,19 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public void triggerSavepoint(
+    public String triggerSavepoint(
             String jobId,
-            SnapshotTriggerType triggerType,
-            org.apache.flink.kubernetes.operator.api.status.SavepointInfo savepointInfo,
+            org.apache.flink.core.execution.SavepointFormatType savepointFormatType,
+            String savepointDirectory,
             Configuration conf)
             throws Exception {
-        LOG.info("Triggering new savepoint");
         try (var clusterClient = getClusterClient(conf)) {
             var savepointTriggerHeaders = SavepointTriggerHeaders.getInstance();
             var savepointTriggerMessageParameters =
                     savepointTriggerHeaders.getUnresolvedMessageParameters();
             savepointTriggerMessageParameters.jobID.resolve(JobID.fromHexString(jobId));
 
-            var savepointDirectory =
-                    Preconditions.checkNotNull(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
             var timeout = operatorConfig.getFlinkClientTimeout().getSeconds();
-
-            var savepointFormatType =
-                    conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
 
             var response =
                     clusterClient
@@ -571,18 +557,14 @@ public abstract class AbstractFlinkService implements FlinkService {
                             .get(timeout, TimeUnit.SECONDS);
             LOG.info("Savepoint successfully triggered: " + response.getTriggerId().toHexString());
 
-            savepointInfo.setTrigger(
-                    response.getTriggerId().toHexString(),
-                    triggerType,
-                    SavepointFormatType.valueOf(savepointFormatType.name()));
+            return response.getTriggerId().toHexString();
         }
     }
 
     @Override
-    public void triggerCheckpoint(
+    public String triggerCheckpoint(
             String jobId,
-            SnapshotTriggerType triggerType,
-            org.apache.flink.kubernetes.operator.api.status.CheckpointInfo checkpointInfo,
+            org.apache.flink.core.execution.CheckpointType checkpointType,
             Configuration conf)
             throws Exception {
         LOG.info("Triggering new checkpoint");
@@ -594,21 +576,15 @@ public abstract class AbstractFlinkService implements FlinkService {
 
             var timeout = operatorConfig.getFlinkClientTimeout().getSeconds();
 
-            var checkpointFormatType = org.apache.flink.core.execution.CheckpointType.FULL;
-
             var response =
                     clusterClient
                             .sendRequest(
                                     checkpointTriggerHeaders,
                                     checkpointTriggerMessageParameters,
-                                    new CheckpointTriggerRequestBody(checkpointFormatType, null))
+                                    new CheckpointTriggerRequestBody(checkpointType, null))
                             .get(timeout, TimeUnit.SECONDS);
             LOG.info("Checkpoint successfully triggered: " + response.getTriggerId().toHexString());
-
-            checkpointInfo.setTrigger(
-                    response.getTriggerId().toHexString(),
-                    triggerType,
-                    CheckpointType.valueOf(checkpointFormatType.name()));
+            return response.getTriggerId().toHexString();
         }
     }
 
@@ -749,7 +725,8 @@ public abstract class AbstractFlinkService implements FlinkService {
                             "Checkpoint {} triggered by the operator for job {} completed:",
                             triggerId,
                             jobId);
-                    return CheckpointFetchResult.completed();
+                    return CheckpointFetchResult.completed(
+                            response.get().resource().getCheckpointId());
                 default:
                     throw new IllegalStateException(
                             String.format(
@@ -759,6 +736,48 @@ public abstract class AbstractFlinkService implements FlinkService {
         } catch (Exception e) {
             LOG.error("Exception while fetching the checkpoint result", e);
             return CheckpointFetchResult.error(e.getMessage());
+        }
+    }
+
+    @Override
+    public CheckpointStatsResult fetchCheckpointStats(
+            String jobId, Long checkpointId, Configuration conf) {
+        try (RestClusterClient<String> clusterClient = getClusterClient(conf)) {
+            var checkpointStatusHeaders = CheckpointStatisticDetailsHeaders.getInstance();
+            var parameters = checkpointStatusHeaders.getUnresolvedMessageParameters();
+            parameters.jobPathParameter.resolve(JobID.fromHexString(jobId));
+
+            // This was needed because the parameter is protected
+            var checkpointIdPathParameter =
+                    (CheckpointIdPathParameter) Iterables.getLast(parameters.getPathParameters());
+            checkpointIdPathParameter.resolve(checkpointId);
+
+            var response =
+                    clusterClient.sendRequest(
+                            checkpointStatusHeaders, parameters, EmptyRequestBody.getInstance());
+
+            var stats = response.get();
+            if (stats == null) {
+                throw new IllegalStateException("Checkpoint ID %d for job %s does not exist!");
+            } else if (stats instanceof CheckpointStatistics.CompletedCheckpointStatistics) {
+                return CheckpointStatsResult.completed(
+                        ((CheckpointStatistics.CompletedCheckpointStatistics) stats)
+                                .getExternalPath());
+            } else if (stats instanceof CheckpointStatistics.FailedCheckpointStatistics) {
+                return CheckpointStatsResult.error(
+                        ((CheckpointStatistics.FailedCheckpointStatistics) stats)
+                                .getFailureMessage());
+            } else if (stats instanceof CheckpointStatistics.PendingCheckpointStatistics) {
+                return CheckpointStatsResult.pending();
+            } else {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "Unknown checkpoint statistics result class: %s",
+                                stats.getClass().getSimpleName()));
+            }
+        } catch (Exception e) {
+            LOG.error("Exception while fetching checkpoint statistics", e);
+            return CheckpointStatsResult.pending();
         }
     }
 
@@ -1072,7 +1091,8 @@ public abstract class AbstractFlinkService implements FlinkService {
         }
     }
 
-    private Configuration getOperatorRestConfig(Configuration origConfig) throws IOException {
+    private static Configuration getOperatorRestConfig(Configuration origConfig)
+            throws IOException {
         Configuration conf = new Configuration(origConfig);
         EnvUtils.get(EnvUtils.ENV_OPERATOR_TRUSTSTORE_PATH)
                 .ifPresent(

@@ -26,13 +26,11 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
-import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.observer.CheckpointFetchResult;
+import org.apache.flink.kubernetes.operator.observer.CheckpointStatsResult;
 import org.apache.flink.kubernetes.operator.observer.SavepointFetchResult;
 import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.jobmaster.JobResult;
@@ -75,7 +73,8 @@ public interface FlinkService {
 
     JobResult requestJobResult(Configuration conf, JobID jobID) throws Exception;
 
-    void cancelJob(FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration conf)
+    Optional<String> cancelJob(
+            FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration conf)
             throws Exception;
 
     void deleteClusterDeployment(
@@ -84,20 +83,20 @@ public interface FlinkService {
             Configuration conf,
             boolean deleteHaData);
 
-    void cancelSessionJob(FlinkSessionJob sessionJob, UpgradeMode upgradeMode, Configuration conf)
+    Optional<String> cancelSessionJob(
+            FlinkSessionJob sessionJob, UpgradeMode upgradeMode, Configuration conf)
             throws Exception;
 
-    void triggerSavepoint(
+    String triggerSavepoint(
             String jobId,
-            SnapshotTriggerType triggerType,
-            SavepointInfo savepointInfo,
+            org.apache.flink.core.execution.SavepointFormatType savepointFormatType,
+            String savepointDirectory,
             Configuration conf)
             throws Exception;
 
-    void triggerCheckpoint(
+    String triggerCheckpoint(
             String jobId,
-            SnapshotTriggerType triggerType,
-            CheckpointInfo checkpointInfo,
+            org.apache.flink.core.execution.CheckpointType checkpointType,
             Configuration conf)
             throws Exception;
 
@@ -106,6 +105,8 @@ public interface FlinkService {
     SavepointFetchResult fetchSavepointInfo(String triggerId, String jobId, Configuration conf);
 
     CheckpointFetchResult fetchCheckpointInfo(String triggerId, String jobId, Configuration conf);
+
+    CheckpointStatsResult fetchCheckpointStats(String jobId, Long checkpointId, Configuration conf);
 
     Tuple2<
                     Optional<CheckpointHistoryWrapper.CompletedCheckpointInfo>,

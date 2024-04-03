@@ -25,14 +25,21 @@ import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
 import org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
+import org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
+import org.apache.flink.kubernetes.operator.api.spec.JobKind;
+import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode;
+import org.apache.flink.kubernetes.operator.api.spec.SavepointSpec;
 import org.apache.flink.kubernetes.operator.api.spec.TaskManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentReconciliationStatus;
@@ -520,6 +527,16 @@ public class DefaultValidatorTest {
                     dep.getSpec().getTaskManager().getResource().setEphemeralStorage("abc");
                 },
                 "TaskManager resource ephemeral storage parse error: Character a is neither a decimal digit number, decimal point, nor \"e\" notation exponential mark.");
+
+        testError(
+                dep -> {
+                    dep.getSpec()
+                            .getJob()
+                            .setFlinkStateSnapshotReference(
+                                    FlinkStateSnapshotReference.builder().name("snapshot").build());
+                    dep.getSpec().getJob().setInitialSavepointPath("s0");
+                },
+                "Cannot set both initialSavepointPath and flinkStateSnapshotReference in the job spec");
     }
 
     @Test
@@ -598,8 +615,9 @@ public class DefaultValidatorTest {
                             .serializeAndSetLastReconciledSpec(dep.getSpec(), dep);
                     job.setSavepointRedeployNonce(1L);
                     job.setInitialSavepointPath(null);
+                    job.setFlinkStateSnapshotReference(null);
                 },
-                "InitialSavepointPath must not be empty for savepoint redeployment");
+                "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeployment");
 
         testError(
                 dep -> {
@@ -610,7 +628,7 @@ public class DefaultValidatorTest {
                     job.setSavepointRedeployNonce(1L);
                     job.setInitialSavepointPath(" ");
                 },
-                "InitialSavepointPath must not be empty for savepoint redeployment");
+                "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeploymen");
 
         testError(
                 dep -> {
@@ -624,7 +642,7 @@ public class DefaultValidatorTest {
                     job.setSavepointRedeployNonce(2L);
                     job.setInitialSavepointPath(null);
                 },
-                "InitialSavepointPath must not be empty for savepoint redeployment");
+                "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeploymen");
     }
 
     @ParameterizedTest
@@ -1028,6 +1046,72 @@ public class DefaultValidatorTest {
     private static void assertErrorNotContains(Optional<String> result) {
         if (result.isPresent()) {
             Assertions.fail("Invalid Configuration not caught in the tests");
+        }
+    }
+
+    @Test
+    public void testFlinkStateSnapshotValidator() {
+        testStateSnapshotValidateWithModifier(snapshot -> {}, null);
+
+        testStateSnapshotValidateWithModifier(
+                snapshot -> {
+                    snapshot.getSpec().setCheckpoint(CheckpointSpec.builder().build());
+                    snapshot.getSpec().setSavepoint(SavepointSpec.builder().build());
+                },
+                "Exactly one of checkpoint or savepoint configurations has to be set.");
+
+        testStateSnapshotValidateWithModifier(
+                snapshot -> snapshot.getSpec().setJobReference(null),
+                "Job reference must be supplied for this snapshot");
+
+        testStateSnapshotValidateWithModifier(
+                snapshot -> {
+                    snapshot.getSpec().setJobReference(null);
+                    snapshot.getSpec().getSavepoint().setAlreadyExists(true);
+                },
+                null);
+
+        var refName = "does-not-exist";
+        var snapshot =
+                TestUtils.buildFlinkStateSnapshotSavepoint(
+                        false,
+                        JobReference.builder()
+                                .kind(JobKind.FLINK_DEPLOYMENT)
+                                .name(refName)
+                                .build());
+        testStateSnapshotValidate(
+                snapshot,
+                Optional.empty(),
+                String.format(
+                        "Target for snapshot (FlinkDeployment/%s) in namespace test was not found",
+                        refName));
+    }
+
+    private void testStateSnapshotValidateWithModifier(
+            Consumer<FlinkStateSnapshot> snapshotModifier, @Nullable String expectedErr) {
+        var flinkDeployment = TestUtils.buildApplicationCluster();
+        var snapshot =
+                TestUtils.buildFlinkStateSnapshotSavepoint(
+                        false, JobReference.fromFlinkResource(flinkDeployment));
+
+        snapshotModifier.accept(snapshot);
+        testStateSnapshotValidate(snapshot, Optional.of(flinkDeployment), expectedErr);
+    }
+
+    private void testStateSnapshotValidate(
+            FlinkStateSnapshot flinkStateSnapshot,
+            Optional<AbstractFlinkResource<?, ?>> secondaryResource,
+            @Nullable String expectedErr) {
+        Optional<String> error =
+                validator.validateStateSnapshot(flinkStateSnapshot, secondaryResource);
+        if (expectedErr == null) {
+            error.ifPresent(Assertions::fail);
+        } else {
+            if (error.isPresent()) {
+                assertTrue(error.get().startsWith(expectedErr), error.get());
+            } else {
+                fail("Did not get expected error: " + expectedErr);
+            }
         }
     }
 }

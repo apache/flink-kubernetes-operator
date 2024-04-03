@@ -23,6 +23,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.metrics.KubernetesClientMetrics;
 import org.apache.flink.metrics.MetricGroup;
 
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.client.Config;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
@@ -66,5 +67,21 @@ public class KubernetesClientUtils {
         }
 
         return clientBuilder.build();
+    }
+
+    /**
+     * Checks if the class for a Custom Resource is installed in the current Kubernetes cluster.
+     *
+     * @param clazz class of Custom Resource
+     * @return true if the CRD present in the Kubernetes cluster
+     */
+    public static boolean isCrdInstalled(Class<? extends HasMetadata> clazz) {
+        try (var client = new KubernetesClientBuilder().build()) {
+            client.resources(clazz).list().getItems();
+            return true;
+        } catch (Throwable t) {
+            LOG.warn("Failed to find CRD {}", clazz.getSimpleName());
+            return false;
+        }
     }
 }

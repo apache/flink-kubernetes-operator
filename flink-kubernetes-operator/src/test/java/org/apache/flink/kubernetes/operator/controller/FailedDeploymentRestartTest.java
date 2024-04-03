@@ -17,20 +17,18 @@
 
 package org.apache.flink.kubernetes.operator.controller;
 
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
-import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
-import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.observer.SnapshotObserver;
-import org.apache.flink.kubernetes.operator.utils.SnapshotStatus;
-import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
+import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
 import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -42,10 +40,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.Optional;
+
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
-import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -116,6 +114,7 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
     @EnumSource(UpgradeMode.class)
     public void verifyFailedApplicationRecoveryWithCheckpoint(UpgradeMode upgradeMode)
             throws Exception {
+        var savepointPath = "/tmp/savepoint";
         FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
         appCluster.getSpec().getJob().setUpgradeMode(upgradeMode);
 
@@ -134,21 +133,15 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
         assertNull(flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH));
 
         // trigger checkpoint
-        CheckpointInfo checkpointInfo = appCluster.getStatus().getJobStatus().getCheckpointInfo();
-        flinkService.triggerCheckpoint(
-                null,
-                SnapshotTriggerType.PERIODIC,
-                checkpointInfo,
-                configManager.getObserveConfig(appCluster));
-
-        // Pending
-        observer.observeCheckpointStatus(getResourceContext(appCluster));
-        // Completed
-        observer.observeCheckpointStatus(getResourceContext(appCluster));
-        assertFalse(SnapshotUtils.checkpointInProgress(appCluster.getStatus().getJobStatus()));
-        assertEquals(
-                SnapshotUtils.getLastSnapshotStatus(appCluster, CHECKPOINT),
-                SnapshotStatus.SUCCEEDED);
+        long now = System.currentTimeMillis();
+        flinkService.setCheckpointInfo(
+                Tuple2.of(
+                        Optional.of(
+                                new CheckpointHistoryWrapper.CompletedCheckpointInfo(
+                                        0, savepointPath, now - 30000)),
+                        Optional.of(
+                                new CheckpointHistoryWrapper.PendingCheckpointInfo(
+                                        0, now - 61000))));
 
         // Make deployment unhealthy
         flinkService.markApplicationJobFailedWithError(
@@ -170,7 +163,7 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
         if (upgradeMode != UpgradeMode.STATELESS) {
             assertEquals(
                     flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH),
-                    "ck_0");
+                    savepointPath);
         } else {
             assertNull(flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH));
         }

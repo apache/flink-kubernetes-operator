@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.admission.informer;
 
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
+import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.util.Preconditions;
 
 import io.fabric8.kubernetes.api.model.HasMetadata;
@@ -41,6 +42,7 @@ public class InformerManager {
     private final Set<String> watchedNamespaces = ConcurrentHashMap.newKeySet();
     private final KubernetesClient kubernetesClient;
     private volatile Map<String, SharedIndexInformer<FlinkDeployment>> flinkDepInformers;
+    private volatile Map<String, SharedIndexInformer<FlinkSessionJob>> flinkSessionJobInformers;
 
     public InformerManager(KubernetesClient kubernetesClient) {
         this.kubernetesClient = kubernetesClient;
@@ -71,8 +73,39 @@ public class InformerManager {
                     }
                     this.flinkDepInformers = runnableInformers;
                     LOG.info(
-                            "Created flink deployment informers for {}",
-                            flinkDepInformers.keySet());
+                            "Created FlinkDeployment informers for {}", flinkDepInformers.keySet());
+                }
+            }
+        }
+    }
+
+    public SharedIndexInformer<FlinkSessionJob> getFlinkSessionJobInformer(String namespace) {
+        initFlinkSessionJobInformers();
+        var effectiveNamespace =
+                DEFAULT_NAMESPACES_SET.equals(watchedNamespaces)
+                        ? Constants.WATCH_ALL_NAMESPACES
+                        : namespace;
+        var informer = flinkSessionJobInformers.get(effectiveNamespace);
+        Preconditions.checkNotNull(
+                informer, String.format("The informer for %s should not be null", namespace));
+        return informer;
+    }
+
+    private void initFlinkSessionJobInformers() {
+        if (flinkSessionJobInformers == null) {
+            synchronized (this) {
+                if (flinkSessionJobInformers == null) {
+                    var runnableInformers =
+                            createRunnableInformers(
+                                    FlinkSessionJob.class, watchedNamespaces, kubernetesClient);
+                    for (Map.Entry<String, SharedIndexInformer<FlinkSessionJob>> runnableInformer :
+                            runnableInformers.entrySet()) {
+                        runnableInformer.getValue().run();
+                    }
+                    this.flinkSessionJobInformers = runnableInformers;
+                    LOG.info(
+                            "Created FlinkSessionJob informers for {}",
+                            flinkSessionJobInformers.keySet());
                 }
             }
         }
@@ -110,11 +143,23 @@ public class InformerManager {
                 if (flinkDepInformers != null) {
                     flinkDepInformers.forEach(
                             (key, value) -> {
-                                LOG.info("Stopping informer in {})", key);
+                                LOG.info("Stopping FlinkDeployment informer in {})", key);
                                 value.stop();
                             });
                 }
                 flinkDepInformers = null;
+            }
+        }
+        if (flinkSessionJobInformers != null) {
+            synchronized (this) {
+                if (flinkSessionJobInformers != null) {
+                    flinkSessionJobInformers.forEach(
+                            (key, value) -> {
+                                LOG.info("Stopping FlinkSessionJob informer in {})", key);
+                                value.stop();
+                            });
+                }
+                flinkSessionJobInformers = null;
             }
         }
     }

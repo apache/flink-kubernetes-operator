@@ -298,6 +298,18 @@ public class KubernetesOperatorConfigOptions {
                                     + "Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
 
     @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> SNAPSHOT_RESOURCE_ENABLED =
+            operatorConfig("snapshot.resource.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Create new FlinkStateSnapshot resources for storing snapshots. "
+                                    + "Disable if you wish to use the deprecated mode and save snapshot results to "
+                                    + "FlinkDeployment/FlinkSessionJob status fields. The Operator will fallback to "
+                                    + "legacy mode during runtime if the CRD is not found, "
+                                    + "even if this value is true.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<String> PERIODIC_SAVEPOINT_INTERVAL =
             operatorConfig("periodic.savepoint.interval")
                     .stringType()
@@ -425,6 +437,14 @@ public class KubernetesOperatorConfigOptions {
                     .noDefaultValue()
                     .withDescription(
                             "Max allowed checkpoint age for initiating last-state upgrades on running jobs. If a checkpoint is not available within the desired age (and nothing in progress) a savepoint will be triggered.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE =
+            operatorConfig("savepoint.dispose-on-delete")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Savepoint data for FlinkStateSnapshot resources created by the operator during upgrades and periodic savepoints will be disposed of automatically when the generated Kubernetes resource is deleted.");
 
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<SavepointFormatType> OPERATOR_SAVEPOINT_FORMAT_TYPE =

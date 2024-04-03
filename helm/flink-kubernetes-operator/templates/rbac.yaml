@@ -81,6 +81,9 @@ rules:
       - flinkdeployments/finalizers
       - flinksessionjobs
       - flinksessionjobs/finalizers
+      - flinkstatesnapshots
+      - flinkstatesnapshots/status
+      - flinkstatesnapshots/finalizers
     verbs:
       - get
       - list

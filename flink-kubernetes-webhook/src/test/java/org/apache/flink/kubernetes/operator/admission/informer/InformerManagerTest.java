@@ -62,7 +62,7 @@ public class InformerManagerTest {
         Configuration config =
                 Configuration.fromMap(Map.of(OPERATOR_WATCHED_NAMESPACES.key(), "ns1"));
         FlinkConfigManager configManager =
-                new FlinkConfigManager(config, informerManager::setNamespaces);
+                new FlinkConfigManager(config, informerManager::setNamespaces, true);
         informerManager.setNamespaces(
                 configManager.getOperatorConfiguration().getWatchedNamespaces());
         Assertions.assertNotNull(informerManager.getFlinkDepInformer("ns1"));

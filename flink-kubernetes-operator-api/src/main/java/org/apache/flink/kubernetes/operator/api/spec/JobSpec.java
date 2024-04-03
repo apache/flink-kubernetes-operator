@@ -64,6 +64,7 @@ public class JobSpec implements Diffable<JobSpec> {
      * savepoint, change the number to a different non-null value.
      */
     @SpecDiff(DiffType.IGNORE)
+    @Deprecated
     private Long savepointTriggerNonce;
 
     /**
@@ -71,13 +72,22 @@ public class JobSpec implements Diffable<JobSpec> {
      * redeployments (triggered by changing the savepointRedeployNonce).
      */
     @SpecDiff(DiffType.IGNORE)
+    @Deprecated
     private String initialSavepointPath;
+
+    /**
+     * Snapshot reference used by the job the first time it is deployed or during savepoint
+     * redeployments (triggered by changing the savepointRedeployNonce).
+     */
+    @SpecDiff(DiffType.IGNORE)
+    private FlinkStateSnapshotReference flinkStateSnapshotReference;
 
     /**
      * Nonce used to manually trigger checkpoint for the running job. In order to trigger a
      * checkpoint, change the number to a different non-null value.
      */
     @SpecDiff(DiffType.IGNORE)
+    @Deprecated
     private Long checkpointTriggerNonce;
 
     /** Upgrade mode of the Flink job. */
@@ -90,8 +100,9 @@ public class JobSpec implements Diffable<JobSpec> {
 
     /**
      * Nonce used to trigger a full redeployment of the job from the savepoint path specified in
-     * initialSavepointPath. In order to trigger redeployment, change the number to a different
-     * non-null value. Rollback is not possible after redeployment.
+     * initialSavepointPath or the path/FlinkStateSnapshot reference in flinkStateSnapshotReference.
+     * In order to trigger redeployment, change the number to a different non-null value. Rollback
+     * is not possible after redeployment.
      */
     @SpecDiff(value = DiffType.SAVEPOINT_REDEPLOY, onNullIgnore = true)
     private Long savepointRedeployNonce;

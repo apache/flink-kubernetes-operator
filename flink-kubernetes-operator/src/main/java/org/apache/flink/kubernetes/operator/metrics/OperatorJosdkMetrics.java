@@ -17,9 +17,9 @@
 
 package org.apache.flink.kubernetes.operator.metrics;
 
-import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.metrics.Counter;
 import org.apache.flink.metrics.Histogram;
@@ -28,6 +28,7 @@ import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.util.clock.Clock;
 import org.apache.flink.util.clock.SystemClock;
 
+import io.fabric8.kubernetes.client.CustomResource;
 import io.javaoperatorsdk.operator.api.monitoring.Metrics;
 import io.javaoperatorsdk.operator.api.reconciler.Constants;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
@@ -48,7 +49,6 @@ import java.util.concurrent.TimeUnit;
  * Implementation of {@link Metrics} to monitor and forward JOSDK metrics to {@link MetricRegistry}.
  */
 public class OperatorJosdkMetrics implements Metrics {
-
     private static final String OPERATOR_SDK_GROUP = "JOSDK";
     private static final String RECONCILIATION = "Reconciliation";
     private static final String RESOURCE = "Resource";
@@ -179,7 +179,7 @@ public class OperatorJosdkMetrics implements Metrics {
 
     private KubernetesResourceNamespaceMetricGroup getResourceNsMg(
             ResourceID resourceID, Map<String, Object> metadata) {
-        Class<? extends AbstractFlinkResource<?, ?>> resourceClass =
+        Class<? extends CustomResource<?, ?>> resourceClass =
                 getResourceClass(metadata)
                         .orElseThrow(
                                 () ->
@@ -195,7 +195,7 @@ public class OperatorJosdkMetrics implements Metrics {
                                 rid.getNamespace().orElse("default")));
     }
 
-    private Optional<Class<? extends AbstractFlinkResource<?, ?>>> getResourceClass(
+    private Optional<Class<? extends CustomResource<?, ?>>> getResourceClass(
             Map<String, Object> metadata) {
         var resourceGvk = (GroupVersionKind) metadata.get(Constants.RESOURCE_GVK_KEY);
 
@@ -203,12 +203,14 @@ public class OperatorJosdkMetrics implements Metrics {
             return Optional.empty();
         }
 
-        Class<? extends AbstractFlinkResource<?, ?>> resourceClass;
+        Class<? extends CustomResource<?, ?>> resourceClass;
 
         if (resourceGvk.getKind().equals(FlinkDeployment.class.getSimpleName())) {
             resourceClass = FlinkDeployment.class;
         } else if (resourceGvk.getKind().equals(FlinkSessionJob.class.getSimpleName())) {
             resourceClass = FlinkSessionJob.class;
+        } else if (resourceGvk.getKind().equals(FlinkStateSnapshot.class.getSimpleName())) {
+            resourceClass = FlinkStateSnapshot.class;
         } else {
             return Optional.empty();
         }

@@ -22,13 +22,16 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.metrics.lifecycle.LifecycleMetrics;
+
+import io.fabric8.kubernetes.client.CustomResource;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /** Metric manager for Operator managed custom resources. */
-public class MetricManager<CR extends AbstractFlinkResource<?, ?>> {
+public class MetricManager<CR extends CustomResource<?, ?>> {
     private final List<CustomResourceMetrics<CR>> registeredMetrics = new ArrayList<>();
 
     public void onUpdate(CR cr) {
@@ -59,6 +62,13 @@ public class MetricManager<CR extends AbstractFlinkResource<?, ?>> {
         return metricManager;
     }
 
+    public static MetricManager<FlinkStateSnapshot> createFlinkStateSnapshotMetricManager(
+            Configuration conf, KubernetesOperatorMetricGroup metricGroup) {
+        MetricManager<FlinkStateSnapshot> metricManager = new MetricManager<>();
+        registerFlinkStateSnapshotMetrics(conf, metricGroup, metricManager);
+        return metricManager;
+    }
+
     private static void registerFlinkDeploymentMetrics(
             Configuration conf,
             KubernetesOperatorMetricGroup metricGroup,
@@ -74,6 +84,15 @@ public class MetricManager<CR extends AbstractFlinkResource<?, ?>> {
             MetricManager<FlinkSessionJob> metricManager) {
         if (conf.get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)) {
             metricManager.register(new FlinkSessionJobMetrics(metricGroup, conf));
+        }
+    }
+
+    private static void registerFlinkStateSnapshotMetrics(
+            Configuration conf,
+            KubernetesOperatorMetricGroup metricGroup,
+            MetricManager<FlinkStateSnapshot> metricManager) {
+        if (conf.get(KubernetesOperatorMetricOptions.OPERATOR_RESOURCE_METRICS_ENABLED)) {
+            metricManager.register(new FlinkStateSnapshotMetrics(metricGroup, conf));
         }
     }
 

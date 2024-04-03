@@ -18,7 +18,7 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
-import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.listener.AuditUtils;
 
 import io.fabric8.kubernetes.api.model.Event;
@@ -28,14 +28,15 @@ import org.slf4j.LoggerFactory;
 import java.util.LinkedList;
 import java.util.function.BiConsumer;
 
-/** Simple consumer that collects triggered events for tests. */
-public class EventCollector implements BiConsumer<AbstractFlinkResource<?, ?>, Event> {
-    private static final Logger LOG = LoggerFactory.getLogger(EventCollector.class);
+/** Simple consumer that collects triggered savepoint events for tests. */
+public class FlinkStateSnapshotEventCollector implements BiConsumer<FlinkStateSnapshot, Event> {
+    private static final Logger LOG =
+            LoggerFactory.getLogger(FlinkStateSnapshotEventCollector.class);
     public final LinkedList<Event> events = new LinkedList<>();
 
     @Override
-    public void accept(AbstractFlinkResource<?, ?> abstractFlinkResource, Event event) {
-        LOG.info(AuditUtils.format(event));
+    public void accept(FlinkStateSnapshot savepoint, Event event) {
+        LOG.info(AuditUtils.format(event, "Snapshot"));
         events.add(event);
     }
 }

@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.api.status;
 
 /** Interface representing common snapshot information. */
+@Deprecated
 public interface SnapshotInfo {
 
     String getTriggerId();

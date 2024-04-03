@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.core.execution.CheckpointType;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
@@ -198,7 +199,7 @@ public class SnapshotObserverTest extends OperatorTestBase {
     }
 
     @Test
-    public void testPeriodicSavepoint() {
+    public void testPeriodicSavepoint() throws Exception {
         var conf = new Configuration();
         var deployment = TestUtils.buildApplicationCluster();
         var status = deployment.getStatus();
@@ -208,7 +209,7 @@ public class SnapshotObserverTest extends OperatorTestBase {
         jobStatus.setState("RUNNING");
 
         var savepointInfo = jobStatus.getSavepointInfo();
-        flinkService.triggerSavepoint(null, SnapshotTriggerType.PERIODIC, savepointInfo, conf);
+        flinkService.triggerSavepointLegacy(null, SnapshotTriggerType.PERIODIC, deployment, conf);
 
         var triggerTs = savepointInfo.getTriggerTimestamp();
         assertEquals(0L, savepointInfo.getLastPeriodicSavepointTimestamp());
@@ -244,11 +245,14 @@ public class SnapshotObserverTest extends OperatorTestBase {
         jobStatus.setState("RUNNING");
 
         var checkpointInfo = jobStatus.getCheckpointInfo();
-        flinkService.triggerCheckpoint(null, SnapshotTriggerType.PERIODIC, checkpointInfo, conf);
+        var triggerId = flinkService.triggerCheckpoint(null, CheckpointType.FULL, conf);
+        checkpointInfo.setTrigger(
+                triggerId,
+                SnapshotTriggerType.PERIODIC,
+                org.apache.flink.kubernetes.operator.api.status.CheckpointType.FULL);
 
         var triggerTs = checkpointInfo.getTriggerTimestamp();
         assertEquals(0L, checkpointInfo.getLastPeriodicTriggerTimestamp());
-        assertEquals(SnapshotTriggerType.PERIODIC, checkpointInfo.getTriggerType());
         assertTrue(SnapshotUtils.checkpointInProgress(jobStatus));
         assertEquals(
                 SnapshotStatus.PENDING,
