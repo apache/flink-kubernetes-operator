@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.utils;
 import org.apache.flink.kubernetes.operator.TestUtils;
 
 import io.fabric8.kubernetes.api.model.Event;
+import io.fabric8.kubernetes.api.model.EventBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
@@ -30,6 +31,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.annotation.Nullable;
 
+import java.net.HttpURLConnection;
 import java.time.Duration;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -523,6 +525,51 @@ public class EventUtilsTest {
                         .withName(eventName)
                         .get();
         Assertions.assertEquals(1, event.getCount());
+        Assertions.assertNull(eventConsumed);
+    }
+
+    @Test
+    public void testCreateOrReplaceEventOnDeletedNamespace() {
+        var consumer =
+                new Consumer<Event>() {
+                    @Override
+                    public void accept(Event event) {
+                        eventConsumed = event;
+                    }
+                };
+        var flinkApp = TestUtils.buildApplicationCluster();
+        var reason = "Cleanup";
+        var message = "message";
+        var eventName =
+                EventUtils.generateEventName(
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        message,
+                        EventRecorder.Component.Operator);
+
+        var namespaceName = flinkApp.getMetadata().getNamespace();
+
+        String eventCreatePath = String.format("/api/v1/namespaces/%s/events", namespaceName);
+
+        mockServer
+                .expect()
+                .post()
+                .withPath(eventCreatePath)
+                .andReturn(HttpURLConnection.HTTP_FORBIDDEN, new EventBuilder().build())
+                .once();
+
+        Assertions.assertTrue(
+                EventUtils.createOrUpdateEventWithInterval(
+                        kubernetesClient,
+                        flinkApp,
+                        EventRecorder.Type.Warning,
+                        reason,
+                        message,
+                        EventRecorder.Component.Operator,
+                        consumer,
+                        null,
+                        null));
         Assertions.assertNull(eventConsumed);
     }
 }
