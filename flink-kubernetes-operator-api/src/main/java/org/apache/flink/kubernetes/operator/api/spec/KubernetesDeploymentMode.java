@@ -27,7 +27,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public enum KubernetesDeploymentMode {
 
     /**
-     * Deploys Flink using Flinks native Kubernetes support. Only supported for newer versions of
+     * Deploys Flink using Flink's native Kubernetes support. Only supported for newer versions of
      * Flink
      */
     @JsonProperty("native")
