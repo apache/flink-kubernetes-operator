@@ -19,6 +19,7 @@ package org.apache.flink.autoscaler.standalone;
 
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
+import org.apache.flink.configuration.Configuration;
 
 import java.util.Collection;
 
@@ -26,5 +27,11 @@ import java.util.Collection;
 @Experimental
 public interface JobListFetcher<KEY, Context extends JobAutoScalerContext<KEY>> {
 
-    Collection<Context> fetch() throws Exception;
+    /**
+     * Fetch the job context.
+     *
+     * @param baseConf The basic configuration for standalone autoscaler. The basic configuration
+     *     can be overridden by the configuration at job-level.
+     */
+    Collection<Context> fetch(Configuration baseConf) throws Exception;
 }

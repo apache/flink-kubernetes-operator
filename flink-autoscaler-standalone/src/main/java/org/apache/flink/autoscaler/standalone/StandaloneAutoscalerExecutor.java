@@ -22,6 +22,7 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.configuration.UnmodifiableConfiguration;
 import org.apache.flink.util.concurrent.ExecutorThreadFactory;
 
 import org.apache.flink.shaded.guava31.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -60,6 +61,7 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
     private final JobAutoScaler<KEY, Context> autoScaler;
     private final ScheduledExecutorService scheduledExecutorService;
     private final ExecutorService scalingThreadPool;
+    private final UnmodifiableConfiguration baseConf;
 
     /**
      * Maintain a set of job keys that during scaling, it should be updated at {@link
@@ -88,6 +90,7 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
                 Executors.newFixedThreadPool(
                         parallelism, new ExecutorThreadFactory("autoscaler-standalone-scaling"));
         this.scalingJobKeys = new HashSet<>();
+        this.baseConf = new UnmodifiableConfiguration(conf);
     }
 
     public void start() {
@@ -107,7 +110,7 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
         LOG.info("Standalone autoscaler starts scaling.");
         Collection<Context> jobList;
         try {
-            jobList = jobListFetcher.fetch();
+            jobList = jobListFetcher.fetch(baseConf);
         } catch (Throwable e) {
             LOG.error("Error while fetch job list.", e);
             return;

@@ -84,17 +84,42 @@ class FlinkClusterJobListFetcherTest {
                                 closeCounter),
                         Duration.ofSeconds(10));
 
+        // Test for empty base conf
+        assertFetcherResult(
+                new Configuration(), jobs, configurations, closeCounter, jobListFetcher);
+
+        // Add the new option key, and old option key with different value.
+        var baseConf = new Configuration();
+        baseConf.setString("option_key4", "option_value4");
+        baseConf.setString("option_key3", "option_value5");
+
+        closeCounter.set(0);
+        // Test for mixed base conf
+        assertFetcherResult(
+                new Configuration(), jobs, configurations, closeCounter, jobListFetcher);
+    }
+
+    private void assertFetcherResult(
+            Configuration baseConf,
+            Map<JobID, JobStatus> jobs,
+            Map<JobID, Configuration> configurations,
+            AtomicLong closeCounter,
+            FlinkClusterJobListFetcher jobListFetcher)
+            throws Exception {
         // Fetch multiple times and check whether the results are as expected each time
         for (int i = 1; i <= 3; i++) {
-            var fetchedJobList = jobListFetcher.fetch();
+            var fetchedJobList = jobListFetcher.fetch(baseConf);
             // Check whether rest client is closed.
             assertThat(closeCounter).hasValue(i);
 
             assertThat(fetchedJobList).hasSize(2);
             for (var jobContext : fetchedJobList) {
-                var expectedJobState = jobs.get(jobContext.getJobID());
-                Configuration expectedConf = configurations.get(jobContext.getJobID());
-                assertThat(jobContext.getJobStatus()).isEqualTo(expectedJobState);
+                var expectedJobStatus = jobs.get(jobContext.getJobID());
+
+                var expectedConf = new Configuration(baseConf);
+                expectedConf.addAll(configurations.get(jobContext.getJobID()));
+                assertThat(jobContext.getJobStatus()).isNotNull().isEqualTo(expectedJobStatus);
+
                 assertThat(jobContext.getConfiguration()).isNotNull().isEqualTo(expectedConf);
             }
         }
@@ -116,7 +141,9 @@ class FlinkClusterJobListFetcherTest {
                                 Either.Left(Map.of()),
                                 closeCounter),
                         Duration.ofSeconds(10));
-        assertThatThrownBy(jobListFetcher::fetch).getCause().isEqualTo(expectedException);
+        assertThatThrownBy(() -> jobListFetcher.fetch(new Configuration()))
+                .getCause()
+                .isEqualTo(expectedException);
         assertThat(closeCounter).hasValue(1);
     }
 
@@ -137,7 +164,9 @@ class FlinkClusterJobListFetcherTest {
                                 closeCounter),
                         Duration.ofSeconds(10));
 
-        assertThatThrownBy(jobListFetcher::fetch).getRootCause().isEqualTo(expectedException);
+        assertThatThrownBy(() -> jobListFetcher.fetch(new Configuration()))
+                .getRootCause()
+                .isEqualTo(expectedException);
         assertThat(closeCounter).hasValue(1);
     }
 
@@ -154,7 +183,8 @@ class FlinkClusterJobListFetcherTest {
                         Duration.ofSeconds(2));
 
         assertThat(closeFuture).isNotDone();
-        assertThatThrownBy(jobListFetcher::fetch).isInstanceOf(TimeoutException.class);
+        assertThatThrownBy(() -> jobListFetcher.fetch(new Configuration()))
+                .isInstanceOf(TimeoutException.class);
         assertThat(closeFuture).isDone();
     }
 
@@ -173,7 +203,7 @@ class FlinkClusterJobListFetcherTest {
                         Duration.ofSeconds(2));
 
         assertThat(closeFuture).isNotDone();
-        assertThatThrownBy(jobListFetcher::fetch)
+        assertThatThrownBy(() -> jobListFetcher.fetch(new Configuration()))
                 .getRootCause()
                 .isInstanceOf(TimeoutException.class);
         assertThat(closeFuture).isDone();
