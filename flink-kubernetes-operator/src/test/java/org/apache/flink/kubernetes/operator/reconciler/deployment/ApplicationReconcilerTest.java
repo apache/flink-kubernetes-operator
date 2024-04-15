@@ -82,6 +82,7 @@ import lombok.Getter;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.ThrowingConsumer;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -941,18 +942,32 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     }
 
     @Test
-    public void testTerminalJmTtl() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
+    public void testTerminalJmTtlOnSuspend() throws Throwable {
+        testTerminalJmTtl(
+                dep -> {
+                    getJobSpec(dep).setState(JobState.SUSPENDED);
+                    reconciler.reconcile(dep, context);
+                });
+    }
+
+    @Test
+    public void testTerminalJmTtlOnFinished() throws Throwable {
+        testTerminalJmTtl(dep -> dep.getStatus().getJobStatus().setState("FINISHED"));
+    }
+
+    @Test
+    public void testTerminalJmTtlOnFailed() throws Throwable {
+        testTerminalJmTtl(dep -> dep.getStatus().getJobStatus().setState("FAILED"));
+    }
+
+    public void testTerminalJmTtl(ThrowingConsumer<FlinkDeployment> deploymentSetup)
+            throws Throwable {
+        var deployment = TestUtils.buildApplicationCluster();
         getJobSpec(deployment).setUpgradeMode(UpgradeMode.SAVEPOINT);
         reconciler.reconcile(deployment, context);
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
-
-        getJobSpec(deployment).setState(JobState.SUSPENDED);
-        reconciler.reconcile(deployment, context);
+        deploymentSetup.accept(deployment);
         var status = deployment.getStatus();
-        assertEquals(
-                org.apache.flink.api.common.JobStatus.FINISHED.toString(),
-                status.getJobStatus().getState());
         assertEquals(JobManagerDeploymentStatus.READY, status.getJobManagerDeploymentStatus());
 
         deployment
@@ -974,6 +989,9 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         reconciler
                 .getReconciler()
                 .setClock(Clock.fixed(now.plus(Duration.ofMinutes(6)), ZoneId.systemDefault()));
+        reconciler.reconcile(deployment, context);
+        assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
+        // Make sure we don't resubmit
         reconciler.reconcile(deployment, context);
         assertEquals(JobManagerDeploymentStatus.MISSING, status.getJobManagerDeploymentStatus());
     }
