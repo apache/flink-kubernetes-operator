@@ -84,7 +84,7 @@ class StandaloneAutoscalerExecutorTest {
 
         try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
-                        conf, () -> jobList, eventCollector, jobAutoScaler) {
+                        conf, baseConf -> jobList, eventCollector, jobAutoScaler) {
                     @Override
                     protected void scalingSingleJob(JobAutoScalerContext<JobID> jobContext) {
                         super.scalingSingleJob(jobContext);
@@ -112,7 +112,7 @@ class StandaloneAutoscalerExecutorTest {
         try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
                         new Configuration(),
-                        () -> {
+                        baseConf -> {
                             throw new RuntimeException("Excepted exception.");
                         },
                         eventCollector,
@@ -149,7 +149,7 @@ class StandaloneAutoscalerExecutorTest {
         try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
                         conf,
-                        () -> jobList,
+                        baseConf -> jobList,
                         new TestingEventCollector<>(),
                         new JobAutoScaler<>() {
                             @Override
@@ -197,7 +197,7 @@ class StandaloneAutoscalerExecutorTest {
         try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
                         conf,
-                        jobContextWithIndex::keySet,
+                        baseConf -> jobContextWithIndex.keySet(),
                         new TestingEventCollector<>(),
                         new JobAutoScaler<>() {
                             @Override

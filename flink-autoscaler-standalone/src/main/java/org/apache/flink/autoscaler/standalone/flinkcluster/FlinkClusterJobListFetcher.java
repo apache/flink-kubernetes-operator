@@ -54,7 +54,7 @@ public class FlinkClusterJobListFetcher
     }
 
     @Override
-    public Collection<JobAutoScalerContext<JobID>> fetch() throws Exception {
+    public Collection<JobAutoScalerContext<JobID>> fetch(Configuration baseConf) throws Exception {
         try (var restClusterClient = restClientGetter.apply(new Configuration())) {
             return restClusterClient
                     .sendRequest(
@@ -67,7 +67,8 @@ public class FlinkClusterJobListFetcher
                     .map(
                             jobStatusMessage -> {
                                 try {
-                                    return generateJobContext(restClusterClient, jobStatusMessage);
+                                    return generateJobContext(
+                                            baseConf, restClusterClient, jobStatusMessage);
                                 } catch (Throwable e) {
                                     throw new RuntimeException(
                                             "generateJobContext throw exception", e);
@@ -78,10 +79,12 @@ public class FlinkClusterJobListFetcher
     }
 
     private JobAutoScalerContext<JobID> generateJobContext(
-            RestClusterClient<String> restClusterClient, JobStatusMessage jobStatusMessage)
+            Configuration baseConf,
+            RestClusterClient<String> restClusterClient,
+            JobStatusMessage jobStatusMessage)
             throws Exception {
         var jobId = jobStatusMessage.getJobId();
-        var conf = getConfiguration(restClusterClient, jobId);
+        var conf = getConfiguration(baseConf, restClusterClient, jobId);
 
         return new JobAutoScalerContext<>(
                 jobId,
@@ -92,7 +95,8 @@ public class FlinkClusterJobListFetcher
                 () -> restClientGetter.apply(conf));
     }
 
-    private Configuration getConfiguration(RestClusterClient<String> restClusterClient, JobID jobId)
+    private Configuration getConfiguration(
+            Configuration baseConf, RestClusterClient<String> restClusterClient, JobID jobId)
             throws Exception {
         var jobParameters = new JobMessageParameters();
         jobParameters.jobPathParameter.resolve(jobId);
@@ -105,7 +109,7 @@ public class FlinkClusterJobListFetcher
                                 EmptyRequestBody.getInstance())
                         .get(restClientTimeout.toSeconds(), TimeUnit.SECONDS);
 
-        var conf = new Configuration();
+        var conf = new Configuration(baseConf);
         configurationInfo.forEach(entry -> conf.setString(entry.getKey(), entry.getValue()));
         return conf;
     }
