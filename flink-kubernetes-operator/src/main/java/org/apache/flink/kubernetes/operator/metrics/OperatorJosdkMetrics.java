@@ -205,9 +205,9 @@ public class OperatorJosdkMetrics implements Metrics {
 
         Class<? extends AbstractFlinkResource<?, ?>> resourceClass;
 
-        if (resourceGvk.kind.equals(FlinkDeployment.class.getSimpleName())) {
+        if (resourceGvk.getKind().equals(FlinkDeployment.class.getSimpleName())) {
             resourceClass = FlinkDeployment.class;
-        } else if (resourceGvk.kind.equals(FlinkSessionJob.class.getSimpleName())) {
+        } else if (resourceGvk.getKind().equals(FlinkSessionJob.class.getSimpleName())) {
             resourceClass = FlinkSessionJob.class;
         } else {
             return Optional.empty();

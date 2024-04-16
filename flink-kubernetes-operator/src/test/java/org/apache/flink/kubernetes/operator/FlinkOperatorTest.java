@@ -70,21 +70,10 @@ public class FlinkOperatorTest {
 
         var configService = testOperator.getOperator().getConfigurationService();
 
-        // Test parallelism being passed expectedly
+        // Test parallelism being passed
         var executorService = configService.getExecutorService();
         Assertions.assertInstanceOf(ThreadPoolExecutor.class, executorService);
         ThreadPoolExecutor threadPoolExecutor = (ThreadPoolExecutor) executorService;
-        for (int i = 0; i < testParallelism * 2; i++) {
-            threadPoolExecutor.execute(
-                    () -> {
-                        try {
-                            Thread.sleep(1000);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-                    });
-        }
-        Assertions.assertEquals(threadPoolExecutor.getPoolSize(), testParallelism);
         Assertions.assertEquals(threadPoolExecutor.getMaximumPoolSize(), testParallelism);
 
         // Test label selector being passed

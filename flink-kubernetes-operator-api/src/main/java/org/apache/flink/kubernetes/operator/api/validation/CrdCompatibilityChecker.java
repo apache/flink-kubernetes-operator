@@ -93,7 +93,11 @@ public class CrdCompatibilityChecker {
                     // This field was removed from Kubernetes ObjectMeta v1 in 1.25 as it was unused
                     // for a long time. If set for any reason (very unlikely as it does nothing),
                     // the property will be dropped / ignored by the api server.
-                    if (!fieldPath.endsWith(".metadata.clusterName")) {
+                    if (!fieldPath.endsWith(".metadata.clusterName")
+                            // This claims field was removed in Kubernetes 1.28 as it was mistakenly
+                            // added in the first place. For more context please refer to
+                            // https://github.com/kubernetes/api/commit/8b14183
+                            && !fieldPath.contains(".volumeClaimTemplate.spec.resources.claims")) {
                         err(fieldPath + " has been removed");
                     }
                 } else {
