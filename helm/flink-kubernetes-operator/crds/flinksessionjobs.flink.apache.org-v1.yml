@@ -33,203 +33,203 @@ spec:
             properties:
               deploymentName:
                 type: string
+              flinkConfiguration:
+                additionalProperties:
+                  type: string
+                type: object
               job:
                 properties:
-                  jarURI:
-                    type: string
-                  parallelism:
-                    type: integer
-                  entryClass:
-                    type: string
+                  allowNonRestoredState:
+                    type: boolean
                   args:
                     items:
                       type: string
                     type: array
+                  checkpointTriggerNonce:
+                    type: integer
+                  entryClass:
+                    type: string
+                  initialSavepointPath:
+                    type: string
+                  jarURI:
+                    type: string
+                  parallelism:
+                    type: integer
+                  savepointRedeployNonce:
+                    type: integer
+                  savepointTriggerNonce:
+                    type: integer
                   state:
                     enum:
                     - running
                     - suspended
                     type: string
-                  savepointTriggerNonce:
-                    type: integer
-                  initialSavepointPath:
-                    type: string
-                  checkpointTriggerNonce:
-                    type: integer
                   upgradeMode:
                     enum:
-                    - savepoint
                     - last-state
+                    - savepoint
                     - stateless
                     type: string
-                  allowNonRestoredState:
-                    type: boolean
-                  savepointRedeployNonce:
-                    type: integer
                 type: object
               restartNonce:
                 type: integer
-              flinkConfiguration:
-                additionalProperties:
-                  type: string
-                type: object
             type: object
           status:
             properties:
-              reconciliationStatus:
-                properties:
-                  reconciliationTimestamp:
-                    type: integer
-                  lastReconciledSpec:
-                    type: string
-                  lastStableSpec:
-                    type: string
-                  state:
-                    enum:
-                    - DEPLOYED
-                    - UPGRADING
-                    - ROLLING_BACK
-                    - ROLLED_BACK
-                    type: string
-                type: object
+              error:
+                type: string
               jobStatus:
                 properties:
-                  jobName:
-                    type: string
-                  jobId:
-                    type: string
-                  state:
-                    type: string
-                  startTime:
-                    type: string
-                  updateTime:
-                    type: string
-                  savepointInfo:
-                    properties:
-                      lastSavepoint:
-                        properties:
-                          timeStamp:
-                            type: integer
-                          location:
-                            type: string
-                          triggerType:
-                            enum:
-                            - MANUAL
-                            - PERIODIC
-                            - UPGRADE
-                            - UNKNOWN
-                            type: string
-                          formatType:
-                            enum:
-                            - CANONICAL
-                            - NATIVE
-                            - UNKNOWN
-                            type: string
-                          triggerNonce:
-                            type: integer
-                        type: object
-                      triggerId:
-                        type: string
-                      triggerTimestamp:
-                        type: integer
-                      triggerType:
-                        enum:
-                        - MANUAL
-                        - PERIODIC
-                        - UPGRADE
-                        - UNKNOWN
-                        type: string
-                      formatType:
-                        enum:
-                        - CANONICAL
-                        - NATIVE
-                        - UNKNOWN
-                        type: string
-                      savepointHistory:
-                        items:
-                          properties:
-                            timeStamp:
-                              type: integer
-                            location:
-                              type: string
-                            triggerType:
-                              enum:
-                              - MANUAL
-                              - PERIODIC
-                              - UPGRADE
-                              - UNKNOWN
-                              type: string
-                            formatType:
-                              enum:
-                              - CANONICAL
-                              - NATIVE
-                              - UNKNOWN
-                              type: string
-                            triggerNonce:
-                              type: integer
-                          type: object
-                        type: array
-                      lastPeriodicSavepointTimestamp:
-                        type: integer
-                    type: object
                   checkpointInfo:
                     properties:
-                      lastCheckpoint:
-                        properties:
-                          timeStamp:
-                            type: integer
-                          triggerType:
-                            enum:
-                            - MANUAL
-                            - PERIODIC
-                            - UPGRADE
-                            - UNKNOWN
-                            type: string
-                          formatType:
-                            enum:
-                            - FULL
-                            - INCREMENTAL
-                            - UNKNOWN
-                            type: string
-                          triggerNonce:
-                            type: integer
-                        type: object
-                      triggerId:
-                        type: string
-                      triggerTimestamp:
-                        type: integer
-                      triggerType:
-                        enum:
-                        - MANUAL
-                        - PERIODIC
-                        - UPGRADE
-                        - UNKNOWN
-                        type: string
                       formatType:
                         enum:
                         - FULL
                         - INCREMENTAL
                         - UNKNOWN
                         type: string
+                      lastCheckpoint:
+                        properties:
+                          formatType:
+                            enum:
+                            - FULL
+                            - INCREMENTAL
+                            - UNKNOWN
+                            type: string
+                          timeStamp:
+                            type: integer
+                          triggerNonce:
+                            type: integer
+                          triggerType:
+                            enum:
+                            - MANUAL
+                            - PERIODIC
+                            - UNKNOWN
+                            - UPGRADE
+                            type: string
+                        type: object
                       lastPeriodicCheckpointTimestamp:
                         type: integer
+                      triggerId:
+                        type: string
+                      triggerTimestamp:
+                        type: integer
+                      triggerType:
+                        enum:
+                        - MANUAL
+                        - PERIODIC
+                        - UNKNOWN
+                        - UPGRADE
+                        type: string
                     type: object
+                  jobId:
+                    type: string
+                  jobName:
+                    type: string
+                  savepointInfo:
+                    properties:
+                      formatType:
+                        enum:
+                        - CANONICAL
+                        - NATIVE
+                        - UNKNOWN
+                        type: string
+                      lastPeriodicSavepointTimestamp:
+                        type: integer
+                      lastSavepoint:
+                        properties:
+                          formatType:
+                            enum:
+                            - CANONICAL
+                            - NATIVE
+                            - UNKNOWN
+                            type: string
+                          location:
+                            type: string
+                          timeStamp:
+                            type: integer
+                          triggerNonce:
+                            type: integer
+                          triggerType:
+                            enum:
+                            - MANUAL
+                            - PERIODIC
+                            - UNKNOWN
+                            - UPGRADE
+                            type: string
+                        type: object
+                      savepointHistory:
+                        items:
+                          properties:
+                            formatType:
+                              enum:
+                              - CANONICAL
+                              - NATIVE
+                              - UNKNOWN
+                              type: string
+                            location:
+                              type: string
+                            timeStamp:
+                              type: integer
+                            triggerNonce:
+                              type: integer
+                            triggerType:
+                              enum:
+                              - MANUAL
+                              - PERIODIC
+                              - UNKNOWN
+                              - UPGRADE
+                              type: string
+                          type: object
+                        type: array
+                      triggerId:
+                        type: string
+                      triggerTimestamp:
+                        type: integer
+                      triggerType:
+                        enum:
+                        - MANUAL
+                        - PERIODIC
+                        - UNKNOWN
+                        - UPGRADE
+                        type: string
+                    type: object
+                  startTime:
+                    type: string
+                  state:
+                    type: string
+                  updateTime:
+                    type: string
                 type: object
-              error:
-                type: string
-              observedGeneration:
-                type: integer
               lifecycleState:
                 enum:
                 - CREATED
+                - DEPLOYED
+                - FAILED
+                - ROLLED_BACK
+                - ROLLING_BACK
+                - STABLE
                 - SUSPENDED
                 - UPGRADING
-                - DEPLOYED
-                - STABLE
-                - ROLLING_BACK
-                - ROLLED_BACK
-                - FAILED
                 type: string
+              observedGeneration:
+                type: integer
+              reconciliationStatus:
+                properties:
+                  lastReconciledSpec:
+                    type: string
+                  lastStableSpec:
+                    type: string
+                  reconciliationTimestamp:
+                    type: integer
+                  state:
+                    enum:
+                    - DEPLOYED
+                    - ROLLED_BACK
+                    - ROLLING_BACK
+                    - UPGRADING
+                    type: string
+                type: object
             type: object
         type: object
     served: true

@@ -24,7 +24,7 @@ import org.apache.flink.kubernetes.operator.api.spec.AbstractFlinkSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import io.fabric8.kubernetes.model.annotation.PrinterColumn;
+import io.fabric8.crd.generator.annotation.PrinterColumn;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;

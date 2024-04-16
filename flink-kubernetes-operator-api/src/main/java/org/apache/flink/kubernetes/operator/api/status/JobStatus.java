@@ -20,7 +20,7 @@ package org.apache.flink.kubernetes.operator.api.status;
 import org.apache.flink.annotation.Experimental;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import io.fabric8.kubernetes.model.annotation.PrinterColumn;
+import io.fabric8.crd.generator.annotation.PrinterColumn;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
