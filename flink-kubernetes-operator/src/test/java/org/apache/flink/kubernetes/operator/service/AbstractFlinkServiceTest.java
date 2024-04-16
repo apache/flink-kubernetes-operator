@@ -1013,7 +1013,7 @@ public class AbstractFlinkServiceTest {
                         namespace, deploymentName);
         String watchUrl =
                 String.format(
-                        "/apis/apps/v1/namespaces/%s/deployments?fieldSelector=metadata.name%%3D%s&timeoutSeconds=600&allowWatchBookmarks=true&watch=true",
+                        "/apis/apps/v1/namespaces/%s/deployments?allowWatchBookmarks=true&fieldSelector=metadata.name%%3D%s&timeoutSeconds=600&watch=true",
                         namespace, deploymentName);
 
         var flinkService = new TestingService(null);

@@ -51,6 +51,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.mockwebserver.utils.ResponseProvider;
 import io.javaoperatorsdk.operator.api.config.ControllerConfiguration;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import io.javaoperatorsdk.operator.api.reconciler.IndexedResourceCache;
 import io.javaoperatorsdk.operator.api.reconciler.ResourceDiscriminator;
 import io.javaoperatorsdk.operator.api.reconciler.RetryInfo;
 import io.javaoperatorsdk.operator.api.reconciler.dependent.managed.ManagedDependentResourceContext;
@@ -496,6 +497,11 @@ public class TestUtils extends BaseTestUtils {
         @Override
         public ExecutorService getWorkflowExecutorService() {
             throw new UnsupportedOperationException("Not implemented");
+        }
+
+        @Override
+        public IndexedResourceCache<T> getPrimaryCache() {
+            return null;
         }
     }
 }
