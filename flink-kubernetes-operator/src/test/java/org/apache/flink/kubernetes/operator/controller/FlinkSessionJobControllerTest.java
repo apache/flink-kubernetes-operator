@@ -50,6 +50,7 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.TestUtils.MAX_RECONCILE_TIMES;
 import static org.apache.flink.kubernetes.operator.utils.EventRecorder.Reason.ValidationError;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -118,6 +119,11 @@ class FlinkSessionJobControllerTest {
         assertEquals(JobStatus.RUNNING.name(), sessionJob.getStatus().getJobStatus().getState());
         assertEquals(6, testController.getInternalStatusUpdateCount());
         assertFalse(updateControl.isUpdateStatus());
+        assertThat(sessionJob.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(
+                        "The resource deployment is considered to be stable and won’t be rolled back");
 
         FlinkSessionJobReconciliationStatus reconciliationStatus =
                 sessionJob.getStatus().getReconciliationStatus();
@@ -617,5 +623,10 @@ class FlinkSessionJobControllerTest {
         assertEquals(
                 sessionJob.getStatus().getReconciliationStatus().getLastReconciledSpec(),
                 sessionJob.getStatus().getReconciliationStatus().getLastStableSpec());
+        assertThat(sessionJob.getStatus().getConditions())
+                .hasSize(1)
+                .extracting("message")
+                .contains(
+                        "The resource deployment is considered to be stable and won’t be rolled back");
     }
 }
