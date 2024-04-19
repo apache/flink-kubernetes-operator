@@ -117,6 +117,18 @@
             <td>Percentage threshold for switching to observed from busy time based true processing rate if the measurement is off by at least the configured fraction. For example 0.15 means we switch to observed if the busy time based computation is at least 15% higher during catchup.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.quota.cpu</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>Double</td>
+            <td>Quota of the CPU count. When scaling would go beyond this number the the scaling is not going to happen.</td>
+        </tr>
+        <tr>
+            <td><h5>job.autoscaler.quota.memory</h5></td>
+            <td style="word-wrap: break-word;">(none)</td>
+            <td>MemorySize</td>
+            <td>Quota of the memory size. When scaling would go beyond this number the the scaling is not going to happen.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.restart.time</h5></td>
             <td style="word-wrap: break-word;">5 min</td>
             <td>Duration</td>
