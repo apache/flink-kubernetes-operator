@@ -43,6 +43,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
+import static org.apache.flink.util.ExceptionUtils.findThrowable;
+
 /** The reconciler for the {@link FlinkSessionJob}. */
 public class SessionJobReconciler
         extends AbstractJobReconciler<FlinkSessionJob, FlinkSessionJobSpec, FlinkSessionJobStatus> {
@@ -127,14 +129,13 @@ public class SessionJobReconciler
                                     : UpgradeMode.STATELESS;
                     cancelJob(ctx, upgradeMode);
                 } catch (ExecutionException e) {
-                    final var cause = e.getCause();
-
-                    if (cause instanceof FlinkJobNotFoundException) {
+                    if (findThrowable(e, FlinkJobNotFoundException.class).isPresent()) {
                         LOG.error("Job {} not found in the Flink cluster.", jobID, e);
                         return DeleteControl.defaultDelete();
                     }
 
-                    if (cause instanceof FlinkJobTerminatedWithoutCancellationException) {
+                    if (findThrowable(e, FlinkJobTerminatedWithoutCancellationException.class)
+                            .isPresent()) {
                         LOG.error("Job {} already terminated without cancellation.", jobID, e);
                         return DeleteControl.defaultDelete();
                     }
