@@ -16,6 +16,7 @@
 # limitations under the License.
 ################################################################################
 # Check https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/resource-providers/standalone/docker/#using-flink-python-on-docker for more details
+
 FROM flink:1.16
 
 # install python3: it has updated Python to 3.9 in Debian 11 and so install Python 3.7 from source, \
