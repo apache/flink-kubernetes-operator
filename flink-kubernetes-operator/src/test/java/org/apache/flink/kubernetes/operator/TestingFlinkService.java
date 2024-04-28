@@ -67,8 +67,11 @@ import org.apache.flink.runtime.rest.messages.JobsOverviewHeaders;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetric;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedMetricsResponseBody;
 import org.apache.flink.runtime.rest.messages.job.metrics.AggregatedSubtaskMetricsHeaders;
+import org.apache.flink.runtime.rest.util.RestClientException;
 import org.apache.flink.util.SerializedThrowable;
 import org.apache.flink.util.concurrent.Executors;
+
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.HasMetadata;
@@ -92,6 +95,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
@@ -447,7 +451,16 @@ public class TestingFlinkService extends AbstractFlinkService {
         }
 
         if (isFlinkJobNotFound) {
-            throw new FlinkJobNotFoundException(jobID);
+            // Throw different exceptions randomly, see
+            // https://github.com/apache/flink-kubernetes-operator/pull/818
+            if (new Random().nextBoolean()) {
+                throw new RestClientException(
+                        "Job could not be found.",
+                        new FlinkJobNotFoundException(jobID),
+                        HttpResponseStatus.NOT_FOUND);
+            } else {
+                throw new FlinkJobNotFoundException(jobID);
+            }
         }
 
         var jobOpt = jobs.stream().filter(js -> js.f1.getJobId().equals(jobID)).findAny();
