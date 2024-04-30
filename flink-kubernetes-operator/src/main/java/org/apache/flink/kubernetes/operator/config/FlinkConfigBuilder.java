@@ -566,14 +566,12 @@ public class FlinkConfigBuilder {
             File logbackConfFile = new File(tmpDir.getAbsolutePath(), CONFIG_FILE_LOGBACK_NAME);
             Files.write(logbackConfFile.toPath(), logbackConf.getBytes());
         }
-        tmpDir.deleteOnExit();
         return tmpDir.getAbsolutePath();
     }
 
     private static String createTempFile(PodTemplateSpec podTemplate) throws IOException {
         final File tmp = File.createTempFile(GENERATED_FILE_PREFIX + "podTemplate_", ".yaml");
         Files.write(tmp.toPath(), Serialization.asYaml(podTemplate).getBytes());
-        tmp.deleteOnExit();
         return tmp.getAbsolutePath();
     }
 
