@@ -18,6 +18,7 @@
 
 package org.apache.flink.kubernetes.operator.utils;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState;
@@ -127,44 +128,62 @@ public class StatusRecorder<
             } catch (KubernetesClientException kce) {
                 // 409 is the error code for conflicts resulting from the locking
                 if (kce.getCode() == 409) {
-                    var currentVersion = resource.getMetadata().getResourceVersion();
-                    LOG.debug(
-                            "Could not apply status update for resource version {}",
-                            currentVersion);
-
-                    var latest = client.resource(resource).get();
-                    var latestVersion = latest.getMetadata().getResourceVersion();
-
-                    if (latestVersion.equals(currentVersion)) {
-                        // This should not happen as long as the client works consistently
-                        LOG.error("Unable to fetch latest resource version");
-                        throw kce;
-                    }
-
-                    if (latest.getStatus().equals(prevStatus)) {
-                        if (retries++ < 3) {
-                            LOG.debug(
-                                    "Retrying status update for latest version {}", latestVersion);
-                            resource.getMetadata().setResourceVersion(latestVersion);
-                        } else {
-                            // If we cannot get the latest version in 3 tries we throw the error to
-                            // retry with delay
-                            throw kce;
-                        }
-                    } else {
-                        throw new StatusConflictException(
-                                "Status have been modified externally in version "
-                                        + latestVersion
-                                        + " Previous: "
-                                        + objectMapper.writeValueAsString(prevStatus)
-                                        + " Latest: "
-                                        + objectMapper.writeValueAsString(latest.getStatus()));
-                    }
+                    handleLockingError(resource, prevStatus, client, retries, kce);
+                    ++retries;
                 } else {
-                    // We simply throw non conflict errors, to trigger retry with delay
+                    // We simply throw non-conflict errors, to trigger retry with delay
                     throw kce;
                 }
             }
+        }
+    }
+
+    @VisibleForTesting
+    void handleLockingError(
+            CR resource,
+            STATUS prevStatus,
+            KubernetesClient client,
+            int retries,
+            KubernetesClientException kce)
+            throws JsonProcessingException {
+
+        var currentVersion = resource.getMetadata().getResourceVersion();
+        LOG.debug("Could not apply status update for resource version {}", currentVersion);
+
+        var latest = client.resource(resource).get();
+        if (latest == null || latest.getMetadata() == null) {
+            // This can happen occasionally, we throw the error to retry with delay.
+            throw new KubernetesClientException(
+                    String.format(
+                            "Failed to retrieve latest %s",
+                            latest == null ? "resource" : "metadata"),
+                    kce);
+        }
+
+        var latestVersion = latest.getMetadata().getResourceVersion();
+        if (currentVersion.equals(latestVersion)) {
+            // This should not happen as long as the client works consistently
+            LOG.error("Unable to fetch latest resource version");
+            throw kce;
+        }
+
+        if (latest.getStatus().equals(prevStatus)) {
+            if (retries < 3) {
+                LOG.debug("Retrying status update for latest version {}", latestVersion);
+                resource.getMetadata().setResourceVersion(latestVersion);
+            } else {
+                // If we cannot get the latest version in 3 tries we throw the error to
+                // retry with delay
+                throw kce;
+            }
+        } else {
+            throw new StatusConflictException(
+                    "Status have been modified externally in version "
+                            + latestVersion
+                            + " Previous: "
+                            + objectMapper.writeValueAsString(prevStatus)
+                            + " Latest: "
+                            + objectMapper.writeValueAsString(latest.getStatus()));
         }
     }
 
