@@ -74,11 +74,7 @@ public class StatusRecorderTest {
         assertThatThrownBy(
                         () ->
                                 statusRecorder.handleLockingError(
-                                        resource,
-                                        null,
-                                        kubernetesClient,
-                                        0,
-                                        cause))
+                                        resource, null, kubernetesClient, 0, cause))
                 .isInstanceOf(KubernetesClientException.class)
                 .hasMessage("Failed to retrieve latest resource")
                 .hasCause(cause);
