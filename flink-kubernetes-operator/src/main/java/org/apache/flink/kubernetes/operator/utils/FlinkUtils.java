@@ -58,6 +58,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import static org.apache.flink.kubernetes.utils.Constants.LABEL_CONFIGMAP_TYPE_HIGH_AVAILABILITY;
 
@@ -287,6 +288,20 @@ public class FlinkUtils {
 
     public static boolean isKubernetesHaMetadataAvailable(
             Configuration conf, KubernetesClient kubernetesClient) {
+        return isKubernetesHaMetadataAvailable(
+                conf, kubernetesClient, FlinkUtils::isValidHaConfigMap);
+    }
+
+    public static boolean isKubernetesHaMetadataAvailableWithCheckpoint(
+            Configuration conf, KubernetesClient kubernetesClient) {
+        return isKubernetesHaMetadataAvailable(
+                conf, kubernetesClient, cm -> isValidHaConfigMap(cm) && checkpointExists(cm));
+    }
+
+    private static boolean isKubernetesHaMetadataAvailable(
+            Configuration conf,
+            KubernetesClient kubernetesClient,
+            Predicate<ConfigMap> cmPredicate) {
 
         String clusterId = conf.get(KubernetesConfigOptions.CLUSTER_ID);
         String namespace = conf.get(KubernetesConfigOptions.NAMESPACE);
@@ -303,7 +318,7 @@ public class FlinkUtils {
                         .list()
                         .getItems();
 
-        return configMaps.stream().anyMatch(FlinkUtils::isValidHaConfigMap);
+        return configMaps.stream().anyMatch(cmPredicate);
     }
 
     private static boolean isValidHaConfigMap(ConfigMap cm) {
@@ -317,6 +332,13 @@ public class FlinkUtils {
         }
 
         return name.endsWith("-jobmanager-leader");
+    }
+
+    private static boolean checkpointExists(ConfigMap cm) {
+        var data = cm.getData();
+        return data != null
+                && data.keySet().stream()
+                        .anyMatch(s -> s.startsWith(Constants.CHECKPOINT_ID_KEY_PREFIX));
     }
 
     private static boolean isJobGraphKey(Map.Entry<String, String> entry) {

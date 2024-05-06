@@ -22,12 +22,14 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ConfigurationUtils;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
+import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
+import org.apache.flink.kubernetes.operator.reconciler.deployment.AbstractJobReconciler;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -401,5 +403,24 @@ public class SnapshotUtils {
                         client);
             }
         }
+    }
+
+    /**
+     * Check if the last snapshot information is known. True if the snapshot location is known
+     * explicitly (not implicitly through a last-state upgrade) or if the savepoint is known to be
+     * empty.
+     *
+     * @param status Flink resource status
+     * @return True if last savepoint is known
+     */
+    public static boolean lastSavepointKnown(CommonStatus<?> status) {
+        var lastSavepoint = status.getJobStatus().getSavepointInfo().getLastSavepoint();
+
+        if (lastSavepoint == null) {
+            return true;
+        }
+        String location = lastSavepoint.getLocation();
+
+        return !location.equals(AbstractJobReconciler.LAST_STATE_DUMMY_SP_PATH);
     }
 }

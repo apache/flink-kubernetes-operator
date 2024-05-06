@@ -230,6 +230,15 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
+    public boolean atLeastOneCheckpoint(Configuration conf) {
+        if (FlinkUtils.isKubernetesHAActivated(conf)) {
+            return FlinkUtils.isKubernetesHaMetadataAvailableWithCheckpoint(conf, kubernetesClient);
+        } else {
+            return isHaMetadataAvailable(conf);
+        }
+    }
+
+    @Override
     public JobID submitJobToSessionCluster(
             ObjectMeta meta,
             FlinkSessionJobSpec spec,

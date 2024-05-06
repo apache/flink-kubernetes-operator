@@ -57,6 +57,8 @@ public interface FlinkService {
 
     boolean isHaMetadataAvailable(Configuration conf);
 
+    boolean atLeastOneCheckpoint(Configuration conf);
+
     void submitSessionCluster(Configuration conf) throws Exception;
 
     JobID submitJobToSessionCluster(

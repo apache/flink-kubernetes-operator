@@ -33,6 +33,7 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.service.CheckpointHistoryWrapper;
@@ -63,6 +64,8 @@ public abstract class AbstractJobReconciler<
         extends AbstractFlinkResourceReconciler<CR, SPEC, STATUS> {
 
     private static final Logger LOG = LoggerFactory.getLogger(AbstractJobReconciler.class);
+
+    public static final String LAST_STATE_DUMMY_SP_PATH = "KUBERNETES_OPERATOR_LAST_STATE";
 
     public AbstractJobReconciler(
             EventRecorder eventRecorder,
@@ -179,6 +182,12 @@ public abstract class AbstractJobReconciler<
         var flinkService = ctx.getFlinkService();
         if (ReconciliationUtils.isJobInTerminalState(status)
                 && !flinkService.isHaMetadataAvailable(ctx.getObserveConfig())) {
+
+            if (!SnapshotUtils.lastSavepointKnown(status)) {
+                throw new RecoveryFailureException(
+                        "Job is in terminal state but last checkpoint is unknown, possibly due to an unrecoverable restore error. Manual restore required.",
+                        "UpgradeFailed");
+            }
             LOG.info(
                     "Job is in terminal state, ready for upgrade from observed latest checkpoint/savepoint");
             return AvailableUpgradeMode.of(UpgradeMode.SAVEPOINT);
@@ -265,7 +274,7 @@ public abstract class AbstractJobReconciler<
             throws Exception {
         Optional<String> savepointOpt = Optional.empty();
 
-        if (spec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
+        if (spec.getJob().getUpgradeMode() == UpgradeMode.SAVEPOINT) {
             savepointOpt =
                     Optional.ofNullable(
                                     ctx.getResource()

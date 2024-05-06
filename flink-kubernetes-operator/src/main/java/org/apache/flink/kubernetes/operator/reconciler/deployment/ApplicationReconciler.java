@@ -29,6 +29,8 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
@@ -159,8 +161,18 @@ public class ApplicationReconciler
                 relatedResource.getStatus().getClusterInfo());
 
         if (savepoint.isPresent()) {
+            // Savepoint deployment
             deployConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, savepoint.get());
+        } else if (requireHaMetadata && flinkService.atLeastOneCheckpoint(deployConfig)) {
+            // Last state deployment, explicitly set a dummy savepoint path to avoid accidental
+            // incorrect state restore in case the HA metadata is deleted by the user
+            deployConfig.set(SavepointConfigOptions.SAVEPOINT_PATH, LAST_STATE_DUMMY_SP_PATH);
+            status.getJobStatus()
+                    .getSavepointInfo()
+                    .setLastSavepoint(
+                            Savepoint.of(LAST_STATE_DUMMY_SP_PATH, SnapshotTriggerType.UNKNOWN));
         } else {
+            // Stateless deployment, remove any user configured savepoint path
             deployConfig.removeConfig(SavepointConfigOptions.SAVEPOINT_PATH);
         }
 

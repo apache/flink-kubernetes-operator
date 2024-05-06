@@ -52,6 +52,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -568,6 +569,48 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
         assertEquals(JobState.SUSPENDED, lastReconciledSpec.getJob().getState());
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testLastStateDummySpPath(boolean checkpointAvailable) throws Exception {
+        // Bootstrap running deployment
+        var deployment = TestUtils.buildApplicationCluster();
+        deployment.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+
+        reconciler.reconcile(deployment, context);
+        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+
+        flinkService.setHaDataAvailable(true);
+        flinkService.setCheckpointAvailable(checkpointAvailable);
+
+        // Submit upgrade
+        deployment.getSpec().setRestartNonce(123L);
+        reconciler.reconcile(deployment, context);
+        reconciler.reconcile(deployment, context);
+
+        var lastReconciledSpec =
+                deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
+
+        // Make sure we correctly record upgrade mode to last state
+        assertEquals(UpgradeMode.LAST_STATE, lastReconciledSpec.getJob().getUpgradeMode());
+
+        if (checkpointAvailable) {
+            assertEquals(
+                    ApplicationReconciler.LAST_STATE_DUMMY_SP_PATH,
+                    deployment
+                            .getStatus()
+                            .getJobStatus()
+                            .getSavepointInfo()
+                            .getLastSavepoint()
+                            .getLocation());
+            assertEquals(
+                    ApplicationReconciler.LAST_STATE_DUMMY_SP_PATH,
+                    flinkService.listJobs().get(0).f0);
+        } else {
+            assertNull(deployment.getStatus().getJobStatus().getSavepointInfo().getLastSavepoint());
+            assertNull(flinkService.listJobs().get(0).f0);
+        }
+    }
+
     @Test
     public void testUpgradeModeChangeFromSavepointToLastState() throws Exception {
         final String expectedSavepointPath = "savepoint_0";
@@ -682,7 +725,16 @@ public class ApplicationReconcilerUpgradeModeTest extends OperatorTestBase {
                         .getImage());
         // Upgrade mode changes from stateless to last-state while HA enabled previously should not
         // trigger a savepoint
-        assertNull(flinkService.listJobs().get(0).f0);
+        assertEquals(
+                ApplicationReconciler.LAST_STATE_DUMMY_SP_PATH,
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
+        assertEquals(
+                ApplicationReconciler.LAST_STATE_DUMMY_SP_PATH, flinkService.listJobs().get(0).f0);
     }
 
     public static FlinkDeployment buildApplicationCluster(

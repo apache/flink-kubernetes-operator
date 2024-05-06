@@ -202,6 +202,63 @@ public class FlinkUtilsTest {
     }
 
     @Test
+    public void kubernetesHaMetaDataCheckpointCheckTest() {
+        var cr = TestUtils.buildApplicationCluster();
+        var confManager = new FlinkConfigManager(new Configuration());
+        assertFalse(
+                FlinkUtils.isKubernetesHaMetadataAvailableWithCheckpoint(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+
+        var withCheckpoint = Map.of("checkpointID-2", "p");
+        var withoutCheckpoint = Map.of("counter", "2");
+
+        // Wrong CM name
+        createHAConfigMapWithData(
+                cr.getMetadata().getName() + "-wrong-name",
+                cr.getMetadata().getNamespace(),
+                cr.getMetadata().getName(),
+                withCheckpoint);
+        assertFalse(
+                FlinkUtils.isKubernetesHaMetadataAvailableWithCheckpoint(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+
+        // Missing data
+        createHAConfigMapWithData(
+                cr.getMetadata().getName() + "-000000000000-config-map",
+                cr.getMetadata().getNamespace(),
+                cr.getMetadata().getName(),
+                null);
+        assertFalse(
+                FlinkUtils.isKubernetesHaMetadataAvailableWithCheckpoint(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+
+        // CM data without CP
+        createHAConfigMapWithData(
+                cr.getMetadata().getName() + "-000000000000-config-map",
+                cr.getMetadata().getNamespace(),
+                cr.getMetadata().getName(),
+                withoutCheckpoint);
+        assertFalse(
+                FlinkUtils.isKubernetesHaMetadataAvailableWithCheckpoint(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+
+        // CM data with CP
+        createHAConfigMapWithData(
+                cr.getMetadata().getName() + "-000000000000-config-map",
+                cr.getMetadata().getNamespace(),
+                cr.getMetadata().getName(),
+                withCheckpoint);
+        assertTrue(
+                FlinkUtils.isKubernetesHaMetadataAvailableWithCheckpoint(
+                        confManager.getDeployConfig(cr.getMetadata(), cr.getSpec()),
+                        kubernetesClient));
+    }
+
+    @Test
     public void testJmNeverStartedDetection() {
         var jmDeployment = new Deployment();
         jmDeployment.setMetadata(new ObjectMeta());
