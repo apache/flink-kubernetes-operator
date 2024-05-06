@@ -48,7 +48,7 @@ Flink Kubernetes Operator 旨在承担人工操作 Flink 部署的职责。 人�
 - [Deployment Modes]({{< ref "docs/custom-resource/overview#application-deployments" >}}):
   - Application 集群
   - Session 集群
-  - Sessio job
+  - Session job
 - Built-in [High Availability](https://nightlies.apache.org/flink/flink-docs-master/docs/deployment/ha/kubernetes_ha/)   
 - Extensible framework
   - [Custom validators]({{< ref "docs/operations/plugins#custom-flink-resource-validators" >}})
