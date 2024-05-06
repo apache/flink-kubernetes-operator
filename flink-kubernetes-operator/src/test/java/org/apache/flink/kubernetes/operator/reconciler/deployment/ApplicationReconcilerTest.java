@@ -616,8 +616,15 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
     private void verifyAndSetRunningJobsToStatus(
             FlinkDeployment deployment,
             List<Tuple3<String, JobStatusMessage, Configuration>> runningJobs) {
+        verifyAndSetRunningJobsToStatus(deployment, runningJobs, null);
+    }
+
+    private void verifyAndSetRunningJobsToStatus(
+            FlinkDeployment deployment,
+            List<Tuple3<String, JobStatusMessage, Configuration>> runningJobs,
+            String savepoint) {
         assertEquals(1, runningJobs.size());
-        assertNull(runningJobs.get(0).f0);
+        assertEquals(savepoint, runningJobs.get(0).f0);
         deployment
                 .getStatus()
                 .setJobStatus(
@@ -1105,7 +1112,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 deployment.getSpec().getRestartNonce(), lastReconciledSpec.getRestartNonce());
 
         // Set to running to let savepoint upgrade proceed
-        verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
+        verifyAndSetRunningJobsToStatus(
+                deployment,
+                flinkService.listJobs(),
+                ApplicationReconciler.LAST_STATE_DUMMY_SP_PATH);
 
         reconciler.reconcile(deployment, context);
         // Make sure upgrade is properly triggered now
@@ -1113,6 +1123,15 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 deployment.getStatus().getReconciliationStatus().deserializeLastReconciledSpec();
         assertEquals(deployment.getSpec().getRestartNonce(), lastReconciledSpec.getRestartNonce());
         assertEquals(JobState.SUSPENDED, lastReconciledSpec.getJob().getState());
+        assertEquals(UpgradeMode.SAVEPOINT, lastReconciledSpec.getJob().getUpgradeMode());
+        assertEquals(
+                "savepoint_0",
+                deployment
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getLastSavepoint()
+                        .getLocation());
     }
 
     @Test

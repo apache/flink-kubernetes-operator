@@ -125,6 +125,7 @@ public class TestingFlinkService extends AbstractFlinkService {
     @Setter private boolean isFlinkJobTerminatedWithoutCancellation = false;
     @Setter private boolean isPortReady = true;
     @Setter private boolean haDataAvailable = true;
+    @Setter private boolean checkpointAvailable = true;
     @Setter private boolean jobManagerReady = true;
     @Setter private boolean deployFailure = false;
     @Setter private Runnable sessionJobSubmittedCallback;
@@ -234,6 +235,11 @@ public class TestingFlinkService extends AbstractFlinkService {
                             + "Manual restore required.",
                     "RestoreFailed");
         }
+    }
+
+    @Override
+    public boolean atLeastOneCheckpoint(Configuration conf) {
+        return isHaMetadataAvailable(conf) && checkpointAvailable;
     }
 
     @Override
