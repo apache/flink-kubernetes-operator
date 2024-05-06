@@ -159,6 +159,8 @@ class ClusterHealthEvaluatorTest {
     @Test
     public void evaluateShouldOverwriteCompletedCheckpointCountWhenLess() {
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED, true);
+        configuration.set(
+                OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW, Duration.ofMinutes(5));
         var observedClusterHealthInfo1 = createClusterHealthInfo(validInstant1, 0, 1);
         var observedClusterHealthInfo2 = createClusterHealthInfo(validInstant2, 0, 0);
 
@@ -278,25 +280,33 @@ class ClusterHealthEvaluatorTest {
         Instant tenSecInstant = ofEpochSecond(10);
         Instant twoMinInstant = ofEpochSecond(120);
         Instant fourMinInstant = twoMinInstant.plus(2, ChronoUnit.MINUTES);
+
+        Duration oneMin = Duration.ofMinutes(1);
         return Stream.of(
                 // ShouldMarkClusterUnhealthyWhenNoCompletedCheckpointsOutsideWindow
-                Arguments.of(twoMinInstant, fourMinInstant, 30L, 30L, null, false),
+                Arguments.of(twoMinInstant, fourMinInstant, oneMin, 30L, 30L, null, false),
+                // Verify checkpoint progress even if checkpointing not configured
+                Arguments.of(twoMinInstant, fourMinInstant, oneMin, null, 30L, null, false),
+                // Verify default window if not explicitly configured
+                Arguments.of(twoMinInstant, fourMinInstant, null, 30L, 30L, null, false),
+                // Verify check is off if both window and checkpointing is not configured
+                Arguments.of(twoMinInstant, fourMinInstant, null, null, 30L, null, true),
                 // ShouldMarkClusterHealthyWhenCompletedCheckpointsWithOutsideWindowFromCheckpointInterval
-                Arguments.of(twoMinInstant, fourMinInstant, 120L, 30L, null, true),
+                Arguments.of(twoMinInstant, fourMinInstant, oneMin, 60L, 30L, null, true),
                 // ShouldMarkClusterUnhealthyWhenNoCompletedCheckpointsWithOutsideWindowFromCheckpointInterval
-                Arguments.of(tenSecInstant, fourMinInstant, 120L, 30L, null, false),
+                Arguments.of(tenSecInstant, fourMinInstant, oneMin, 60L, 30L, null, false),
                 // ShouldMarkClusterHealthyWhenCompletedCheckpointsWithOutsideWindowFromCheckpointIntervalTimesNbTolerableFailure
-                Arguments.of(twoMinInstant, fourMinInstant, 30L, 10L, 3, true),
+                Arguments.of(twoMinInstant, fourMinInstant, oneMin, 30L, 10L, 3, true),
                 // ShouldMarkClusterHealthyWhenNoCompletedCheckpointsWithOutsideWindowFromCheckpointIntervalTimesNbTolerableFailure
-                Arguments.of(tenSecInstant, fourMinInstant, 30L, 10L, 3, false),
+                Arguments.of(tenSecInstant, fourMinInstant, oneMin, 30L, 10L, 3, false),
                 // ShouldMarkClusterHealthyWhenCompletedCheckpointsWithOutsideWindowFromCheckpointingTimeout
-                Arguments.of(twoMinInstant, fourMinInstant, 30L, 120L, null, true),
+                Arguments.of(twoMinInstant, fourMinInstant, oneMin, 30L, 60L, null, true),
                 // ShouldMarkClusterHealthyWhenNoCompletedCheckpointsWithOutsideWindowFromCheckpointingTimeout
-                Arguments.of(tenSecInstant, fourMinInstant, 30L, 120L, null, false),
+                Arguments.of(tenSecInstant, fourMinInstant, oneMin, 30L, 60L, null, false),
                 // ShouldMarkClusterHealthyWhenCompletedCheckpointsWithOutsideWindowFromCheckpointingTimeoutTimesNbTolerableFailure
-                Arguments.of(twoMinInstant, fourMinInstant, 10L, 30L, 3, true),
+                Arguments.of(twoMinInstant, fourMinInstant, oneMin, 10L, 30L, 3, true),
                 // ShouldMarkClusterHealthyWhenNoCompletedCheckpointsWithOutsideWindowFromCheckpointingTimeoutTimesNbTolerableFailure
-                Arguments.of(tenSecInstant, fourMinInstant, 10L, 30L, 3, false));
+                Arguments.of(tenSecInstant, fourMinInstant, oneMin, 10L, 30L, 3, false));
     }
 
     @ParameterizedTest
@@ -304,13 +314,15 @@ class ClusterHealthEvaluatorTest {
     public void evaluateCheckpointing(
             Instant validInstant1,
             Instant validInstant2,
+            Duration window,
             Long checkpointingInterval,
             long checkpointingTimeout,
             Integer tolerationFailureNumber,
             boolean expectedIsHealthy) {
         configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED, true);
-        configuration.set(
-                OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW, Duration.ofMinutes(1));
+        if (window != null) {
+            configuration.set(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW, window);
+        }
         if (checkpointingInterval != null) {
             configuration.set(CHECKPOINTING_INTERVAL, Duration.ofSeconds(checkpointingInterval));
         }

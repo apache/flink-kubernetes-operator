@@ -22,15 +22,15 @@
         </tr>
         <tr>
             <td><h5>kubernetes.operator.cluster.health-check.checkpoint-progress.enabled</h5></td>
-            <td style="word-wrap: break-word;">false</td>
+            <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
             <td>Whether to enable checkpoint progress health check for clusters.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.cluster.health-check.checkpoint-progress.window</h5></td>
-            <td style="word-wrap: break-word;">5 min</td>
+            <td style="word-wrap: break-word;">(none)</td>
             <td>Duration</td>
-            <td>If no checkpoints are completed within the defined time window, the job is considered unhealthy. This must be bigger than checkpointing interval.</td>
+            <td>If no checkpoints are completed within the defined time window, the job is considered unhealthy. The minimum window size is `max(checkpointingInterval, checkpointTimeout) * (tolerableCheckpointFailures + 2)`, which also serves as the default value when checkpointing is enabled. For example with checkpoint interval 10 minutes and 0 tolerable failures, the default progress check window will be 20 minutes.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.cluster.health-check.enabled</h5></td>

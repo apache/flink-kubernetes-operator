@@ -502,7 +502,7 @@ public class KubernetesOperatorConfigOptions {
             OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_ENABLED =
                     operatorConfig("cluster.health-check.checkpoint-progress.enabled")
                             .booleanType()
-                            .defaultValue(false)
+                            .defaultValue(true)
                             .withDescription(
                                     "Whether to enable checkpoint progress health check for clusters.");
 
@@ -511,9 +511,9 @@ public class KubernetesOperatorConfigOptions {
             OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW =
                     operatorConfig("cluster.health-check.checkpoint-progress.window")
                             .durationType()
-                            .defaultValue(Duration.ofMinutes(5))
+                            .noDefaultValue()
                             .withDescription(
-                                    "If no checkpoints are completed within the defined time window, the job is considered unhealthy. This must be bigger than checkpointing interval.");
+                                    "If no checkpoints are completed within the defined time window, the job is considered unhealthy. The minimum window size is `max(checkpointingInterval, checkpointTimeout) * (tolerableCheckpointFailures + 2)`, which also serves as the default value when checkpointing is enabled. For example with checkpoint interval 10 minutes and 0 tolerable failures, the default progress check window will be 20 minutes.");
 
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> OPERATOR_JOB_RESTART_FAILED =
