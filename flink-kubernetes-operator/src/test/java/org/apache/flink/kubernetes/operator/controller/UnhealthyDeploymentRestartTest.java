@@ -138,7 +138,7 @@ public class UnhealthyDeploymentRestartTest {
         // Ensure the last savepoint has been taken more than 10 minutes ago (Default checkpoint
         // interval)
         clusterHealthInfo.setNumCompletedCheckpointsIncreasedTimeStamp(
-                clusterHealthInfo.getNumCompletedCheckpointsIncreasedTimeStamp() - 600000);
+                clusterHealthInfo.getNumCompletedCheckpointsIncreasedTimeStamp() - 1200000);
         setLastValidClusterHealthInfo(appCluster.getStatus().getClusterInfo(), clusterHealthInfo);
         testController.getStatusRecorder().patchAndCacheStatus(appCluster, kubernetesClient);
         testController.reconcile(appCluster, context);

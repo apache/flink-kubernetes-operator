@@ -178,29 +178,45 @@ public class ClusterHealthEvaluator {
             return true;
         }
 
-        var completedCheckpointsCheckWindow =
-                configuration.get(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW);
+        var windowOpt =
+                configuration.getOptional(OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW);
 
         CheckpointConfig checkpointConfig = new CheckpointConfig();
         checkpointConfig.configure(configuration);
         var checkpointingInterval = checkpointConfig.getCheckpointInterval();
         var checkpointingTimeout = checkpointConfig.getCheckpointTimeout();
-        var tolerationFailureNumber = checkpointConfig.getTolerableCheckpointFailureNumber() + 1;
-        var minCompletedCheckpointsCheckWindow =
-                Math.max(
-                        checkpointingInterval * tolerationFailureNumber,
-                        checkpointingTimeout * tolerationFailureNumber);
-        if (completedCheckpointsCheckWindow.toMillis() < minCompletedCheckpointsCheckWindow) {
-            LOG.warn(
-                    "{} is not long enough. Default to max({} * {}, {} * {}): {}ms",
-                    OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW.key(),
-                    CHECKPOINTING_INTERVAL.key(),
-                    TOLERABLE_FAILURE_NUMBER.key(),
-                    CHECKPOINTING_TIMEOUT.key(),
-                    TOLERABLE_FAILURE_NUMBER.key(),
-                    minCompletedCheckpointsCheckWindow);
-            completedCheckpointsCheckWindow = Duration.ofMillis(minCompletedCheckpointsCheckWindow);
+        var tolerationFailureNumber = checkpointConfig.getTolerableCheckpointFailureNumber() + 2;
+        var minCheckWindow =
+                Duration.ofMillis(
+                        Math.max(
+                                checkpointingInterval * tolerationFailureNumber,
+                                checkpointingTimeout * tolerationFailureNumber));
+
+        if (windowOpt.isEmpty() && !checkpointConfig.isCheckpointingEnabled()) {
+            // If no explicit checkpoint check window is specified and checkpointing is disabled
+            // based on the config, we don't do anything
+            return true;
         }
+
+        var completedCheckpointsCheckWindow =
+                windowOpt
+                        .filter(
+                                d -> {
+                                    if (d.compareTo(minCheckWindow) < 0) {
+                                        LOG.debug(
+                                                "{} is not long enough. Default to max({} * {}, {} * {}): {}",
+                                                OPERATOR_CLUSTER_HEALTH_CHECK_CHECKPOINT_PROGRESS_WINDOW
+                                                        .key(),
+                                                CHECKPOINTING_INTERVAL.key(),
+                                                TOLERABLE_FAILURE_NUMBER.key(),
+                                                CHECKPOINTING_TIMEOUT.key(),
+                                                TOLERABLE_FAILURE_NUMBER.key(),
+                                                minCheckWindow);
+                                        return false;
+                                    }
+                                    return true;
+                                })
+                        .orElse(minCheckWindow);
 
         if (observedClusterHealthInfo.getNumCompletedCheckpoints()
                 < lastValidClusterHealthInfo.getNumCompletedCheckpoints()) {
