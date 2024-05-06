@@ -43,6 +43,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_INTERVAL;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.CONTROL_LOOP_PARALLELISM;
@@ -64,10 +65,16 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
     private final UnmodifiableConfiguration baseConf;
 
     /**
-     * Maintain a set of job keys that during scaling, it should be updated at {@link
+     * Maintain a set of job keys that during scaling, it should be accessed at {@link
      * #scheduledExecutorService} thread.
      */
     private final Set<KEY> scalingJobKeys;
+
+    /**
+     * Maintain a set of scaling job keys for the last control loop, it should be accessed at {@link
+     * #scheduledExecutorService} thread.
+     */
+    private Set<KEY> lastScalingKeys;
 
     public StandaloneAutoscalerExecutor(
             @Nonnull Configuration conf,
@@ -116,6 +123,8 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
             return;
         }
 
+        cleanupStoppedJob(jobList);
+
         for (var jobContext : jobList) {
             final var jobKey = jobContext.getJobKey();
             if (scalingJobKeys.contains(jobKey)) {
@@ -132,9 +141,30 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
                                             throwable);
                                 }
                                 scalingJobKeys.remove(jobKey);
+                                if (!lastScalingKeys.contains(jobKey)) {
+                                    // Current job has been stopped. lastScalingKeys doesn't contain
+                                    // jobKey means current job key was scaled in a previous control
+                                    // loop, and current job is stopped in the latest control loop.
+                                    autoScaler.cleanup(jobKey);
+                                }
                             },
                             scheduledExecutorService);
         }
+    }
+
+    private void cleanupStoppedJob(Collection<Context> jobList) {
+        var currentScalingKeys =
+                jobList.stream().map(JobAutoScalerContext::getJobKey).collect(Collectors.toSet());
+        if (lastScalingKeys != null) {
+            lastScalingKeys.removeAll(currentScalingKeys);
+            for (KEY jobKey : lastScalingKeys) {
+                // Current job may be scaling, and cleanup should happen after scaling.
+                if (!scalingJobKeys.contains(jobKey)) {
+                    autoScaler.cleanup(jobKey);
+                }
+            }
+        }
+        lastScalingKeys = currentScalingKeys;
     }
 
     @VisibleForTesting

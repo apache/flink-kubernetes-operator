@@ -33,8 +33,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -224,6 +226,160 @@ class StandaloneAutoscalerExecutorTest {
                         })) {
             autoscalerExecutor.start();
             slowJobFuture.get();
+        }
+    }
+
+    @Test
+    void testCleanupAfterStopped() throws Exception {
+        var eventCollector = new TestingEventCollector<JobID, JobAutoScalerContext<JobID>>();
+
+        var job1 = createJobAutoScalerContext();
+        var job2 = createJobAutoScalerContext();
+        var scaleCounter = new ConcurrentHashMap<JobID, Integer>();
+        var cleanupCounter = new ConcurrentHashMap<JobID, Integer>();
+
+        var jobList = new ArrayList<JobAutoScalerContext<JobID>>();
+
+        try (var autoscalerExecutor =
+                new StandaloneAutoscalerExecutor<>(
+                        new Configuration(),
+                        () -> jobList,
+                        eventCollector,
+                        new JobAutoScaler<>() {
+                            @Override
+                            public void scale(JobAutoScalerContext<JobID> context) {
+                                scaleCounter.put(
+                                        context.getJobKey(),
+                                        scaleCounter.getOrDefault(context.getJobKey(), 0) + 1);
+                            }
+
+                            @Override
+                            public void cleanup(JobID jobID) {
+                                cleanupCounter.put(
+                                        jobID, cleanupCounter.getOrDefault(jobID, 0) + 1);
+                            }
+                        })) {
+
+            // Test for empty job list.
+            autoscalerExecutor.scaling();
+            Thread.sleep(100);
+            assertThat(scaleCounter).isEmpty();
+            assertThat(cleanupCounter).isEmpty();
+
+            // Test for 2 jobs twice.
+            jobList.add(job1);
+            jobList.add(job2);
+
+            autoscalerExecutor.scaling();
+            Thread.sleep(100);
+            assertThat(scaleCounter)
+                    .containsExactlyInAnyOrderEntriesOf(
+                            Map.of(job1.getJobKey(), 1, job2.getJobKey(), 1));
+            assertThat(cleanupCounter).isEmpty();
+
+            autoscalerExecutor.scaling();
+            Thread.sleep(100);
+            assertThat(scaleCounter)
+                    .containsExactlyInAnyOrderEntriesOf(
+                            Map.of(job1.getJobKey(), 2, job2.getJobKey(), 2));
+            assertThat(cleanupCounter).isEmpty();
+
+            // Test for 1 job twice.
+            jobList.clear();
+            jobList.add(job2);
+
+            autoscalerExecutor.scaling();
+            Thread.sleep(100);
+            assertThat(scaleCounter)
+                    .containsExactlyInAnyOrderEntriesOf(
+                            Map.of(job1.getJobKey(), 2, job2.getJobKey(), 3));
+            assertThat(cleanupCounter)
+                    .containsExactlyInAnyOrderEntriesOf(Map.of(job1.getJobKey(), 1));
+
+            autoscalerExecutor.scaling();
+            Thread.sleep(100);
+            assertThat(scaleCounter)
+                    .containsExactlyInAnyOrderEntriesOf(
+                            Map.of(job1.getJobKey(), 2, job2.getJobKey(), 4));
+            // Only cleanup once.
+            assertThat(cleanupCounter)
+                    .containsExactlyInAnyOrderEntriesOf(Map.of(job1.getJobKey(), 1));
+        }
+    }
+
+    @Test
+    void testCleanupForStoppedJobAfterScaling() throws Exception {
+        var eventCollector = new TestingEventCollector<JobID, JobAutoScalerContext<JobID>>();
+
+        var job1 = createJobAutoScalerContext();
+        var job2 = createJobAutoScalerContext();
+        var scaleCounter = new ConcurrentHashMap<JobID, Integer>();
+        var cleanupCounter = new ConcurrentHashMap<JobID, Integer>();
+
+        var jobList = new ArrayList<JobAutoScalerContext<JobID>>();
+        var job1ScaleFuture = new CompletableFuture<>();
+
+        try (var autoscalerExecutor =
+                new StandaloneAutoscalerExecutor<>(
+                        new Configuration(),
+                        () -> jobList,
+                        eventCollector,
+                        new JobAutoScaler<>() {
+                            @Override
+                            public void scale(JobAutoScalerContext<JobID> context)
+                                    throws Exception {
+                                scaleCounter.put(
+                                        context.getJobKey(),
+                                        scaleCounter.getOrDefault(context.getJobKey(), 0) + 1);
+                                if (context == job1) {
+                                    Thread.sleep(5_000);
+                                    job1ScaleFuture.complete(null);
+                                }
+                            }
+
+                            @Override
+                            public void cleanup(JobID jobID) {
+                                cleanupCounter.put(
+                                        jobID, cleanupCounter.getOrDefault(jobID, 0) + 1);
+                            }
+                        })) {
+
+            // Test for job1 and job2
+            jobList.add(job1);
+            jobList.add(job2);
+
+            autoscalerExecutor.scaling();
+            Thread.sleep(100);
+            assertThat(scaleCounter)
+                    .containsExactlyInAnyOrderEntriesOf(
+                            Map.of(job1.getJobKey(), 1, job2.getJobKey(), 1));
+            assertThat(cleanupCounter).isEmpty();
+
+            // Test for job2 twice
+            jobList.clear();
+            jobList.add(job2);
+
+            autoscalerExecutor.scaling();
+            Thread.sleep(100);
+            assertThat(scaleCounter)
+                    .containsExactlyInAnyOrderEntriesOf(
+                            Map.of(job1.getJobKey(), 1, job2.getJobKey(), 2));
+            // job1 is still scaling, it cannot be cleaned up.
+            assertThat(cleanupCounter).isEmpty();
+
+            autoscalerExecutor.scaling();
+            Thread.sleep(100);
+            assertThat(scaleCounter)
+                    .containsExactlyInAnyOrderEntriesOf(
+                            Map.of(job1.getJobKey(), 1, job2.getJobKey(), 3));
+            // job1 is still scaling, it cannot be cleaned up.
+            assertThat(cleanupCounter).isEmpty();
+
+            // Wait for job1 scaling to complete.
+            job1ScaleFuture.get();
+            Thread.sleep(100);
+            assertThat(cleanupCounter)
+                    .containsExactlyInAnyOrderEntriesOf(Map.of(job1.getJobKey(), 1));
         }
     }
 
