@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.event.TestingEventCollector;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.util.concurrent.FutureUtils;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -243,7 +244,7 @@ class StandaloneAutoscalerExecutorTest {
         try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
                         new Configuration(),
-                        () -> jobList,
+                        baseConf -> jobList,
                         eventCollector,
                         new JobAutoScaler<>() {
                             @Override
@@ -261,8 +262,9 @@ class StandaloneAutoscalerExecutorTest {
                         })) {
 
             // Test for empty job list.
-            autoscalerExecutor.scaling();
-            Thread.sleep(100);
+            var scaledFutures = autoscalerExecutor.scaling();
+            assertThat(scaledFutures).isEmpty();
+            FutureUtils.waitForAll(scaledFutures).get();
             assertThat(scaleCounter).isEmpty();
             assertThat(cleanupCounter).isEmpty();
 
@@ -270,15 +272,17 @@ class StandaloneAutoscalerExecutorTest {
             jobList.add(job1);
             jobList.add(job2);
 
-            autoscalerExecutor.scaling();
-            Thread.sleep(100);
+            scaledFutures = autoscalerExecutor.scaling();
+            assertThat(scaledFutures).hasSize(2);
+            FutureUtils.waitForAll(scaledFutures).get();
             assertThat(scaleCounter)
                     .containsExactlyInAnyOrderEntriesOf(
                             Map.of(job1.getJobKey(), 1, job2.getJobKey(), 1));
             assertThat(cleanupCounter).isEmpty();
 
-            autoscalerExecutor.scaling();
-            Thread.sleep(100);
+            scaledFutures = autoscalerExecutor.scaling();
+            assertThat(scaledFutures).hasSize(2);
+            FutureUtils.waitForAll(scaledFutures).get();
             assertThat(scaleCounter)
                     .containsExactlyInAnyOrderEntriesOf(
                             Map.of(job1.getJobKey(), 2, job2.getJobKey(), 2));
@@ -288,16 +292,18 @@ class StandaloneAutoscalerExecutorTest {
             jobList.clear();
             jobList.add(job2);
 
-            autoscalerExecutor.scaling();
-            Thread.sleep(100);
+            scaledFutures = autoscalerExecutor.scaling();
+            assertThat(scaledFutures).hasSize(1);
+            FutureUtils.waitForAll(scaledFutures).get();
             assertThat(scaleCounter)
                     .containsExactlyInAnyOrderEntriesOf(
                             Map.of(job1.getJobKey(), 2, job2.getJobKey(), 3));
             assertThat(cleanupCounter)
                     .containsExactlyInAnyOrderEntriesOf(Map.of(job1.getJobKey(), 1));
 
-            autoscalerExecutor.scaling();
-            Thread.sleep(100);
+            scaledFutures = autoscalerExecutor.scaling();
+            assertThat(scaledFutures).hasSize(1);
+            FutureUtils.waitForAll(scaledFutures).get();
             assertThat(scaleCounter)
                     .containsExactlyInAnyOrderEntriesOf(
                             Map.of(job1.getJobKey(), 2, job2.getJobKey(), 4));
@@ -316,13 +322,15 @@ class StandaloneAutoscalerExecutorTest {
         var scaleCounter = new ConcurrentHashMap<JobID, Integer>();
         var cleanupCounter = new ConcurrentHashMap<JobID, Integer>();
 
+        var job1StartWaitFuture = new CompletableFuture<>();
+        var job1WaitFuture = new CompletableFuture<>();
+
         var jobList = new ArrayList<JobAutoScalerContext<JobID>>();
-        var job1ScaleFuture = new CompletableFuture<>();
 
         try (var autoscalerExecutor =
                 new StandaloneAutoscalerExecutor<>(
                         new Configuration(),
-                        () -> jobList,
+                        baseConf -> jobList,
                         eventCollector,
                         new JobAutoScaler<>() {
                             @Override
@@ -332,8 +340,8 @@ class StandaloneAutoscalerExecutorTest {
                                         context.getJobKey(),
                                         scaleCounter.getOrDefault(context.getJobKey(), 0) + 1);
                                 if (context == job1) {
-                                    Thread.sleep(5_000);
-                                    job1ScaleFuture.complete(null);
+                                    job1StartWaitFuture.complete(null);
+                                    job1WaitFuture.get();
                                 }
                             }
 
@@ -348,39 +356,55 @@ class StandaloneAutoscalerExecutorTest {
             jobList.add(job1);
             jobList.add(job2);
 
-            autoscalerExecutor.scaling();
-            Thread.sleep(100);
+            var scaledFutures = autoscalerExecutor.scaling();
+            var job1ScaledFuture = scaledFutures.get(0);
+
+            assertThat(scaledFutures).hasSize(2);
+            // wait for job2 scaling is finished.
+            scaledFutures.get(1).get();
+            // wait for job1 starts wait.
+            job1StartWaitFuture.get();
             assertThat(scaleCounter)
                     .containsExactlyInAnyOrderEntriesOf(
                             Map.of(job1.getJobKey(), 1, job2.getJobKey(), 1));
             assertThat(cleanupCounter).isEmpty();
 
-            // Test for job2 twice
+            scalingOnlyHappenForJob2(
+                    job1, job2, scaleCounter, cleanupCounter, autoscalerExecutor, 2);
+
+            // Test for job2 twice, and job1 should be clean up after scaling.
             jobList.clear();
             jobList.add(job2);
 
-            autoscalerExecutor.scaling();
-            Thread.sleep(100);
-            assertThat(scaleCounter)
-                    .containsExactlyInAnyOrderEntriesOf(
-                            Map.of(job1.getJobKey(), 1, job2.getJobKey(), 2));
-            // job1 is still scaling, it cannot be cleaned up.
-            assertThat(cleanupCounter).isEmpty();
-
-            autoscalerExecutor.scaling();
-            Thread.sleep(100);
-            assertThat(scaleCounter)
-                    .containsExactlyInAnyOrderEntriesOf(
-                            Map.of(job1.getJobKey(), 1, job2.getJobKey(), 3));
-            // job1 is still scaling, it cannot be cleaned up.
-            assertThat(cleanupCounter).isEmpty();
+            scalingOnlyHappenForJob2(
+                    job1, job2, scaleCounter, cleanupCounter, autoscalerExecutor, 3);
+            scalingOnlyHappenForJob2(
+                    job1, job2, scaleCounter, cleanupCounter, autoscalerExecutor, 4);
 
             // Wait for job1 scaling to complete.
-            job1ScaleFuture.get();
-            Thread.sleep(100);
+            job1WaitFuture.complete(null);
+            job1ScaledFuture.get();
             assertThat(cleanupCounter)
                     .containsExactlyInAnyOrderEntriesOf(Map.of(job1.getJobKey(), 1));
         }
+    }
+
+    private void scalingOnlyHappenForJob2(
+            JobAutoScalerContext<JobID> job1,
+            JobAutoScalerContext<JobID> job2,
+            ConcurrentHashMap<JobID, Integer> scaleCounter,
+            ConcurrentHashMap<JobID, Integer> cleanupCounter,
+            StandaloneAutoscalerExecutor<JobID, JobAutoScalerContext<JobID>> autoscalerExecutor,
+            int expectedJob2ScaleCounter)
+            throws Exception {
+        var scaledFutures = autoscalerExecutor.scaling();
+        assertThat(scaledFutures).hasSize(1);
+        FutureUtils.waitForAll(scaledFutures).get();
+        assertThat(scaleCounter)
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of(job1.getJobKey(), 1, job2.getJobKey(), expectedJob2ScaleCounter));
+        // job1 is still scaling, it cannot be cleaned up.
+        assertThat(cleanupCounter).isEmpty();
     }
 
     private static JobAutoScalerContext<JobID> createJobAutoScalerContext() {

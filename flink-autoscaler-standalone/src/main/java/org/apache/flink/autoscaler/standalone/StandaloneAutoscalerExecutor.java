@@ -35,8 +35,11 @@ import javax.annotation.Nonnull;
 
 import java.io.Closeable;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -112,44 +115,52 @@ public class StandaloneAutoscalerExecutor<KEY, Context extends JobAutoScalerCont
         scalingThreadPool.shutdownNow();
     }
 
+    /**
+     * @return All CompletableFuture for all scaling jobs, note: it's only used for test for now.
+     */
     @VisibleForTesting
-    protected void scaling() {
+    protected List<CompletableFuture<Void>> scaling() {
         LOG.info("Standalone autoscaler starts scaling.");
         Collection<Context> jobList;
         try {
             jobList = jobListFetcher.fetch(baseConf);
         } catch (Throwable e) {
             LOG.error("Error while fetch job list.", e);
-            return;
+            return Collections.emptyList();
         }
 
         cleanupStoppedJob(jobList);
 
+        var resultFutures = new ArrayList<CompletableFuture<Void>>();
         for (var jobContext : jobList) {
             final var jobKey = jobContext.getJobKey();
             if (scalingJobKeys.contains(jobKey)) {
                 continue;
             }
             scalingJobKeys.add(jobKey);
-            CompletableFuture.runAsync(() -> scalingSingleJob(jobContext), scalingThreadPool)
-                    .whenCompleteAsync(
-                            (result, throwable) -> {
-                                if (throwable != null) {
-                                    LOG.error(
-                                            "Error while jobKey: {} executing scaling .",
-                                            jobKey,
-                                            throwable);
-                                }
-                                scalingJobKeys.remove(jobKey);
-                                if (!lastScalingKeys.contains(jobKey)) {
-                                    // Current job has been stopped. lastScalingKeys doesn't contain
-                                    // jobKey means current job key was scaled in a previous control
-                                    // loop, and current job is stopped in the latest control loop.
-                                    autoScaler.cleanup(jobKey);
-                                }
-                            },
-                            scheduledExecutorService);
+            resultFutures.add(
+                    CompletableFuture.runAsync(
+                                    () -> scalingSingleJob(jobContext), scalingThreadPool)
+                            .whenCompleteAsync(
+                                    (result, throwable) -> {
+                                        if (throwable != null) {
+                                            LOG.error(
+                                                    "Error while jobKey: {} executing scaling .",
+                                                    jobKey,
+                                                    throwable);
+                                        }
+                                        scalingJobKeys.remove(jobKey);
+                                        if (!lastScalingKeys.contains(jobKey)) {
+                                            // Current job has been stopped. lastScalingKeys doesn't
+                                            // contain jobKey means current job key was scaled in a
+                                            // previous control loop, and current job is stopped in
+                                            // the latest control loop.
+                                            autoScaler.cleanup(jobKey);
+                                        }
+                                    },
+                                    scheduledExecutorService));
         }
+        return resultFutures;
     }
 
     private void cleanupStoppedJob(Collection<Context> jobList) {
