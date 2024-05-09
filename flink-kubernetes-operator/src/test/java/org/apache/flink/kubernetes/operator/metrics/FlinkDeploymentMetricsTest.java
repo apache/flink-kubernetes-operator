@@ -34,6 +34,7 @@ import java.util.Map;
 
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.COUNTER_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.CPU_NAME;
+import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.FLINK_MINOR_VERSION_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.FLINK_VERSION_GROUP_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.MEMORY_NAME;
 import static org.apache.flink.kubernetes.operator.metrics.FlinkDeploymentMetrics.RESOURCE_USAGE_GROUP_NAME;
@@ -226,13 +227,14 @@ public class FlinkDeploymentMetricsTest {
     public void testFlinkVersionMetrics() {
         Map<String, String> ns1Values = new HashMap<>();
         ns1Values.put("deployment1", "    ");
-        ns1Values.put("deployment2", "1.14");
-        ns1Values.put("deployment3", "1.14");
-        ns1Values.put("deployment4", "1.15");
-        ns1Values.put("deployment5", "1.15");
-        ns1Values.put("deployment6", "1.16");
-        ns1Values.put("deployment7", "1.17");
-        ns1Values.put("deployment8", "1.14");
+        ns1Values.put("deployment2", "1.14.0");
+        ns1Values.put("deployment3", "1.14.0");
+        ns1Values.put("deployment4", "1.15.1");
+        ns1Values.put("deployment5", "1.15.1");
+        ns1Values.put("deployment6", "1.16.0");
+        ns1Values.put("deployment7", "1.17.1");
+        ns1Values.put("deployment8", "1.14.1");
+        ns1Values.put("deployment9", "test");
 
         Map<String, String> ns2Values = new HashMap<>();
         ns2Values.put("deployment1", "");
@@ -248,20 +250,41 @@ public class FlinkDeploymentMetricsTest {
         var namespaceVersions = Map.of("ns1", ns1Values, "ns2", ns2Values);
         var expected =
                 Map.of(
-                        "ns1", Map.of("UNKNOWN", 1, "1.14", 3, "1.15", 2, "1.16", 1, "1.17", 1),
+                        "ns1",
+                                Map.of(
+                                        "UNKNOWN", 1, "1.14.0", 2, "1.14.1", 1, "1.15.1", 2,
+                                        "1.16.0", 1, "1.17.1", 1, "test", 1),
                         "ns2", Map.of("UNKNOWN", 2, "1.14", 2, "1.15", 3, "1.16", 1, "1.17", 1));
-        updateFlinkVersionsAndAssert(namespaceVersions, expected);
+        updateFlinkVersionsAndAssert(FLINK_VERSION_GROUP_NAME, namespaceVersions, expected);
 
-        // Remove invalid version and insert 1.14
-        namespaceVersions.get("ns1").put("deployment1", "1.14");
+        var expectedMinors =
+                Map.of(
+                        "ns1", Map.of("MALFORMED", 2, "1.14", 3, "1.15", 2, "1.16", 1, "1.17", 1),
+                        "ns2", Map.of("MALFORMED", 2, "1.14", 2, "1.15", 3, "1.16", 1, "1.17", 1));
+        updateFlinkVersionsAndAssert(
+                FLINK_MINOR_VERSION_GROUP_NAME, namespaceVersions, expectedMinors);
+
+        // Remove invalid version and insert 1.14.1
+        namespaceVersions.get("ns1").put("deployment1", "1.14.1");
         expected =
                 Map.of(
-                        "ns1", Map.of("UNKNOWN", 0, "1.14", 4, "1.15", 2, "1.16", 1, "1.17", 1),
+                        "ns1",
+                                Map.of(
+                                        "1.14.0", 2, "1.14.1", 2, "1.15.1", 2, "1.16.0", 1,
+                                        "1.17.1", 1, "test", 1),
                         "ns2", Map.of("UNKNOWN", 2, "1.14", 2, "1.15", 3, "1.16", 1, "1.17", 1));
-        updateFlinkVersionsAndAssert(namespaceVersions, expected);
+        updateFlinkVersionsAndAssert(FLINK_VERSION_GROUP_NAME, namespaceVersions, expected);
+
+        expectedMinors =
+                Map.of(
+                        "ns1", Map.of("MALFORMED", 1, "1.14", 4, "1.15", 2, "1.16", 1, "1.17", 1),
+                        "ns2", Map.of("MALFORMED", 2, "1.14", 2, "1.15", 3, "1.16", 1, "1.17", 1));
+        updateFlinkVersionsAndAssert(
+                FLINK_MINOR_VERSION_GROUP_NAME, namespaceVersions, expectedMinors);
     }
 
     private void updateFlinkVersionsAndAssert(
+            String metricGroup,
             Map<String, Map<String, String>> namespaceVersions,
             Map<String, Map<String, Integer>> expected) {
         for (var namespaceEntry : namespaceVersions.entrySet()) {
@@ -291,7 +314,7 @@ public class FlinkDeploymentMetricsTest {
                         listener.getNamespaceMetricId(
                                 FlinkDeployment.class,
                                 namespaceName,
-                                FLINK_VERSION_GROUP_NAME,
+                                metricGroup,
                                 version,
                                 COUNTER_NAME);
 
