@@ -232,7 +232,7 @@ public class MetricsCollectionAndEvaluationTest {
     }
 
     @Test
-    public void testKafkaPartitionMaxParallelism() throws Exception {
+    public void testKafkaPulsarPartitionMaxParallelism() throws Exception {
         setDefaultMetrics(metricsCollector);
         metricsCollector.updateMetrics(context, stateStore);
 
