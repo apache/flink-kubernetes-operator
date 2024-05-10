@@ -249,29 +249,33 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                 json, slotSharingGroupIdMap, maxParallelismMap, metrics, finished);
     }
 
-    private void updateKafkaPulsarSourceMaxParallelisms(Context ctx, JobID jobId, JobTopology topology)
-            throws Exception {
+    private void updateKafkaPulsarSourceMaxParallelisms(
+            Context ctx, JobID jobId, JobTopology topology) throws Exception {
         try (var restClient = ctx.getRestClusterClient()) {
-            Pattern partitionRegex = Pattern.compile(
-                    "^.*\\.KafkaSourceReader\\.topic\\.(?<kafkaTopic>.+)\\.partition\\.(?<kafkaId>\\d+)\\.currentOffset$"
-                            + "|^.*\\.PulsarConsumer\\.(?<pulsarTopic>.+)-partition-(?<pulsarId>\\d+)\\..*\\.numMsgsReceived$");
+            Pattern partitionRegex =
+                    Pattern.compile(
+                            "^.*\\.KafkaSourceReader\\.topic\\.(?<kafkaTopic>.+)\\.partition\\.(?<kafkaId>\\d+)\\.currentOffset$"
+                                    + "|^.*\\.PulsarConsumer\\.(?<pulsarTopic>.+)-partition-(?<pulsarId>\\d+)\\..*\\.numMsgsReceived$");
             for (var vertexInfo : topology.getVertexInfos().values()) {
                 if (vertexInfo.getInputs().isEmpty()) {
                     var sourceVertex = vertexInfo.getId();
                     var numPartitions =
                             queryAggregatedMetricNames(restClient, jobId, sourceVertex).stream()
-                                    .map(v -> {
-                                        Matcher matcher = partitionRegex.matcher(v);
-                                        if (matcher.matches()) {
-                                            String kafkaTopic = matcher.group("kafkaTopic");
-                                            String kafkaId = matcher.group("kafkaId");
-                                            String pulsarTopic = matcher.group("pulsarTopic");
-                                            String pulsarId = matcher.group("pulsarId");
-                                            return kafkaTopic != null ? kafkaTopic + "-" + kafkaId :
-                                                    pulsarTopic + "-" + pulsarId;
-                                        }
-                                        return null;
-                                    })
+                                    .map(
+                                            v -> {
+                                                Matcher matcher = partitionRegex.matcher(v);
+                                                if (matcher.matches()) {
+                                                    String kafkaTopic = matcher.group("kafkaTopic");
+                                                    String kafkaId = matcher.group("kafkaId");
+                                                    String pulsarTopic =
+                                                            matcher.group("pulsarTopic");
+                                                    String pulsarId = matcher.group("pulsarId");
+                                                    return kafkaTopic != null
+                                                            ? kafkaTopic + "-" + kafkaId
+                                                            : pulsarTopic + "-" + pulsarId;
+                                                }
+                                                return null;
+                                            })
                                     .filter(Objects::nonNull)
                                     .collect(Collectors.toSet())
                                     .size();
