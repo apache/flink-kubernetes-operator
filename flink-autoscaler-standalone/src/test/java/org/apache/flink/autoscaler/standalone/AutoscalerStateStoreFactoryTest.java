@@ -28,6 +28,7 @@ import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory
 import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.MEMORY;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_URL;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.STATE_STORE_TYPE;
+import static org.apache.flink.autoscaler.standalone.utils.HikariJDBCUtil.JDBC_URL_REQUIRED_HINT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -56,9 +57,7 @@ class AutoscalerStateStoreFactoryTest {
         conf.set(STATE_STORE_TYPE, JDBC);
         assertThatThrownBy(() -> AutoscalerStateStoreFactory.create(conf))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "%s is required when jdbc state store or jdbc event handler is used.",
-                        JDBC_URL.key());
+                .hasMessage(JDBC_URL_REQUIRED_HINT);
     }
 
     @Test

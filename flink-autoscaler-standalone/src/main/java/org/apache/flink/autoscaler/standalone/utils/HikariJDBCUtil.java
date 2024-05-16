@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler.standalone.utils;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.util.StringUtils;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
@@ -33,12 +34,14 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 /** Hikari JDBC common util. */
 public class HikariJDBCUtil {
 
+    public static final String JDBC_URL_REQUIRED_HINT =
+            String.format(
+                    "%s is required when jdbc state store or jdbc event handler is used.",
+                    JDBC_URL.key());
+
     public static Connection getConnection(Configuration conf) throws SQLException {
         final var jdbcUrl = conf.get(JDBC_URL);
-        checkArgument(
-                jdbcUrl != null,
-                "%s is required when jdbc state store or jdbc event handler is used.",
-                JDBC_URL.key());
+        checkArgument(!StringUtils.isNullOrWhitespaceOnly(jdbcUrl), JDBC_URL_REQUIRED_HINT);
         var user = conf.get(JDBC_USERNAME);
         var password = System.getenv().get(conf.get(JDBC_PASSWORD_ENV_VARIABLE));
         HikariConfig hikariConfig = new HikariConfig();

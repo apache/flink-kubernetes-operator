@@ -28,6 +28,7 @@ import static org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFacto
 import static org.apache.flink.autoscaler.standalone.AutoscalerEventHandlerFactory.EventHandlerType.LOGGING;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.EVENT_HANDLER_TYPE;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_URL;
+import static org.apache.flink.autoscaler.standalone.utils.HikariJDBCUtil.JDBC_URL_REQUIRED_HINT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -57,9 +58,7 @@ class AutoscalerEventHandlerFactoryTest {
         conf.set(EVENT_HANDLER_TYPE, JDBC);
         assertThatThrownBy(() -> AutoscalerEventHandlerFactory.create(conf))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(
-                        "%s is required when jdbc state store or jdbc event handler is used.",
-                        JDBC_URL.key());
+                .hasMessage(JDBC_URL_REQUIRED_HINT);
     }
 
     @Test
