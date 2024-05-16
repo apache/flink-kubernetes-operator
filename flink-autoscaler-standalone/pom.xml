@@ -133,12 +133,6 @@ under the License.
             <version>${log4j.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>com.zaxxer</groupId>
-            <artifactId>HikariCP</artifactId>
-            <version>${hikari.version}</version>
-        </dependency>
-
         <!-- Test -->
 
         <dependency>
