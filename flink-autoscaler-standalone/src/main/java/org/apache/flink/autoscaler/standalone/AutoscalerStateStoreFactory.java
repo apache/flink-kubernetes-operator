@@ -21,22 +21,17 @@ import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.jdbc.state.JdbcAutoScalerStateStore;
 import org.apache.flink.autoscaler.jdbc.state.JdbcStateInteractor;
 import org.apache.flink.autoscaler.jdbc.state.JdbcStateStore;
+import org.apache.flink.autoscaler.standalone.utils.HikariJDBCUtil;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.DescribedEnum;
 import org.apache.flink.configuration.description.InlineElement;
 
-import java.sql.DriverManager;
-
 import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.JDBC;
 import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.MEMORY;
-import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_PASSWORD_ENV_VARIABLE;
-import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_URL;
-import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_USERNAME;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.STATE_STORE_TYPE;
 import static org.apache.flink.configuration.description.TextElement.text;
-import static org.apache.flink.util.Preconditions.checkArgument;
 
 /** The factory of {@link AutoScalerStateStore}. */
 public class AutoscalerStateStoreFactory {
@@ -79,12 +74,7 @@ public class AutoscalerStateStoreFactory {
     private static <KEY, Context extends JobAutoScalerContext<KEY>>
             AutoScalerStateStore<KEY, Context> createJdbcStateStore(Configuration conf)
                     throws Exception {
-        final var jdbcUrl = conf.get(JDBC_URL);
-        checkArgument(jdbcUrl != null, "%s is required for jdbc state store.", JDBC_URL.key());
-        var user = conf.get(JDBC_USERNAME);
-        var password = System.getenv().get(conf.get(JDBC_PASSWORD_ENV_VARIABLE));
-
-        var conn = DriverManager.getConnection(jdbcUrl, user, password);
+        var conn = HikariJDBCUtil.getConnection(conf);
         return new JdbcAutoScalerStateStore<>(new JdbcStateStore(new JdbcStateInteractor(conn)));
     }
 }

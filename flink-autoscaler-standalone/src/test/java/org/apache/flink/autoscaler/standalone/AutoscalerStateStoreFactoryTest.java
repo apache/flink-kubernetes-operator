@@ -18,18 +18,17 @@
 package org.apache.flink.autoscaler.standalone;
 
 import org.apache.flink.autoscaler.jdbc.state.JdbcAutoScalerStateStore;
+import org.apache.flink.autoscaler.standalone.utils.HikariJDBCUtil;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
 import org.apache.flink.configuration.Configuration;
 
 import org.junit.jupiter.api.Test;
 
-import java.sql.DriverManager;
-import java.sql.SQLException;
-
 import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.JDBC;
 import static org.apache.flink.autoscaler.standalone.AutoscalerStateStoreFactory.StateStoreType.MEMORY;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.JDBC_URL;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.STATE_STORE_TYPE;
+import static org.apache.flink.autoscaler.standalone.utils.HikariJDBCUtil.JDBC_URL_REQUIRED_HINT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -58,25 +57,26 @@ class AutoscalerStateStoreFactoryTest {
         conf.set(STATE_STORE_TYPE, JDBC);
         assertThatThrownBy(() -> AutoscalerStateStoreFactory.create(conf))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("%s is required for jdbc state store.", JDBC_URL.key());
+                .hasMessage(JDBC_URL_REQUIRED_HINT);
     }
 
     @Test
     void testCreateJdbcStateStore() throws Exception {
         final var jdbcUrl = "jdbc:derby:memory:test";
-        DriverManager.getConnection(String.format("%s;create=true", jdbcUrl)).close();
-
         // Test for create JDBC State store.
         final var conf = new Configuration();
         conf.set(STATE_STORE_TYPE, JDBC);
-        conf.set(JDBC_URL, jdbcUrl);
+        conf.set(JDBC_URL, String.format("%s;create=true", jdbcUrl));
+        HikariJDBCUtil.getConnection(conf).close();
 
         var stateStore = AutoscalerStateStoreFactory.create(conf);
         assertThat(stateStore).isInstanceOf(JdbcAutoScalerStateStore.class);
 
         try {
-            DriverManager.getConnection(String.format("%s;shutdown=true", jdbcUrl)).close();
-        } catch (SQLException ignored) {
+            conf.set(JDBC_URL, String.format("%s;shutdown=true", jdbcUrl));
+            HikariJDBCUtil.getConnection(conf).close();
+        } catch (RuntimeException ignored) {
+            // database shutdown ignored exception
         }
     }
 }
