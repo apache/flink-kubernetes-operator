@@ -57,7 +57,9 @@ class AutoscalerEventHandlerFactoryTest {
         conf.set(EVENT_HANDLER_TYPE, JDBC);
         assertThatThrownBy(() -> AutoscalerEventHandlerFactory.create(conf))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("%s is required for jdbc event handler.", JDBC_URL.key());
+                .hasMessage(
+                        "%s is required when jdbc state store or jdbc event handler is used.",
+                        JDBC_URL.key());
     }
 
     @Test
@@ -67,14 +69,14 @@ class AutoscalerEventHandlerFactoryTest {
         final var conf = new Configuration();
         conf.set(EVENT_HANDLER_TYPE, JDBC);
         conf.set(JDBC_URL, String.format("%s;create=true", jdbcUrl));
-        HikariJDBCUtil.getConnection(conf, "testCreateJdbcEventHandler Failed").close();
+        HikariJDBCUtil.getConnection(conf).close();
 
         var eventHandler = AutoscalerEventHandlerFactory.create(conf);
         assertThat(eventHandler).isInstanceOf(JdbcAutoScalerEventHandler.class);
 
         try {
             conf.set(JDBC_URL, String.format("%s;shutdown=true", jdbcUrl));
-            HikariJDBCUtil.getConnection(conf, "testCreateJdbcEventHandler Failed").close();
+            HikariJDBCUtil.getConnection(conf).close();
         } catch (RuntimeException ignored) {
             // database shutdown ignored exception
         }

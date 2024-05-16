@@ -72,7 +72,7 @@ public class AutoscalerEventHandlerFactory {
     private static <KEY, Context extends JobAutoScalerContext<KEY>>
             AutoScalerEventHandler<KEY, Context> createJdbcEventHandler(Configuration conf)
                     throws Exception {
-        var conn = HikariJDBCUtil.getConnection(conf, "%s is required for jdbc event handler.");
+        var conn = HikariJDBCUtil.getConnection(conf);
         return new JdbcAutoScalerEventHandler<>(new JdbcEventInteractor(conn));
     }
 }

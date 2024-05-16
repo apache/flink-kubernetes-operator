@@ -74,7 +74,7 @@ public class AutoscalerStateStoreFactory {
     private static <KEY, Context extends JobAutoScalerContext<KEY>>
             AutoScalerStateStore<KEY, Context> createJdbcStateStore(Configuration conf)
                     throws Exception {
-        var conn = HikariJDBCUtil.getConnection(conf, "%s is required for jdbc state store.");
+        var conn = HikariJDBCUtil.getConnection(conf);
         return new JdbcAutoScalerStateStore<>(new JdbcStateStore(new JdbcStateInteractor(conn)));
     }
 }

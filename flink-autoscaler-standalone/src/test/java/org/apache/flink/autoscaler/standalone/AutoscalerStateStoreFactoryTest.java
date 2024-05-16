@@ -56,7 +56,9 @@ class AutoscalerStateStoreFactoryTest {
         conf.set(STATE_STORE_TYPE, JDBC);
         assertThatThrownBy(() -> AutoscalerStateStoreFactory.create(conf))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("%s is required for jdbc state store.", JDBC_URL.key());
+                .hasMessage(
+                        "%s is required when jdbc state store or jdbc event handler is used.",
+                        JDBC_URL.key());
     }
 
     @Test
@@ -66,14 +68,14 @@ class AutoscalerStateStoreFactoryTest {
         final var conf = new Configuration();
         conf.set(STATE_STORE_TYPE, JDBC);
         conf.set(JDBC_URL, String.format("%s;create=true", jdbcUrl));
-        HikariJDBCUtil.getConnection(conf, "testCreateJdbcStateStore Failed").close();
+        HikariJDBCUtil.getConnection(conf).close();
 
         var stateStore = AutoscalerStateStoreFactory.create(conf);
         assertThat(stateStore).isInstanceOf(JdbcAutoScalerStateStore.class);
 
         try {
             conf.set(JDBC_URL, String.format("%s;shutdown=true", jdbcUrl));
-            HikariJDBCUtil.getConnection(conf, "testCreateJdbcStateStore Failed").close();
+            HikariJDBCUtil.getConnection(conf).close();
         } catch (RuntimeException ignored) {
             // database shutdown ignored exception
         }

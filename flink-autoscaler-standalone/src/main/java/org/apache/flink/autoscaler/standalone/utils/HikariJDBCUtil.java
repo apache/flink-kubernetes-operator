@@ -33,9 +33,12 @@ import static org.apache.flink.util.Preconditions.checkArgument;
 /** Hikari JDBC common util. */
 public class HikariJDBCUtil {
 
-    public static Connection getConnection(Configuration conf, String errMsg) throws SQLException {
+    public static Connection getConnection(Configuration conf) throws SQLException {
         final var jdbcUrl = conf.get(JDBC_URL);
-        checkArgument(jdbcUrl != null, errMsg, JDBC_URL.key());
+        checkArgument(
+                jdbcUrl != null,
+                "%s is required when jdbc state store or jdbc event handler is used.",
+                JDBC_URL.key());
         var user = conf.get(JDBC_USERNAME);
         var password = System.getenv().get(conf.get(JDBC_PASSWORD_ENV_VARIABLE));
         HikariConfig hikariConfig = new HikariConfig();
