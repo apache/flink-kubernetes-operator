@@ -23,7 +23,7 @@ args=("$@")
 cd /flink-kubernetes-operator || exit
 
 maybe_enable_jemalloc() {
-    if [ "${DISABLE_JEMALLOC:-false}" == "false" ]; then
+    if [ "${DISABLE_JEMALLOC:-false}" = "false" ]; then
         JEMALLOC_PATH="/usr/lib/$(uname -m)-linux-gnu/libjemalloc.so"
         JEMALLOC_FALLBACK="/usr/lib/x86_64-linux-gnu/libjemalloc.so"
         if [ -f "$JEMALLOC_PATH" ]; then
