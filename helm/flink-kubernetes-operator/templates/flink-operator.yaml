@@ -23,6 +23,11 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "flink-operator.labels" . | nindent 4 }}
+    {{- if index (.Values.operatorPod) "labels" }}
+      {{- with .Values.operatorPod.labels }}
+        {{- toYaml . | nindent 4 }}
+      {{- end }}
+    {{- end }}
 spec:
   replicas: {{ .Values.replicas }}
   strategy:
