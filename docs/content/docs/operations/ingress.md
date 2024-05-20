@@ -80,7 +80,7 @@ Beyond the example above the Operator understands other template formats too:
 **Simple domain based routing:**
 ```yaml
 ingress:
-  template: "{{name}}.{{namespace}}.flink.k8s.io"
+  template: "{{name}}.{{namespace}}.flink.k8s.io/"
 ```
 This example requires that anything `*.flink.k8s.io` must be routed to the Ingress Controller with a wildcard DNS entry:
 ```shell
