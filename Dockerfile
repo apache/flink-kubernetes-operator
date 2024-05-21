@@ -64,6 +64,14 @@ ARG SKIP_OS_UPDATE=true
 RUN if [ "$SKIP_OS_UPDATE" = "false" ]; then apt-get update; fi
 RUN if [ "$SKIP_OS_UPDATE" = "false" ]; then apt-get upgrade -y; fi
 
+ARG DISABLE_JEMALLOC=false
+# Install jemalloc
+RUN if [ "$DISABLE_JEMALLOC" = "false" ]; then \
+  apt-get update; \
+  apt-get -y install libjemalloc-dev; \
+  rm -rf /var/lib/apt/lists/*; \
+  fi
+
 USER flink
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["help"]
