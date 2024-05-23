@@ -203,12 +203,14 @@ public class ApplicationReconciler
         // https://issues.apache.org/jira/browse/FLINK-19358
         // https://issues.apache.org/jira/browse/FLINK-29109
 
-        if (deployConfig.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID) != null) {
-            // user managed, don't touch
+        var status = resource.getStatus();
+        var userJobId = deployConfig.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID);
+        if (userJobId != null) {
+            status.getJobStatus().setJobId(userJobId);
+            statusRecorder.patchAndCacheStatus(resource, client);
             return;
         }
 
-        var status = resource.getStatus();
         // Rotate job id when not last-state deployment
         if (status.getJobStatus().getJobId() == null || !lastStateDeploy) {
             String jobId = JobID.generate().toHexString();

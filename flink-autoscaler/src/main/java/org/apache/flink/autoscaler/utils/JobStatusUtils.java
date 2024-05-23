@@ -38,14 +38,16 @@ public class JobStatusUtils {
     public static List<JobStatusMessage> toJobStatusMessage(
             MultipleJobsDetails multipleJobsDetails) {
         return multipleJobsDetails.getJobs().stream()
-                .map(
-                        details ->
-                                new JobStatusMessage(
-                                        details.getJobId(),
-                                        details.getJobName(),
-                                        getEffectiveStatus(details),
-                                        details.getStartTime()))
+                .map(JobStatusUtils::toJobStatusMessage)
                 .collect(Collectors.toList());
+    }
+
+    public static JobStatusMessage toJobStatusMessage(JobDetails details) {
+        return new JobStatusMessage(
+                details.getJobId(),
+                details.getJobName(),
+                getEffectiveStatus(details),
+                details.getStartTime());
     }
 
     @VisibleForTesting

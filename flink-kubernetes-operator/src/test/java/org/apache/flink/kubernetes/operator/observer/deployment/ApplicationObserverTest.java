@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.PipelineOptions;
+import org.apache.flink.configuration.PipelineOptionsInternal;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.TestingFlinkService;
@@ -72,16 +73,23 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     private Context<FlinkDeployment> readyContext;
     private TestObserverAdapter<FlinkDeployment> observer;
+    private FlinkDeployment deployment;
 
     @Override
     public void setup() {
         observer = new TestObserverAdapter<>(this, new ApplicationObserver(eventRecorder));
         readyContext = TestUtils.createContextWithReadyJobManagerDeployment(kubernetesClient);
+        deployment = TestUtils.buildApplicationCluster();
+        var jobId = new JobID().toHexString();
+        deployment
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID.key(), jobId);
+        deployment.getStatus().getJobStatus().setJobId(jobId);
     }
 
     @Test
     public void observeApplicationCluster() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
 
@@ -178,12 +186,10 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     @Test
     public void testEventGeneratedWhenStatusChanged() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
 
-        deployment.setStatus(deployment.initStatus());
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
 
@@ -211,12 +217,10 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     @Test
     public void testErrorForwardToStatusWhenJobFailed() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
 
-        deployment.setStatus(deployment.initStatus());
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
 
@@ -232,7 +236,6 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     @Test
     public void observeSavepoint() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Long timedOutNonce = 1L;
         deployment.getSpec().getJob().setSavepointTriggerNonce(timedOutNonce);
         Configuration conf =
@@ -524,7 +527,6 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     @Test
     public void observeCheckpoint() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Long timedOutNonce = 1L;
         final var errorReason = EventRecorder.Reason.CheckpointError.name();
         final var namespace = deployment.getMetadata().getNamespace();
@@ -656,7 +658,6 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     @Test
     public void testSavepointFormat() throws Exception {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         Configuration conf =
                 configManager.getDeployConfig(deployment.getMetadata(), deployment.getSpec());
         flinkService.submitApplicationCluster(deployment.getSpec().getJob(), conf, false);
@@ -731,9 +732,8 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     private void bringToReadyStatus(FlinkDeployment deployment) {
         ReconciliationUtils.updateStatusForDeployedSpec(deployment, new Configuration());
-        JobStatus jobStatus = new JobStatus();
+        JobStatus jobStatus = deployment.getStatus().getJobStatus();
         jobStatus.setJobName("jobname");
-        jobStatus.setJobId("0000000000");
         jobStatus.setState(JobState.RUNNING.name());
         deployment.getStatus().setJobStatus(jobStatus);
         deployment.getStatus().setJobManagerDeploymentStatus(JobManagerDeploymentStatus.READY);
@@ -741,7 +741,6 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     @Test
     public void observeListJobsError() {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         bringToReadyStatus(deployment);
         observer.observe(deployment, readyContext);
         assertEquals(
@@ -771,7 +770,6 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
         var context = TestUtils.createContextWithDeployment(kubernetesDeployment, kubernetesClient);
 
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getMetadata().setGeneration(123L);
 
         var status = deployment.getStatus();
@@ -849,8 +847,6 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     @Test
     public void observeAlreadyScaled() {
-        var deployment = TestUtils.buildApplicationCluster();
-
         // Update status for for running job
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(
                 deployment,
@@ -880,7 +876,6 @@ public class ApplicationObserverTest extends OperatorTestBase {
 
     @Test
     public void validateLastReconciledClearedOnInitialFailure() {
-        FlinkDeployment deployment = TestUtils.buildApplicationCluster();
         deployment.getMetadata().setGeneration(123L);
 
         ReconciliationUtils.updateStatusBeforeDeploymentAttempt(

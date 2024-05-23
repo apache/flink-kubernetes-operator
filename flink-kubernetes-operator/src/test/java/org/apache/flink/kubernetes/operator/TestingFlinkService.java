@@ -276,11 +276,12 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public Collection<JobStatusMessage> listJobs(Configuration conf) throws Exception {
+    public Optional<JobStatusMessage> getJobStatus(Configuration conf, JobID jobID)
+            throws Exception {
         if (!isPortReady) {
             throw new TimeoutException("JM port is unavailable");
         }
-        return super.listJobs(conf);
+        return super.getJobStatus(conf, jobID);
     }
 
     public List<Tuple3<String, JobStatusMessage, Configuration>> listJobs() {
@@ -603,7 +604,10 @@ public class TestingFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public Map<String, String> getClusterInfo(Configuration conf) {
+    public Map<String, String> getClusterInfo(Configuration conf) throws TimeoutException {
+        if (!isPortReady) {
+            throw new TimeoutException("JM port is unavailable");
+        }
         return CLUSTER_INFO;
     }
 
