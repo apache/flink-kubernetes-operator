@@ -19,19 +19,11 @@ package org.apache.flink.kubernetes.operator.observer.deployment;
 
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
-import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
-import org.apache.flink.kubernetes.operator.exception.UnknownJobException;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthObserver;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.SnapshotObserver;
-import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
-import org.apache.flink.runtime.client.JobStatusMessage;
-
-import java.util.Comparator;
-import java.util.List;
-import java.util.Optional;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CLUSTER_HEALTH_CHECK_ENABLED;
 
@@ -72,47 +64,6 @@ public class ApplicationObserver extends AbstractFlinkDeploymentObserver {
         @Override
         public void onTimeout(FlinkResourceContext<FlinkDeployment> ctx) {
             observeJmDeployment(ctx);
-        }
-
-        @Override
-        protected Optional<JobStatusMessage> filterTargetJob(
-                JobStatus status, List<JobStatusMessage> clusterJobStatuses) {
-            if (!clusterJobStatuses.isEmpty()) {
-                clusterJobStatuses.sort(
-                        Comparator.comparingLong(JobStatusMessage::getStartTime).reversed());
-                return Optional.of(clusterJobStatuses.get(0));
-            }
-            return Optional.empty();
-        }
-
-        @Override
-        protected void onTargetJobNotFound(FlinkResourceContext<FlinkDeployment> ctx) {
-            // This should never happen for application clusters, there is something
-            // wrong
-            setUnknownJobError(ctx);
-        }
-
-        /**
-         * We found a job on an application cluster that doesn't match the expected job. Trigger
-         * error.
-         *
-         * @param ctx Application deployment context.
-         */
-        private void setUnknownJobError(FlinkResourceContext<FlinkDeployment> ctx) {
-            ctx.getResource()
-                    .getStatus()
-                    .getJobStatus()
-                    .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
-            String err = "Unrecognized Job for Application deployment";
-            logger.error(err);
-            ReconciliationUtils.updateForReconciliationError(ctx, new UnknownJobException(err));
-            eventRecorder.triggerEvent(
-                    ctx.getResource(),
-                    EventRecorder.Type.Warning,
-                    EventRecorder.Reason.Missing,
-                    EventRecorder.Component.Job,
-                    err,
-                    ctx.getKubernetesClient());
         }
     }
 }

@@ -43,7 +43,6 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 
 import javax.annotation.Nullable;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -70,7 +69,7 @@ public interface FlinkService {
 
     boolean isJobManagerPortReady(Configuration config);
 
-    Collection<JobStatusMessage> listJobs(Configuration conf) throws Exception;
+    Optional<JobStatusMessage> getJobStatus(Configuration conf, JobID jobId) throws Exception;
 
     JobResult requestJobResult(Configuration conf, JobID jobID) throws Exception;
 

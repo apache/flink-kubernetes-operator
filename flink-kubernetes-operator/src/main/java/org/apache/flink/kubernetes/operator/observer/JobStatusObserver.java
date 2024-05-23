@@ -17,6 +17,7 @@
 
 package org.apache.flink.kubernetes.operator.observer;
 
+import org.apache.flink.api.common.JobID;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
@@ -24,23 +25,21 @@ import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.rest.NotFoundException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 
 import static org.apache.flink.kubernetes.operator.utils.FlinkResourceExceptionUtils.updateFlinkResourceException;
 
 /** An observer to observe the job status. */
-public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
+public class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(JobStatusObserver.class);
 
-    public static final String MISSING_SESSION_JOB_ERR = "Missing Session Job";
+    public static final String JOB_NOT_FOUND_ERR = "Job Not Found";
 
     protected final EventRecorder eventRecorder;
 
@@ -68,43 +67,29 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
         LOG.debug("Observing job status");
         var previousJobStatus = jobStatus.getState();
 
-        List<JobStatusMessage> clusterJobStatuses;
         try {
-            // Query job list from the cluster
-            clusterJobStatuses =
-                    new ArrayList<>(ctx.getFlinkService().listJobs(ctx.getObserveConfig()));
+            var newJobStatusOpt =
+                    ctx.getFlinkService()
+                            .getJobStatus(
+                                    ctx.getObserveConfig(),
+                                    JobID.fromHexString(jobStatus.getJobId()));
+
+            if (newJobStatusOpt.isPresent()) {
+                updateJobStatus(ctx, newJobStatusOpt.get());
+                ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
+                return true;
+            } else {
+                onTargetJobNotFound(ctx);
+            }
         } catch (Exception e) {
             // Error while accessing the rest api, will try again later...
-            LOG.warn("Exception while listing jobs", e);
+            LOG.warn("Exception while getting job status", e);
             ifRunningMoveToReconciling(jobStatus, previousJobStatus);
             if (e instanceof TimeoutException) {
                 onTimeout(ctx);
             }
-            return false;
         }
-
-        if (!clusterJobStatuses.isEmpty()) {
-            // There are jobs on the cluster, we filter the ones for this resource
-            Optional<JobStatusMessage> targetJobStatusMessage =
-                    filterTargetJob(jobStatus, clusterJobStatuses);
-
-            if (targetJobStatusMessage.isEmpty()) {
-                LOG.warn("No matching jobs found on the cluster");
-                ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-                onTargetJobNotFound(ctx);
-                return false;
-            } else {
-                updateJobStatus(ctx, targetJobStatusMessage.get());
-            }
-            ReconciliationUtils.checkAndUpdateStableSpec(resource.getStatus());
-            return true;
-        } else {
-            LOG.debug("No jobs found on the cluster");
-            // No jobs found on the cluster, it is possible that the jobmanager is still starting up
-            ifRunningMoveToReconciling(jobStatus, previousJobStatus);
-            onNoJobsFound(ctx);
-            return false;
-        }
+        return false;
     }
 
     /**
@@ -112,14 +97,21 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
      *
      * @param ctx The Flink resource context.
      */
-    protected abstract void onTargetJobNotFound(FlinkResourceContext<R> ctx);
-
-    /**
-     * Callback when no jobs were found on the cluster.
-     *
-     * @param ctx The Flink resource context.
-     */
-    protected void onNoJobsFound(FlinkResourceContext<R> ctx) {}
+    protected void onTargetJobNotFound(FlinkResourceContext<R> ctx) {
+        ctx.getResource()
+                .getStatus()
+                .getJobStatus()
+                .setState(org.apache.flink.api.common.JobStatus.RECONCILING.name());
+        ReconciliationUtils.updateForReconciliationError(
+                ctx, new NotFoundException(JOB_NOT_FOUND_ERR));
+        eventRecorder.triggerEvent(
+                ctx.getResource(),
+                EventRecorder.Type.Warning,
+                EventRecorder.Reason.Missing,
+                EventRecorder.Component.Job,
+                JOB_NOT_FOUND_ERR,
+                ctx.getKubernetesClient());
+    }
 
     /**
      * If we observed the job previously in RUNNING state we move to RECONCILING instead as we are
@@ -139,18 +131,7 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
      *
      * @param ctx Resource context.
      */
-    protected abstract void onTimeout(FlinkResourceContext<R> ctx);
-
-    /**
-     * Filter the target job status message by the job list from the cluster.
-     *
-     * @param status the target job status.
-     * @param clusterJobStatuses the candidate cluster jobs.
-     * @return The target job status message. If no matched job found, {@code Optional.empty()} will
-     *     be returned.
-     */
-    protected abstract Optional<JobStatusMessage> filterTargetJob(
-            JobStatus status, List<JobStatusMessage> clusterJobStatuses);
+    protected void onTimeout(FlinkResourceContext<R> ctx) {}
 
     /**
      * Update the status in CR according to the cluster job status.
@@ -161,16 +142,13 @@ public abstract class JobStatusObserver<R extends AbstractFlinkResource<?, ?>> {
     private void updateJobStatus(FlinkResourceContext<R> ctx, JobStatusMessage clusterJobStatus) {
         var resource = ctx.getResource();
         var jobStatus = resource.getStatus().getJobStatus();
-        var previousJobId = jobStatus.getJobId();
         var previousJobStatus = jobStatus.getState();
 
         jobStatus.setState(clusterJobStatus.getJobState().name());
         jobStatus.setJobName(clusterJobStatus.getJobName());
-        jobStatus.setJobId(clusterJobStatus.getJobId().toHexString());
         jobStatus.setStartTime(String.valueOf(clusterJobStatus.getStartTime()));
 
-        if (jobStatus.getJobId().equals(previousJobId)
-                && jobStatus.getState().equals(previousJobStatus)) {
+        if (jobStatus.getState().equals(previousJobStatus)) {
             LOG.debug("Job status ({}) unchanged", previousJobStatus);
         } else {
             jobStatus.setUpdateTime(String.valueOf(System.currentTimeMillis()));

@@ -77,6 +77,7 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerReq
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagerInfo;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersHeaders;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersInfo;
+import org.apache.flink.runtime.rest.util.RestClientException;
 import org.apache.flink.runtime.rest.util.RestMapperUtils;
 import org.apache.flink.runtime.scheduler.stopwithsavepoint.StopWithSavepointStoppingException;
 import org.apache.flink.runtime.taskexecutor.TaskExecutorMemoryConfiguration;
@@ -91,6 +92,7 @@ import org.apache.flink.util.concurrent.Executors;
 import org.apache.flink.util.function.TriFunction;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ListMeta;
@@ -299,6 +301,40 @@ public class AbstractFlinkServiceTest {
         assertTrue(cancelFuture.isDone());
         assertEquals(jobID, cancelFuture.get());
         assertNull(jobStatus.getSavepointInfo().getLastSavepoint());
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {404, 409, 500})
+    public void cancelErrorHandling(int statusCode) throws Exception {
+
+        var testingClusterClient =
+                new TestingClusterClient<>(configuration, TestUtils.TEST_DEPLOYMENT_NAME);
+        testingClusterClient.setCancelFunction(
+                jobID ->
+                        CompletableFuture.failedFuture(
+                                new RuntimeException(
+                                        new RestClientException(
+                                                "errrr", HttpResponseStatus.valueOf(statusCode)))));
+        var flinkService = new TestingService(testingClusterClient);
+
+        JobID jobID = JobID.generate();
+        var job = TestUtils.buildSessionJob();
+        var jobStatus = job.getStatus().getJobStatus();
+        jobStatus.setJobId(jobID.toHexString());
+        jobStatus.setState("RUNNING");
+        ReconciliationUtils.updateStatusForDeployedSpec(job, new Configuration());
+
+        if (statusCode == 500) {
+            assertThrows(
+                    Exception.class,
+                    () ->
+                            flinkService.cancelSessionJob(
+                                    job, UpgradeMode.STATELESS, new Configuration()));
+            assertEquals("RUNNING", jobStatus.getState());
+        } else {
+            flinkService.cancelSessionJob(job, UpgradeMode.STATELESS, new Configuration());
+            assertEquals("FINISHED", jobStatus.getState());
+        }
     }
 
     @ParameterizedTest

@@ -54,6 +54,8 @@ import org.apache.flink.runtime.client.JobStatusMessage;
 import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClientHAServices;
 import org.apache.flink.runtime.jobgraph.RestoreMode;
 import org.apache.flink.runtime.jobmaster.JobResult;
+import org.apache.flink.runtime.messages.FlinkJobNotFoundException;
+import org.apache.flink.runtime.messages.FlinkJobTerminatedWithoutCancellationException;
 import org.apache.flink.runtime.rest.FileUpload;
 import org.apache.flink.runtime.rest.RestClient;
 import org.apache.flink.runtime.rest.handler.async.AsynchronousOperationResult;
@@ -78,6 +80,7 @@ import org.apache.flink.runtime.rest.messages.job.savepoints.SavepointTriggerReq
 import org.apache.flink.runtime.rest.messages.queue.QueueStatus;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersHeaders;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagersInfo;
+import org.apache.flink.runtime.rest.util.RestClientException;
 import org.apache.flink.runtime.rest.util.RestConstants;
 import org.apache.flink.runtime.scheduler.stopwithsavepoint.StopWithSavepointStoppingException;
 import org.apache.flink.runtime.state.memory.NonPersistentMetadataCheckpointStorageLocation;
@@ -94,6 +97,8 @@ import org.apache.flink.util.FileUtils;
 import org.apache.flink.util.FlinkException;
 import org.apache.flink.util.FlinkRuntimeException;
 import org.apache.flink.util.Preconditions;
+
+import org.apache.flink.shaded.netty4.io.netty.handler.codec.http.HttpResponseStatus;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -123,7 +128,6 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -141,6 +145,7 @@ import java.util.stream.Collectors;
 
 import static org.apache.flink.kubernetes.operator.config.FlinkConfigBuilder.FLINK_VERSION;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.K8S_OP_CONF_PREFIX;
+import static org.apache.flink.util.ExceptionUtils.findThrowable;
 
 /**
  * An abstract {@link FlinkService} containing some common implementations for the native and
@@ -263,14 +268,24 @@ public abstract class AbstractFlinkService implements FlinkService {
     }
 
     @Override
-    public Collection<JobStatusMessage> listJobs(Configuration conf) throws Exception {
+    public Optional<JobStatusMessage> getJobStatus(Configuration conf, JobID jobId)
+            throws Exception {
         try (var clusterClient = getClusterClient(conf)) {
             return clusterClient
                     .sendRequest(
                             JobsOverviewHeaders.getInstance(),
                             EmptyMessageParameters.getInstance(),
                             EmptyRequestBody.getInstance())
-                    .thenApply(JobStatusUtils::toJobStatusMessage)
+                    .thenApply(
+                            mjd -> {
+                                if (mjd.getJobs() == null) {
+                                    return Optional.<JobStatusMessage>empty();
+                                }
+                                return mjd.getJobs().stream()
+                                        .filter(jd -> jd.getJobId().equals(jobId))
+                                        .findAny()
+                                        .map(JobStatusUtils::toJobStatusMessage);
+                            })
                     .get(operatorConfig.getFlinkClientTimeout().toSeconds(), TimeUnit.SECONDS);
         }
     }
@@ -425,16 +440,23 @@ public abstract class AbstractFlinkService implements FlinkService {
             LOG.debug("Job is not in terminal state, cancelling it");
 
             try (var clusterClient = getClusterClient(conf)) {
-                final String clusterId = clusterClient.getClusterId();
                 switch (upgradeMode) {
                     case STATELESS:
                         LOG.info("Cancelling job.");
-                        clusterClient
-                                .cancel(jobId)
-                                .get(
-                                        operatorConfig.getFlinkCancelJobTimeout().toSeconds(),
-                                        TimeUnit.SECONDS);
-                        LOG.info("Job successfully cancelled.");
+                        try {
+                            clusterClient
+                                    .cancel(jobId)
+                                    .get(
+                                            operatorConfig.getFlinkCancelJobTimeout().toSeconds(),
+                                            TimeUnit.SECONDS);
+                            LOG.info("Job successfully cancelled.");
+                        } catch (Exception e) {
+                            if (isJobMissingOrTerminated(e)) {
+                                LOG.info("Job already missing or terminated");
+                            } else {
+                                throw e;
+                            }
+                        }
                         break;
                     case SAVEPOINT:
                         if (ReconciliationUtils.isJobRunning(sessionJobStatus)) {
@@ -464,10 +486,9 @@ public abstract class AbstractFlinkService implements FlinkService {
                             } catch (TimeoutException exception) {
                                 throw new FlinkException(
                                         String.format(
-                                                "Timed out stopping the job %s in Flink cluster %s with savepoint, "
+                                                "Timed out stopping the job %s with savepoint, "
                                                         + "please configure a larger timeout via '%s'",
                                                 jobId,
-                                                clusterId,
                                                 ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT
                                                         .key()),
                                         exception);
@@ -492,6 +513,22 @@ public abstract class AbstractFlinkService implements FlinkService {
                     Savepoint sp = Savepoint.of(location, SnapshotTriggerType.UPGRADE);
                     jobStatus.getSavepointInfo().updateLastSavepoint(sp);
                 });
+    }
+
+    public static boolean isJobMissingOrTerminated(Exception e) {
+        if (findThrowable(e, FlinkJobNotFoundException.class).isPresent()
+                || findThrowable(e, FlinkJobTerminatedWithoutCancellationException.class)
+                        .isPresent()) {
+            return true;
+        }
+
+        return findThrowable(e, RestClientException.class)
+                .map(RestClientException::getHttpResponseStatus)
+                .map(
+                        respCode ->
+                                HttpResponseStatus.NOT_FOUND == respCode
+                                        || HttpResponseStatus.CONFLICT == respCode)
+                .orElse(false);
     }
 
     @Override

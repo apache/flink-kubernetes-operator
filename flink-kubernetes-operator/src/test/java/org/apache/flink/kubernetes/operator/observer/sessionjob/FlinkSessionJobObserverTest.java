@@ -21,7 +21,6 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
@@ -40,7 +39,6 @@ import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import lombok.Getter;
-import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -139,29 +137,13 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
 
         eventCollector.events.clear();
 
-        // With HA enabled no error should be triggered
-        observer.observe(sessionJob2, readyContext);
-        Assertions.assertEquals(
-                JobStatus.RECONCILING.name(), sessionJob2.getStatus().getJobStatus().getState());
-        Assertions.assertTrue(StringUtils.isEmpty(sessionJob2.getStatus().getError()));
-        Assertions.assertTrue(eventCollector.events.isEmpty());
-
-        // With HA disabled we expect an error status and event
-        sessionJob2
-                .getSpec()
-                .getFlinkConfiguration()
-                .put(HighAvailabilityOptions.HA_MODE.key(), "NONE");
         observer.observe(sessionJob2, readyContext);
         Assertions.assertEquals(
                 JobStatus.RECONCILING.name(), sessionJob2.getStatus().getJobStatus().getState());
         Assertions.assertTrue(
-                sessionJob2
-                        .getStatus()
-                        .getError()
-                        .contains(JobStatusObserver.MISSING_SESSION_JOB_ERR));
+                sessionJob2.getStatus().getError().contains(JobStatusObserver.JOB_NOT_FOUND_ERR));
         Assertions.assertEquals(
-                JobStatusObserver.MISSING_SESSION_JOB_ERR,
-                eventCollector.events.peek().getMessage());
+                JobStatusObserver.JOB_NOT_FOUND_ERR, eventCollector.events.peek().getMessage());
     }
 
     @Test
@@ -179,7 +161,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
                 JobStatus.RECONCILING.name(), sessionJob.getStatus().getJobStatus().getState());
 
         flinkService.setListJobConsumer(
-                configuration ->
+                (configuration) ->
                         Assertions.assertEquals(8088, configuration.getInteger(RestOptions.PORT)));
         observer.observe(sessionJob, readyContext);
         Assertions.assertEquals(

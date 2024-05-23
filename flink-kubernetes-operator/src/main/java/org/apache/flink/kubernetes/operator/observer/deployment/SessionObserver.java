@@ -36,7 +36,7 @@ public class SessionObserver extends AbstractFlinkDeploymentObserver {
         // Check if session cluster can serve rest calls following our practice in JobObserver
         try {
             logger.debug("Observing session cluster");
-            ctx.getFlinkService().listJobs(ctx.getObserveConfig());
+            ctx.getFlinkService().getClusterInfo(ctx.getObserveConfig());
             var rs = ctx.getResource().getStatus().getReconciliationStatus();
             if (rs.getState() == ReconciliationState.DEPLOYED) {
                 rs.markReconciledSpecAsStable();
