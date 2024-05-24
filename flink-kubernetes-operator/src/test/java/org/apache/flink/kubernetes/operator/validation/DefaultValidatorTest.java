@@ -483,6 +483,12 @@ public class DefaultValidatorTest {
 
         testError(dep -> dep.getSpec().setFlinkVersion(null), "Flink Version must be defined.");
 
+        testError(
+                dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_14),
+                "Flink version "
+                        + FlinkVersion.v1_14
+                        + " is not supported by this operator version");
+
         testSuccess(dep -> dep.getSpec().setFlinkVersion(FlinkVersion.v1_15));
 
         testError(
