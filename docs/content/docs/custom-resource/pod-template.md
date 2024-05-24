@@ -125,4 +125,4 @@ arr1: [{name: a, p2: v2}, {name: c, p2: v2}]
 merged: [{name: a, p1: v1, p2: v2}, {name: b, p1: v1}, {name: c, p2: v2}]
 ```
 
-Merging by name can we be very convenient when merging container specs or when the base and override templates are not defined together.
+Merging by name can be very convenient when merging container specs or when the base and override templates are not defined together.
