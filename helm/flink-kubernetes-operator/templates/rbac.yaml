@@ -30,7 +30,14 @@ rules:
       - configmaps
       - secrets
     verbs:
-      - "*"
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+      - deletecollection
 {{- if .Values.rbac.nodesRule.create }}
   - apiGroups:
     - ""
@@ -47,37 +54,74 @@ rules:
       - deployments/finalizers
       - replicasets
     verbs:
-      - "*"
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
   - apiGroups:
       - extensions
     resources:
       - deployments
       - ingresses
     verbs:
-      - "*"
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
   - apiGroups:
       - flink.apache.org
     resources:
       - flinkdeployments
-      - flinkdeployments/status
       - flinkdeployments/finalizers
       - flinksessionjobs
-      - flinksessionjobs/status
       - flinksessionjobs/finalizers
     verbs:
-      - "*"
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - flink.apache.org
+    resources:
+      - flinkdeployments/status
+      - flinksessionjobs/status
+    verbs:
+      - get
+      - update
+      - patch
   - apiGroups:
       - networking.k8s.io
     resources:
       - ingresses
     verbs:
-      - "*"
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
   - apiGroups:
       - coordination.k8s.io
     resources:
       - leases
     verbs:
-      - "*"
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
 {{- end }}
 
 {{/*
@@ -91,14 +135,26 @@ rules:
       - pods
       - configmaps
     verbs:
-      - '*'
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
   - apiGroups:
       - apps
     resources:
       - deployments
       - deployments/finalizers
     verbs:
-      - '*'
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
 {{- end }}
 
 ---
