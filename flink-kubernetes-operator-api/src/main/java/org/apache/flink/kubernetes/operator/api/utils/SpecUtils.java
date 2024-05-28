@@ -50,6 +50,7 @@ public class SpecUtils {
         try {
             ObjectNode wrapper = (ObjectNode) objectMapper.readTree(specWithMetaString);
             ObjectNode internalMeta = (ObjectNode) wrapper.remove(INTERNAL_METADATA_JSON_KEY);
+            internalMeta.remove("metadata");
 
             if (internalMeta == null) {
                 // migrating from old format
