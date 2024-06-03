@@ -208,6 +208,34 @@ public class MemoryTuningTest {
                                 TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
                                 "14172382822 bytes"));
 
+        // Test METASPACE when memory usage is so high that it could take all the memory
+        metrics = new EvaluatedMetrics(vertexMetrics, new HashMap<>(globalMetrics));
+        metrics.getGlobalMetrics()
+                .put(ScalingMetric.HEAP_MEMORY_USED, EvaluatedScalingMetric.avg(30812254720d));
+        // Set usage to max metaspace usage to ensure the calculation take in account max size
+        metrics.getGlobalMetrics()
+                .put(ScalingMetric.METASPACE_MEMORY_USED, EvaluatedScalingMetric.avg(268435456d));
+        configChanges =
+                MemoryTuning.tuneTaskManagerMemory(
+                        context, metrics, jobTopology, scalingSummaries, eventHandler);
+        assertThat(configChanges.getOverrides())
+                .containsExactlyInAnyOrderEntriesOf(
+                        Map.of(
+                                TaskManagerOptions.MANAGED_MEMORY_FRACTION.key(),
+                                "0.0",
+                                TaskManagerOptions.NETWORK_MEMORY_MIN.key(),
+                                "13760 kb",
+                                TaskManagerOptions.NETWORK_MEMORY_MAX.key(),
+                                "13760 kb",
+                                TaskManagerOptions.JVM_METASPACE.key(),
+                                "322122547 bytes",
+                                TaskManagerOptions.JVM_OVERHEAD_FRACTION.key(),
+                                "0.034",
+                                TaskManagerOptions.FRAMEWORK_HEAP_MEMORY.key(),
+                                "0 bytes",
+                                TaskManagerOptions.TOTAL_PROCESS_MEMORY.key(),
+                                "30 gb"));
+
         // Test tuning disabled
         config.set(AutoScalerOptions.MEMORY_TUNING_ENABLED, false);
         assertThat(

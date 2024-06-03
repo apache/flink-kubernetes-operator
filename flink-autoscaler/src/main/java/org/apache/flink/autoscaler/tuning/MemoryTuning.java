@@ -125,10 +125,12 @@ public class MemoryTuning {
                                 scalingSummaries, evaluatedMetrics.getVertexMetrics()),
                         config,
                         memBudget);
-        MemorySize newHeapSize =
-                determineNewSize(getUsage(HEAP_MEMORY_USED, globalMetrics), config, memBudget);
+        // Assign memory to the METASPACE before the HEAP to ensure all needed memory is provided
+        // to the METASPACE
         MemorySize newMetaspaceSize =
                 determineNewSize(getUsage(METASPACE_MEMORY_USED, globalMetrics), config, memBudget);
+        MemorySize newHeapSize =
+                determineNewSize(getUsage(HEAP_MEMORY_USED, globalMetrics), config, memBudget);
         MemorySize newManagedSize =
                 adjustManagedMemory(
                         getUsage(MANAGED_MEMORY_USED, globalMetrics),
