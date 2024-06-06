@@ -106,5 +106,5 @@ For each additional namespace that runs the Flink jobs, users need to do the fol
     ```
 3. Optionally create an example Flink job in the namespace. Run the command from the root of the cloned flink-kuberntes-operator repo:
     ```sh
-    kubectl -f example/basic.yaml
+    kubectl apply -f example/basic.yaml
     ```
