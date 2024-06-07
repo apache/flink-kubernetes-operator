@@ -59,6 +59,15 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | logConfiguration | java.util.Map<java.lang.String,java.lang.String> | Log configuration overrides for the Flink deployment. Format logConfigFileName -> configContent. |
 | mode | org.apache.flink.kubernetes.operator.api.spec.KubernetesDeploymentMode | Deployment mode of the Flink cluster, native or standalone. |
 
+### FlinkSessionJob
+**Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJob
+
+**Description**: Custom resource that represents a session job deployment.
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| spec | org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec | Spec that describes a session job deployment. |
+| status | org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus | Last observed status of the session job deployment. |
+
 ### FlinkSessionJobSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec
 
@@ -66,9 +75,9 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for application deployments/session job. Null for session clusters. |
+| job | org.apache.flink.kubernetes.operator.api.spec.JobSpec | Job specification for session job. |
 | restartNonce | java.lang.Long | Nonce used to manually trigger restart for the cluster/session job. In order to trigger restart, change the number to a different non-null value. |
-| flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink deployment or Flink session job. |
+| flinkConfiguration | java.util.Map<java.lang.String,java.lang.String> | Flink configuration overrides for the Flink session job. |
 | deploymentName | java.lang.String | The name of the target session cluster deployment. |
 
 ### FlinkVersion
@@ -269,9 +278,9 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus | Last observed status of the Flink job on Application/Session cluster. |
-| error | java.lang.String | Error information about the FlinkDeployment/FlinkSessionJob. |
-| observedGeneration | java.lang.Long | Last observed generation of the FlinkDeployment/FlinkSessionJob. |
+| jobStatus | org.apache.flink.kubernetes.operator.api.status.JobStatus | Last observed status of the Flink job on Session cluster. |
+| error | java.lang.String | Error information about the FlinkSessionJob. |
+| observedGeneration | java.lang.Long | Last observed generation of the FlinkSessionJob. |
 | lifecycleState | org.apache.flink.kubernetes.operator.api.lifecycle.ResourceLifecycleState | Lifecycle state of the Flink resource (including being rolled back, failed etc.). |
 | reconciliationStatus | org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobReconciliationStatus | Status of the last reconcile operation. |
 
