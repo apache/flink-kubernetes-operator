@@ -68,6 +68,8 @@ pygmentsUseClasses = true
   ]
 
 [markup]
+[markup.tableOfContents]
+  endLevel = 4
 [markup.goldmark.renderer]
   unsafe = true
 
