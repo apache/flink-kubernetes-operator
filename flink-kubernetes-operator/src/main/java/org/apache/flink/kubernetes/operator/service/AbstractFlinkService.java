@@ -82,11 +82,7 @@ import org.apache.flink.runtime.webmonitor.handlers.JarRunRequestBody;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadHeaders;
 import org.apache.flink.runtime.webmonitor.handlers.JarUploadResponseBody;
 import org.apache.flink.streaming.api.environment.ExecutionCheckpointingOptions;
-import org.apache.flink.util.ConfigurationException;
-import org.apache.flink.util.FileUtils;
-import org.apache.flink.util.FlinkException;
-import org.apache.flink.util.FlinkRuntimeException;
-import org.apache.flink.util.Preconditions;
+import org.apache.flink.util.*;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -135,6 +131,7 @@ public abstract class AbstractFlinkService implements FlinkService {
     private static final String EMPTY_JAR_FILENAME = "empty.jar";
     public static final String FIELD_NAME_TOTAL_CPU = "total-cpu";
     public static final String FIELD_NAME_TOTAL_MEMORY = "total-memory";
+    public static final String FORWARD_SLASH = "/";
 
     protected final KubernetesClient kubernetesClient;
     protected final ExecutorService executorService;
@@ -287,29 +284,33 @@ public abstract class AbstractFlinkService implements FlinkService {
                     deleteClusterDeployment(deployment.getMetadata(), deploymentStatus, conf, true);
                     break;
                 case SAVEPOINT:
-                    final String savepointDirectory =
-                            Preconditions.checkNotNull(
-                                    conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
-                    final long timeout =
-                            conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT)
-                                    .getSeconds();
                     if (ReconciliationUtils.isJobRunning(deploymentStatus)) {
                         try {
-                            LOG.info("Suspending job with savepoint.");
-                            String savepoint =
-                                    clusterClient
-                                            .stopWithSavepoint(
-                                                    Preconditions.checkNotNull(jobId),
-                                                    false,
-                                                    savepointDirectory,
-                                                    conf.get(FLINK_VERSION)
-                                                                    .isNewerVersionThan(
-                                                                            FlinkVersion.v1_14)
-                                                            ? savepointFormatType
-                                                            : null)
-                                            .get(timeout, TimeUnit.SECONDS);
-                            savepointOpt = Optional.of(savepoint);
-                            LOG.info("Job successfully suspended with savepoint {}.", savepoint);
+                            if (!StringUtils.isNullOrWhitespaceOnly(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY))){
+                                LOG.info("Suspending job with savepoint.");
+                                final String jobIdSubdir = FORWARD_SLASH + jobId + FORWARD_SLASH;
+                                final String savepointDirectory = operatorConfig.isSavepointCreateSubdir() ?
+                                        conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY) + jobIdSubdir : conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY);
+                                final long timeout =
+                                        conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT)
+                                                .getSeconds();
+                                String savepoint =
+                                        clusterClient
+                                                .stopWithSavepoint(
+                                                        Preconditions.checkNotNull(jobId),
+                                                        false,
+                                                        savepointDirectory,
+                                                        conf.get(FLINK_VERSION)
+                                                                .isNewerVersionThan(
+                                                                        FlinkVersion.v1_14)
+                                                                ? savepointFormatType
+                                                                : null)
+                                                .get(timeout, TimeUnit.SECONDS);
+                                savepointOpt = Optional.of(savepoint);
+                                LOG.info("Job successfully suspended with savepoint {}.", savepoint);
+                            }else {
+                                LOG.info("Job config 'state.savepoints.dir' is null, skipping cancel-with-savepoint");
+                            }
                         } catch (TimeoutException exception) {
                             throw new FlinkException(
                                     String.format(
@@ -395,41 +396,45 @@ public abstract class AbstractFlinkService implements FlinkService {
                         break;
                     case SAVEPOINT:
                         if (ReconciliationUtils.isJobRunning(sessionJobStatus)) {
-                            LOG.info("Suspending job with savepoint.");
-                            final String savepointDirectory =
-                                    Preconditions.checkNotNull(
-                                            conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
-                            final long timeout =
-                                    conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT)
-                                            .getSeconds();
-                            try {
-                                String savepoint =
-                                        clusterClient
-                                                .stopWithSavepoint(
-                                                        jobId,
-                                                        false,
-                                                        savepointDirectory,
-                                                        conf.get(FLINK_VERSION)
-                                                                        .isNewerVersionThan(
-                                                                                FlinkVersion.v1_14)
-                                                                ? conf.get(
-                                                                        KubernetesOperatorConfigOptions
-                                                                                .OPERATOR_SAVEPOINT_FORMAT_TYPE)
-                                                                : null)
-                                                .get(timeout, TimeUnit.SECONDS);
-                                savepointOpt = Optional.of(savepoint);
-                                LOG.info(
-                                        "Job successfully suspended with savepoint {}.", savepoint);
-                            } catch (TimeoutException exception) {
-                                throw new FlinkException(
-                                        String.format(
-                                                "Timed out stopping the job %s in Flink cluster %s with savepoint, "
-                                                        + "please configure a larger timeout via '%s'",
-                                                jobId,
-                                                clusterId,
-                                                ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT
-                                                        .key()),
-                                        exception);
+                            if(!StringUtils.isNullOrWhitespaceOnly(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY))){
+                                LOG.info("Suspending job with savepoint.");
+                                final String jobIdSubdir = FORWARD_SLASH + jobId + FORWARD_SLASH;
+                                final String savepointDirectory = operatorConfig.isSavepointCreateSubdir() ?
+                                                conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY) + jobIdSubdir : conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY);
+                                final long timeout =
+                                        conf.get(ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT)
+                                                .getSeconds();
+                                try {
+                                    String savepoint =
+                                            clusterClient
+                                                    .stopWithSavepoint(
+                                                            jobId,
+                                                            false,
+                                                            savepointDirectory,
+                                                            conf.get(FLINK_VERSION)
+                                                                    .isNewerVersionThan(
+                                                                            FlinkVersion.v1_14)
+                                                                    ? conf.get(
+                                                                    KubernetesOperatorConfigOptions
+                                                                            .OPERATOR_SAVEPOINT_FORMAT_TYPE)
+                                                                    : null)
+                                                    .get(timeout, TimeUnit.SECONDS);
+                                    savepointOpt = Optional.of(savepoint);
+                                    LOG.info(
+                                            "Job successfully suspended with savepoint {}.", savepoint);
+                                } catch (TimeoutException exception) {
+                                    throw new FlinkException(
+                                            String.format(
+                                                    "Timed out stopping the job %s in Flink cluster %s with savepoint, "
+                                                            + "please configure a larger timeout via '%s'",
+                                                    jobId,
+                                                    clusterId,
+                                                    ExecutionCheckpointingOptions.CHECKPOINTING_TIMEOUT
+                                                            .key()),
+                                            exception);
+                                }
+                            }else {
+                                LOG.info("Job config 'state.savepoints.dir' is null, skipping cancel-with-savepoint");
                             }
                         } else {
                             throw new RuntimeException(
@@ -467,8 +472,12 @@ public abstract class AbstractFlinkService implements FlinkService {
                     savepointTriggerHeaders.getUnresolvedMessageParameters();
             savepointTriggerMessageParameters.jobID.resolve(JobID.fromHexString(jobId));
 
-            var savepointDirectory =
-                    Preconditions.checkNotNull(conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
+            var jobIdSubdir = FORWARD_SLASH + jobId + FORWARD_SLASH;
+            var savepointDirectory = operatorConfig.isSavepointCreateSubdir() ?
+                    Preconditions.checkNotNull(
+                            conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY)) + jobIdSubdir :
+                    Preconditions.checkNotNull(
+                            conf.get(CheckpointingOptions.SAVEPOINT_DIRECTORY));
             var timeout = operatorConfig.getFlinkClientTimeout().getSeconds();
 
             var savepointFormatType = SavepointUtils.getSavepointFormatType(conf);

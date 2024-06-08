@@ -533,4 +533,11 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(false)
                     .withDescription(
                             "Indicate whether a savepoint must be taken when deleting a FlinkDeployment or FlinkSessionJob.");
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> SAVEPOINT_CREATE_SUBDIR =
+            operatorConfig("job.savepoint-create-subdir")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Indicate whether to create sub-directories named by job id under the 'state.savepoints.dir'");
 }
