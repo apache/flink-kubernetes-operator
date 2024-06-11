@@ -58,12 +58,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -202,7 +204,7 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
 
         Set<JobVertexID> vertexSet = Set.copyOf(t.getVerticesInTopologicalOrder());
         updateVertexList(stateStore, ctx, clock.instant(), vertexSet);
-        updateKafkaSourceMaxParallelisms(ctx, jobDetailsInfo.getJobId(), t);
+        updateKafkaPulsarSourceMaxParallelisms(ctx, jobDetailsInfo.getJobId(), t);
         excludeVerticesFromScaling(ctx.getConfiguration(), t.getFinishedVertices());
         return t;
     }
@@ -247,17 +249,36 @@ public abstract class ScalingMetricCollector<KEY, Context extends JobAutoScalerC
                 json, slotSharingGroupIdMap, maxParallelismMap, metrics, finished);
     }
 
-    private void updateKafkaSourceMaxParallelisms(Context ctx, JobID jobId, JobTopology topology)
-            throws Exception {
+    private void updateKafkaPulsarSourceMaxParallelisms(
+            Context ctx, JobID jobId, JobTopology topology) throws Exception {
         try (var restClient = ctx.getRestClusterClient()) {
-            var partitionRegex = Pattern.compile("^.*\\.partition\\.\\d+\\.currentOffset$");
+            Pattern partitionRegex =
+                    Pattern.compile(
+                            "^.*\\.KafkaSourceReader\\.topic\\.(?<kafkaTopic>.+)\\.partition\\.(?<kafkaId>\\d+)\\.currentOffset$"
+                                    + "|^.*\\.PulsarConsumer\\.(?<pulsarTopic>.+)-partition-(?<pulsarId>\\d+)\\..*\\.numMsgsReceived$");
             for (var vertexInfo : topology.getVertexInfos().values()) {
                 if (vertexInfo.getInputs().isEmpty()) {
                     var sourceVertex = vertexInfo.getId();
                     var numPartitions =
                             queryAggregatedMetricNames(restClient, jobId, sourceVertex).stream()
-                                    .filter(partitionRegex.asMatchPredicate())
-                                    .count();
+                                    .map(
+                                            v -> {
+                                                Matcher matcher = partitionRegex.matcher(v);
+                                                if (matcher.matches()) {
+                                                    String kafkaTopic = matcher.group("kafkaTopic");
+                                                    String kafkaId = matcher.group("kafkaId");
+                                                    String pulsarTopic =
+                                                            matcher.group("pulsarTopic");
+                                                    String pulsarId = matcher.group("pulsarId");
+                                                    return kafkaTopic != null
+                                                            ? kafkaTopic + "-" + kafkaId
+                                                            : pulsarTopic + "-" + pulsarId;
+                                                }
+                                                return null;
+                                            })
+                                    .filter(Objects::nonNull)
+                                    .collect(Collectors.toSet())
+                                    .size();
                     if (numPartitions > 0) {
                         LOG.debug(
                                 "Updating source {} max parallelism based on available partitions to {}",

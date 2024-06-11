@@ -232,7 +232,7 @@ public class MetricsCollectionAndEvaluationTest {
     }
 
     @Test
-    public void testKafkaPartitionMaxParallelism() throws Exception {
+    public void testKafkaPulsarPartitionMaxParallelism() throws Exception {
         setDefaultMetrics(metricsCollector);
         metricsCollector.updateMetrics(context, stateStore);
 
@@ -261,6 +261,25 @@ public class MetricsCollectionAndEvaluationTest {
         collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
         assertEquals(5, collectedMetrics.getJobTopology().get(source1).getMaxParallelism());
         assertEquals(720, collectedMetrics.getJobTopology().get(source2).getMaxParallelism());
+
+        metricsCollector.setMetricNames(
+                Map.of(
+                        source2,
+                        List.of(
+                                "0.Source__pulsar_source[1].PulsarConsumer"
+                                        + ".persistent_//public/default/testTopic-partition-1.d842f.numMsgsReceived",
+                                "0.Source__pulsar_source[1].PulsarConsumer"
+                                        + ".persistent_//public/default/testTopic-partition-1.660d2.numMsgsReceived",
+                                "0.Source__pulsar_source[1].PulsarConsumer"
+                                        + ".persistent_//public/default/testTopic-partition-2.d356f.numMsgsReceived",
+                                "0.Source__pulsar_source[1].PulsarConsumer"
+                                        + ".persistent_//public/default/otherTopic-partition-2.m953d.numMsgsReceived",
+                                "0.Source__pulsar_source[1].PulsarConsumer"
+                                        + ".persistent_//public/default/testTopic-partition-3.e427h.numMsgsReceived",
+                                "0.Source__pulsar_source[1].PulsarConsumer"
+                                        + ".persistent_//public/default/testTopic-partition-4.m962n.numMsgsReceived")));
+        collectedMetrics = metricsCollector.updateMetrics(context, stateStore);
+        assertEquals(5, collectedMetrics.getJobTopology().get(source2).getMaxParallelism());
     }
 
     @Test
