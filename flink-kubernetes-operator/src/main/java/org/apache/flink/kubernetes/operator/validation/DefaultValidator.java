@@ -30,6 +30,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
+import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.IngressSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobManagerSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobSpec;
@@ -133,8 +134,14 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     private Optional<String> validateFlinkVersion(FlinkDeployment deployment) {
         var spec = deployment.getSpec();
-        if (spec.getFlinkVersion() == null) {
+        var version = spec.getFlinkVersion();
+        if (version == null) {
             return Optional.of("Flink Version must be defined.");
+        }
+
+        if (!FlinkVersion.isSupported(version)) {
+            return Optional.of(
+                    "Flink version " + version + " is not supported by this operator version");
         }
 
         var lastReconciledSpec =
