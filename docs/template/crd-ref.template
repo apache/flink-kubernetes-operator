@@ -22,9 +22,9 @@ specific language governing permissions and limitations
 under the License.
 -->
 
-# FlinkDeployment Reference
+# Custom Resource Defintion Reference
 
-This page serves as a full reference for FlinkDeployment custom resource definition including all the possible configuration parameters.
+This serves as a full reference for FlinkDeployment and FlinkSessionJob custom resource definitions, including all possible configuration parameters.
 
 ## FlinkDeployment
 **Class**: org.apache.flink.kubernetes.operator.crd.FlinkDeployment
@@ -35,3 +35,13 @@ This page serves as a full reference for FlinkDeployment custom resource definit
 | ----------| ---- | ---- |
 | spec | org.apache.flink.kubernetes.operator.crd.spec.FlinkDeploymentSpec | Spec that describes a Flink application or session cluster deployment. |
 | status | org.apache.flink.kubernetes.operator.crd.status.FlinkDeploymentStatus | Last observed status of the Flink deployment. |
+
+## FlinkSessionJob
+**Class**: org.apache.flink.kubernetes.operator.crd.FlinkSessionJob
+
+**Description**: Custom resource that represents a session job deployment.
+
+| Parameter | Type | Docs |
+| ----------| ---- | ---- |
+| spec | org.apache.flink.kubernetes.operator.crd.spec.FlinkSessionJobSpec | Spec that describes a session job deployment. |
+| status | org.apache.flink.kubernetes.operator.crd.status.FlinkSessionJobStatus | Last observed status of the session job deployment. |
