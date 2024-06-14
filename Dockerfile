@@ -56,6 +56,7 @@ COPY --chown=flink:flink --from=build /app/flink-kubernetes-standalone/target/$K
 COPY --chown=flink:flink --from=build /app/flink-kubernetes-operator/target/plugins $FLINK_HOME/plugins
 COPY --chown=flink:flink --from=build /app/tools/license/licenses-output/NOTICE .
 COPY --chown=flink:flink --from=build /app/tools/license/licenses-output/licenses ./licenses
+COPY --chown=flink:flink --from=build /app/LICENSE ./LICENSE
 COPY --chown=flink:flink docker-entrypoint.sh /
 
 ARG SKIP_OS_UPDATE=true
