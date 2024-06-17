@@ -48,7 +48,7 @@ jobs:
       - name: Build with Maven
         run: |
           set -o pipefail; mvn clean install javadoc:javadoc -Pgenerate-docs | tee ./mvn.log; set +o pipefail
-          if [[ $(cat ./mvn.log | grep -E -v '(flink-runtime-.*.jar, flink-kubernetes-operator-.*.jar)|(flink-kubernetes-operator-.*.jar, flink-runtime-.*.jar) define 3 overlapping classes' | grep -E -v '(flink-runtime-.*.jar, flink-autoscaler-.*.jar)|(flink-autoscaler-.*.jar, flink-runtime-.*.jar) define 1 overlapping classes' | grep -c "overlapping classes" -) -gt 0 ]];then
+          if [[ $(cat ./mvn.log | grep -E -v '(flink-runtime-.*.jar, flink-kubernetes-operator-.*.jar)|(flink-kubernetes-operator-.*.jar, flink-runtime-.*.jar) define 3 overlapping classes' | grep -E -v '(flink-runtime-.*.jar, flink-autoscaler-.*.jar)|(flink-autoscaler-.*.jar, flink-runtime-.*.jar) define 1|2 overlapping classes' | grep -c "overlapping classes" -) -gt 0 ]];then
             echo "Found overlapping classes: "
             cat ./mvn.log | grep "overlapping classes"
             exit 1
@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        version: ["v1_18","v1_17","v1_16","v1_15"]
+        version: ["v1_19","v1_18","v1_17","v1_16","v1_15"]
         namespace: ["default","flink"]
         mode: ["native", "standalone"]
         java-version: [ 11, 17, 21 ]
@@ -95,6 +95,8 @@ jobs:
         include:
           - namespace: flink
             extraArgs: '--create-namespace --set "watchNamespaces={default,flink}"'
+          - version: v1_19
+            image: flink:1.19
           - version: v1_18
             image: flink:1.18
           - version: v1_17
@@ -130,6 +132,10 @@ jobs:
             test: test_dynamic_config.sh
           - version: v1_17
             test: test_flink_operator_ha.sh
+          - version: v1_18
+            test: test_dynamic_config.sh
+          - version: v1_18
+            test: test_flink_operator_ha.sh
           - version: v1_15
             java-version: 17
           - version: v1_16
@@ -141,6 +147,8 @@ jobs:
           - version: v1_16
             java-version: 21
           - version: v1_17
+            java-version: 21
+          - version: v1_18
             java-version: 21
     name: e2e_ci
     steps:
@@ -179,7 +187,7 @@ jobs:
             sed -i "s/# kubernetes.operator.leader-election.enabled: false/kubernetes.operator.leader-election.enabled: true/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
             sed -i "s/# kubernetes.operator.leader-election.lease-name: flink-operator-lease/kubernetes.operator.leader-election.lease-name: flink-operator-lease/" helm/flink-kubernetes-operator/conf/flink-conf.yaml
             sed -i "s/replicas: 1/replicas: 2/" helm/flink-kubernetes-operator/values.yaml
-          fi 
+          fi
           helm --debug install flink-kubernetes-operator -n ${{ matrix.namespace }} helm/flink-kubernetes-operator --set image.repository=flink-kubernetes-operator --set image.tag=ci-latest ${{ matrix.extraArgs }}
           kubectl wait --for=condition=Available --timeout=120s -n ${{ matrix.namespace }} deploy/flink-kubernetes-operator
           kubectl get pods -n ${{ matrix.namespace }}
