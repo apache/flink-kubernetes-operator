@@ -44,8 +44,8 @@ public class Basic {
         objectMeta.setName("basic");
         flinkDeployment.setMetadata(objectMeta);
         FlinkDeploymentSpec flinkDeploymentSpec = new FlinkDeploymentSpec();
-        flinkDeploymentSpec.setFlinkVersion(FlinkVersion.v1_15);
-        flinkDeploymentSpec.setImage("flink:1.15");
+        flinkDeploymentSpec.setFlinkVersion(FlinkVersion.v1_19);
+        flinkDeploymentSpec.setImage("flink:1.19");
         Map<String, String> flinkConfiguration =
                 Map.ofEntries(entry("taskmanager.numberOfTaskSlots", "2"));
         flinkDeploymentSpec.setFlinkConfiguration(flinkConfiguration);

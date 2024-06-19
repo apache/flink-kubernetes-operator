@@ -1058,7 +1058,7 @@ public class FlinkDeploymentControllerTest {
 
     @Test
     public void testInitialHaError() throws Exception {
-        var appCluster = TestUtils.buildApplicationCluster(FlinkVersion.v1_15);
+        var appCluster = TestUtils.buildApplicationCluster(FlinkVersion.v1_19);
         appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
         testController.reconcile(appCluster, context);
         testController.reconcile(appCluster, context);

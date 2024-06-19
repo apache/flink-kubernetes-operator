@@ -100,7 +100,7 @@ public class NativeFlinkServiceTest {
     public void setup() {
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
-        configuration.set(FLINK_VERSION, FlinkVersion.v1_15);
+        configuration.set(FLINK_VERSION, FlinkVersion.v1_19);
         eventRecorder = new EventRecorder(eventCollector);
         operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);
         executorService = Executors.newDirectExecutorService();

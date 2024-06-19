@@ -693,12 +693,12 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
     @Test
     public void testAlwaysSavepointOnFlinkVersionChange() throws Exception {
-        var deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_14);
+        var deployment = TestUtils.buildApplicationCluster(FlinkVersion.v1_18);
         getJobSpec(deployment).setUpgradeMode(UpgradeMode.LAST_STATE);
 
         reconciler.reconcile(deployment, context);
 
-        deployment.getSpec().setFlinkVersion(FlinkVersion.v1_15);
+        deployment.getSpec().setFlinkVersion(FlinkVersion.v1_19);
 
         var reconStatus = deployment.getStatus().getReconciliationStatus();
 

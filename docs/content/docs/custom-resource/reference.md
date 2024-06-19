@@ -90,7 +90,7 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 | ----- | ---- |
 | v1_13 | No longer supported since 1.7 operator release. |
 | v1_14 | No longer supported since 1.7 operator release. |
-| v1_15 |  |
+| v1_15 | Deprecated since 1.10 operator release. |
 | v1_16 |  |
 | v1_17 |  |
 | v1_18 |  |

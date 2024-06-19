@@ -207,7 +207,7 @@ For example, to support the hadoop fs resource:
 ```shell script
 FROM apache/flink-kubernetes-operator
 ENV FLINK_PLUGINS_DIR=/opt/flink/plugins
-COPY flink-hadoop-fs-1.15-SNAPSHOT.jar $FLINK_PLUGINS_DIR/hadoop-fs/
+COPY flink-hadoop-fs-1.19-SNAPSHOT.jar $FLINK_PLUGINS_DIR/hadoop-fs/
 ```
 
 Alternatively, if you use helm to install flink-kubernetes-operator, it allows you to specify a postStart hook to download the required plugins.
