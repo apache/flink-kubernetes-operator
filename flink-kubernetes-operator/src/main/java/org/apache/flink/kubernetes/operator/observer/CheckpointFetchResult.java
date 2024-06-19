@@ -22,18 +22,19 @@ import lombok.Value;
 /** Result of a fetch checkpoint operation. */
 @Value
 public class CheckpointFetchResult {
+    Long checkpointId;
     boolean pending;
     String error;
 
     public static CheckpointFetchResult error(String error) {
-        return new CheckpointFetchResult(false, error);
+        return new CheckpointFetchResult(null, false, error);
     }
 
     public static CheckpointFetchResult pending() {
-        return new CheckpointFetchResult(true, null);
+        return new CheckpointFetchResult(null, true, null);
     }
 
-    public static CheckpointFetchResult completed() {
-        return new CheckpointFetchResult(false, null);
+    public static CheckpointFetchResult completed(Long checkpointId) {
+        return new CheckpointFetchResult(checkpointId, false, null);
     }
 }

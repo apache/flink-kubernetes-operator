@@ -298,6 +298,26 @@ public class KubernetesOperatorConfigOptions {
                                     + "Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
 
     @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> SNAPSHOT_RESOURCE_ENABLED =
+            operatorConfig("snapshot.resource.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Create new FlinkStateSnapshot resources for storing snapshots. "
+                                    + "Disable if you wish to use the deprecated mode and save snapshot results to "
+                                    + "FlinkDeployment/FlinkSessionJob status fields. The Operator will fallback to the "
+                                    + "legacy mode during runtime if the CRD is not found, "
+                                    + "even if this value is true.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> PERIODIC_SAVEPOINT_DISPOSE_ON_DELETE =
+            operatorConfig("periodic.savepoint.dispose-on-delete")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Savepoint data created by periodic savepoints as FlinkStateSnapshot resources will be disposed of automatically when the Kubernetes resource gets deleted.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<String> PERIODIC_SAVEPOINT_INTERVAL =
             operatorConfig("periodic.savepoint.interval")
                     .stringType()
@@ -400,6 +420,14 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(5)
                     .withDescription(
                             "Max number of reconcile loops triggered within the rate limiter refresh period for each resource. Setting the limit <= 0 disables the limiter.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> OPERATOR_JOB_UPGRADE_SAVEPOINT_DISPOSE_ON_DELETE =
+            operatorConfig("job.upgrade.savepoint.dispose-on-delete")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Savepoint data created by upgrade savepoints as FlinkStateSnapshot resources will be disposed of automatically when the Kubernetes resource gets deleted.");
 
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> OPERATOR_JOB_UPGRADE_LAST_STATE_FALLBACK_ENABLED =

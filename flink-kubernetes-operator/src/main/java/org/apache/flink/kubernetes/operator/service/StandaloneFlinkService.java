@@ -46,6 +46,7 @@ import io.fabric8.kubernetes.client.KubernetesClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -80,9 +81,10 @@ public class StandaloneFlinkService extends AbstractFlinkService {
     }
 
     @Override
-    public void cancelJob(FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration conf)
+    public Optional<String> cancelJob(
+            FlinkDeployment deployment, UpgradeMode upgradeMode, Configuration conf)
             throws Exception {
-        cancelJob(deployment, upgradeMode, conf, true);
+        return cancelJob(deployment, upgradeMode, conf, true);
     }
 
     @Override

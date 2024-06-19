@@ -21,9 +21,11 @@ import org.apache.flink.core.plugin.Plugin;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
+import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 
 import io.fabric8.kubernetes.api.model.Event;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -41,18 +43,35 @@ public interface FlinkResourceListener extends Plugin {
 
     void onSessionJobEvent(ResourceEventContext<FlinkSessionJob> ctx);
 
-    /** Base for Resource Event and StatusUpdate contexts. */
-    interface ResourceContext<R extends AbstractFlinkResource<?, ?>> {
-        R getFlinkResource();
+    /**
+     * Called when a new FlinkStateSnapshot event is triggered.
+     *
+     * @param ctx Context of the event and resource
+     */
+    void onStateSnapshotEvent(FlinkStateSnapshotEventContext ctx);
 
+    /**
+     * Called when a FlinkStateSnapshot status gets updated.
+     *
+     * @param ctx Context of the new status and resource
+     */
+    void onStateSnapshotStatusUpdate(FlinkStateSnapshotStatusUpdateContext ctx);
+
+    /** Base for Resource Event and StatusUpdate contexts. */
+    interface ResourceContext {
         KubernetesClient getKubernetesClient();
 
         Instant getTimestamp();
     }
 
-    /** Context for Resource Event listener methods. */
+    /** Base for Flink resource Event and StatusUpdate contexts. */
+    interface FlinkResourceContext<R extends AbstractFlinkResource<?, ?>> extends ResourceContext {
+        R getFlinkResource();
+    }
+
+    /** Context for Flink resource Event listener methods. */
     interface ResourceEventContext<R extends AbstractFlinkResource<?, ?>>
-            extends ResourceContext<R> {
+            extends FlinkResourceContext<R> {
         Event getEvent();
 
         @Override
@@ -61,14 +80,39 @@ public interface FlinkResourceListener extends Plugin {
         }
     }
 
-    /** Context for Status listener methods. */
+    /** Context for Flink resource Status listener methods. */
     interface StatusUpdateContext<R extends AbstractFlinkResource<?, S>, S extends CommonStatus<?>>
-            extends ResourceContext<R> {
+            extends FlinkResourceContext<R> {
 
         default S getNewStatus() {
             return getFlinkResource().getStatus();
         }
 
         S getPreviousStatus();
+    }
+
+    /** Context for FlinkStateSnapshot Status listener methods. */
+    interface FlinkStateSnapshotStatusUpdateContext extends FlinkStateSnapshotResourceContext {
+
+        default FlinkStateSnapshotStatus getNewStatus() {
+            return getStateSnapshot().getStatus();
+        }
+
+        FlinkStateSnapshotStatus getPreviousStatus();
+    }
+
+    /** Context for FlinkStateSnapshot Event listener methods. */
+    interface FlinkStateSnapshotEventContext extends FlinkStateSnapshotResourceContext {
+        Event getEvent();
+
+        @Override
+        default Instant getTimestamp() {
+            return Instant.parse(getEvent().getLastTimestamp());
+        }
+    }
+
+    /** Base for FlinkStateSnapshot Event and StatusUpdate contexts. */
+    interface FlinkStateSnapshotResourceContext extends ResourceContext {
+        FlinkStateSnapshot getStateSnapshot();
     }
 }

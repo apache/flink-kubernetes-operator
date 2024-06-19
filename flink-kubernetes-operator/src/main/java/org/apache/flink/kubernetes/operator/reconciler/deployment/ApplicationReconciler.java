@@ -29,15 +29,20 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.Savepoint;
+import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.crd.CustomResourceDefinitionWatcher;
 import org.apache.flink.kubernetes.operator.exception.RecoveryFailureException;
 import org.apache.flink.kubernetes.operator.health.ClusterHealthInfo;
 import org.apache.flink.kubernetes.operator.observer.ClusterHealthEvaluator;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
@@ -70,8 +75,9 @@ public class ApplicationReconciler
     public ApplicationReconciler(
             EventRecorder eventRecorder,
             StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
-            JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler) {
-        super(eventRecorder, statusRecorder, autoscaler);
+            JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler,
+            CustomResourceDefinitionWatcher crdWatcher) {
+        super(eventRecorder, statusRecorder, autoscaler, crdWatcher);
     }
 
     @Override
@@ -226,7 +232,35 @@ public class ApplicationReconciler
     @Override
     protected void cancelJob(FlinkResourceContext<FlinkDeployment> ctx, UpgradeMode upgradeMode)
             throws Exception {
-        ctx.getFlinkService().cancelJob(ctx.getResource(), upgradeMode, ctx.getObserveConfig());
+        var conf = ctx.getObserveConfig() != null ? ctx.getObserveConfig() : new Configuration();
+        var savepointFormatType =
+                conf.get(KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_FORMAT_TYPE);
+
+        var savepointOpt = ctx.getFlinkService().cancelJob(ctx.getResource(), upgradeMode, conf);
+        savepointOpt.ifPresent(
+                location -> {
+                    if (FlinkStateSnapshotUtils.shouldCreateSnapshotResource(crdWatcher, conf)) {
+                        FlinkStateSnapshotUtils.createUpgradeSavepointResource(
+                                ctx.getKubernetesClient(),
+                                ctx.getResource(),
+                                location,
+                                SavepointFormatType.valueOf(savepointFormatType.name()),
+                                conf.get(
+                                        KubernetesOperatorConfigOptions
+                                                .OPERATOR_JOB_UPGRADE_SAVEPOINT_DISPOSE_ON_DELETE));
+                    } else {
+                        Savepoint sp =
+                                Savepoint.of(
+                                        location,
+                                        SnapshotTriggerType.UPGRADE,
+                                        SavepointFormatType.valueOf(savepointFormatType.name()));
+                        ctx.getResource()
+                                .getStatus()
+                                .getJobStatus()
+                                .getSavepointInfo()
+                                .updateLastSavepoint(sp);
+                    }
+                });
     }
 
     @Override

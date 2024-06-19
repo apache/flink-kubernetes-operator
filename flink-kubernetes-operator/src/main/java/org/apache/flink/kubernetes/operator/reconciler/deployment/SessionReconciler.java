@@ -26,6 +26,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.crd.CustomResourceDefinitionWatcher;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
@@ -51,8 +52,9 @@ public class SessionReconciler
 
     public SessionReconciler(
             EventRecorder eventRecorder,
-            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder) {
-        super(eventRecorder, statusRecorder, new NoopJobAutoscaler<>());
+            StatusRecorder<FlinkDeployment, FlinkDeploymentStatus> statusRecorder,
+            CustomResourceDefinitionWatcher crdWatcher) {
+        super(eventRecorder, statusRecorder, new NoopJobAutoscaler<>(), crdWatcher);
     }
 
     @Override

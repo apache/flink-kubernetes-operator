@@ -20,6 +20,7 @@ package org.apache.flink.kubernetes.operator.mutator;
 import org.apache.flink.core.plugin.Plugin;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 
 import java.util.Optional;
 
@@ -40,4 +41,11 @@ public interface FlinkResourceMutator extends Plugin {
      * @param session the target session cluster of the session job to be Mutated.
      */
     FlinkSessionJob mutateSessionJob(FlinkSessionJob sessionJob, Optional<FlinkDeployment> session);
+
+    /**
+     * Mutate snapshot and return the mutated Object.
+     *
+     * @param stateSnapshot the snapshot to be mutated.
+     */
+    FlinkStateSnapshot mutateStateSnapshot(FlinkStateSnapshot stateSnapshot);
 }

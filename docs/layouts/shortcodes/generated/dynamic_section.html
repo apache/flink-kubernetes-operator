@@ -129,10 +129,22 @@
             <td>Max allowed checkpoint age for initiating last-state upgrades on running jobs. If a checkpoint is not available within the desired age (and nothing in progress) a savepoint will be triggered.</td>
         </tr>
         <tr>
+            <td><h5>kubernetes.operator.job.upgrade.savepoint.dispose-on-delete</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Savepoint data created by upgrade savepoints as FlinkStateSnapshot resources will be disposed of automatically when the Kubernetes resource gets deleted.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.periodic.checkpoint.interval</h5></td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>String</td>
             <td>Option to enable automatic checkpoint triggering. Can be specified either as a Duration type (i.e. '10m') or as a cron expression in Quartz format (6 or 7 positions, see http://www.quartz-scheduler.org/documentation/quartz-2.3.0/tutorials/crontrigger.html).The triggering schedule is not guaranteed, checkpoints will be triggered as part of the regular reconcile loop. NOTE: checkpoints are generally managed by Flink. This setting isn't meant to replace Flink's checkpoint settings, but to complement them in special cases. For instance, a full checkpoint might need to be occasionally triggered to break the chain of incremental checkpoints and consolidate the partial incremental files. WARNING: not intended to be used together with the cron-based periodic checkpoint triggering</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.periodic.savepoint.dispose-on-delete</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Savepoint data created by periodic savepoints as FlinkStateSnapshot resources will be disposed of automatically when the Kubernetes resource gets deleted.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.periodic.savepoint.interval</h5></td>
@@ -175,6 +187,12 @@
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>
             <td>The interval before a savepoint trigger attempt is marked as unsuccessful.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.snapshot.resource.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Create new FlinkStateSnapshot resources for storing snapshots. Disable if you wish to use the deprecated mode and save snapshot results to FlinkDeployment/FlinkSessionJob status fields. The Operator will fallback to the legacy mode during runtime if the CRD is not found, even if this value is true.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.user.artifacts.http.header</h5></td>

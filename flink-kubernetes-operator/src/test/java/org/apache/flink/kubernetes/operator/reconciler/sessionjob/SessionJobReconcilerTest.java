@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
+import org.apache.flink.kubernetes.operator.api.CrdConstants;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobState;
@@ -33,8 +34,10 @@ import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
+import org.apache.flink.kubernetes.operator.crd.TestCustomResourceDefinitionWatcher;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
 
@@ -46,6 +49,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import javax.annotation.Nullable;
 
@@ -70,8 +74,10 @@ import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getJobStatus;
 import static org.apache.flink.kubernetes.operator.api.utils.FlinkResourceUtils.getReconciledJobSpec;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.SNAPSHOT_RESOURCE_ENABLED;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -96,13 +102,21 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 new TestReconcilerAdapter<>(
                         this,
                         new SessionJobReconciler(
-                                eventRecorder, statusRecorder, new NoopJobAutoscaler<>()));
+                                eventRecorder,
+                                statusRecorder,
+                                new NoopJobAutoscaler<>(),
+                                new TestCustomResourceDefinitionWatcher()));
     }
 
-    @Test
-    public void testSubmitAndCleanUpWithSavepoint() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testSubmitAndCleanUpWithSavepoint(boolean legacySnapshots) throws Exception {
         var conf = configManager.getDefaultConfig();
         conf.set(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION, true);
+        if (legacySnapshots) {
+            conf.set(SNAPSHOT_RESOURCE_ENABLED, false);
+        }
+
         configManager.updateDefaultConfig(conf);
 
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
@@ -117,23 +131,41 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         // clean up
         reconciler.cleanup(
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(
-                "savepoint_0",
-                sessionJob
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
+
+        if (legacySnapshots) {
+            assertEquals(
+                    "savepoint_0",
+                    sessionJob
+                            .getStatus()
+                            .getJobStatus()
+                            .getSavepointInfo()
+                            .getLastSavepoint()
+                            .getLocation());
+        } else {
+            var snapshots =
+                    FlinkStateSnapshotUtils.getFlinkStateSnapshotsForResource(
+                            flinkService.getKubernetesClient(), sessionJob);
+            assertThat(snapshots).isNotEmpty();
+            assertEquals("savepoint_0", snapshots.get(0).getSpec().getSavepoint().getPath());
+        }
     }
 
-    @Test
-    public void testSubmitAndCleanUpWithSavepointOnResource() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testSubmitAndCleanUpWithSavepointOnResource(boolean legacySnapshots)
+            throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
         sessionJob
                 .getSpec()
                 .getFlinkConfiguration()
                 .put(KubernetesOperatorConfigOptions.SAVEPOINT_ON_DELETION.key(), "true");
+
+        if (legacySnapshots) {
+            sessionJob
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        }
 
         // session ready
         reconciler.reconcile(
@@ -145,14 +177,22 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         // clean up
         reconciler.cleanup(
                 sessionJob, TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient));
-        assertEquals(
-                "savepoint_0",
-                sessionJob
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getLocation());
+        if (legacySnapshots) {
+            assertEquals(
+                    "savepoint_0",
+                    sessionJob
+                            .getStatus()
+                            .getJobStatus()
+                            .getSavepointInfo()
+                            .getLastSavepoint()
+                            .getLocation());
+        } else {
+            var snapshots =
+                    FlinkStateSnapshotUtils.getFlinkStateSnapshotsForResource(
+                            flinkService.getKubernetesClient(), sessionJob);
+            assertThat(snapshots).isNotEmpty();
+            assertEquals("savepoint_0", snapshots.get(0).getSpec().getSavepoint().getPath());
+        }
     }
 
     @Test
@@ -337,9 +377,16 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 flinkService.listJobs());
     }
 
-    @Test
-    public void testSavepointUpgrade() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testSavepointUpgrade(boolean legacySnapshots) throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        if (legacySnapshots) {
+            sessionJob
+                    .getSpec()
+                    .getFlinkConfiguration()
+                    .put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+        }
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
         reconciler.reconcile(sessionJob, readyContext);
@@ -370,22 +417,36 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
         // job suspended first
         assertEquals(FINISHED, flinkService.listJobs().get(0).f1.getJobState());
         verifyJobState(statefulSessionJob, JobState.SUSPENDED, "FINISHED");
-        assertEquals(
-                1,
-                statefulSessionJob
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getSavepointHistory()
-                        .size());
-        assertEquals(
-                SnapshotTriggerType.UPGRADE,
-                statefulSessionJob
-                        .getStatus()
-                        .getJobStatus()
-                        .getSavepointInfo()
-                        .getLastSavepoint()
-                        .getTriggerType());
+        if (legacySnapshots) {
+            assertEquals(
+                    1,
+                    statefulSessionJob
+                            .getStatus()
+                            .getJobStatus()
+                            .getSavepointInfo()
+                            .getSavepointHistory()
+                            .size());
+            assertEquals(
+                    SnapshotTriggerType.UPGRADE,
+                    statefulSessionJob
+                            .getStatus()
+                            .getJobStatus()
+                            .getSavepointInfo()
+                            .getLastSavepoint()
+                            .getTriggerType());
+        } else {
+            var snapshots =
+                    FlinkStateSnapshotUtils.getFlinkStateSnapshotsForResource(
+                            flinkService.getKubernetesClient(), statefulSessionJob);
+            assertThat(snapshots).isNotEmpty();
+            assertEquals(
+                    SnapshotTriggerType.UPGRADE.name(),
+                    snapshots
+                            .get(0)
+                            .getMetadata()
+                            .getLabels()
+                            .get(CrdConstants.LABEL_SNAPSHOT_TYPE));
+        }
 
         flinkService.clear();
         // upgraded
@@ -400,8 +461,10 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     }
 
     @Test
-    public void testTriggerSavepoint() throws Exception {
+    public void testTriggerSavepointLegacyLegacy() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        sessionJob.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+
         assertFalse(SnapshotUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
@@ -523,6 +586,8 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
     @Test
     public void testTriggerCheckpoint() throws Exception {
         FlinkSessionJob sessionJob = TestUtils.buildSessionJob();
+        sessionJob.getSpec().getFlinkConfiguration().put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
+
         assertFalse(SnapshotUtils.checkpointInProgress(getJobStatus(sessionJob)));
 
         var readyContext = TestUtils.createContextWithReadyFlinkDeployment(kubernetesClient);
@@ -770,6 +835,10 @@ public class SessionJobReconcilerTest extends OperatorTestBase {
                 sessionJob, JobState.RUNNING, RECONCILING.name(), null, flinkService.listJobs());
 
         FlinkSessionJob spSessionJob = ReconciliationUtils.clone(sessionJob);
+        spSessionJob
+                .getSpec()
+                .getFlinkConfiguration()
+                .put(SNAPSHOT_RESOURCE_ENABLED.key(), "false");
         spSessionJob
                 .getSpec()
                 .getJob()

@@ -36,8 +36,9 @@ import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkDeploymentContext;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
-import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
 import org.apache.flink.kubernetes.utils.KubernetesUtils;
 import org.apache.flink.runtime.jobgraph.JobResourceRequirements;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -90,7 +91,10 @@ public class NativeFlinkServiceTest {
     private final Configuration configuration = new Configuration();
     private final FlinkConfigManager configManager = new FlinkConfigManager(configuration);
 
-    private final EventCollector eventCollector = new EventCollector();
+    private final FlinkResourceEventCollector flinkResourceEventCollector =
+            new FlinkResourceEventCollector();
+    private final FlinkStateSnapshotEventCollector flinkStateSnapshotEventCollector =
+            new FlinkStateSnapshotEventCollector();
 
     private EventRecorder eventRecorder;
     private FlinkOperatorConfiguration operatorConfig;
@@ -101,7 +105,8 @@ public class NativeFlinkServiceTest {
         configuration.set(KubernetesConfigOptions.CLUSTER_ID, TestUtils.TEST_DEPLOYMENT_NAME);
         configuration.set(KubernetesConfigOptions.NAMESPACE, TestUtils.TEST_NAMESPACE);
         configuration.set(FLINK_VERSION, FlinkVersion.v1_15);
-        eventRecorder = new EventRecorder(eventCollector);
+        eventRecorder =
+                new EventRecorder(flinkResourceEventCollector, flinkStateSnapshotEventCollector);
         operatorConfig = FlinkOperatorConfiguration.fromConfiguration(configuration);
         executorService = Executors.newDirectExecutorService();
     }
@@ -200,13 +205,14 @@ public class NativeFlinkServiceTest {
                 new NativeFlinkService(
                         client, null, executorService, operatorConfig, eventRecorder) {
                     @Override
-                    protected void cancelJob(
+                    protected Optional<String> cancelJob(
                             FlinkDeployment deployment,
                             UpgradeMode upgradeMode,
                             Configuration conf,
                             boolean deleteClusterAfterSavepoint) {
                         assertEquals(false, deleteClusterAfterSavepoint);
                         tested.set(true);
+                        return Optional.empty();
                     }
                 };
 

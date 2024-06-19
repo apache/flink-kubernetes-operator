@@ -38,11 +38,13 @@ import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.autoscaler.KubernetesJobAutoScalerContext;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
+import org.apache.flink.kubernetes.operator.crd.CustomResourceDefinitionWatcher;
 import org.apache.flink.kubernetes.operator.reconciler.Reconciler;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
 import org.apache.flink.kubernetes.operator.reconciler.diff.DiffResult;
 import org.apache.flink.kubernetes.operator.reconciler.diff.ReflectiveDiffBuilder;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.FlinkUtils;
 import org.apache.flink.kubernetes.operator.utils.StatusRecorder;
 import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
@@ -78,6 +80,7 @@ public abstract class AbstractFlinkResourceReconciler<
     protected final EventRecorder eventRecorder;
     protected final StatusRecorder<CR, STATUS> statusRecorder;
     protected final JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler;
+    protected final CustomResourceDefinitionWatcher crdWatcher;
 
     public static final String MSG_SUSPENDED = "Suspending existing deployment.";
     public static final String MSG_SPEC_CHANGED =
@@ -90,10 +93,12 @@ public abstract class AbstractFlinkResourceReconciler<
     public AbstractFlinkResourceReconciler(
             EventRecorder eventRecorder,
             StatusRecorder<CR, STATUS> statusRecorder,
-            JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler) {
+            JobAutoScaler<ResourceID, KubernetesJobAutoScalerContext> autoscaler,
+            CustomResourceDefinitionWatcher crdWatcher) {
         this.eventRecorder = eventRecorder;
         this.statusRecorder = statusRecorder;
         this.autoscaler = autoscaler;
+        this.crdWatcher = crdWatcher;
     }
 
     @Override
@@ -122,12 +127,20 @@ public abstract class AbstractFlinkResourceReconciler<
             var deployConfig = ctx.getDeployConfig(spec);
             updateStatusBeforeFirstDeployment(
                     cr, spec, deployConfig, status, ctx.getKubernetesClient());
-            deploy(
-                    ctx,
-                    spec,
-                    deployConfig,
-                    Optional.ofNullable(spec.getJob()).map(JobSpec::getInitialSavepointPath),
-                    false);
+
+            Optional<String> savepointPathOpt =
+                    Optional.ofNullable(spec.getJob()).map(JobSpec::getInitialSavepointPath);
+            if (spec.getJob() != null && spec.getJob().getFlinkStateSnapshotReference() != null) {
+                var snapshotRef = spec.getJob().getFlinkStateSnapshotReference();
+                if (snapshotRef.getName() != null) {
+                    savepointPathOpt =
+                            Optional.of(
+                                    FlinkStateSnapshotUtils.getAndValidateFlinkStateSnapshotPath(
+                                            ctx.getKubernetesClient(), snapshotRef));
+                }
+            }
+
+            deploy(ctx, spec, deployConfig, savepointPathOpt, false);
 
             ReconciliationUtils.updateStatusForDeployedSpec(cr, deployConfig, clock);
             return;
@@ -222,9 +235,12 @@ public abstract class AbstractFlinkResourceReconciler<
             CR cr, SPEC spec, Configuration deployConfig, STATUS status, KubernetesClient client) {
         if (spec.getJob() != null) {
             var initialUpgradeMode = UpgradeMode.STATELESS;
+            var snapshotRef = spec.getJob().getFlinkStateSnapshotReference();
             var initialSp = spec.getJob().getInitialSavepointPath();
 
-            if (initialSp != null) {
+            if (snapshotRef != null) {
+                initialUpgradeMode = UpgradeMode.SAVEPOINT;
+            } else if (initialSp != null) {
                 status.getJobStatus()
                         .getSavepointInfo()
                         .setLastSavepoint(Savepoint.of(initialSp, SnapshotTriggerType.UNKNOWN));

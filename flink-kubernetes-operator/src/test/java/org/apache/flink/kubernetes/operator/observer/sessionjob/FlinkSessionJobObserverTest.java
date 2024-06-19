@@ -23,6 +23,7 @@ import org.apache.flink.autoscaler.NoopJobAutoscaler;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.RestOptions;
+import org.apache.flink.core.execution.CheckpointType;
 import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
@@ -30,6 +31,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkSessionJobStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
+import org.apache.flink.kubernetes.operator.crd.TestCustomResourceDefinitionWatcher;
 import org.apache.flink.kubernetes.operator.observer.JobStatusObserver;
 import org.apache.flink.kubernetes.operator.observer.TestObserverAdapter;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
@@ -69,7 +71,10 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
                 new TestReconcilerAdapter<>(
                         this,
                         new SessionJobReconciler(
-                                eventRecorder, statusRecorder, new NoopJobAutoscaler<>()));
+                                eventRecorder,
+                                statusRecorder,
+                                new NoopJobAutoscaler<>(),
+                                new TestCustomResourceDefinitionWatcher()));
     }
 
     @Test
@@ -137,14 +142,14 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
         // test error behaviour if job not present
         flinkService.clear();
 
-        eventCollector.events.clear();
+        flinkResourceEventCollector.events.clear();
 
         // With HA enabled no error should be triggered
         observer.observe(sessionJob2, readyContext);
         Assertions.assertEquals(
                 JobStatus.RECONCILING.name(), sessionJob2.getStatus().getJobStatus().getState());
         Assertions.assertTrue(StringUtils.isEmpty(sessionJob2.getStatus().getError()));
-        Assertions.assertTrue(eventCollector.events.isEmpty());
+        Assertions.assertTrue(flinkResourceEventCollector.events.isEmpty());
 
         // With HA disabled we expect an error status and event
         sessionJob2
@@ -161,7 +166,7 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
                         .contains(JobStatusObserver.MISSING_SESSION_JOB_ERR));
         Assertions.assertEquals(
                 JobStatusObserver.MISSING_SESSION_JOB_ERR,
-                eventCollector.events.peek().getMessage());
+                flinkResourceEventCollector.events.peek().getMessage());
     }
 
     @Test
@@ -207,21 +212,21 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
 
         Long firstNonce = 123L;
         sessionJob.getSpec().getJob().setSavepointTriggerNonce(firstNonce);
-        flinkService.triggerSavepoint(
-                jobID, SnapshotTriggerType.MANUAL, savepointInfo, new Configuration());
+        flinkService.triggerSavepointLegacy(
+                jobID, SnapshotTriggerType.MANUAL, sessionJob, new Configuration());
         Assertions.assertTrue(
                 SnapshotUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
         Assertions.assertEquals("savepoint_trigger_0", savepointInfo.getTriggerId());
 
         Long secondNonce = 456L;
         sessionJob.getSpec().getJob().setSavepointTriggerNonce(secondNonce);
-        flinkService.triggerSavepoint(
-                jobID, SnapshotTriggerType.MANUAL, savepointInfo, new Configuration());
+        flinkService.triggerSavepointLegacy(
+                jobID, SnapshotTriggerType.MANUAL, sessionJob, new Configuration());
         Assertions.assertTrue(
                 SnapshotUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
         Assertions.assertEquals("savepoint_trigger_1", savepointInfo.getTriggerId());
-        flinkService.triggerSavepoint(
-                jobID, SnapshotTriggerType.MANUAL, savepointInfo, new Configuration());
+        flinkService.triggerSavepointLegacy(
+                jobID, SnapshotTriggerType.MANUAL, sessionJob, new Configuration());
         Assertions.assertTrue(
                 SnapshotUtils.savepointInProgress(sessionJob.getStatus().getJobStatus()));
         observer.observe(sessionJob, readyContext); // pending
@@ -251,19 +256,27 @@ public class FlinkSessionJobObserverTest extends OperatorTestBase {
 
         Long firstNonce = 123L;
         sessionJob.getSpec().getJob().setCheckpointTriggerNonce(firstNonce);
-        flinkService.triggerCheckpoint(
-                jobID, SnapshotTriggerType.MANUAL, checkpointInfo, new Configuration());
+        var triggerId =
+                flinkService.triggerCheckpoint(jobID, CheckpointType.FULL, new Configuration());
+        checkpointInfo.setTrigger(
+                triggerId,
+                SnapshotTriggerType.MANUAL,
+                org.apache.flink.kubernetes.operator.api.status.CheckpointType.FULL);
         assertTrue(SnapshotUtils.checkpointInProgress(sessionJob.getStatus().getJobStatus()));
-        assertEquals("checkpoint_trigger_0", checkpointInfo.getTriggerId());
 
         Long secondNonce = 456L;
         sessionJob.getSpec().getJob().setCheckpointTriggerNonce(secondNonce);
-        flinkService.triggerCheckpoint(
-                jobID, SnapshotTriggerType.MANUAL, checkpointInfo, new Configuration());
+        triggerId = flinkService.triggerCheckpoint(jobID, CheckpointType.FULL, new Configuration());
+        checkpointInfo.setTrigger(
+                triggerId,
+                SnapshotTriggerType.MANUAL,
+                org.apache.flink.kubernetes.operator.api.status.CheckpointType.FULL);
         assertTrue(SnapshotUtils.checkpointInProgress(sessionJob.getStatus().getJobStatus()));
-        assertEquals("checkpoint_trigger_1", checkpointInfo.getTriggerId());
-        flinkService.triggerCheckpoint(
-                jobID, SnapshotTriggerType.MANUAL, checkpointInfo, new Configuration());
+        triggerId = flinkService.triggerCheckpoint(jobID, CheckpointType.FULL, new Configuration());
+        checkpointInfo.setTrigger(
+                triggerId,
+                SnapshotTriggerType.MANUAL,
+                org.apache.flink.kubernetes.operator.api.status.CheckpointType.FULL);
         assertTrue(SnapshotUtils.checkpointInProgress(sessionJob.getStatus().getJobStatus()));
         observer.observe(sessionJob, readyContext); // pending
         observer.observe(sessionJob, readyContext); // success

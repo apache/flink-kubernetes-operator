@@ -27,6 +27,7 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.ReconciliationState;
+import org.apache.flink.kubernetes.operator.crd.TestCustomResourceDefinitionWatcher;
 import org.apache.flink.kubernetes.operator.reconciler.TestReconcilerAdapter;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
@@ -60,7 +61,11 @@ public class SessionReconcilerTest extends OperatorTestBase {
     public void setup() {
         reconciler =
                 new TestReconcilerAdapter<>(
-                        this, new SessionReconciler(eventRecorder, statusRecorder));
+                        this,
+                        new SessionReconciler(
+                                eventRecorder,
+                                statusRecorder,
+                                new TestCustomResourceDefinitionWatcher()));
     }
 
     @Test

@@ -26,8 +26,10 @@ import org.apache.flink.configuration.HighAvailabilityOptions;
 import org.apache.flink.configuration.JobManagerOptions;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.kubernetes.configuration.KubernetesConfigOptions;
+import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkSessionJobSpec;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
@@ -53,6 +55,8 @@ import org.apache.flink.runtime.jobmanager.JobManagerProcessUtils;
 import org.apache.flink.util.StringUtils;
 
 import io.fabric8.kubernetes.api.model.Quantity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
@@ -64,6 +68,8 @@ import java.util.regex.Pattern;
 
 /** Default validator implementation for {@link FlinkDeployment}. */
 public class DefaultValidator implements FlinkResourceValidator {
+
+    private static final Logger LOG = LoggerFactory.getLogger(DefaultValidator.class);
 
     private static final Pattern DEPLOYMENT_NAME_PATTERN =
             Pattern.compile("[a-z]([-a-z\\d]{0,43}[a-z\\d])?");
@@ -286,6 +292,12 @@ public class DefaultValidator implements FlinkResourceValidator {
             return Optional.of("Job parallelism must be larger than 0");
         }
 
+        if (!StringUtils.isNullOrWhitespaceOnly(job.getInitialSavepointPath())
+                && job.getFlinkStateSnapshotReference() != null) {
+            return Optional.of(
+                    "Cannot set both initialSavepointPath and flinkStateSnapshotReference in the job spec");
+        }
+
         return Optional.empty();
     }
 
@@ -459,10 +471,12 @@ public class DefaultValidator implements FlinkResourceValidator {
 
             if (newJob.getSavepointRedeployNonce() != null
                     && !newJob.getSavepointRedeployNonce()
-                            .equals(oldJob.getSavepointRedeployNonce())
-                    && StringUtils.isNullOrWhitespaceOnly(newJob.getInitialSavepointPath())) {
-                return Optional.of(
-                        "InitialSavepointPath must not be empty for savepoint redeployment");
+                            .equals(oldJob.getSavepointRedeployNonce())) {
+                if (StringUtils.isNullOrWhitespaceOnly(newJob.getInitialSavepointPath())
+                        && newJob.getFlinkStateSnapshotReference() == null) {
+                    return Optional.of(
+                            "InitialSavepointPath and flinkStateSnapshotReference must not be empty for savepoint redeployment");
+                }
             }
         }
 
@@ -482,6 +496,29 @@ public class DefaultValidator implements FlinkResourceValidator {
                     validateSessionJobOnly(sessionJob),
                     validateSessionJobWithCluster(sessionJob, sessionOpt.get()));
         }
+    }
+
+    @Override
+    public Optional<String> validateStateSnapshot(
+            FlinkStateSnapshot savepoint, Optional<AbstractFlinkResource<?, ?>> target) {
+        var namespace = savepoint.getMetadata().getNamespace();
+        var spec = savepoint.getSpec();
+        var targetName = spec.getJobReference().toString();
+
+        if (target.isEmpty()) {
+            return Optional.of(
+                    String.format(
+                            "Target for snapshot (%s) in namespace %s was not found",
+                            targetName, namespace));
+        }
+
+        if ((!spec.isSavepoint() && !spec.isCheckpoint())
+                || (spec.isSavepoint() && spec.isCheckpoint())) {
+            return Optional.of(
+                    "Exactly one of checkpoint or savepoint configurations has to be set.");
+        }
+
+        return Optional.empty();
     }
 
     private Optional<String> validateSessionJobOnly(FlinkSessionJob sessionJob) {

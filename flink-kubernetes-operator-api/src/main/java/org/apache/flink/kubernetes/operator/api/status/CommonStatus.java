@@ -27,11 +27,13 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.fabric8.crd.generator.annotation.PrinterColumn;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
 import org.apache.commons.lang3.StringUtils;
 
 /** Last observed common status of the Flink deployment/Flink SessionJob. */
+@EqualsAndHashCode
 @Experimental
 @Data
 @AllArgsConstructor

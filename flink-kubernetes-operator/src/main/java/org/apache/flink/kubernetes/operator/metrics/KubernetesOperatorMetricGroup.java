@@ -18,12 +18,13 @@
 package org.apache.flink.kubernetes.operator.metrics;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.metrics.CharacterFilter;
 import org.apache.flink.runtime.metrics.MetricRegistry;
 import org.apache.flink.runtime.metrics.dump.QueryScopeInfo;
 import org.apache.flink.runtime.metrics.groups.AbstractMetricGroup;
 import org.apache.flink.runtime.metrics.scope.ScopeFormat;
+
+import io.fabric8.kubernetes.client.CustomResource;
 
 import java.util.Map;
 
@@ -48,7 +49,7 @@ public class KubernetesOperatorMetricGroup extends AbstractMetricGroup<AbstractM
 
     public KubernetesResourceNamespaceMetricGroup createResourceNamespaceGroup(
             Configuration config,
-            Class<? extends AbstractFlinkResource> resourceClass,
+            Class<? extends CustomResource> resourceClass,
             String resourceNs) {
         var resourceType = resourceClass.getSimpleName();
         return new KubernetesResourceNamespaceMetricGroup(

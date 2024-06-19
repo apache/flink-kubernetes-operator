@@ -28,9 +28,9 @@ import org.slf4j.LoggerFactory;
 import java.util.LinkedList;
 import java.util.function.BiConsumer;
 
-/** Simple consumer that collects triggered events for tests. */
-public class EventCollector implements BiConsumer<AbstractFlinkResource<?, ?>, Event> {
-    private static final Logger LOG = LoggerFactory.getLogger(EventCollector.class);
+/** Simple consumer that collects triggered resource events for tests. */
+public class FlinkResourceEventCollector implements BiConsumer<AbstractFlinkResource<?, ?>, Event> {
+    private static final Logger LOG = LoggerFactory.getLogger(FlinkResourceEventCollector.class);
     public final LinkedList<Event> events = new LinkedList<>();
 
     @Override

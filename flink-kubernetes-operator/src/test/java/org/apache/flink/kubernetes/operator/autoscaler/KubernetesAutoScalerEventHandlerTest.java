@@ -23,8 +23,9 @@ import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.kubernetes.operator.autoscaler.state.ConfigMapStore;
 import org.apache.flink.kubernetes.operator.autoscaler.state.KubernetesAutoScalerStateStore;
-import org.apache.flink.kubernetes.operator.utils.EventCollector;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkResourceEventCollector;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotEventCollector;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
 import io.fabric8.kubernetes.api.model.Event;
@@ -64,12 +65,14 @@ public class KubernetesAutoScalerEventHandlerTest {
 
     KubernetesAutoScalerStateStore stateStore;
 
-    private EventCollector eventCollector;
+    private FlinkResourceEventCollector flinkResourceEventCollector;
 
     @BeforeEach
     void setup() {
-        eventCollector = new EventCollector();
-        var eventRecorder = new EventRecorder(eventCollector);
+        flinkResourceEventCollector = new FlinkResourceEventCollector();
+        var eventRecorder =
+                new EventRecorder(
+                        flinkResourceEventCollector, new FlinkStateSnapshotEventCollector());
         ctx = createContext("cr1", kubernetesClient);
         eventHandler = new KubernetesAutoScalerEventHandler(eventRecorder);
         stateStore = new KubernetesAutoScalerStateStore(configMapStore);
@@ -99,7 +102,7 @@ public class KubernetesAutoScalerEventHandlerTest {
                 "message",
                 messageKey,
                 interval);
-        var event = eventCollector.events.poll();
+        var event = flinkResourceEventCollector.events.poll();
         assertEquals(EventRecorder.Reason.IneffectiveScaling.name(), event.getReason());
         assertEquals(1, event.getCount());
 
@@ -112,10 +115,10 @@ public class KubernetesAutoScalerEventHandlerTest {
                 messageKey,
                 interval);
         if (interval != null && interval.toMillis() > 0) {
-            assertEquals(0, eventCollector.events.size());
+            assertEquals(0, flinkResourceEventCollector.events.size());
         } else {
-            assertEquals(1, eventCollector.events.size());
-            event = eventCollector.events.poll();
+            assertEquals(1, flinkResourceEventCollector.events.size());
+            event = flinkResourceEventCollector.events.poll();
             assertEquals("message", event.getMessage());
             assertEquals(2, event.getCount());
         }
@@ -129,10 +132,10 @@ public class KubernetesAutoScalerEventHandlerTest {
                 messageKey,
                 interval);
         if (messageKey != null && interval != null && interval.toMillis() > 0) {
-            assertEquals(0, eventCollector.events.size());
+            assertEquals(0, flinkResourceEventCollector.events.size());
         } else {
-            assertEquals(1, eventCollector.events.size());
-            event = eventCollector.events.poll();
+            assertEquals(1, flinkResourceEventCollector.events.size());
+            event = flinkResourceEventCollector.events.poll();
             assertEquals("message1", event.getMessage());
             assertEquals(messageKey == null ? 1 : 3, event.getCount());
         }
@@ -145,8 +148,8 @@ public class KubernetesAutoScalerEventHandlerTest {
                 "message1",
                 "newKey",
                 interval);
-        assertEquals(1, eventCollector.events.size());
-        event = eventCollector.events.poll();
+        assertEquals(1, flinkResourceEventCollector.events.size());
+        event = flinkResourceEventCollector.events.poll();
         assertEquals("message1", event.getMessage());
         assertEquals(1, event.getCount());
     }
@@ -199,7 +202,7 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         false);
 
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, message, interval);
-        var event = eventCollector.events.poll();
+        var event = flinkResourceEventCollector.events.poll();
         assertTrue(
                 event.getMessage()
                         .contains(
@@ -222,10 +225,10 @@ public class KubernetesAutoScalerEventHandlerTest {
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, message, interval);
         Event newEvent;
         if (interval != null && interval.toMillis() > 0 && !scaled) {
-            assertEquals(0, eventCollector.events.size());
+            assertEquals(0, flinkResourceEventCollector.events.size());
         } else {
-            assertEquals(1, eventCollector.events.size());
-            newEvent = eventCollector.events.poll();
+            assertEquals(1, flinkResourceEventCollector.events.size());
+            newEvent = flinkResourceEventCollector.events.poll();
             assertEquals(event.getMetadata().getUid(), newEvent.getMetadata().getUid());
             assertEquals(2, newEvent.getCount());
         }
@@ -246,9 +249,9 @@ public class KubernetesAutoScalerEventHandlerTest {
                                         evaluatedScalingMetric)));
         eventHandler.handleScalingEvent(ctx, scalingSummaries2, message, interval);
 
-        assertEquals(1, eventCollector.events.size());
+        assertEquals(1, flinkResourceEventCollector.events.size());
 
-        newEvent = eventCollector.events.poll();
+        newEvent = flinkResourceEventCollector.events.poll();
         assertEquals(event.getMetadata().getUid(), newEvent.getMetadata().getUid());
         assertEquals(
                 interval != null && interval.toMillis() > 0 && !scaled ? 2 : 3,
@@ -272,10 +275,10 @@ public class KubernetesAutoScalerEventHandlerTest {
         eventHandler.handleScalingEvent(ctx, scalingSummaries2, message, interval);
 
         if (interval != null && interval.toMillis() > 0 && !scaled) {
-            assertEquals(0, eventCollector.events.size());
+            assertEquals(0, flinkResourceEventCollector.events.size());
         } else {
-            assertEquals(1, eventCollector.events.size());
-            newEvent = eventCollector.events.poll();
+            assertEquals(1, flinkResourceEventCollector.events.size());
+            newEvent = flinkResourceEventCollector.events.poll();
             assertEquals(4, newEvent.getCount());
         }
     }
@@ -307,15 +310,15 @@ public class KubernetesAutoScalerEventHandlerTest {
                         + String.format(
                                 SCALING_EXECUTION_DISABLED_REASON, SCALING_ENABLED.key(), false);
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, enabledMessage, interval);
-        var event = eventCollector.events.poll();
+        var event = flinkResourceEventCollector.events.poll();
         assertEquals(null, event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
         assertEquals(1, event.getCount());
 
         // Get recommendation event even parallelism map doesn't change and within supression
         // interval
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, disabledMessage, interval);
-        assertEquals(1, eventCollector.events.size());
-        event = eventCollector.events.poll();
+        assertEquals(1, flinkResourceEventCollector.events.size());
+        event = flinkResourceEventCollector.events.poll();
         assertTrue(
                 event.getMessage()
                         .contains(
@@ -334,8 +337,8 @@ public class KubernetesAutoScalerEventHandlerTest {
         // Get recommendation event even parallelism map doesn't change and within supression
         // interval
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, enabledMessage, interval);
-        assertEquals(1, eventCollector.events.size());
-        event = eventCollector.events.poll();
+        assertEquals(1, flinkResourceEventCollector.events.size());
+        event = flinkResourceEventCollector.events.poll();
         assertTrue(
                 event.getMessage()
                         .contains(
@@ -381,15 +384,15 @@ public class KubernetesAutoScalerEventHandlerTest {
                                 EXCLUDED_PERIODS.key(),
                                 "10:00-11:00");
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, enabledMessage, interval);
-        var event = eventCollector.events.poll();
+        var event = flinkResourceEventCollector.events.poll();
         assertNull(event.getMetadata().getLabels().get(PARALLELISM_MAP_KEY));
         assertEquals(1, event.getCount());
 
         // Get recommendation event even parallelism map doesn't change and within supression
         // interval
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, disabledMessage, interval);
-        assertEquals(1, eventCollector.events.size());
-        event = eventCollector.events.poll();
+        assertEquals(1, flinkResourceEventCollector.events.size());
+        event = flinkResourceEventCollector.events.poll();
         assertTrue(
                 event.getMessage()
                         .contains(
@@ -408,8 +411,8 @@ public class KubernetesAutoScalerEventHandlerTest {
         // Get recommendation event even parallelism map doesn't change and within supression
         // interval
         eventHandler.handleScalingEvent(ctx, scalingSummaries1, enabledMessage, interval);
-        assertEquals(1, eventCollector.events.size());
-        event = eventCollector.events.poll();
+        assertEquals(1, flinkResourceEventCollector.events.size());
+        event = flinkResourceEventCollector.events.poll();
         assertTrue(
                 event.getMessage()
                         .contains(

@@ -21,6 +21,7 @@ import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
 import org.apache.flink.kubernetes.operator.api.listener.FlinkResourceListener;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
+import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 
 import io.fabric8.kubernetes.api.model.Event;
 import lombok.NonNull;
@@ -31,6 +32,14 @@ import org.slf4j.LoggerFactory;
 /** Responsible for logging resource event/status updates. */
 public class AuditUtils {
     private static final Logger LOG = LoggerFactory.getLogger(AuditUtils.class);
+
+    public static void logContext(FlinkResourceListener.FlinkStateSnapshotStatusUpdateContext ctx) {
+        LOG.info(format(ctx.getNewStatus()));
+    }
+
+    public static void logContext(FlinkResourceListener.FlinkStateSnapshotEventContext ctx) {
+        LOG.info(format(ctx.getEvent()));
+    }
 
     public static <R extends AbstractFlinkResource<?, S>, S extends CommonStatus<?>>
             void logContext(FlinkResourceListener.StatusUpdateContext<R, S> ctx) {
@@ -51,6 +60,16 @@ public class AuditUtils {
                 StringUtils.isEmpty(status.getError())
                         ? lifeCycleState.getDescription()
                         : status.getError());
+    }
+
+    private static String format(@NonNull FlinkStateSnapshotStatus status) {
+        if (StringUtils.isEmpty(status.getError())) {
+            return String.format(
+                    ">>> Status[Snapshot] | Info | %s | %s", status.getState(), status.getPath());
+        } else {
+            return String.format(
+                    ">>> Status[Snapshot] | Error | %s | %s", status.getState(), status.getError());
+        }
     }
 
     @VisibleForTesting
