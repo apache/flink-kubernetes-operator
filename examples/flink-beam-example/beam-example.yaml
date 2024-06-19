@@ -22,7 +22,7 @@ metadata:
   name: beam-example
 spec:
   image: flink-beam-example:latest
-  flinkVersion: v1_15
+  flinkVersion: v1_16
   flinkConfiguration:
     taskmanager.numberOfTaskSlots: "1"
   serviceAccount: flink

@@ -325,7 +325,7 @@ public class TestUtils extends BaseTestUtils {
 
     public static Stream<Arguments> flinkVersionsAndUpgradeModes() {
         List<Arguments> args = new ArrayList<>();
-        for (FlinkVersion version : Set.of(FlinkVersion.v1_15, FlinkVersion.v1_18)) {
+        for (FlinkVersion version : Set.of(FlinkVersion.v1_16, FlinkVersion.v1_19)) {
             for (UpgradeMode upgradeMode : UpgradeMode.values()) {
                 args.add(arguments(version, upgradeMode));
             }
@@ -334,7 +334,7 @@ public class TestUtils extends BaseTestUtils {
     }
 
     public static Stream<Arguments> flinkVersions() {
-        return Stream.of(arguments(FlinkVersion.v1_15), arguments(FlinkVersion.v1_18));
+        return Stream.of(arguments(FlinkVersion.v1_16), arguments(FlinkVersion.v1_19));
     }
 
     public static FlinkDeployment createCanaryDeployment() {

@@ -29,6 +29,8 @@ public enum FlinkVersion {
     /** No longer supported since 1.7 operator release. */
     @Deprecated
     v1_14,
+    /** Deprecated since 1.10 operator release. */
+    @Deprecated
     v1_15,
     v1_16,
     v1_17,

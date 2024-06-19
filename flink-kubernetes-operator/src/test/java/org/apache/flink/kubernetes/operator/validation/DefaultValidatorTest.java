@@ -657,7 +657,7 @@ public class DefaultValidatorTest {
             UpgradeMode fromUpgrade, UpgradeMode toUpgrade, JobState fromState) {
         return dep -> {
             var spec = dep.getSpec();
-            spec.setFlinkVersion(FlinkVersion.v1_15);
+            spec.setFlinkVersion(FlinkVersion.v1_19);
             spec.getJob().setUpgradeMode(toUpgrade);
 
             var suspendSpec = ReconciliationUtils.clone(spec);
@@ -665,7 +665,7 @@ public class DefaultValidatorTest {
             // Stopped with LAST_STATE mode with different Flink Version
             suspendSpec.getJob().setUpgradeMode(fromUpgrade);
             suspendSpec.getJob().setState(fromState);
-            suspendSpec.setFlinkVersion(FlinkVersion.v1_14);
+            suspendSpec.setFlinkVersion(FlinkVersion.v1_18);
 
             dep.getStatus()
                     .getReconciliationStatus()
