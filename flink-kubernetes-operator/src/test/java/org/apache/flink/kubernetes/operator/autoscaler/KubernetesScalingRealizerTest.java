@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.autoscaler.tuning.ConfigChanges;
+import org.apache.flink.configuration.GlobalConfiguration;
 import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.configuration.PipelineOptions;
 import org.apache.flink.configuration.TaskManagerOptions;
@@ -35,6 +36,9 @@ public class KubernetesScalingRealizerTest {
 
     @Test
     public void testApplyOverrides() {
+        // Required to keep the test config context on legacy Flink YAML converters.
+        GlobalConfiguration.setStandardYaml(false);
+
         KubernetesJobAutoScalerContext ctx =
                 TestingKubernetesAutoscalerUtils.createContext("test", null);
 

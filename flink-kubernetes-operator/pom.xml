@@ -251,6 +251,12 @@ under the License.
                                         <exclude>META-INF/**/module-info.class</exclude>
                                     </excludes>
                                 </filter>
+                                <filter>
+                                    <artifact>org.apache.flink:flink-kubernetes</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/versions/**/com/fasterxml/jackson/core/io/doubleparser/**</exclude>
+                                    </excludes>
+                                </filter>
                             </filters>
                             <artifactSet>
                                 <includes combine.children="append">

@@ -136,7 +136,7 @@ public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBas
         assertEquals(1, podSpec.getContainers().size());
         assertEquals(TestUtils.SERVICE_ACCOUNT, podSpec.getServiceAccountName());
         // Config and secret volumes
-        assertEquals(3, podSpec.getVolumes().size());
+        assertEquals(4, podSpec.getVolumes().size());
 
         final Container mainContainer = podSpec.getContainers().get(0);
         assertEquals(Constants.MAIN_CONTAINER_NAME, mainContainer.getName());
@@ -184,7 +184,7 @@ public class StandaloneKubernetesJobManagerFactoryTest extends ParametersTestBas
         assertEquals(
                 String.valueOf(TestUtils.JOB_MANAGER_MEMORY_MB), limits.get("memory").getAmount());
 
-        assertEquals(3, mainContainer.getVolumeMounts().size());
+        assertEquals(4, mainContainer.getVolumeMounts().size());
     }
 
     @Test

@@ -104,6 +104,12 @@ under the License.
             </exclusions>
         </dependency>
 
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.17.0</version>
+        </dependency>
+
         <!-- Derby tests -->
         <dependency>
             <groupId>org.apache.derby</groupId>
