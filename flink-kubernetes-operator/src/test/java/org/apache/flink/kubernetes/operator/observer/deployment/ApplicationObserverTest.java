@@ -842,7 +842,7 @@ public class ApplicationObserverTest extends OperatorTestBase {
                 status.getJobManagerDeploymentStatus());
 
         var specWithMeta = status.getReconciliationStatus().deserializeLastReconciledSpecWithMeta();
-        assertEquals(321L, specWithMeta.getMeta().getMetadata().getGeneration());
+        assertEquals(321L, status.getObservedGeneration());
         assertEquals(JobState.RUNNING, specWithMeta.getSpec().getJob().getState());
         assertEquals(5, specWithMeta.getSpec().getJob().getParallelism());
     }

@@ -1124,30 +1124,14 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         reconciler.reconcile(deployment, context);
         verifyAndSetRunningJobsToStatus(deployment, flinkService.listJobs());
 
-        assertEquals(
-                1L,
-                deployment
-                        .getStatus()
-                        .getReconciliationStatus()
-                        .deserializeLastReconciledSpecWithMeta()
-                        .getMeta()
-                        .getMetadata()
-                        .getGeneration());
+        assertEquals(1L, deployment.getStatus().getObservedGeneration());
 
         // Submit no-op upgrade
         deployment.getSpec().getFlinkConfiguration().put("kubernetes.operator.test", "value");
         deployment.getMetadata().setGeneration(2L);
 
         reconciler.reconcile(deployment, context);
-        assertEquals(
-                2L,
-                deployment
-                        .getStatus()
-                        .getReconciliationStatus()
-                        .deserializeLastReconciledSpecWithMeta()
-                        .getMeta()
-                        .getMetadata()
-                        .getGeneration());
+        assertEquals(2L, deployment.getStatus().getObservedGeneration());
     }
 
     @ParameterizedTest
