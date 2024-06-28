@@ -45,7 +45,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
 
-/** Copied from Flink. Should be removed once the client dependency is upgraded to 1.18. */
+/** Copied from Flink. Should be removed once the client dependency is upgraded to 1.20. */
 /** The difference compared to 1.18 is that slot sharing group is optional here. */
 public class JobDetailsInfo implements ResponseBody {
 
