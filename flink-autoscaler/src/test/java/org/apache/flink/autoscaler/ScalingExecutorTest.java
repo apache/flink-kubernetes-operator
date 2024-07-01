@@ -644,6 +644,334 @@ public class ScalingExecutorTest {
     }
 
     @Test
+    public void testScalingWithBackPropEnabledSimpleGraph() throws Exception {
+        var sourceHexString = "0bfd135746ac8efb3cce668b12e16d3a";
+        var source = JobVertexID.fromHexString(sourceHexString);
+        var filterOperatorHexString = "869fb403873411306404e9f2e4438c0e";
+        var filterOperator = JobVertexID.fromHexString(filterOperatorHexString);
+        var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
+        var sink = JobVertexID.fromHexString(sinkHexString);
+
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 1, 10, false, null),
+                        new VertexInfo(
+                                filterOperator, Map.of(source, REBALANCE), 1, 5, false, null),
+                        new VertexInfo(sink, Map.of(filterOperator, HASH), 1, 10, false, null));
+
+        var conf = context.getConfiguration();
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.d);
+        conf.set(AutoScalerOptions.PROCESSING_RATE_BACKPROPAGATION_ENABLED, true);
+
+        // If back propagation is enabled, then parallelism of all vertices is 5
+        var metrics =
+                new EvaluatedMetrics(
+                        Map.of(
+                                source,
+                                evaluatedWithMaxParallelism(1, 100, 10, 10),
+                                filterOperator,
+                                evaluatedWithMaxParallelism(1, 100, 10, 5),
+                                sink,
+                                evaluatedWithMaxParallelism(1, 100, 10, 10)),
+                        dummyGlobalMetrics);
+        var now = Instant.now();
+        assertThat(
+                        scalingExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                now,
+                                jobTopology))
+                .isTrue();
+
+        Map<String, String> parallelismOverrides = stateStore.getParallelismOverrides(context);
+
+        // Check if backpropagation has effect on another vertices
+        assertThat(parallelismOverrides)
+                .containsAllEntriesOf(
+                        Map.of(
+                                "0bfd135746ac8efb3cce668b12e16d3a",
+                                "5",
+                                "869fb403873411306404e9f2e4438c0e",
+                                "5",
+                                "a6b7102b8d3e3a9564998c1ffeb5e2b7",
+                                "5"));
+
+        conf.set(AutoScalerOptions.PROCESSING_RATE_BACKPROPAGATION_ENABLED, false);
+        now = Instant.now();
+        assertThat(
+                        scalingExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                now,
+                                jobTopology))
+                .isTrue();
+
+        parallelismOverrides = stateStore.getParallelismOverrides(context);
+
+        assertThat(parallelismOverrides)
+                .containsAllEntriesOf(
+                        Map.of(
+                                "0bfd135746ac8efb3cce668b12e16d3a",
+                                "10",
+                                "869fb403873411306404e9f2e4438c0e",
+                                "5",
+                                "a6b7102b8d3e3a9564998c1ffeb5e2b7",
+                                "10"));
+
+        conf.set(AutoScalerOptions.PROCESSING_RATE_BACKPROPAGATION_ENABLED, true);
+
+        jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 1, 11, false, null),
+                        new VertexInfo(
+                                filterOperator, Map.of(source, REBALANCE), 1, 6, false, null),
+                        new VertexInfo(sink, Map.of(filterOperator, HASH), 1, 11, false, null));
+
+        metrics =
+                new EvaluatedMetrics(
+                        Map.of(
+                                source,
+                                evaluatedWithMaxParallelism(1, 100, 10, 11),
+                                filterOperator,
+                                evaluatedWithMaxParallelism(1, 100, 10, 6),
+                                sink,
+                                evaluatedWithMaxParallelism(1, 100, 10, 11)),
+                        dummyGlobalMetrics);
+        now = Instant.now();
+        assertThat(
+                        scalingExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                now,
+                                jobTopology))
+                .isTrue();
+
+        parallelismOverrides = stateStore.getParallelismOverrides(context);
+
+        // Check max parallelism of the bottleneck vertex affects on other vertices parallelism
+        assertThat(parallelismOverrides)
+                .containsAllEntriesOf(
+                        Map.of(
+                                "0bfd135746ac8efb3cce668b12e16d3a",
+                                "6",
+                                "869fb403873411306404e9f2e4438c0e",
+                                "6",
+                                "a6b7102b8d3e3a9564998c1ffeb5e2b7",
+                                "6"));
+    }
+
+    @Test
+    public void testScalingWithBackPropEnabledComplexGraph() throws Exception {
+        var source1HexString = "0bfd135746ac8efb3cce668b12e16d3a";
+        var source1 = JobVertexID.fromHexString(source1HexString);
+        var source2HexString = "3082f1a7c9ee7aaab5172f2c0a5fba90";
+        var source2 = JobVertexID.fromHexString(source2HexString);
+        var source3HexString = "108440e208a8fe04cca0fee9d0161721";
+        var source3 = JobVertexID.fromHexString(source3HexString);
+        var joinOperator1HexString = "869fb403873411306404e9f2e4438c0e";
+        var joinOperator1 = JobVertexID.fromHexString(joinOperator1HexString);
+        var joinOperator2HexString = "50d0addd07a68c439013f2767a6bd813";
+        var joinOperator2 = JobVertexID.fromHexString(joinOperator2HexString);
+        var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
+        var sink = JobVertexID.fromHexString(sinkHexString);
+
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source1, Map.of(), 1, 1, false, null),
+                        new VertexInfo(source2, Map.of(), 1, 1, false, null),
+                        new VertexInfo(source3, Map.of(), 1, 3, false, null),
+                        new VertexInfo(
+                                joinOperator1,
+                                Map.of(source1, HASH, source2, HASH),
+                                1,
+                                5,
+                                false,
+                                null),
+                        new VertexInfo(
+                                joinOperator2,
+                                Map.of(joinOperator1, HASH, source3, HASH),
+                                1,
+                                15,
+                                false,
+                                null),
+                        new VertexInfo(sink, Map.of(joinOperator2, REBALANCE), 1, 3, false, null));
+
+        var conf = context.getConfiguration();
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.d);
+        conf.set(AutoScalerOptions.PROCESSING_RATE_BACKPROPAGATION_ENABLED, true);
+
+        // The expected new parallelism is 7 without adjustment by max parallelism.
+        var metrics =
+                new EvaluatedMetrics(
+                        Map.of(
+                                source1,
+                                evaluatedWithMaxParallelism(1, 8, 10, 1),
+                                source2,
+                                evaluatedWithMaxParallelism(1, 7, 10, 1),
+                                source3,
+                                evaluatedWithMaxParallelism(1, 6, 50, 1),
+                                joinOperator1,
+                                evaluatedWithMaxParallelism(1, 200, 10, 5),
+                                joinOperator2,
+                                evaluatedWithMaxParallelism(1, 250, 10, 15),
+                                sink,
+                                evaluatedWithMaxParallelism(1, 100, 200, 3)),
+                        dummyGlobalMetrics);
+        var now = Instant.now();
+        assertThat(
+                        scalingExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                now,
+                                jobTopology))
+                .isTrue();
+        Map<String, String> parallelismOverrides = stateStore.getParallelismOverrides(context);
+        // The source and keyed Operator should enable the parallelism adjustment, so the
+        // parallelism of source and sink are adjusted, but filter is not.
+        assertThat(parallelismOverrides)
+                .containsAllEntriesOf(
+                        Map.of(
+                                "0bfd135746ac8efb3cce668b12e16d3a",
+                                "1",
+                                "3082f1a7c9ee7aaab5172f2c0a5fba90",
+                                "1",
+                                "108440e208a8fe04cca0fee9d0161721",
+                                "1",
+                                "869fb403873411306404e9f2e4438c0e",
+                                "5",
+                                "50d0addd07a68c439013f2767a6bd813",
+                                "7",
+                                "a6b7102b8d3e3a9564998c1ffeb5e2b7",
+                                "1"));
+    }
+
+    @Test
+    public void testScalingWithBackPropEnabledAndExcludedVerticesSimpleGraph() throws Exception {
+        var sourceHexString = "0bfd135746ac8efb3cce668b12e16d3a";
+        var source = JobVertexID.fromHexString(sourceHexString);
+        var filterOperatorHexString = "869fb403873411306404e9f2e4438c0e";
+        var filterOperator = JobVertexID.fromHexString(filterOperatorHexString);
+        var mapOperatorHexString = "8f7c3b96622500ee3ea2c47920168039";
+        var mapOperator = JobVertexID.fromHexString(mapOperatorHexString);
+        var sinkHexString = "a6b7102b8d3e3a9564998c1ffeb5e2b7";
+        var sink = JobVertexID.fromHexString(sinkHexString);
+
+        JobTopology jobTopology =
+                new JobTopology(
+                        new VertexInfo(source, Map.of(), 1, 10, false, null),
+                        new VertexInfo(
+                                filterOperator, Map.of(source, REBALANCE), 2, 5, false, null),
+                        new VertexInfo(
+                                mapOperator, Map.of(filterOperator, REBALANCE), 2, 10, false, null),
+                        new VertexInfo(sink, Map.of(mapOperator, REBALANCE), 1, 10, false, null));
+
+        var conf = context.getConfiguration();
+        conf.set(AutoScalerOptions.TARGET_UTILIZATION, 1.d);
+        conf.set(AutoScalerOptions.PROCESSING_RATE_BACKPROPAGATION_ENABLED, true);
+
+        // If back propagation is enabled, then parallelism of all vertices is 5
+        var metrics =
+                new EvaluatedMetrics(
+                        Map.of(
+                                source,
+                                evaluatedWithMaxParallelism(1, 100, 10, 10),
+                                filterOperator,
+                                evaluatedWithMaxParallelism(2, 100, 50, 5),
+                                mapOperator,
+                                evaluatedWithMaxParallelism(2, 150, 50, 10),
+                                sink,
+                                evaluatedWithMaxParallelism(1, 100, 10, 10)),
+                        dummyGlobalMetrics);
+        var now = Instant.now();
+        assertThat(
+                        scalingExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                now,
+                                jobTopology))
+                .isTrue();
+
+        Map<String, String> parallelismOverrides = stateStore.getParallelismOverrides(context);
+
+        // If there is no bottlenecks scaling is ok.
+        assertThat(parallelismOverrides)
+                .containsAllEntriesOf(
+                        Map.of(
+                                "0bfd135746ac8efb3cce668b12e16d3a",
+                                "10",
+                                "869fb403873411306404e9f2e4438c0e",
+                                "4",
+                                "8f7c3b96622500ee3ea2c47920168039",
+                                "6",
+                                "a6b7102b8d3e3a9564998c1ffeb5e2b7",
+                                "10"));
+
+        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of("869fb403873411306404e9f2e4438c0e"));
+
+        now = Instant.now();
+        assertThat(
+                        scalingExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                now,
+                                jobTopology))
+                .isTrue();
+
+        parallelismOverrides = stateStore.getParallelismOverrides(context);
+
+        assertThat(parallelismOverrides)
+                .containsAllEntriesOf(
+                        Map.of(
+                                "0bfd135746ac8efb3cce668b12e16d3a",
+                                "5",
+                                "869fb403873411306404e9f2e4438c0e",
+                                "2",
+                                "8f7c3b96622500ee3ea2c47920168039",
+                                "3",
+                                "a6b7102b8d3e3a9564998c1ffeb5e2b7",
+                                "5"));
+
+        conf.set(AutoScalerOptions.VERTEX_EXCLUDE_IDS, List.of("8f7c3b96622500ee3ea2c47920168039"));
+
+        now = Instant.now();
+        assertThat(
+                        scalingExecutor.scaleResource(
+                                context,
+                                metrics,
+                                new HashMap<>(),
+                                new ScalingTracking(),
+                                now,
+                                jobTopology))
+                .isTrue();
+
+        parallelismOverrides = stateStore.getParallelismOverrides(context);
+
+        assertThat(parallelismOverrides)
+                .containsAllEntriesOf(
+                        Map.of(
+                                "0bfd135746ac8efb3cce668b12e16d3a",
+                                "5",
+                                "869fb403873411306404e9f2e4438c0e",
+                                "2",
+                                "8f7c3b96622500ee3ea2c47920168039",
+                                "2",
+                                "a6b7102b8d3e3a9564998c1ffeb5e2b7",
+                                "4"));
+    }
+
+    @Test
     public void testAdjustByMaxParallelism() throws Exception {
         var sourceHexString = "0bfd135746ac8efb3cce668b12e16d3a";
         var source = JobVertexID.fromHexString(sourceHexString);
@@ -844,6 +1172,13 @@ public class ScalingExecutorTest {
     private Map<ScalingMetric, EvaluatedScalingMetric> evaluated(
             int parallelism, double target, double trueProcessingRate) {
         return evaluated(parallelism, target, trueProcessingRate, 0.);
+    }
+
+    private Map<ScalingMetric, EvaluatedScalingMetric> evaluatedWithMaxParallelism(
+            int parallelism, double target, double trueProcessingRate, int maxParallelism) {
+        var res = evaluated(parallelism, target, trueProcessingRate, 0.);
+        res.put(ScalingMetric.MAX_PARALLELISM, EvaluatedScalingMetric.of(maxParallelism));
+        return res;
     }
 
     protected static <KEY, Context extends JobAutoScalerContext<KEY>>
