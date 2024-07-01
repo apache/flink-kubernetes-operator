@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.PROCESSING_RATE_BACKPROPAGATION_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_EXECUTION_DISABLED_REASON;
@@ -220,39 +221,77 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return Map.of();
         }
 
-        var out = new HashMap<JobVertexID, ScalingSummary>();
-        var excludeVertexIdList =
-                context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
+        var scalingResult =
+                computeScalingSummaryInternal(
+                        context, evaluatedMetrics, scalingHistory, restartTime, jobTopology, 1.0);
+
+        if (scalingResult.getBottlenecks().isEmpty()
+                || !context.getConfiguration()
+                        .getBoolean(PROCESSING_RATE_BACKPROPAGATION_ENABLED)) {
+            return scalingResult.getScalingSummaries();
+        }
+
+        LOG.info("Vertices with ids {} are bottlenecks", scalingResult.getBottlenecks());
+
+        double backpropagationScaleFactor = scalingResult.getBackpropagationScaleFactor();
+
+        LOG.info(
+                "Processing rate back propagation scaling factor is {}",
+                backpropagationScaleFactor);
+
+        scalingResult =
+                computeScalingSummaryInternal(
+                        context,
+                        evaluatedMetrics,
+                        scalingHistory,
+                        restartTime,
+                        jobTopology,
+                        backpropagationScaleFactor);
+
+        return scalingResult.getScalingSummaries();
+    }
+
+    IntermediateScalingResult computeScalingSummaryInternal(
+            Context context,
+            EvaluatedMetrics evaluatedMetrics,
+            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
+            Duration restartTime,
+            JobTopology jobTopology,
+            double backpropagationScaleFactor) {
+
+        var scalingResult = new IntermediateScalingResult();
         evaluatedMetrics
                 .getVertexMetrics()
                 .forEach(
                         (v, metrics) -> {
-                            if (excludeVertexIdList.contains(v.toHexString())) {
-                                LOG.debug(
-                                        "Vertex {} is part of `vertex.exclude.ids` config, Ignoring it for scaling",
-                                        v);
-                            } else {
-                                var currentParallelism =
-                                        (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
+                            var currentParallelism =
+                                    (int) metrics.get(ScalingMetric.PARALLELISM).getCurrent();
 
-                                var newParallelism =
-                                        jobVertexScaler.computeScaleTargetParallelism(
-                                                context,
-                                                v,
-                                                jobTopology.get(v).getInputs().values(),
-                                                metrics,
-                                                scalingHistory.getOrDefault(
-                                                        v, Collections.emptySortedMap()),
-                                                restartTime);
-                                if (currentParallelism != newParallelism) {
-                                    out.put(
+                            var newParallelism =
+                                    jobVertexScaler.computeScaleTargetParallelism(
+                                            context,
                                             v,
-                                            new ScalingSummary(
-                                                    currentParallelism, newParallelism, metrics));
-                                }
+                                            jobTopology.get(v).getInputs().values(),
+                                            metrics,
+                                            scalingHistory.getOrDefault(
+                                                    v, Collections.emptySortedMap()),
+                                            restartTime,
+                                            backpropagationScaleFactor);
+                            if (currentParallelism != newParallelism.getParallelism()) {
+                                scalingResult.addScalingSummary(
+                                        v,
+                                        new ScalingSummary(
+                                                currentParallelism,
+                                                newParallelism.getParallelism(),
+                                                metrics));
+                            }
+                            // Even if parallelism didn't change, vertex can be a bottleneck
+                            if (newParallelism.isBottleneck()) {
+                                scalingResult.addBottleneckVertex(
+                                        v, newParallelism.getBottleneckScaleFactor());
                             }
                         });
-        return out;
+        return scalingResult;
     }
 
     private boolean isJobUnderMemoryPressure(

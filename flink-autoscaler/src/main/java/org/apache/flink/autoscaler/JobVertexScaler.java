@@ -71,21 +71,31 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         this.autoScalerEventHandler = autoScalerEventHandler;
     }
 
-    public int computeScaleTargetParallelism(
+    public VertexScalingResult computeScaleTargetParallelism(
             Context context,
             JobVertexID vertex,
             Collection<ShipStrategy> inputShipStrategies,
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             SortedMap<Instant, ScalingSummary> history,
-            Duration restartTime) {
+            Duration restartTime,
+            double backpropagationScaleFactor) {
         var conf = context.getConfiguration();
+
+        boolean excluded =
+                conf.get(AutoScalerOptions.VERTEX_EXCLUDE_IDS).contains(vertex.toHexString());
+        if (excluded) {
+            LOG.debug(
+                    "Vertex {} is part of `vertex.exclude.ids` config, Check for bottleneck but not scale",
+                    vertex);
+        }
+
         var currentParallelism = (int) evaluatedMetrics.get(PARALLELISM).getCurrent();
         double averageTrueProcessingRate = evaluatedMetrics.get(TRUE_PROCESSING_RATE).getAverage();
         if (Double.isNaN(averageTrueProcessingRate)) {
             LOG.warn(
                     "True processing rate is not available for {}, cannot compute new parallelism",
                     vertex);
-            return currentParallelism;
+            return VertexScalingResult.normalScaling(currentParallelism);
         }
 
         double targetCapacity =
@@ -95,8 +105,10 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             LOG.warn(
                     "Target data rate is not available for {}, cannot compute new parallelism",
                     vertex);
-            return currentParallelism;
+            return VertexScalingResult.normalScaling(currentParallelism);
         }
+
+        targetCapacity *= backpropagationScaleFactor;
 
         LOG.debug("Target processing capacity for {} is {}", vertex, targetCapacity);
         double scaleFactor = targetCapacity / averageTrueProcessingRate;
@@ -122,16 +134,25 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         double cappedTargetCapacity = averageTrueProcessingRate * scaleFactor;
         LOG.debug("Capped target processing capacity for {} is {}", vertex, cappedTargetCapacity);
 
-        int newParallelism =
+        int parallelismLowerLimit =
+                excluded
+                        ? currentParallelism
+                        : Math.min(currentParallelism, conf.getInteger(VERTEX_MIN_PARALLELISM));
+        int parallelismUpperLimit =
+                excluded
+                        ? currentParallelism
+                        : Math.max(currentParallelism, conf.getInteger(VERTEX_MAX_PARALLELISM));
+
+        var scalingResult =
                 scale(
                         currentParallelism,
                         inputShipStrategies,
                         (int) evaluatedMetrics.get(MAX_PARALLELISM).getCurrent(),
                         scaleFactor,
-                        Math.min(currentParallelism, conf.getInteger(VERTEX_MIN_PARALLELISM)),
-                        Math.max(currentParallelism, conf.getInteger(VERTEX_MAX_PARALLELISM)));
+                        parallelismLowerLimit,
+                        parallelismUpperLimit);
 
-        if (newParallelism == currentParallelism
+        if (scalingResult.getParallelism() == currentParallelism
                 || blockScalingBasedOnPastActions(
                         context,
                         vertex,
@@ -139,15 +160,18 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                         evaluatedMetrics,
                         history,
                         currentParallelism,
-                        newParallelism)) {
-            return currentParallelism;
+                        scalingResult.getParallelism())) {
+            return new VertexScalingResult(
+                    currentParallelism,
+                    scalingResult.getBottleneckScaleFactor(),
+                    scalingResult.isBottleneck());
         }
 
         // We record our expectations for this scaling operation
         evaluatedMetrics.put(
                 ScalingMetric.EXPECTED_PROCESSING_RATE,
                 EvaluatedScalingMetric.of(cappedTargetCapacity));
-        return newParallelism;
+        return scalingResult;
     }
 
     private boolean blockScalingBasedOnPastActions(
@@ -249,9 +273,12 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
      * <p>Also, in order to ensure the data is evenly spread across subtasks, we try to adjust the
      * parallelism for source and keyed vertex such that it divides the maxParallelism without a
      * remainder.
+     *
+     * <p>If newParallelism exceeds min(parallelismUpperLimit, maxParallelism) the job vertex
+     * considered to be a bottleneck.
      */
     @VisibleForTesting
-    protected static int scale(
+    protected static VertexScalingResult scale(
             int currentParallelism,
             Collection<ShipStrategy> inputShipStrategies,
             int maxParallelism,
@@ -284,13 +311,23 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         // parallelism upper limit
         final int upperBound = Math.min(maxParallelism, parallelismUpperLimit);
 
+        boolean isBottleneck = false;
+        double bottleneckScaleFactor = 1.0;
+
+        // If required parallelism is higher than upper bound ---> the vertex is a bottleneck
+        if (newParallelism > upperBound) {
+            isBottleneck = true;
+            bottleneckScaleFactor = (double) upperBound / newParallelism;
+            newParallelism = upperBound;
+        }
+
         // Apply min/max parallelism
-        newParallelism = Math.min(Math.max(parallelismLowerLimit, newParallelism), upperBound);
+        newParallelism = Math.max(parallelismLowerLimit, newParallelism);
 
         var adjustByMaxParallelism =
                 inputShipStrategies.isEmpty() || inputShipStrategies.contains(HASH);
         if (!adjustByMaxParallelism) {
-            return newParallelism;
+            return new VertexScalingResult(newParallelism, bottleneckScaleFactor, isBottleneck);
         }
 
         // When the shuffle type of vertex inputs contains keyBy or vertex is a source, we try to
@@ -298,12 +335,12 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
         // => data is evenly spread across subtasks
         for (int p = newParallelism; p <= maxParallelism / 2 && p <= upperBound; p++) {
             if (maxParallelism % p == 0) {
-                return p;
+                return new VertexScalingResult(p, bottleneckScaleFactor, isBottleneck);
             }
         }
 
         // If parallelism adjustment fails, use originally computed parallelism
-        return newParallelism;
+        return new VertexScalingResult(newParallelism, bottleneckScaleFactor, isBottleneck);
     }
 
     @VisibleForTesting
