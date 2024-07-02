@@ -230,7 +230,11 @@ spec:
             name: flink-operator-config
             items:
               - key: flink-conf.yaml
+              {{- if .Values.defaultConfiguration.standardYaml }}
+                path: config.yaml
+              {{- else }}
                 path: flink-conf.yaml
+              {{- end }}
               - key: log4j-operator.properties
                 path: log4j-operator.properties
               - key: log4j-console.properties

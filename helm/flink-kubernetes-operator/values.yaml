@@ -154,6 +154,9 @@ defaultConfiguration:
   # If set to false, loads just the overrides as in (2).
   # This option has not effect, if create is equal to false.
   append: true
+  # If set to true, then will support YAML 1.2 syntax through use of `config.yaml` file.
+  # If set to false, will make use of deprecated flink-conf.yaml filen.
+  standardYaml: false
   flink-conf.yaml: |+
     # Flink Config Overrides
     kubernetes.operator.metrics.reporter.slf4j.factory.class: org.apache.flink.metrics.slf4j.Slf4jReporterFactory
