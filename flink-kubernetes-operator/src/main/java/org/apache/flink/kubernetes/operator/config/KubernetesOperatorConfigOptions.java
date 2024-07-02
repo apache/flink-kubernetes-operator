@@ -333,11 +333,12 @@ public class KubernetesOperatorConfigOptions {
                                     + "WARNING: not intended to be used together with the cron-based "
                                     + "periodic checkpoint triggering");
 
+    @SuppressWarnings("unused")
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<String> PLUGINS_LISTENERS_CLASS =
             operatorConfig("plugins.listeners.<listener-name>.class")
                     .stringType()
-                    .defaultValue("")
+                    .noDefaultValue()
                     .withDescription(
                             "Custom plugins listener class, 'listener-name' is the name of the plugin listener, and its value is a fully qualified class name.");
 
