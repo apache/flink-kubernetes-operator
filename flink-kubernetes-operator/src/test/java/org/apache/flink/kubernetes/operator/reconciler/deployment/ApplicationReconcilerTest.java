@@ -230,7 +230,15 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                         .isFirstDeployment());
 
         JobID jobId = runningJobs.get(0).f1.getJobId();
-        verifyJobId(deployment, runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
+
+        // Last state upgrade
+        FlinkDeployment lastStateUpgrade = ReconciliationUtils.clone(deployment);
+        getJobSpec(lastStateUpgrade).setUpgradeMode(UpgradeMode.LAST_STATE);
+        lastStateUpgrade.getSpec().setRestartNonce(1234L);
+        reconciler.reconcile(deployment, context);
+        reconciler.reconcile(deployment, context);
+        // Make sure jobId is rotated on last-state startup
+        verifyJobId(lastStateUpgrade, runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
 
         // Test stateless upgrade
         FlinkDeployment statelessUpgrade = ReconciliationUtils.clone(deployment);
@@ -284,7 +292,10 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
                 SnapshotTriggerType.UPGRADE,
                 getSavepointInfo(statefulUpgrade).getLastSavepoint().getTriggerType());
         assertEquals(SnapshotStatus.SUCCEEDED, getLastSnapshotStatus(statefulUpgrade, SAVEPOINT));
-        verifyJobId(deployment, runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
+
+        // Make sure jobId rotated on savepoint
+        verifyNewJobId(runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
+        jobId = runningJobs.get(0).f1.getJobId();
 
         getJobSpec(deployment).setUpgradeMode(UpgradeMode.LAST_STATE);
         deployment.getSpec().setRestartNonce(100L);
@@ -325,7 +336,8 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
 
         assertEquals(1, flinkService.getRunningCount());
         assertEquals("finished_sp", runningJobs.get(0).f0);
-        verifyJobId(deployment, runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
+        // Make sure jobId rotated on savepoint
+        verifyNewJobId(runningJobs.get(0).f1, runningJobs.get(0).f2, jobId);
     }
 
     private void verifyJobId(
@@ -333,6 +345,13 @@ public class ApplicationReconcilerTest extends OperatorTestBase {
         // jobId set by operator
         assertEquals(jobId, status.getJobId());
         assertEquals(conf.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID), jobId.toHexString());
+    }
+
+    private void verifyNewJobId(JobStatusMessage status, Configuration conf, JobID jobId) {
+        assertNotEquals(jobId.toHexString(), status.getJobId());
+        assertEquals(
+                conf.get(PipelineOptionsInternal.PIPELINE_FIXED_JOB_ID),
+                status.getJobId().toHexString());
     }
 
     @NotNull

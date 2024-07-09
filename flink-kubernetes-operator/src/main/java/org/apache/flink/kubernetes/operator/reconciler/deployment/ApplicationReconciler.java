@@ -175,7 +175,8 @@ public class ApplicationReconciler
             statusRecorder.patchAndCacheStatus(relatedResource, ctx.getKubernetesClient());
         }
 
-        setJobIdIfNecessary(spec, relatedResource, deployConfig, ctx.getKubernetesClient());
+        setJobIdIfNecessary(
+                relatedResource, deployConfig, ctx.getKubernetesClient(), requireHaMetadata);
 
         eventRecorder.triggerEvent(
                 relatedResource,
@@ -193,10 +194,10 @@ public class ApplicationReconciler
     }
 
     private void setJobIdIfNecessary(
-            FlinkDeploymentSpec spec,
             FlinkDeployment resource,
             Configuration deployConfig,
-            KubernetesClient client) {
+            KubernetesClient client,
+            boolean lastStateDeploy) {
         // The jobId assigned by Flink would be constant,
         // overwrite to avoid checkpoint path conflicts.
         // https://issues.apache.org/jira/browse/FLINK-19358
@@ -208,9 +209,8 @@ public class ApplicationReconciler
         }
 
         var status = resource.getStatus();
-        // generate jobId initially or rotate on every deployment when mode is stateless
-        if (status.getJobStatus().getJobId() == null
-                || spec.getJob().getUpgradeMode() == UpgradeMode.STATELESS) {
+        // Rotate job id when not last-state deployment
+        if (status.getJobStatus().getJobId() == null || !lastStateDeploy) {
             String jobId = JobID.generate().toHexString();
             // record before first deployment to ensure we use it on any retry
             status.getJobStatus().setJobId(jobId);
