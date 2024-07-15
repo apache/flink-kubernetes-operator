@@ -56,6 +56,8 @@ Flink Kubernetes Operator aims to capture the responsibilities of a human operat
   - Collect lag and utilization metrics
   - Scale job vertices to the ideal parallelism
   - Scale up and down as the load changes
+- [Snapshot management]({{< ref "docs/custom-resource/snapshots" >}})
+  - Manage snapshots via Kubernetes CRs
 ### Operations
 - Operator [Metrics]({{< ref "docs/operations/metrics-logging#metrics" >}})
   - Utilizes the well-established [Flink Metric System](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/metrics)
