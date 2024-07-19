@@ -215,6 +215,15 @@ under the License.
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <environmentVariables>
+                        <FLINK_CONF_DIR>src/test/resources</FLINK_CONF_DIR>
+                    </environmentVariables>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
