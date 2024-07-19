@@ -308,6 +308,13 @@ org.apache.flink.autoscaler.standalone.StandaloneAutoscalerEntrypoint \
 --autoscaler.standalone.jdbc.username root
 ```
 
+### Load StandaloneAutoscaler configuration through configuration file
+
+Can specify the running configuration of StandaloneAutoscaler in the configuration file. The config.yaml and
+flink-conf.yaml files in the environment variable `FLINK_CONF_DIR` directory will be loaded by default. You can also pass
+`export CONF_OVERRIDE_DIR=xxx` to specify the loaded configuration file directory.
+NOTE: main configuration will overwrite the configuration in the configuration file
+
 All supported options for autoscaler standalone can be viewed
 [here]({{< ref "docs/operations/configuration#autoscaler-standalone-configuration" >}}).
 

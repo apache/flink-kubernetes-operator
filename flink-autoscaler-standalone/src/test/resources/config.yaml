@@ -1,0 +1,2 @@
+autoscaler.standalone.control-loop.interval: 60s
+autoscaler.standalone.control-loop.parallelism: 20

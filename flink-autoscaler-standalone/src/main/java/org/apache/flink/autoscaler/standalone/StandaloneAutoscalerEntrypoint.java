@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler.standalone;
 
 import org.apache.flink.annotation.Experimental;
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.autoscaler.JobAutoScaler;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
@@ -37,9 +38,12 @@ import org.apache.flink.runtime.highavailability.nonha.standalone.StandaloneClie
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Optional;
+
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.FLINK_CLIENT_TIMEOUT;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.FETCHER_FLINK_CLUSTER_HOST;
 import static org.apache.flink.autoscaler.standalone.config.AutoscalerStandaloneOptions.FETCHER_FLINK_CLUSTER_PORT;
+import static org.apache.flink.autoscaler.standalone.utils.Envs.ENV_CONF_OVERRIDE_DIR;
 
 /** The entrypoint of the standalone autoscaler. */
 @Experimental
@@ -49,9 +53,8 @@ public class StandaloneAutoscalerEntrypoint {
 
     public static <KEY, Context extends JobAutoScalerContext<KEY>> void main(String[] args)
             throws Exception {
-        var conf =
-                GlobalConfiguration.loadConfiguration(
-                        ParameterTool.fromArgs(args).getConfiguration());
+        String confOverrideDir = System.getenv(ENV_CONF_OVERRIDE_DIR);
+        Configuration conf = loadConfiguration(Optional.ofNullable(confOverrideDir), args);
         LOG.info("The standalone autoscaler is started, configuration: {}", conf);
 
         // Initialize JobListFetcher and JobAutoScaler.
@@ -96,5 +99,16 @@ public class StandaloneAutoscalerEntrypoint {
                 eventHandler,
                 new RescaleApiScalingRealizer<>(eventHandler),
                 stateStore);
+    }
+
+    @VisibleForTesting
+    static Configuration loadConfiguration(Optional<String> confOverrideDir, String[] args) {
+        if (confOverrideDir.isPresent()) {
+            return GlobalConfiguration.loadConfiguration(
+                    confOverrideDir.get(), ParameterTool.fromArgs(args).getConfiguration());
+        } else {
+            return GlobalConfiguration.loadConfiguration(
+                    ParameterTool.fromArgs(args).getConfiguration());
+        }
     }
 }
