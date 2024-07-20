@@ -298,6 +298,8 @@ public abstract class AbstractJobReconciler<
             LOG.info("Stopping failed Flink job...");
             cleanupAfterFailedJob(ctx);
             status.setError(null);
+            ReconciliationUtils.updateStatusForDeployedSpec(
+                    ctx.getResource(), ctx.getDeployConfig(ctx.getResource().getSpec()), clock);
             resubmitJob(ctx, false);
             return true;
         } else {
