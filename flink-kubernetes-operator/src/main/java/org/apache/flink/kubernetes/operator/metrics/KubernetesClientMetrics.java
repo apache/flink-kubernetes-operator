@@ -29,13 +29,10 @@ import org.apache.flink.metrics.MetricGroup;
 import io.fabric8.kubernetes.client.http.AsyncBody;
 import io.fabric8.kubernetes.client.http.HttpRequest;
 import io.fabric8.kubernetes.client.http.HttpResponse;
-import okhttp3.Interceptor;
-import okhttp3.Request;
-import okhttp3.Response;
+import io.fabric8.kubernetes.client.http.Interceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,8 +45,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.LongSupplier;
 
 /** Kubernetes client metrics. */
-public class KubernetesClientMetrics
-        implements Interceptor, io.fabric8.kubernetes.client.http.Interceptor {
+public class KubernetesClientMetrics implements Interceptor {
 
     public static final String KUBE_CLIENT_GROUP = "KubeClient";
     public static final String HTTP_REQUEST_GROUP = "HttpRequest";
@@ -147,20 +143,6 @@ public class KubernetesClientMetrics
     }
 
     @Override
-    public Response intercept(Chain chain) throws IOException {
-        Request request = chain.request();
-        updateRequestMetrics(request);
-        Response response = null;
-        final long startTime = nanoTimeSource.getAsLong();
-        try {
-            response = chain.proceed(request);
-            return response;
-        } finally {
-            updateResponseMetrics(response, startTime);
-        }
-    }
-
-    @Override
     public AsyncBody.Consumer<List<ByteBuffer>> consumer(
             AsyncBody.Consumer<List<ByteBuffer>> consumer, HttpRequest request) {
         final Long original = requestStartTimes.put(request.id(), nanoTimeSource.getAsLong());
@@ -234,28 +216,9 @@ public class KubernetesClientMetrics
         return requestFailedRateMeter;
     }
 
-    private void updateRequestMetrics(Request request) {
-        this.requestRateMeter.markEvent();
-        getCounterByRequestMethod(request.method()).inc();
-    }
-
     private void updateRequestMetrics(HttpRequest request) {
         this.requestRateMeter.markEvent();
         getCounterByRequestMethod(request.method()).inc();
-    }
-
-    private void updateResponseMetrics(Response response, long startTimeNanos) {
-        final long latency = nanoTimeSource.getAsLong() - startTimeNanos;
-        if (response != null) {
-            this.responseRateMeter.markEvent();
-            this.responseLatency.update(latency);
-            getMeterViewByResponseCode(response.code()).markEvent();
-            if (this.httpResponseCodeGroupsEnabled) {
-                responseCodeGroupMeters.get(response.code() / 100 - 1).markEvent();
-            }
-        } else {
-            this.requestFailedRateMeter.markEvent();
-        }
     }
 
     private void updateResponseMetrics(HttpResponse<?> response) {
