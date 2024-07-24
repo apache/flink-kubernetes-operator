@@ -50,7 +50,6 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.function.Predicate;
 
-import static org.apache.flink.kubernetes.operator.api.spec.UpgradeMode.STATELESS;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_UPGRADE_LAST_STATE_CHECKPOINT_MAX_AGE;
 
@@ -148,7 +147,7 @@ public abstract class AbstractJobReconciler<
 
         if (currentJobState == JobState.SUSPENDED && desiredJobState == JobState.RUNNING) {
             // We inherit the upgrade mode unless stateless upgrade requested
-            if (currentDeploySpec.getJob().getUpgradeMode() != STATELESS) {
+            if (currentDeploySpec.getJob().getUpgradeMode() != UpgradeMode.STATELESS) {
                 currentDeploySpec
                         .getJob()
                         .setUpgradeMode(lastReconciledSpec.getJob().getUpgradeMode());
@@ -175,9 +174,9 @@ public abstract class AbstractJobReconciler<
         var status = resource.getStatus();
         var upgradeMode = resource.getSpec().getJob().getUpgradeMode();
 
-        if (upgradeMode == STATELESS) {
+        if (upgradeMode == UpgradeMode.STATELESS) {
             LOG.info("Stateless job, ready for upgrade");
-            return AvailableUpgradeMode.of(STATELESS);
+            return AvailableUpgradeMode.of(UpgradeMode.STATELESS);
         }
 
         var flinkService = ctx.getFlinkService();
@@ -332,11 +331,10 @@ public abstract class AbstractJobReconciler<
                                 .getLastSavepoint());
         if (requireHaMetadata) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
-        } else if (ctx.getResource().getSpec().getJob().getUpgradeMode() != STATELESS
+        } else if (ctx.getResource().getSpec().getJob().getUpgradeMode() != UpgradeMode.STATELESS
                 && lastSavepoint.isPresent()) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         }
-
         restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata);
     }
 
@@ -349,7 +347,7 @@ public abstract class AbstractJobReconciler<
             JobState desiredJobState)
             throws Exception {
         LOG.info("Redeploying from savepoint");
-        cancelJob(ctx, STATELESS);
+        cancelJob(ctx, UpgradeMode.STATELESS);
         var savepoint = currentDeploySpec.getJob().getInitialSavepointPath();
         currentDeploySpec.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         status.getJobStatus()
