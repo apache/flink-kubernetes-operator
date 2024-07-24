@@ -18,46 +18,59 @@
 package org.apache.flink.kubernetes.operator.controller;
 
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.kubernetes.operator.OperatorTestBase;
 import org.apache.flink.kubernetes.operator.TestUtils;
-import org.apache.flink.kubernetes.operator.TestingFlinkService;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.UpgradeMode;
+import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
+import org.apache.flink.kubernetes.operator.api.status.FlinkDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
+import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
+import org.apache.flink.kubernetes.operator.observer.SnapshotObserver;
+import org.apache.flink.kubernetes.operator.utils.SnapshotStatus;
+import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
+import org.apache.flink.runtime.jobgraph.SavepointConfigOptions;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.server.mock.EnableKubernetesMockClient;
 import io.javaoperatorsdk.operator.api.reconciler.Context;
+import lombok.Getter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_JOB_RESTART_FAILED;
+import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * @link Unhealthy deployment restart tests
  */
 @EnableKubernetesMockClient(crud = true)
-public class FailedDeploymentRestartTest {
+public class FailedDeploymentRestartTest extends OperatorTestBase {
     private FlinkConfigManager configManager;
 
-    private TestingFlinkService flinkService;
     private Context<FlinkDeployment> context;
     private TestingFlinkDeploymentController testController;
+    private SnapshotObserver<FlinkDeployment, FlinkDeploymentStatus> observer;
 
-    private KubernetesClient kubernetesClient;
+    @Getter private KubernetesClient kubernetesClient;
 
     @BeforeEach
     public void setup() {
         var configuration = new Configuration();
         configuration.set(OPERATOR_JOB_RESTART_FAILED, true);
         configManager = new FlinkConfigManager(configuration);
-        flinkService = new TestingFlinkService(kubernetesClient);
         context = flinkService.getContext();
         testController = new TestingFlinkDeploymentController(configManager, flinkService);
         kubernetesClient.resource(TestUtils.buildApplicationCluster()).createOrReplace();
+        observer = new SnapshotObserver<>(eventRecorder);
     }
 
     @ParameterizedTest
@@ -97,5 +110,69 @@ public class FailedDeploymentRestartTest {
         assertEquals(
                 appCluster.getSpec(),
                 appCluster.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
+    }
+
+    @ParameterizedTest
+    @EnumSource(UpgradeMode.class)
+    public void verifyFailedApplicationRecoveryWithCheckpoint(UpgradeMode upgradeMode)
+            throws Exception {
+        FlinkDeployment appCluster = TestUtils.buildApplicationCluster();
+        appCluster.getSpec().getJob().setUpgradeMode(upgradeMode);
+
+        // Start a healthy deployment
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+
+        // Mark job_id
+        String jobId = appCluster.getStatus().getJobStatus().getJobId();
+        assertNotNull(jobId);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+        assertNull(flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH));
+
+        // trigger checkpoint
+        CheckpointInfo checkpointInfo = appCluster.getStatus().getJobStatus().getCheckpointInfo();
+        flinkService.triggerCheckpoint(
+                null,
+                SnapshotTriggerType.PERIODIC,
+                checkpointInfo,
+                configManager.getObserveConfig(appCluster));
+
+        // Pending
+        observer.observeCheckpointStatus(getResourceContext(appCluster));
+        // Completed
+        observer.observeCheckpointStatus(getResourceContext(appCluster));
+        assertFalse(SnapshotUtils.checkpointInProgress(appCluster.getStatus().getJobStatus()));
+        assertEquals(
+                SnapshotUtils.getLastSnapshotStatus(appCluster, CHECKPOINT),
+                SnapshotStatus.SUCCEEDED);
+
+        // Make deployment unhealthy
+        flinkService.markApplicationJobFailedWithError(
+                flinkService.listJobs().get(0).f1.getJobId(), "Failed job");
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.DEPLOYING,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+
+        // After restart the deployment is healthy again
+        testController.reconcile(appCluster, context);
+        testController.reconcile(appCluster, context);
+        assertEquals(
+                JobManagerDeploymentStatus.READY,
+                appCluster.getStatus().getJobManagerDeploymentStatus());
+        assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
+
+        // check savepoint_path
+        if (upgradeMode != UpgradeMode.STATELESS) {
+            assertEquals(
+                    flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH),
+                    "ck_0");
+        } else {
+            assertNull(flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH));
+        }
     }
 }

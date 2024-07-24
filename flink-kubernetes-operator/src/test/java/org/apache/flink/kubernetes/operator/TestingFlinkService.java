@@ -348,6 +348,16 @@ public class TestingFlinkService extends AbstractFlinkService {
 
         if (checkpointTriggers.containsKey(triggerId)) {
             if (checkpointTriggers.get(triggerId)) {
+                // Mark completed checkpoint
+                checkpointInfo =
+                        Tuple2.of(
+                                Optional.of(
+                                        new CheckpointHistoryWrapper.CompletedCheckpointInfo(
+                                                checkpointCounter,
+                                                "ck_" + checkpointCounter,
+                                                System.currentTimeMillis())),
+                                Optional.empty());
+
                 checkpointCounter++;
                 return CheckpointFetchResult.completed();
             }
