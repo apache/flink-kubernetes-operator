@@ -298,8 +298,6 @@ public abstract class AbstractJobReconciler<
             LOG.info("Stopping failed Flink job...");
             cleanupAfterFailedJob(ctx);
             status.setError(null);
-            ReconciliationUtils.updateStatusForDeployedSpec(
-                    ctx.getResource(), ctx.getDeployConfig(ctx.getResource().getSpec()), clock);
             resubmitJob(ctx, false);
             return true;
         } else {
@@ -324,9 +322,19 @@ public abstract class AbstractJobReconciler<
             throws Exception {
         LOG.info("Resubmitting Flink job...");
         SPEC specToRecover = ReconciliationUtils.getDeployedSpec(ctx.getResource());
+        Optional<Savepoint> lastSavepoint =
+                Optional.ofNullable(
+                        ctx.getResource()
+                                .getStatus()
+                                .getJobStatus()
+                                .getSavepointInfo()
+                                .getLastSavepoint());
         if (requireHaMetadata) {
             specToRecover.getJob().setUpgradeMode(UpgradeMode.LAST_STATE);
+        } else if (lastSavepoint.isPresent()) {
+            specToRecover.getJob().setUpgradeMode(UpgradeMode.SAVEPOINT);
         }
+
         restoreJob(ctx, specToRecover, ctx.getObserveConfig(), requireHaMetadata);
     }
 

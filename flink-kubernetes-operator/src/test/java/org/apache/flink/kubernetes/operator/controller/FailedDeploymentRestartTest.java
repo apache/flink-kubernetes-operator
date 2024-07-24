@@ -105,6 +105,8 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
                 appCluster.getStatus().getJobManagerDeploymentStatus());
         assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
 
+        // We started without savepoint
+        appCluster.getSpec().getJob().setUpgradeMode(UpgradeMode.STATELESS);
         assertEquals(
                 appCluster.getSpec(),
                 appCluster.getStatus().getReconciliationStatus().deserializeLastReconciledSpec());
@@ -165,12 +167,7 @@ public class FailedDeploymentRestartTest extends OperatorTestBase {
         assertEquals("RUNNING", appCluster.getStatus().getJobStatus().getState());
 
         // check savepoint_path
-        if (upgradeMode != UpgradeMode.STATELESS) {
-            assertEquals(
-                    flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH),
-                    "ck_0");
-        } else {
-            assertNull(flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH));
-        }
+        assertEquals(
+                flinkService.getSubmittedConf().get(SavepointConfigOptions.SAVEPOINT_PATH), "ck_0");
     }
 }
