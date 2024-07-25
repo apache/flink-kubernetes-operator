@@ -18,22 +18,19 @@
 package org.apache.flink.kubernetes.operator.api.spec;
 
 import org.apache.flink.annotation.Experimental;
-import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** Spec for checkpoint state snapshots. */
+/**
+ * Spec for checkpoint state snapshots. This is an empty class, used to instruct the operator to
+ * trigger a checkpoint.
+ */
 @Experimental
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 @Builder
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class CheckpointSpec {
-    /** Type of checkpoint to take. */
-    private CheckpointType checkpointType = CheckpointType.FULL;
-}
+public class CheckpointSpec {}

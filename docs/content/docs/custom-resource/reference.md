@@ -51,11 +51,11 @@ This serves as a full reference for FlinkDeployment and FlinkSessionJob custom r
 ### CheckpointSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.CheckpointSpec
 
-**Description**: Spec for checkpoint state snapshots.
+**Description**: Spec for checkpoint state snapshots. This is an empty class, used to instruct the operator to
+ trigger a checkpoint.
 
 | Parameter | Type | Docs |
 | ----------| ---- | ---- |
-| checkpointType | org.apache.flink.kubernetes.operator.api.status.CheckpointType | Type of checkpoint to take. |
 
 ### FlinkDeploymentSpec
 **Class**: org.apache.flink.kubernetes.operator.api.spec.FlinkDeploymentSpec

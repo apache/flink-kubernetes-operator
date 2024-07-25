@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
 import org.apache.flink.kubernetes.operator.api.spec.SavepointSpec;
-import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
 import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
@@ -176,21 +175,17 @@ public class FlinkStateSnapshotUtils {
      *
      * @param kubernetesClient kubernetes client
      * @param resource Flink resource associated
-     * @param checkpointType type of checkpoint
      * @param triggerType trigger type
      * @return created snapshot
      */
     public static FlinkStateSnapshot createCheckpointResource(
             KubernetesClient kubernetesClient,
             AbstractFlinkResource<?, ?> resource,
-            CheckpointType checkpointType,
             SnapshotTriggerType triggerType) {
-        var checkpointSpec = CheckpointSpec.builder().checkpointType(checkpointType).build();
-
         var snapshotSpec =
                 FlinkStateSnapshotSpec.builder()
                         .jobReference(JobReference.fromFlinkResource(resource))
-                        .checkpoint(checkpointSpec)
+                        .checkpoint(new CheckpointSpec())
                         .build();
 
         var resourceName = getFlinkStateSnapshotName(CHECKPOINT, triggerType, resource);
