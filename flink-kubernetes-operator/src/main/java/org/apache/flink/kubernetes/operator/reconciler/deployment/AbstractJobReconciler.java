@@ -412,15 +412,15 @@ public abstract class AbstractJobReconciler<
 
                 break;
             case CHECKPOINT:
-                var checkpointType =
-                        conf.get(KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_TYPE);
                 if (createSnapshotResource) {
                     FlinkStateSnapshotUtils.createCheckpointResource(
-                            ctx.getKubernetesClient(), resource, checkpointType, triggerType);
+                            ctx.getKubernetesClient(), resource, triggerType);
 
                     ReconciliationUtils.updateLastReconciledSnapshotTriggerNonce(
                             triggerType, resource, CHECKPOINT);
                 } else {
+                    var checkpointType =
+                            conf.get(KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_TYPE);
                     var triggerId =
                             ctx.getFlinkService()
                                     .triggerCheckpoint(

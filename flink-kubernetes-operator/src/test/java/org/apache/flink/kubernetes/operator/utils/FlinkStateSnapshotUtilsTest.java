@@ -27,7 +27,6 @@ import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference
 import org.apache.flink.kubernetes.operator.api.spec.FlinkVersion;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
 import org.apache.flink.kubernetes.operator.api.spec.JobReference;
-import org.apache.flink.kubernetes.operator.api.status.CheckpointType;
 import org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobManagerDeploymentStatus;
 import org.apache.flink.kubernetes.operator.api.status.SavepointFormatType;
@@ -173,14 +172,12 @@ public class FlinkStateSnapshotUtilsTest {
     @Test
     public void testCreatePeriodicCheckpointResource() {
         var deployment = initDeployment();
-        var checkpointType = CheckpointType.FULL;
 
         var snapshot =
                 FlinkStateSnapshotUtils.createCheckpointResource(
-                        client, deployment, checkpointType, SnapshotTriggerType.PERIODIC);
+                        client, deployment, SnapshotTriggerType.PERIODIC);
 
         assertTrue(snapshot.getSpec().isCheckpoint());
-        assertEquals(checkpointType, snapshot.getSpec().getCheckpoint().getCheckpointType());
         assertEquals(
                 deployment.getMetadata().getName(), snapshot.getSpec().getJobReference().getName());
         assertEquals(JobKind.FLINK_DEPLOYMENT, snapshot.getSpec().getJobReference().getKind());
@@ -238,9 +235,8 @@ public class FlinkStateSnapshotUtilsTest {
 
         var snapshot =
                 FlinkStateSnapshotUtils.createCheckpointResource(
-                        client, deployment, CheckpointType.FULL, SnapshotTriggerType.MANUAL);
-        assertCheckpointResource(
-                snapshot, deployment, SnapshotTriggerType.MANUAL, CheckpointType.FULL);
+                        client, deployment, SnapshotTriggerType.MANUAL);
+        assertCheckpointResource(snapshot, deployment, SnapshotTriggerType.MANUAL);
     }
 
     @ParameterizedTest
@@ -389,13 +385,11 @@ public class FlinkStateSnapshotUtilsTest {
     private void assertCheckpointResource(
             FlinkStateSnapshot snapshot,
             FlinkDeployment deployment,
-            SnapshotTriggerType triggerType,
-            CheckpointType checkpointType) {
+            SnapshotTriggerType triggerType) {
         assertEquals(
                 triggerType.name(),
                 snapshot.getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TYPE));
         assertTrue(snapshot.getSpec().isCheckpoint());
-        assertEquals(checkpointType, snapshot.getSpec().getCheckpoint().getCheckpointType());
 
         assertEquals(
                 deployment.getMetadata().getName(), snapshot.getSpec().getJobReference().getName());

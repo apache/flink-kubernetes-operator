@@ -38,13 +38,6 @@ spec:
               backoffLimit:
                 type: integer
               checkpoint:
-                properties:
-                  checkpointType:
-                    enum:
-                    - FULL
-                    - INCREMENTAL
-                    - UNKNOWN
-                    type: string
                 type: object
               jobReference:
                 properties:

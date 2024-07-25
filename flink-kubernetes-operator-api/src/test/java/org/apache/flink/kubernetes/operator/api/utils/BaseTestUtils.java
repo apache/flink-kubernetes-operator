@@ -249,11 +249,10 @@ public class BaseTestUtils {
             String namespace,
             CheckpointType checkpointType,
             JobReference jobReference) {
-        var checkpointSpec = CheckpointSpec.builder().checkpointType(checkpointType).build();
         var spec =
                 FlinkStateSnapshotSpec.builder()
                         .jobReference(jobReference)
-                        .checkpoint(checkpointSpec)
+                        .checkpoint(new CheckpointSpec())
                         .build();
         var snapshot = new FlinkStateSnapshot();
         snapshot.setSpec(spec);

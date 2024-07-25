@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.reconciler.snapshot;
 
 import org.apache.flink.configuration.CheckpointingOptions;
+import org.apache.flink.core.execution.CheckpointType;
 import org.apache.flink.kubernetes.operator.api.FlinkDeployment;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotSpec;
@@ -216,12 +217,7 @@ public class StateSnapshotReconciler {
                 throw new IllegalArgumentException(
                         "Manual checkpoint triggering is not supported for this Flink job (requires Flink 1.17+)");
             }
-            return Optional.of(
-                    flinkService.triggerCheckpoint(
-                            jobId,
-                            org.apache.flink.core.execution.CheckpointType.valueOf(
-                                    spec.getCheckpoint().getCheckpointType().name()),
-                            conf));
+            return Optional.of(flinkService.triggerCheckpoint(jobId, CheckpointType.FULL, conf));
         } else {
             throw new IllegalArgumentException(
                     "Snapshot must specify either savepoint or checkpoint spec");
