@@ -32,6 +32,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.flink.configuration.WebOptions.CHECKPOINTS_HISTORY_SIZE;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.IN_PROGRESS;
 
 /** The observer of {@link org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot}. */
@@ -142,12 +143,29 @@ public class StateSnapshotObserver {
 
         if (checkpointStatsResult.isPending()) {
             return;
-        } else if (checkpointStatsResult.getError() != null) {
-            throw new ReconciliationException(checkpointStatsResult.getError());
         }
 
-        LOG.info("Checkpoint {} successful: {}", resourceName, checkpointStatsResult.getPath());
-        FlinkStateSnapshotUtils.snapshotSuccessful(
-                resource, checkpointStatsResult.getPath(), false);
+        String path = checkpointStatsResult.getPath();
+        // At this point the checkpoint is already assumed to be complete, so we can mark the
+        // snapshot complete with empty path and trigger an event.
+        if (checkpointStatsResult.getError() != null) {
+            path = "";
+            var error =
+                    String.format(
+                            "Checkpoint %s was successful, but failed to fetch path. Flink webserver stores only a limited amount of checkpoints in its cache, try increasing '%s' config for this job.\n%s",
+                            resourceName,
+                            CHECKPOINTS_HISTORY_SIZE.key(),
+                            checkpointStatsResult.getError());
+            eventRecorder.triggerSnapshotEvent(
+                    resource,
+                    EventRecorder.Type.Warning,
+                    EventRecorder.Reason.CheckpointError,
+                    EventRecorder.Component.Snapshot,
+                    error,
+                    ctx.getKubernetesClient());
+        }
+
+        LOG.info("Checkpoint {} successful: {}", resourceName, path);
+        FlinkStateSnapshotUtils.snapshotSuccessful(resource, path, false);
     }
 }

@@ -776,8 +776,7 @@ public abstract class AbstractFlinkService implements FlinkService {
                                 stats.getClass().getSimpleName()));
             }
         } catch (Exception e) {
-            LOG.error("Exception while fetching checkpoint statistics", e);
-            return CheckpointStatsResult.pending();
+            return CheckpointStatsResult.error(e.getMessage());
         }
     }
 
