@@ -33,8 +33,13 @@ import java.util.Map;
 @Experimental
 public interface ScalingRealizer<KEY, Context extends JobAutoScalerContext<KEY>> {
 
-    /** Update job's parallelism to parallelismOverrides. */
-    void realizeParallelismOverrides(Context context, Map<String, String> parallelismOverrides);
+    /**
+     * Update job's parallelism to parallelismOverrides.
+     *
+     * @throws Exception Error during realize parallelism overrides.
+     */
+    void realizeParallelismOverrides(Context context, Map<String, String> parallelismOverrides)
+            throws Exception;
 
     /** Updates the TaskManager memory configuration. */
     void realizeConfigOverrides(Context context, ConfigChanges configChanges);

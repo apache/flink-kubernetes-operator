@@ -25,6 +25,7 @@ import org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
 import org.apache.flink.autoscaler.metrics.TestMetrics;
+import org.apache.flink.autoscaler.realizer.ScalingRealizer;
 import org.apache.flink.autoscaler.realizer.TestingScalingRealizer;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.state.InMemoryAutoScalerStateStore;
@@ -188,6 +189,43 @@ public class JobAutoScalerImplTest {
         autoscaler.scale(context);
         Assertions.assertEquals(
                 0, autoscaler.flinkMetrics.get(context.getJobKey()).getNumErrorsCount());
+    }
+
+    @Test
+    public void testRealizeParallelismOverridesExceptions() throws Exception {
+        JobVertexID jobVertexID = new JobVertexID();
+        JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Map.of(), 1, 20));
+        var metricsCollector =
+                new TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>>(jobTopology);
+        ScalingRealizer<JobID, JobAutoScalerContext<JobID>>
+                realizeParallelismOverridesWithExceptionsScalingRealizer =
+                        new ScalingRealizer<>() {
+                            @Override
+                            public void realizeConfigOverrides(
+                                    JobAutoScalerContext context, ConfigChanges configChanges) {}
+
+                            @Override
+                            public void realizeParallelismOverrides(
+                                    JobAutoScalerContext context, Map parallelismOverrides) {
+                                throw new RuntimeException(
+                                        "Test Realize Parallelism Overrides Exceptions.");
+                            }
+                        };
+        stateStore.storeParallelismOverrides(context, Map.of(jobVertexID.toHexString(), "2"));
+
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        metricsCollector,
+                        null,
+                        null,
+                        eventCollector,
+                        realizeParallelismOverridesWithExceptionsScalingRealizer,
+                        stateStore);
+
+        // Should produce an error
+        autoscaler.scale(context);
+        Assertions.assertEquals(
+                1, autoscaler.flinkMetrics.get(context.getJobKey()).getNumErrorsCount());
     }
 
     @Test
