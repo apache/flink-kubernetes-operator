@@ -181,11 +181,9 @@ public class EventSourceUtils {
                                                 return Set.of();
                                             }
                                             return Set.of(
-                                                    new ResourceID(
-                                                            snapshot.getSpec()
-                                                                    .getJobReference()
-                                                                    .getName(),
-                                                            snapshot.getMetadata().getNamespace()));
+                                                    FlinkStateSnapshotUtils
+                                                            .getSnapshotJobReferenceResourceId(
+                                                                    snapshot));
                                         })
                         .withNamespacesInheritedFromController(context)
                         .followNamespaceChanges(true)
@@ -206,12 +204,9 @@ public class EventSourceUtils {
 
                                                 // If FlinkSessionJob, retrieve deployment
                                                 var resourceId =
-                                                        new ResourceID(
-                                                                snapshot.getSpec()
-                                                                        .getJobReference()
-                                                                        .getName(),
-                                                                snapshot.getMetadata()
-                                                                        .getNamespace());
+                                                        FlinkStateSnapshotUtils
+                                                                .getSnapshotJobReferenceResourceId(
+                                                                        snapshot);
                                                 var flinkSessionJob =
                                                         flinkSessionJobEventSource
                                                                 .get(resourceId)
@@ -226,11 +221,9 @@ public class EventSourceUtils {
                                                                         .getNamespace()));
                                             }
                                             return Set.of(
-                                                    new ResourceID(
-                                                            snapshot.getSpec()
-                                                                    .getJobReference()
-                                                                    .getName(),
-                                                            snapshot.getMetadata().getNamespace()));
+                                                    FlinkStateSnapshotUtils
+                                                            .getSnapshotJobReferenceResourceId(
+                                                                    snapshot));
                                         })
                         .withNamespacesInheritedFromController(context)
                         .followNamespaceChanges(true)

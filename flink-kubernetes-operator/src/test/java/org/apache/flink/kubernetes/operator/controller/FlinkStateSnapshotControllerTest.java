@@ -514,8 +514,10 @@ public class FlinkStateSnapshotControllerTest {
         var snapshot = createSavepoint(deployment);
         var errorMessage =
                 String.format(
-                        "Secondary resource FlinkDeployment/%s for savepoint snapshot-test was not found",
-                        deployment.getMetadata().getName());
+                        "Secondary resource %s/%s (%s) for savepoint snapshot-test was not found",
+                        deployment.getMetadata().getNamespace(),
+                        deployment.getMetadata().getName(),
+                        CrdConstants.KIND_FLINK_DEPLOYMENT);
 
         // First reconcile will trigger the snapshot.
         controller.reconcile(snapshot, TestUtils.createSnapshotContext(client, deployment));
@@ -556,8 +558,10 @@ public class FlinkStateSnapshotControllerTest {
         var snapshot = createSavepoint(deployment);
         var errorMessage =
                 String.format(
-                        "Secondary resource FlinkDeployment/%s for savepoint snapshot-test is not running",
-                        deployment.getMetadata().getName());
+                        "Secondary resource %s/%s (%s) for savepoint snapshot-test is not running",
+                        deployment.getMetadata().getNamespace(),
+                        deployment.getMetadata().getName(),
+                        CrdConstants.KIND_FLINK_DEPLOYMENT);
 
         controller.reconcile(snapshot, context);
 

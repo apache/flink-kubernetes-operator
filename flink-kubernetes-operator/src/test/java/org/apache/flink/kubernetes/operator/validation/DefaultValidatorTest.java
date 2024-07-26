@@ -1072,19 +1072,19 @@ public class DefaultValidatorTest {
                 null);
 
         var refName = "does-not-exist";
+        var namespace = "default";
         var snapshot =
                 TestUtils.buildFlinkStateSnapshotSavepoint(
                         false,
                         JobReference.builder()
                                 .kind(JobKind.FLINK_DEPLOYMENT)
                                 .name(refName)
+                                .namespace(namespace)
                                 .build());
         testStateSnapshotValidate(
                 snapshot,
                 Optional.empty(),
-                String.format(
-                        "Target for snapshot (FlinkDeployment/%s) in namespace test was not found",
-                        refName));
+                String.format("Target for snapshot %s/%s was not found", namespace, refName));
     }
 
     private void testStateSnapshotValidateWithModifier(
