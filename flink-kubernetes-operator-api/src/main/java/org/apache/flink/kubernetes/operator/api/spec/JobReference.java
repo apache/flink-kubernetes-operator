@@ -44,9 +44,16 @@ public class JobReference {
     /** Name of the Flink resource. */
     private String name;
 
+    /**
+     * Namespace of the Flink resource. If empty, the operator will use the namespace of the
+     * snapshot.
+     */
+    private String namespace;
+
     public static JobReference fromFlinkResource(AbstractFlinkResource<?, ?> flinkResource) {
         var result = new JobReference();
         result.setName(flinkResource.getMetadata().getName());
+        result.setNamespace(flinkResource.getMetadata().getNamespace());
 
         if (flinkResource instanceof FlinkDeployment) {
             result.setKind(JobKind.FLINK_DEPLOYMENT);
@@ -64,6 +71,6 @@ public class JobReference {
         } else if (kind == JobKind.FLINK_SESSION_JOB) {
             kindString = CrdConstants.KIND_SESSION_JOB;
         }
-        return String.format("%s/%s", kindString, name);
+        return String.format("%s/%s (%s)", namespace, name, kindString);
     }
 }

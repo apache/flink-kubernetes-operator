@@ -48,6 +48,7 @@ import org.apache.flink.kubernetes.operator.config.FlinkConfigManager;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.IngressUtils;
 import org.apache.flink.kubernetes.utils.Constants;
 import org.apache.flink.runtime.clusterframework.TaskExecutorProcessUtils;
@@ -501,8 +502,8 @@ public class DefaultValidator implements FlinkResourceValidator {
 
     @Override
     public Optional<String> validateStateSnapshot(
-            FlinkStateSnapshot savepoint, Optional<AbstractFlinkResource<?, ?>> target) {
-        var spec = savepoint.getSpec();
+            FlinkStateSnapshot snapshot, Optional<AbstractFlinkResource<?, ?>> target) {
+        var spec = snapshot.getSpec();
 
         if ((!spec.isSavepoint() && !spec.isCheckpoint())
                 || (spec.isSavepoint() && spec.isCheckpoint())) {
@@ -522,13 +523,14 @@ public class DefaultValidator implements FlinkResourceValidator {
         // If the savepoint has already been processed by the operator, we don't need to check the
         // job reference.
         if (target.isEmpty()
-                && (savepoint.getStatus() == null
+                && (snapshot.getStatus() == null
                         || FlinkStateSnapshotStatus.State.TRIGGER_PENDING.equals(
-                                savepoint.getStatus().getState()))) {
+                                snapshot.getStatus().getState()))) {
+            var resourceId = FlinkStateSnapshotUtils.getSnapshotJobReferenceResourceId(snapshot);
             return Optional.of(
                     String.format(
-                            "Target for snapshot (%s) in namespace %s was not found",
-                            spec.getJobReference(), savepoint.getMetadata().getNamespace()));
+                            "Target for snapshot %s/%s was not found",
+                            resourceId.getNamespace().orElse(null), resourceId.getName()));
         }
 
         return Optional.empty();

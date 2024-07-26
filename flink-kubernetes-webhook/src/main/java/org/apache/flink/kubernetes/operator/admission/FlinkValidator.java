@@ -25,6 +25,7 @@ import org.apache.flink.kubernetes.operator.api.FlinkSessionJob;
 import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.JobKind;
 import org.apache.flink.kubernetes.operator.health.CanaryResourceManager;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.validation.FlinkResourceValidator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -101,15 +102,21 @@ public class FlinkValidator implements Validator<HasMetadata> {
     }
 
     private void validateStateSnapshot(KubernetesResource resource) {
-        FlinkStateSnapshot savepoint =
-                objectMapper.convertValue(resource, FlinkStateSnapshot.class);
+        FlinkStateSnapshot snapshot = objectMapper.convertValue(resource, FlinkStateSnapshot.class);
 
-        var namespace = savepoint.getMetadata().getNamespace();
-        var jobRef = savepoint.getSpec().getJobReference();
+        var jobRef = snapshot.getSpec().getJobReference();
 
         AbstractFlinkResource<?, ?> targetResource = null;
         if (jobRef != null && jobRef.getName() != null && jobRef.getKind() != null) {
+            var namespace =
+                    FlinkStateSnapshotUtils.getSnapshotJobReferenceResourceId(snapshot)
+                            .getNamespace()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalArgumentException(
+                                                    "Cannot determine namespace for snapshot"));
             var key = Cache.namespaceKeyFunc(namespace, jobRef.getName());
+
             if (JobKind.FLINK_DEPLOYMENT.equals(jobRef.getKind())) {
                 targetResource =
                         informerManager.getFlinkDepInformer(namespace).getStore().getByKey(key);
@@ -124,7 +131,7 @@ public class FlinkValidator implements Validator<HasMetadata> {
 
         for (FlinkResourceValidator validator : validators) {
             Optional<String> validationError =
-                    validator.validateStateSnapshot(savepoint, Optional.ofNullable(targetResource));
+                    validator.validateStateSnapshot(snapshot, Optional.ofNullable(targetResource));
             if (validationError.isPresent()) {
                 throw new NotAllowedException(validationError.get());
             }

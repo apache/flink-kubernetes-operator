@@ -36,11 +36,13 @@ import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.javaoperatorsdk.operator.processing.event.ResourceID;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nullable;
 
 import java.time.Instant;
+import java.util.Optional;
 
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.ABANDONED;
 import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
@@ -372,5 +374,20 @@ public class FlinkStateSnapshotUtils {
      */
     public static void snapshotTriggerPending(FlinkStateSnapshot snapshot) {
         snapshot.getStatus().setState(TRIGGER_PENDING);
+    }
+
+    /**
+     * Extracts the namespace of the job reference from a snapshot resource. This is either
+     * explicitly specified in the job reference, or it will fallback to the namespace of the
+     * snapshot.
+     *
+     * @param snapshot snapshot resource
+     * @return namespace with the job reference to be found in
+     */
+    public static ResourceID getSnapshotJobReferenceResourceId(FlinkStateSnapshot snapshot) {
+        var namespace =
+                Optional.ofNullable(snapshot.getSpec().getJobReference().getNamespace())
+                        .orElse(snapshot.getMetadata().getNamespace());
+        return new ResourceID(snapshot.getSpec().getJobReference().getName(), namespace);
     }
 }
