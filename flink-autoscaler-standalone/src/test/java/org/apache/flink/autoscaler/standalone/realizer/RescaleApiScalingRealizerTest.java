@@ -59,7 +59,7 @@ class RescaleApiScalingRealizerTest {
      */
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void testUpdateResourceRequirements(boolean resourceIsChanged) {
+    void testUpdateResourceRequirements(boolean resourceIsChanged) throws Exception {
         var jobID = new JobID();
         var jobVertex1 = new JobVertexID().toHexString();
         var jobVertex2 = new JobVertexID().toHexString();
@@ -110,7 +110,7 @@ class RescaleApiScalingRealizerTest {
     }
 
     @Test
-    void testDisableAdaptiveScheduler() {
+    void testDisableAdaptiveScheduler() throws Exception {
         var jobID = new JobID();
         var jobVertex1 = new JobVertexID().toHexString();
         var jobVertex2 = new JobVertexID().toHexString();
@@ -132,7 +132,7 @@ class RescaleApiScalingRealizerTest {
     }
 
     @Test
-    void testJobNotRunning() {
+    void testJobNotRunning() throws Exception {
         var jobID = new JobID();
         var jobVertex1 = new JobVertexID().toHexString();
         var jobVertex2 = new JobVertexID().toHexString();

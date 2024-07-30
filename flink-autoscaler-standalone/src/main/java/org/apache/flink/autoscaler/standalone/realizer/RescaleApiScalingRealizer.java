@@ -66,7 +66,7 @@ public class RescaleApiScalingRealizer<KEY, Context extends JobAutoScalerContext
 
     @Override
     public void realizeParallelismOverrides(
-            Context context, Map<String, String> parallelismOverrides) {
+            Context context, Map<String, String> parallelismOverrides) throws Exception {
         Configuration conf = context.getConfiguration();
         if (!conf.get(JobManagerOptions.SCHEDULER)
                 .equals(JobManagerOptions.SchedulerType.Adaptive)) {
@@ -121,8 +121,6 @@ public class RescaleApiScalingRealizer<KEY, Context extends JobAutoScalerContext
             } else {
                 LOG.info("Vertex resources requirements already match target, nothing to do...");
             }
-        } catch (Exception e) {
-            LOG.warn("Failed to apply parallelism overrides.", e);
         }
     }
 
