@@ -50,8 +50,6 @@ rules:
       - apps
     resources:
       - deployments
-      - deployments/scale
-      - deployments/finalizers
       - replicasets
     verbs:
       - get
@@ -61,26 +59,20 @@ rules:
       - update
       - patch
       - delete
+      - deletecollection
   - apiGroups:
-      - extensions
+      - apps
     resources:
-      - deployments
-      - ingresses
+      - deployments/scale
     verbs:
       - get
-      - list
-      - watch
-      - create
       - update
       - patch
-      - delete
   - apiGroups:
       - flink.apache.org
     resources:
       - flinkdeployments
-      - flinkdeployments/finalizers
       - flinksessionjobs
-      - flinksessionjobs/finalizers
     verbs:
       - get
       - list
@@ -89,6 +81,7 @@ rules:
       - update
       - patch
       - delete
+      - deletecollection
   - apiGroups:
       - flink.apache.org
     resources:
@@ -110,6 +103,7 @@ rules:
       - update
       - patch
       - delete
+      - deletecollection
   - apiGroups:
       - coordination.k8s.io
     resources:
@@ -122,6 +116,7 @@ rules:
       - update
       - patch
       - delete
+      - deletecollection
 {{- end }}
 
 {{/*
@@ -142,11 +137,11 @@ rules:
       - update
       - patch
       - delete
+      - deletecollection
   - apiGroups:
       - apps
     resources:
       - deployments
-      - deployments/finalizers
     verbs:
       - get
       - list
@@ -155,6 +150,7 @@ rules:
       - update
       - patch
       - delete
+      - deletecollection
 {{- end }}
 
 ---
@@ -245,7 +241,14 @@ rules:
     resources:
       - leases
     verbs:
-      - "*"
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+      - deletecollection
 {{- end }}
 ---
 {{- if and .Values.rbac.operatorRole.create (not (has .Release.Namespace .Values.watchNamespaces)) }}
