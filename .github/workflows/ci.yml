@@ -22,8 +22,10 @@
 # https://infra-reports.apache.org/#ghactions
 name: Flink Kubernetes Operator CI
 on:
-  push:
-  pull_request:
+#  push:
+#  pull_request:
+  workflow_dispatch:
+
 jobs:
   test_ci:
     runs-on: ubuntu-latest

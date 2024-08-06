@@ -19,16 +19,16 @@
 name: "Build Docker Image"
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - 'release-*'
-    tags:
-      - 'release-*-rc*'
-  pull_request:
-    branches:
-      - main
-      - 'release-*'
+#  push:
+#    branches:
+#      - main
+#      - 'release-*'
+#    tags:
+#      - 'release-*-rc*'
+#  pull_request:
+#    branches:
+#      - main
+#      - 'release-*'
 jobs:
   build_image:
     runs-on: ubuntu-latest
