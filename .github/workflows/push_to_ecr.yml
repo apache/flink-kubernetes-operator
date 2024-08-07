@@ -43,14 +43,6 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build Docker image
+      - name: Publish Docker image to ECR
         run: |
-          docker build -t ${{ env.IMAGE_NAME }} . --file Dockerfile
-
-      - name: Tag Docker image
-        run: |
-          docker tag ${{ env.IMAGE_NAME }}:latest ${{ env.ECR_URL }}/${{ env.IMAGE_NAME }}:1.9.0
-
-      - name: Push Docker image to ECR
-        run: |
-          docker push ${{ env.ECR_URL }}/${{ env.IMAGE_NAME }}:1.9.0
+          docker buildx build --tag ${{ env.ECR_URL }}/${{ env.IMAGE_NAME }}:1.9.0 --platform=linux/amd64,linux/arm64 --push --file Dockerfile . 
