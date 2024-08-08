@@ -139,6 +139,23 @@ public class FlinkStateSnapshotUtils {
     }
 
     /**
+     * Extracts snapshot trigger type from a snapshot resource. If unable to do so, return {@link
+     * SnapshotTriggerType#UNKNOWN}
+     *
+     * @param snapshot resource to check
+     * @return trigger type
+     */
+    public static SnapshotTriggerType getSnapshotTriggerType(FlinkStateSnapshot snapshot) {
+        var triggerTypeStr =
+                snapshot.getMetadata().getLabels().get(CrdConstants.LABEL_SNAPSHOT_TYPE);
+        try {
+            return SnapshotTriggerType.valueOf(triggerTypeStr);
+        } catch (NullPointerException | IllegalArgumentException e) {
+            return SnapshotTriggerType.UNKNOWN;
+        }
+    }
+
+    /**
      * Creates a checkpoint {@link FlinkStateSnapshot} resource on the Kubernetes cluster.
      *
      * @param kubernetesClient kubernetes client

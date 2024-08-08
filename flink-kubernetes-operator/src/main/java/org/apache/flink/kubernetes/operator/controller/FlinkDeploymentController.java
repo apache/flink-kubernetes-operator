@@ -199,7 +199,8 @@ public class FlinkDeploymentController
             EventSourceContext<FlinkDeployment> context) {
         return EventSourceInitializer.nameEventSources(
                 EventSourceUtils.getSessionJobInformerEventSource(context),
-                EventSourceUtils.getDeploymentInformerEventSource(context));
+                EventSourceUtils.getDeploymentInformerEventSource(context),
+                EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
     }
 
     @Override
