@@ -19,32 +19,47 @@ package org.apache.flink.kubernetes.operator.observer;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
+import org.apache.flink.autoscaler.utils.DateTimeUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.kubernetes.operator.api.AbstractFlinkResource;
+import org.apache.flink.kubernetes.operator.api.FlinkStateSnapshot;
 import org.apache.flink.kubernetes.operator.api.spec.FlinkStateSnapshotReference;
 import org.apache.flink.kubernetes.operator.api.status.Checkpoint;
 import org.apache.flink.kubernetes.operator.api.status.CheckpointInfo;
 import org.apache.flink.kubernetes.operator.api.status.CommonStatus;
 import org.apache.flink.kubernetes.operator.api.status.JobStatus;
 import org.apache.flink.kubernetes.operator.api.status.Savepoint;
-import org.apache.flink.kubernetes.operator.api.status.SavepointInfo;
 import org.apache.flink.kubernetes.operator.api.status.SnapshotTriggerType;
+import org.apache.flink.kubernetes.operator.config.FlinkOperatorConfiguration;
 import org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions;
 import org.apache.flink.kubernetes.operator.controller.FlinkResourceContext;
 import org.apache.flink.kubernetes.operator.exception.ReconciliationException;
 import org.apache.flink.kubernetes.operator.reconciler.ReconciliationUtils;
+import org.apache.flink.kubernetes.operator.reconciler.SnapshotType;
 import org.apache.flink.kubernetes.operator.service.FlinkService;
 import org.apache.flink.kubernetes.operator.utils.ConfigOptionUtils;
 import org.apache.flink.kubernetes.operator.utils.EventRecorder;
+import org.apache.flink.kubernetes.operator.utils.FlinkStateSnapshotUtils;
 import org.apache.flink.kubernetes.operator.utils.SnapshotUtils;
+import org.apache.flink.util.CollectionUtil;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.Iterator;
-import java.util.List;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import static org.apache.flink.kubernetes.operator.api.status.FlinkStateSnapshotStatus.State.COMPLETED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_HISTORY_MAX_AGE;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE;
+import static org.apache.flink.kubernetes.operator.config.KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.CHECKPOINT;
 import static org.apache.flink.kubernetes.operator.reconciler.SnapshotType.SAVEPOINT;
 import static org.apache.flink.kubernetes.operator.utils.SnapshotUtils.isSnapshotTriggeringSupported;
@@ -78,7 +93,7 @@ public class SnapshotObserver<
                     ctx.getFlinkService(), jobStatus, jobId, ctx.getObserveConfig());
         }
 
-        cleanupSavepointHistory(ctx, jobStatus.getSavepointInfo());
+        cleanupSavepointHistory(ctx);
     }
 
     public void observeCheckpointStatus(FlinkResourceContext<CR> ctx) {
@@ -220,63 +235,179 @@ public class SnapshotObserver<
 
     /** Clean up and dispose savepoints according to the configured max size/age. */
     @VisibleForTesting
-    void cleanupSavepointHistory(FlinkResourceContext<CR> ctx, SavepointInfo currentSavepointInfo) {
+    void cleanupSavepointHistory(FlinkResourceContext<CR> ctx) {
+        if (!FlinkStateSnapshotUtils.isSnapshotResourceEnabled(
+                ctx.getOperatorConfig(), ctx.getObserveConfig())) {
+            cleanupSavepointHistoryLegacy(ctx);
+            return;
+        }
 
-        var observeConfig = ctx.getObserveConfig();
-        var flinkService = ctx.getFlinkService();
-        boolean savepointCleanupEnabled =
-                observeConfig.getBoolean(
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_CLEANUP_ENABLED);
+        var snapshots = ctx.getJosdkContext().getSecondaryResources(FlinkStateSnapshot.class);
+        if (CollectionUtil.isNullOrEmpty(snapshots)) {
+            return;
+        }
+        if (ctx.getObserveConfig().get(OPERATOR_SAVEPOINT_CLEANUP_ENABLED)) {
+            var savepointsToDelete =
+                    getFlinkStateSnapshotsToCleanUp(
+                            snapshots, ctx.getObserveConfig(), ctx.getOperatorConfig(), SAVEPOINT);
+            var checkpointsToDelete =
+                    getFlinkStateSnapshotsToCleanUp(
+                            snapshots, ctx.getObserveConfig(), ctx.getOperatorConfig(), CHECKPOINT);
+            Stream.concat(savepointsToDelete.stream(), checkpointsToDelete.stream())
+                    .forEach(
+                            snapshot ->
+                                    ctx.getKubernetesClient()
+                                            .resource(snapshot)
+                                            .withTimeoutInMillis(0L)
+                                            .delete());
+        }
+    }
 
-        // maintain history
-        List<Savepoint> savepointHistory = currentSavepointInfo.getSavepointHistory();
+    @VisibleForTesting
+    Set<FlinkStateSnapshot> getFlinkStateSnapshotsToCleanUp(
+            Collection<FlinkStateSnapshot> snapshots,
+            Configuration observeConfig,
+            FlinkOperatorConfiguration operatorConfig,
+            SnapshotType snapshotType) {
+        var snapshotList =
+                snapshots.stream()
+                        .filter(s -> s.getStatus() != null)
+                        .filter(s -> COMPLETED.equals(s.getStatus().getState()))
+                        .filter(
+                                s ->
+                                        SnapshotTriggerType.PERIODIC.equals(
+                                                FlinkStateSnapshotUtils.getSnapshotTriggerType(s)))
+                        .filter(s -> (s.getSpec().isSavepoint() == (snapshotType == SAVEPOINT)))
+                        .sorted(
+                                Comparator.comparing(
+                                        s ->
+                                                DateTimeUtils.parseKubernetes(
+                                                        s.getStatus().getResultTimestamp())))
+                        .collect(Collectors.toList());
+
+        var maxCount = getMaxCountForSnapshotType(observeConfig, operatorConfig, snapshotType);
+        var maxTms = getMaxAgeForSnapshotType(observeConfig, operatorConfig, snapshotType);
+        var result = new HashSet<FlinkStateSnapshot>();
+
+        if (snapshotList.size() < 2) {
+            return result;
+        }
+        var lastSnapshot = snapshotList.get(snapshotList.size() - 1);
+
+        while (snapshotList.size() > maxCount) {
+            var snapshot = snapshotList.remove(0);
+            result.add(snapshot);
+        }
+        for (var snapshot : snapshotList) {
+            var ts =
+                    DateTimeUtils.parseKubernetes(snapshot.getStatus().getResultTimestamp())
+                            .toEpochMilli();
+            if (ts < maxTms && snapshot != lastSnapshot) {
+                result.add(snapshot);
+            }
+        }
+
+        return result;
+    }
+
+    private void cleanupSavepointHistoryLegacy(FlinkResourceContext<CR> ctx) {
+        var maxTms =
+                getMaxAgeForSnapshotType(
+                        ctx.getObserveConfig(), ctx.getOperatorConfig(), SAVEPOINT);
+        var maxCount =
+                getMaxCountForSnapshotType(
+                        ctx.getObserveConfig(), ctx.getOperatorConfig(), SAVEPOINT);
+
+        var savepointHistory =
+                ctx.getResource()
+                        .getStatus()
+                        .getJobStatus()
+                        .getSavepointInfo()
+                        .getSavepointHistory();
+
+        var savepointCleanupEnabled =
+                ctx.getObserveConfig().getBoolean(OPERATOR_SAVEPOINT_CLEANUP_ENABLED);
+
         if (savepointHistory.size() < 2) {
             return;
         }
         var lastSavepoint = savepointHistory.get(savepointHistory.size() - 1);
 
-        int maxCount =
-                Math.max(
-                        1,
-                        ConfigOptionUtils.getValueWithThreshold(
-                                observeConfig,
-                                KubernetesOperatorConfigOptions
-                                        .OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
-                                ctx.getOperatorConfig().getSavepointHistoryCountThreshold()));
         while (savepointHistory.size() > maxCount) {
             // remove oldest entries
-            Savepoint sp = savepointHistory.remove(0);
+            var sp = savepointHistory.remove(0);
             if (savepointCleanupEnabled) {
-                disposeSavepointQuietly(flinkService, sp, observeConfig);
+                disposeSavepointQuietly(ctx, sp.getLocation());
             }
         }
 
-        Duration maxAge =
-                ConfigOptionUtils.getValueWithThreshold(
-                        observeConfig,
-                        KubernetesOperatorConfigOptions.OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
-                        ctx.getOperatorConfig().getSavepointHistoryAgeThreshold());
-        long maxTms = System.currentTimeMillis() - maxAge.toMillis();
-        Iterator<Savepoint> it = savepointHistory.iterator();
+        var it = savepointHistory.iterator();
         while (it.hasNext()) {
-            Savepoint sp = it.next();
+            var sp = it.next();
             if (sp.getTimeStamp() < maxTms && sp != lastSavepoint) {
                 it.remove();
                 if (savepointCleanupEnabled) {
-                    disposeSavepointQuietly(flinkService, sp, observeConfig);
+                    disposeSavepointQuietly(ctx, sp.getLocation());
                 }
             }
         }
     }
 
-    private void disposeSavepointQuietly(
-            FlinkService flinkService, Savepoint sp, Configuration conf) {
+    private void disposeSavepointQuietly(FlinkResourceContext<CR> ctx, String path) {
         try {
-            LOG.info("Disposing savepoint {}", sp);
-            flinkService.disposeSavepoint(sp.getLocation(), conf);
+            LOG.info("Disposing savepoint {}", path);
+            ctx.getFlinkService().disposeSavepoint(path, ctx.getObserveConfig());
         } catch (Exception e) {
             // savepoint dispose error should not affect the deployment
-            LOG.error("Exception while disposing savepoint {}", sp.getLocation(), e);
+            LOG.error("Exception while disposing savepoint {}", path, e);
+        }
+    }
+
+    private long getMaxAgeForSnapshotType(
+            Configuration observeConfig,
+            FlinkOperatorConfiguration operatorConfig,
+            SnapshotType snapshotType) {
+        Duration maxAge;
+        switch (snapshotType) {
+            case CHECKPOINT:
+                maxAge =
+                        ConfigOptionUtils.getValueWithThreshold(
+                                observeConfig,
+                                OPERATOR_CHECKPOINT_HISTORY_MAX_AGE,
+                                operatorConfig.getCheckpointHistoryAgeThreshold());
+                break;
+            case SAVEPOINT:
+                maxAge =
+                        ConfigOptionUtils.getValueWithThreshold(
+                                observeConfig,
+                                OPERATOR_SAVEPOINT_HISTORY_MAX_AGE,
+                                operatorConfig.getSavepointHistoryAgeThreshold());
+                break;
+            default:
+                throw new IllegalArgumentException(
+                        String.format("Unknown snapshot type %s", snapshotType.name()));
+        }
+        return System.currentTimeMillis() - maxAge.toMillis();
+    }
+
+    private int getMaxCountForSnapshotType(
+            Configuration observeConfig,
+            FlinkOperatorConfiguration operatorConfig,
+            SnapshotType snapshotType) {
+        switch (snapshotType) {
+            case CHECKPOINT:
+                return ConfigOptionUtils.getValueWithThreshold(
+                        observeConfig,
+                        OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT,
+                        operatorConfig.getCheckpointHistoryCountThreshold());
+            case SAVEPOINT:
+                return ConfigOptionUtils.getValueWithThreshold(
+                        observeConfig,
+                        OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT,
+                        operatorConfig.getSavepointHistoryCountThreshold());
+            default:
+                throw new IllegalArgumentException(
+                        String.format("Unknown snapshot type %s", snapshotType.name()));
         }
     }
 

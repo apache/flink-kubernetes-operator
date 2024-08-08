@@ -211,18 +211,45 @@ public class KubernetesOperatorConfigOptions {
                             "Whether to enable recovery of missing/deleted jobmanager deployments.");
 
     @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE =
+            operatorConfig("savepoint.dispose-on-delete")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Savepoint data for FlinkStateSnapshot resources created by the operator during upgrades and periodic savepoints will be disposed of automatically when the generated Kubernetes resource is deleted.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<SavepointFormatType> OPERATOR_SAVEPOINT_FORMAT_TYPE =
+            operatorConfig("savepoint.format.type")
+                    .enumType(SavepointFormatType.class)
+                    .defaultValue(SavepointFormatType.DEFAULT)
+                    .withDescription(
+                            "Type of the binary format in which a savepoint should be taken.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<CheckpointType> OPERATOR_CHECKPOINT_TYPE =
+            operatorConfig("checkpoint.type")
+                    .enumType(CheckpointType.class)
+                    .defaultValue(CheckpointType.FULL)
+                    .withDescription("Type of checkpoint.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Boolean> OPERATOR_SAVEPOINT_CLEANUP_ENABLED =
             operatorConfig("savepoint.cleanup.enabled")
                     .booleanType()
                     .defaultValue(true)
-                    .withDescription("Whether to enable clean up of savepoint history.");
+                    .withDescription(
+                            String.format(
+                                    "Whether to enable clean up of savepoint FlinkStateSnapshot resources. Savepoint state will be disposed of as well if the snapshot CR spec is configured as such. For automatic savepoints this can be configured via the %s config option.",
+                                    OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE.key()));
 
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Integer> OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT =
             operatorConfig("savepoint.history.max.count")
                     .intType()
                     .defaultValue(10)
-                    .withDescription("Maximum number of savepoint history entries to retain.");
+                    .withDescription(
+                            "Maximum number of savepoint FlinkStateSnapshot resources entries to retain.");
 
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Integer> OPERATOR_SAVEPOINT_HISTORY_MAX_COUNT_THRESHOLD =
@@ -230,7 +257,7 @@ public class KubernetesOperatorConfigOptions {
                     .intType()
                     .noDefaultValue()
                     .withDescription(
-                            "Maximum number threshold of savepoint history entries to retain.");
+                            "Maximum number threshold of savepoint FlinkStateSnapshot resources to retain.");
 
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE =
@@ -238,7 +265,55 @@ public class KubernetesOperatorConfigOptions {
                     .durationType()
                     .defaultValue(Duration.ofHours(24))
                     .withDescription(
-                            "Maximum age for savepoint history entries to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.");
+                            "Maximum age for savepoint FlinkStateSnapshot resources to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD =
+            ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE.key() + ".threshold")
+                    .durationType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Maximum age threshold for FlinkStateSnapshot resources to retain.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Boolean> OPERATOR_CHECKPOINT_CLEANUP_ENABLED =
+            operatorConfig("checkpoint.cleanup.enabled")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription(
+                            "Whether to enable clean up of checkpoint FlinkStateSnapshot resources created by the operator automatically. This will only remove the FlinkStateSnapshot CR, and will not remove any data on the filesystem.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Integer> OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT =
+            operatorConfig("checkpoint.history.max.count")
+                    .intType()
+                    .defaultValue(10)
+                    .withDescription(
+                            "Maximum number of checkpoint FlinkStateSnapshot resources to retain.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Integer> OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT_THRESHOLD =
+            ConfigOptions.key(OPERATOR_CHECKPOINT_HISTORY_MAX_COUNT.key() + ".threshold")
+                    .intType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Maximum number threshold of checkpoint FlinkStateSnapshot resources to retain.");
+
+    @Documentation.Section(SECTION_DYNAMIC)
+    public static final ConfigOption<Duration> OPERATOR_CHECKPOINT_HISTORY_MAX_AGE =
+            operatorConfig("checkpoint.history.max.age")
+                    .durationType()
+                    .defaultValue(Duration.ofHours(24))
+                    .withDescription(
+                            "Maximum age for checkpoint FlinkStateSnapshot resources to retain. Due to lazy clean-up, the most recent checkpoint may live longer than the max age.");
+
+    @Documentation.Section(SECTION_ADVANCED)
+    public static final ConfigOption<Duration> OPERATOR_CHECKPOINT_HISTORY_MAX_AGE_THRESHOLD =
+            ConfigOptions.key(OPERATOR_CHECKPOINT_HISTORY_MAX_AGE.key() + ".threshold")
+                    .durationType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Maximum age threshold for checkpoint FlinkStateSnapshot resources to retain.");
 
     @Documentation.Section(SECTION_SYSTEM)
     public static final ConfigOption<Boolean> OPERATOR_EXCEPTION_STACK_TRACE_ENABLED =
@@ -279,14 +354,6 @@ public class KubernetesOperatorConfigOptions {
                     .defaultValue(new HashMap<>())
                     .withDescription(
                             "Key-Value pair where key is the REGEX to filter through the exception messages and value is the string to be included in CR status error label field if the REGEX matches. Expected format: headerKey1:headerValue1,headerKey2:headerValue2.");
-
-    @Documentation.Section(SECTION_ADVANCED)
-    public static final ConfigOption<Duration> OPERATOR_SAVEPOINT_HISTORY_MAX_AGE_THRESHOLD =
-            ConfigOptions.key(OPERATOR_SAVEPOINT_HISTORY_MAX_AGE.key() + ".threshold")
-                    .durationType()
-                    .noDefaultValue()
-                    .withDescription(
-                            "Maximum age threshold for savepoint history entries to retain.");
 
     @Documentation.Section(SECTION_DYNAMIC)
     public static final ConfigOption<Map<String, String>> JAR_ARTIFACT_HTTP_HEADER =
@@ -437,29 +504,6 @@ public class KubernetesOperatorConfigOptions {
                     .noDefaultValue()
                     .withDescription(
                             "Max allowed checkpoint age for initiating last-state upgrades on running jobs. If a checkpoint is not available within the desired age (and nothing in progress) a savepoint will be triggered.");
-
-    @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<Boolean> OPERATOR_JOB_SAVEPOINT_DISPOSE_ON_DELETE =
-            operatorConfig("savepoint.dispose-on-delete")
-                    .booleanType()
-                    .defaultValue(false)
-                    .withDescription(
-                            "Savepoint data for FlinkStateSnapshot resources created by the operator during upgrades and periodic savepoints will be disposed of automatically when the generated Kubernetes resource is deleted.");
-
-    @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<SavepointFormatType> OPERATOR_SAVEPOINT_FORMAT_TYPE =
-            operatorConfig("savepoint.format.type")
-                    .enumType(SavepointFormatType.class)
-                    .defaultValue(SavepointFormatType.DEFAULT)
-                    .withDescription(
-                            "Type of the binary format in which a savepoint should be taken.");
-
-    @Documentation.Section(SECTION_DYNAMIC)
-    public static final ConfigOption<CheckpointType> OPERATOR_CHECKPOINT_TYPE =
-            operatorConfig("checkpoint.type")
-                    .enumType(CheckpointType.class)
-                    .defaultValue(CheckpointType.FULL)
-                    .withDescription("Type of checkpoint.");
 
     @Documentation.Section(SECTION_ADVANCED)
     public static final ConfigOption<Boolean> OPERATOR_HEALTH_PROBE_ENABLED =

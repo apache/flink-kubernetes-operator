@@ -69,6 +69,36 @@ public class FlinkStateSnapshotUtilsTest {
     private static final String SAVEPOINT_PATH = "/tmp/savepoint-01";
 
     @Test
+    public void testGetSnapshotTriggerType() {
+        var snapshot = new FlinkStateSnapshot();
+
+        assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
+                .isEqualTo(SnapshotTriggerType.UNKNOWN);
+
+        snapshot.getMetadata().getLabels().put(CrdConstants.LABEL_SNAPSHOT_TYPE, "");
+        assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
+                .isEqualTo(SnapshotTriggerType.UNKNOWN);
+
+        snapshot.getMetadata()
+                .getLabels()
+                .put(CrdConstants.LABEL_SNAPSHOT_TYPE, SnapshotTriggerType.MANUAL.name());
+        assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
+                .isEqualTo(SnapshotTriggerType.MANUAL);
+
+        snapshot.getMetadata()
+                .getLabels()
+                .put(CrdConstants.LABEL_SNAPSHOT_TYPE, SnapshotTriggerType.UPGRADE.name());
+        assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
+                .isEqualTo(SnapshotTriggerType.UPGRADE);
+
+        snapshot.getMetadata()
+                .getLabels()
+                .put(CrdConstants.LABEL_SNAPSHOT_TYPE, SnapshotTriggerType.PERIODIC.name());
+        assertThat(FlinkStateSnapshotUtils.getSnapshotTriggerType(snapshot))
+                .isEqualTo(SnapshotTriggerType.PERIODIC);
+    }
+
+    @Test
     public void testGetValidatedFlinkStateSnapshotPathPathGiven() {
         var snapshotRef = FlinkStateSnapshotReference.builder().path(SAVEPOINT_PATH).build();
         var snapshotResult =

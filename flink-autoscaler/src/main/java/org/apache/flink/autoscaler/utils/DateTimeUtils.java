@@ -60,4 +60,14 @@ public class DateTimeUtils {
         ZonedDateTime dateTime = instant.atZone(ZoneId.systemDefault());
         return dateTime.format(DateTimeFormatter.ISO_INSTANT);
     }
+
+    /**
+     * Parses a Kubernetes-compatible datetime.
+     *
+     * @param datetime datetime in Kubernetes format
+     * @return time parsed
+     */
+    public static Instant parseKubernetes(String datetime) {
+        return Instant.parse(datetime);
+    }
 }
