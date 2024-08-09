@@ -20,8 +20,10 @@ package org.apache.flink.autoscaler;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
+import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.autoscaler.topology.ShipStrategy;
 import org.apache.flink.autoscaler.utils.AutoScalerUtils;
 import org.apache.flink.configuration.Configuration;
@@ -36,9 +38,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.BOTTLENECK_PROPAGATION_SCALE_DOWN_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_DOWN_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.MAX_SCALE_UP_FACTOR;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALE_UP_GRACE_PERIOD;
@@ -49,6 +53,7 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.VERTEX_MIN_PA
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.EXPECTED_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.MAX_PARALLELISM;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.PARALLELISM;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 import static org.apache.flink.autoscaler.topology.ShipStrategy.HASH;
 
@@ -148,6 +153,122 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
                 ScalingMetric.EXPECTED_PROCESSING_RATE,
                 EvaluatedScalingMetric.of(cappedTargetCapacity));
         return newParallelism;
+    }
+
+    public boolean propagateBackpropScaleFactor(
+            Configuration conf,
+            JobVertexID vertex,
+            JobTopology topology,
+            EvaluatedMetrics evaluatedMetrics,
+            Map<JobVertexID, Double> backpropScaleFactors,
+            List<String> excludedVertices) {
+
+        double averageTrueProcessingRate =
+                evaluatedMetrics
+                        .getVertexMetrics()
+                        .get(vertex)
+                        .get(TRUE_PROCESSING_RATE)
+                        .getAverage();
+
+        // target parallelism is not defined -> cannot propagate the bottle factor to the upstream
+        if (Double.isNaN(averageTrueProcessingRate)
+                || Double.isInfinite(averageTrueProcessingRate)) {
+            LOG.debug(
+                    "Unable to backpropagate bottleneck scale factor of vertex {}, average true processing rate is {}",
+                    vertex,
+                    averageTrueProcessingRate);
+            return false;
+        }
+
+        double minScaleFactor = 1 - conf.get(MAX_SCALE_DOWN_FACTOR);
+        double maxScaleFactor = 1 + conf.get(MAX_SCALE_UP_FACTOR);
+
+        double processingRateCapacity =
+                evaluatedMetrics.getVertexMetrics().get(vertex).get(TARGET_DATA_RATE).getAverage();
+
+        if (Double.isNaN(processingRateCapacity)) {
+            LOG.debug(
+                    "Unable to backpropagate bottleneck scale factor of vertex {}, processing rate capacity is {}",
+                    vertex,
+                    processingRateCapacity);
+            return false;
+        }
+
+        // if scale down is disabled, the adjusted scale factor cannot be less than the default
+        // factor
+        if (!conf.getBoolean(BOTTLENECK_PROPAGATION_SCALE_DOWN_ENABLED)) {
+            double scaleFactor = processingRateCapacity / averageTrueProcessingRate;
+            scaleFactor = Math.max(scaleFactor, minScaleFactor);
+            minScaleFactor = Math.min(1.0, scaleFactor);
+        }
+
+        // we scaled processing rate capacity by upstream
+        double currentBackPropFactor = backpropScaleFactors.getOrDefault(vertex, 1.0);
+        processingRateCapacity *= currentBackPropFactor;
+
+        double targetScaleFactor = processingRateCapacity / averageTrueProcessingRate;
+
+        if (excludedVertices.contains(vertex.toHexString())) {
+            LOG.debug(
+                    "Vertex {} is excluded from scaling. Target scale factor is 1.0",
+                    vertex.toHexString());
+            targetScaleFactor = 1.0;
+        }
+
+        if (targetScaleFactor < minScaleFactor) {
+            LOG.debug(
+                    "Computed scale factor of {} for {} is capped by maximum scale down factor to {}",
+                    targetScaleFactor,
+                    vertex,
+                    minScaleFactor);
+            targetScaleFactor = minScaleFactor;
+        }
+        if (maxScaleFactor < targetScaleFactor) {
+            LOG.debug(
+                    "Computed scale factor of {} for {} is capped by maximum scale up factor to {}",
+                    targetScaleFactor,
+                    vertex,
+                    maxScaleFactor);
+            targetScaleFactor = maxScaleFactor;
+        }
+
+        double maxVertexScaleFactor =
+                evaluatedMetrics.getVertexMetrics().get(vertex).get(MAX_PARALLELISM).getCurrent()
+                        / evaluatedMetrics
+                                .getVertexMetrics()
+                                .get(vertex)
+                                .get(PARALLELISM)
+                                .getCurrent();
+
+        // check if scaling violates max parallelism cap
+        if (maxVertexScaleFactor < targetScaleFactor) {
+            targetScaleFactor = maxVertexScaleFactor;
+        }
+
+        double targetProcessingCapacity = targetScaleFactor * averageTrueProcessingRate;
+        double adjustedProcessingRateCapacity =
+                AutoScalerUtils.getInPlaceTargetProcessingCapacity(
+                        evaluatedMetrics, topology, vertex, backpropScaleFactors);
+        if (Double.isNaN(adjustedProcessingRateCapacity)) {
+            return false;
+        }
+
+        LOG.debug(
+                "Vertex {} has target capacity of {} and receives capacity {} from the downstream",
+                vertex,
+                targetProcessingCapacity,
+                adjustedProcessingRateCapacity);
+
+        // if the capacity from the upstream vertices exceeds target processing rate ->
+        // backpropagate scale factor
+        if (targetProcessingCapacity < adjustedProcessingRateCapacity) {
+            double adjustFactor = targetProcessingCapacity / adjustedProcessingRateCapacity;
+            for (var input : topology.getVertexInfos().get(vertex).getInputs().keySet()) {
+                double factor = backpropScaleFactors.getOrDefault(input, 1.0);
+                backpropScaleFactors.put(input, factor * adjustFactor);
+            }
+        }
+        return true;
     }
 
     private boolean blockScalingBasedOnPastActions(

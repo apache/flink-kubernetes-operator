@@ -15,6 +15,12 @@
             <td>Lag threshold which will prevent unnecessary scalings while removing the pending messages responsible for the lag.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.bottleneck-propagation.allow-scale-down</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Allow vertices scale down during bottleneck propagation.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.catch-up.duration</h5></td>
             <td style="word-wrap: break-word;">30 min</td>
             <td>Duration</td>
@@ -117,6 +123,12 @@
             <td>Percentage threshold for switching to observed from busy time based true processing rate if the measurement is off by at least the configured fraction. For example 0.15 means we switch to observed if the busy time based computation is at least 15% higher during catchup.</td>
         </tr>
         <tr>
+            <td><h5>job.autoscaler.processing.rate.backpropagation.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Enable backpropagation of processing rate during autoscaling to reduce resources usage.</td>
+        </tr>
+        <tr>
             <td><h5>job.autoscaler.quota.cpu</h5></td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>Double</td>
@@ -210,7 +222,7 @@
             <td><h5>job.autoscaler.vertex.exclude.ids</h5></td>
             <td style="word-wrap: break-word;"></td>
             <td>List&lt;String&gt;</td>
-            <td>A (semicolon-separated) list of vertex ids in hexstring for which to disable scaling. Caution: For non-sink vertices this will still scale their downstream operators until https://issues.apache.org/jira/browse/FLINK-31215 is implemented.</td>
+            <td>A (semicolon-separated) list of vertex ids in hexstring for which to disable scaling.</td>
         </tr>
         <tr>
             <td><h5>job.autoscaler.vertex.max-parallelism</h5></td>

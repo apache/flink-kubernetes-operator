@@ -25,6 +25,7 @@ import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Setter;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /** Job vertex information. */
@@ -35,6 +36,9 @@ public class VertexInfo {
 
     // All input vertices and the ship_strategy
     private final Map<JobVertexID, ShipStrategy> inputs;
+
+    // Output ratios from input vertices. Used for backpropagation
+    private final Map<JobVertexID, Double> inputRatios;
 
     private final SlotSharingGroupId slotSharingGroupId;
 
@@ -68,6 +72,7 @@ public class VertexInfo {
         this.originalMaxParallelism = maxParallelism;
         this.finished = finished;
         this.ioMetrics = ioMetrics;
+        this.inputRatios = new HashMap<>();
     }
 
     @VisibleForTesting

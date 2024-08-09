@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.SortedMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.EXCLUDED_PERIODS;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.PROCESSING_RATE_BACKPROPAGATION_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_ENABLED;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.SCALING_EVENT_INTERVAL;
 import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_EXECUTION_DISABLED_REASON;
@@ -57,6 +58,7 @@ import static org.apache.flink.autoscaler.event.AutoScalerEventHandler.SCALING_S
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.addToScalingHistoryAndStore;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_DOWN_RATE_THRESHOLD;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.SCALE_UP_RATE_THRESHOLD;
+import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TRUE_PROCESSING_RATE;
 
 /** Class responsible for executing scaling decisions. */
@@ -221,8 +223,14 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
+
+        if (context.getConfiguration().getBoolean(PROCESSING_RATE_BACKPROPAGATION_ENABLED)) {
+            backpropagateProcessingRate(context, evaluatedMetrics, restartTime, jobTopology);
+        }
+
         var excludeVertexIdList =
                 context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
+
         evaluatedMetrics
                 .getVertexMetrics()
                 .forEach(
@@ -253,6 +261,75 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                             }
                         });
         return out;
+    }
+
+    private void backpropagateProcessingRate(
+            Context context,
+            EvaluatedMetrics evaluatedMetrics,
+            Duration restartTime,
+            JobTopology jobTopology) {
+        var conf = context.getConfiguration();
+        var backpropScaleFactors = new HashMap<JobVertexID, Double>();
+        var excludeVertexIdList =
+                context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);
+        var vertexIterator =
+                jobTopology
+                        .getVerticesInTopologicalOrder()
+                        .listIterator(jobTopology.getVerticesInTopologicalOrder().size());
+
+        boolean canPropagate = true;
+
+        // backpropagate scale factors
+        while (canPropagate && vertexIterator.hasPrevious()) {
+            var vertex = vertexIterator.previous();
+            canPropagate =
+                    jobVertexScaler.propagateBackpropScaleFactor(
+                            conf,
+                            vertex,
+                            jobTopology,
+                            evaluatedMetrics,
+                            backpropScaleFactors,
+                            excludeVertexIdList);
+        }
+
+        if (!canPropagate) {
+            LOG.debug("Cannot properly perform backpropagation because metrics are incomplete");
+            return;
+        }
+
+        // use an extra map to not lose precision
+        Map<JobVertexID, Double> adjustedDataRate = new HashMap<>();
+
+        // re-evaluating vertices capacity
+        // Target data rate metric is rewritten for parallelism evaluation
+        for (var vertex : jobTopology.getVerticesInTopologicalOrder()) {
+            double adjustedCapacity = 0.0;
+
+            if (jobTopology.isSource(vertex)) {
+                adjustedCapacity +=
+                        evaluatedMetrics
+                                        .getVertexMetrics()
+                                        .get(vertex)
+                                        .get(TARGET_DATA_RATE)
+                                        .getAverage()
+                                * backpropScaleFactors.getOrDefault(vertex, 1.0);
+            } else {
+                for (var input : jobTopology.getVertexInfos().get(vertex).getInputs().keySet()) {
+                    adjustedCapacity +=
+                            adjustedDataRate.get(input)
+                                    * jobTopology
+                                            .getVertexInfos()
+                                            .get(vertex)
+                                            .getInputRatios()
+                                            .get(input);
+                }
+            }
+            adjustedDataRate.put(vertex, adjustedCapacity);
+            evaluatedMetrics
+                    .getVertexMetrics()
+                    .get(vertex)
+                    .put(TARGET_DATA_RATE, EvaluatedScalingMetric.avg(adjustedCapacity));
+        }
     }
 
     private boolean isJobUnderMemoryPressure(

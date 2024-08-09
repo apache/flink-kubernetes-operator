@@ -58,6 +58,23 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Enable vertex scaling execution by the autoscaler. If disabled, the autoscaler will only collect metrics and evaluate the suggested parallelism for each vertex but will not upgrade the jobs.");
 
+    public static final ConfigOption<Boolean> PROCESSING_RATE_BACKPROPAGATION_ENABLED =
+            autoScalerConfig("processing.rate.backpropagation.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("processing.rate.backpropagation.enabled"))
+                    .withDescription(
+                            "Enable backpropagation of processing rate during autoscaling to reduce resources usage.");
+
+    public static final ConfigOption<Boolean> BOTTLENECK_PROPAGATION_SCALE_DOWN_ENABLED =
+            autoScalerConfig("bottleneck-propagation.allow-scale-down")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withFallbackKeys(
+                            oldOperatorConfigKey("bottleneck-propagation.allow-scale-down"))
+                    .withDescription("Allow vertices scale down during bottleneck propagation.");
+
     public static final ConfigOption<Duration> METRICS_WINDOW =
             autoScalerConfig("metrics.window")
                     .durationType()
@@ -313,7 +330,7 @@ public class AutoScalerOptions {
                     .defaultValues()
                     .withFallbackKeys(oldOperatorConfigKey("vertex.exclude.ids"))
                     .withDescription(
-                            "A (semicolon-separated) list of vertex ids in hexstring for which to disable scaling. Caution: For non-sink vertices this will still scale their downstream operators until https://issues.apache.org/jira/browse/FLINK-31215 is implemented.");
+                            "A (semicolon-separated) list of vertex ids in hexstring for which to disable scaling.");
 
     public static final ConfigOption<Duration> SCALING_EVENT_INTERVAL =
             autoScalerConfig("scaling.event.interval")

@@ -18,8 +18,10 @@
 package org.apache.flink.autoscaler.utils;
 
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
+import org.apache.flink.autoscaler.metrics.EvaluatedMetrics;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
+import org.apache.flink.autoscaler.topology.JobTopology;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 
@@ -51,9 +53,6 @@ public class AutoScalerUtils {
         if (Double.isNaN(lagCatchupTargetRate)) {
             return Double.NaN;
         }
-
-        double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
-
         targetUtilization = Math.max(0., targetUtilization);
         targetUtilization = Math.min(1., targetUtilization);
 
@@ -62,6 +61,7 @@ public class AutoScalerUtils {
             return Double.NaN;
         }
 
+        double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
         if (targetUtilization == 0) {
             return Double.POSITIVE_INFINITY;
         }
@@ -73,6 +73,48 @@ public class AutoScalerUtils {
         double inputTargetAtUtilization = avgInputTargetRate / targetUtilization;
 
         return Math.round(lagCatchupTargetRate + restartCatchupRate + inputTargetAtUtilization);
+    }
+
+    public static double getInPlaceTargetProcessingCapacity(
+            EvaluatedMetrics evaluatedMetrics,
+            JobTopology jobTopology,
+            JobVertexID vertexID,
+            Map<JobVertexID, Double> backpropFactors) {
+
+        // double avgInputTargetRate = evaluatedMetrics.get(TARGET_DATA_RATE).getAverage();
+        double avgInputTargetRate = 0.0;
+        if (jobTopology.isSource(vertexID)) {
+            avgInputTargetRate =
+                    evaluatedMetrics
+                            .getVertexMetrics()
+                            .get(vertexID)
+                            .get(TARGET_DATA_RATE)
+                            .getAverage();
+        } else {
+
+            for (var input : jobTopology.getVertexInfos().get(vertexID).getInputs().keySet()) {
+                double inputCapacity =
+                        evaluatedMetrics
+                                .getVertexMetrics()
+                                .get(input)
+                                .get(TARGET_DATA_RATE)
+                                .getAverage();
+
+                inputCapacity *= backpropFactors.getOrDefault(input, 1.0);
+                inputCapacity *=
+                        jobTopology
+                                .getVertexInfos()
+                                .get(vertexID)
+                                .getInputRatios()
+                                .getOrDefault(input, 1.0);
+                avgInputTargetRate += inputCapacity;
+            }
+        }
+        if (Double.isNaN(avgInputTargetRate)) {
+            return Double.NaN;
+        }
+
+        return avgInputTargetRate;
     }
 
     /**
