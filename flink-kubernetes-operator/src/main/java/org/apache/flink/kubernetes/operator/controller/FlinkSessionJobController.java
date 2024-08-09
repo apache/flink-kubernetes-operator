@@ -161,7 +161,8 @@ public class FlinkSessionJobController
     public Map<String, EventSource> prepareEventSources(
             EventSourceContext<FlinkSessionJob> context) {
         return EventSourceInitializer.nameEventSources(
-                EventSourceUtils.getFlinkDeploymentInformerEventSource(context));
+                EventSourceUtils.getFlinkDeploymentInformerEventSource(context),
+                EventSourceUtils.getStateSnapshotForFlinkResourceInformerEventSource(context));
     }
 
     private boolean validateSessionJob(FlinkResourceContext<FlinkSessionJob> ctx) {

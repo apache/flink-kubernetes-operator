@@ -9,6 +9,24 @@
     </thead>
     <tbody>
         <tr>
+            <td><h5>kubernetes.operator.checkpoint.cleanup.enabled</h5></td>
+            <td style="word-wrap: break-word;">true</td>
+            <td>Boolean</td>
+            <td>Whether to enable clean up of checkpoint FlinkStateSnapshot resources created by the operator automatically. This will only remove the FlinkStateSnapshot CR, and will not remove any data on the filesystem.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.checkpoint.history.max.age</h5></td>
+            <td style="word-wrap: break-word;">1 d</td>
+            <td>Duration</td>
+            <td>Maximum age for checkpoint FlinkStateSnapshot resources to retain. Due to lazy clean-up, the most recent checkpoint may live longer than the max age.</td>
+        </tr>
+        <tr>
+            <td><h5>kubernetes.operator.checkpoint.history.max.count</h5></td>
+            <td style="word-wrap: break-word;">10</td>
+            <td>Integer</td>
+            <td>Maximum number of checkpoint FlinkStateSnapshot resources to retain.</td>
+        </tr>
+        <tr>
             <td><h5>kubernetes.operator.checkpoint.trigger.grace-period</h5></td>
             <td style="word-wrap: break-word;">1 min</td>
             <td>Duration</td>
@@ -156,7 +174,7 @@
             <td><h5>kubernetes.operator.savepoint.cleanup.enabled</h5></td>
             <td style="word-wrap: break-word;">true</td>
             <td>Boolean</td>
-            <td>Whether to enable clean up of savepoint history.</td>
+            <td>Whether to enable clean up of savepoint FlinkStateSnapshot resources. Savepoint state will be disposed of as well if the snapshot CR spec is configured as such. For automatic savepoints this can be configured via the kubernetes.operator.savepoint.dispose-on-delete config option.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.savepoint.dispose-on-delete</h5></td>
@@ -174,13 +192,13 @@
             <td><h5>kubernetes.operator.savepoint.history.max.age</h5></td>
             <td style="word-wrap: break-word;">1 d</td>
             <td>Duration</td>
-            <td>Maximum age for savepoint history entries to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.</td>
+            <td>Maximum age for savepoint FlinkStateSnapshot resources to retain. Due to lazy clean-up, the most recent savepoint may live longer than the max age.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.savepoint.history.max.count</h5></td>
             <td style="word-wrap: break-word;">10</td>
             <td>Integer</td>
-            <td>Maximum number of savepoint history entries to retain.</td>
+            <td>Maximum number of savepoint FlinkStateSnapshot resources entries to retain.</td>
         </tr>
         <tr>
             <td><h5>kubernetes.operator.savepoint.trigger.grace-period</h5></td>
