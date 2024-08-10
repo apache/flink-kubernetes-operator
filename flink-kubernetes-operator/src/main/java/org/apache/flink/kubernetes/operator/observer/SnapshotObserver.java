@@ -69,6 +69,11 @@ public class SnapshotObserver<
         CR extends AbstractFlinkResource<?, STATUS>, STATUS extends CommonStatus<?>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(SnapshotObserver.class);
+    public static final Comparator<FlinkStateSnapshot> SORT_SNAPSHOTS_BY_TIME =
+            Comparator.comparing(
+                    s -> DateTimeUtils.parseKubernetes(s.getStatus().getResultTimestamp()));
+    private static final Set<SnapshotTriggerType> CLEAN_UP_SNAPSHOT_TRIGGER_TYPES =
+            Set.of(SnapshotTriggerType.PERIODIC, SnapshotTriggerType.UPGRADE);
 
     private final EventRecorder eventRecorder;
 
@@ -271,19 +276,22 @@ public class SnapshotObserver<
             SnapshotType snapshotType) {
         var snapshotList =
                 snapshots.stream()
-                        .filter(s -> s.getStatus() != null)
-                        .filter(s -> COMPLETED.equals(s.getStatus().getState()))
                         .filter(
                                 s ->
-                                        SnapshotTriggerType.PERIODIC.equals(
+                                        CLEAN_UP_SNAPSHOT_TRIGGER_TYPES.contains(
                                                 FlinkStateSnapshotUtils.getSnapshotTriggerType(s)))
                         .filter(s -> (s.getSpec().isSavepoint() == (snapshotType == SAVEPOINT)))
-                        .sorted(
-                                Comparator.comparing(
-                                        s ->
-                                                DateTimeUtils.parseKubernetes(
-                                                        s.getStatus().getResultTimestamp())))
+                        .sorted(SORT_SNAPSHOTS_BY_TIME)
                         .collect(Collectors.toList());
+
+        var lastCompleteSnapshot =
+                snapshotList.stream()
+                        .filter(
+                                s ->
+                                        s.getStatus() != null
+                                                && COMPLETED.equals(s.getStatus().getState()))
+                        .max(SORT_SNAPSHOTS_BY_TIME)
+                        .orElse(null);
 
         var maxCount = getMaxCountForSnapshotType(observeConfig, operatorConfig, snapshotType);
         var maxTms = getMaxAgeForSnapshotType(observeConfig, operatorConfig, snapshotType);
@@ -292,17 +300,16 @@ public class SnapshotObserver<
         if (snapshotList.size() < 2) {
             return result;
         }
-        var lastSnapshot = snapshotList.get(snapshotList.size() - 1);
 
-        while (snapshotList.size() > maxCount) {
-            var snapshot = snapshotList.remove(0);
-            result.add(snapshot);
-        }
         for (var snapshot : snapshotList) {
+            if (snapshot.equals(lastCompleteSnapshot)) {
+                continue;
+            }
+
             var ts =
                     DateTimeUtils.parseKubernetes(snapshot.getStatus().getResultTimestamp())
                             .toEpochMilli();
-            if (ts < maxTms && snapshot != lastSnapshot) {
+            if (snapshotList.size() - result.size() > maxCount || ts < maxTms) {
                 result.add(snapshot);
             }
         }

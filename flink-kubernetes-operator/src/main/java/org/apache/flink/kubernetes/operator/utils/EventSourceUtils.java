@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** Utility class to locate secondary resources. */
 public class EventSourceUtils {
@@ -56,11 +57,12 @@ public class EventSourceUtils {
             InformerEventSource<FlinkStateSnapshot, T>
                     getStateSnapshotForFlinkResourceInformerEventSource(
                             EventSourceContext<T> context) {
-
+        var labelFilters =
+                Stream.of(SnapshotTriggerType.PERIODIC, SnapshotTriggerType.UPGRADE)
+                        .map(Enum::name)
+                        .collect(Collectors.joining(","));
         var labelSelector =
-                String.format(
-                        "%s=%s",
-                        CrdConstants.LABEL_SNAPSHOT_TYPE, SnapshotTriggerType.PERIODIC.name());
+                String.format("%s in (%s)", CrdConstants.LABEL_SNAPSHOT_TYPE, labelFilters);
         var configuration =
                 InformerConfiguration.from(FlinkStateSnapshot.class, context)
                         .withLabelSelector(labelSelector)
