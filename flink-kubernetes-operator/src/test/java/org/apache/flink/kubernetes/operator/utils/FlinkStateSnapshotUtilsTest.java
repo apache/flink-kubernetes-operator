@@ -230,6 +230,28 @@ public class FlinkStateSnapshotUtilsTest {
     }
 
     @Test
+    public void testCreateSnapshotInSameNamespace() {
+        var namespace = "different-namespace";
+        var deployment = initDeployment();
+        deployment.getMetadata().setNamespace(namespace);
+
+        var savepoint =
+                FlinkStateSnapshotUtils.createSavepointResource(
+                        client,
+                        deployment,
+                        SAVEPOINT_PATH,
+                        SnapshotTriggerType.PERIODIC,
+                        SavepointFormatType.CANONICAL,
+                        true);
+        assertThat(savepoint.getMetadata().getNamespace()).isEqualTo(namespace);
+
+        var checkpoint =
+                FlinkStateSnapshotUtils.createCheckpointResource(
+                        client, deployment, SnapshotTriggerType.MANUAL);
+        assertThat(checkpoint.getMetadata().getNamespace()).isEqualTo(namespace);
+    }
+
+    @Test
     public void testCreateCheckpointResource() {
         var deployment = initDeployment();
 

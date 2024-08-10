@@ -122,10 +122,12 @@ public class FlinkStateSnapshotUtils {
 
     protected static FlinkStateSnapshot createFlinkStateSnapshot(
             KubernetesClient kubernetesClient,
+            String namespace,
             String name,
             FlinkStateSnapshotSpec spec,
             SnapshotTriggerType triggerType) {
         var metadata = new ObjectMeta();
+        metadata.setNamespace(namespace);
         metadata.setName(name);
         metadata.getLabels().put(CrdConstants.LABEL_SNAPSHOT_TYPE, triggerType.name());
 
@@ -169,7 +171,12 @@ public class FlinkStateSnapshotUtils {
                         .build();
 
         var resourceName = getFlinkStateSnapshotName(SAVEPOINT, triggerType, resource);
-        return createFlinkStateSnapshot(kubernetesClient, resourceName, snapshotSpec, triggerType);
+        return createFlinkStateSnapshot(
+                kubernetesClient,
+                resource.getMetadata().getNamespace(),
+                resourceName,
+                snapshotSpec,
+                triggerType);
     }
 
     /**
@@ -191,7 +198,12 @@ public class FlinkStateSnapshotUtils {
                         .build();
 
         var resourceName = getFlinkStateSnapshotName(CHECKPOINT, triggerType, resource);
-        return createFlinkStateSnapshot(kubernetesClient, resourceName, snapshotSpec, triggerType);
+        return createFlinkStateSnapshot(
+                kubernetesClient,
+                resource.getMetadata().getNamespace(),
+                resourceName,
+                snapshotSpec,
+                triggerType);
     }
 
     /**

@@ -286,7 +286,12 @@ public class TestUtils extends BaseTestUtils {
     public static <CR extends AbstractFlinkResource<?, ?>>
             List<FlinkStateSnapshot> getFlinkStateSnapshotsForResource(
                     KubernetesClient kubernetesClient, CR resource) {
-        return kubernetesClient.resources(FlinkStateSnapshot.class).list().getItems().stream()
+        return kubernetesClient
+                .resources(FlinkStateSnapshot.class)
+                .inAnyNamespace()
+                .list()
+                .getItems()
+                .stream()
                 .filter(
                         s ->
                                 s.getSpec()
